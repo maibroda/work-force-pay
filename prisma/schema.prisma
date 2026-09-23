@@ -1,0 +1,1642 @@
+// WorkforcePay — multi-tenant workforce deployment & payroll platform
+// Hierarchy: Organization → Client → Contract → Beat (location)
+// Every organization-owned record carries organizationId.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["queryCompiler", "driverAdapters"]
+  engineType      = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────── ENUMS ───────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  COMPANY_ADMIN
+  HR_ADMIN
+  OPERATIONS
+  PAYROLL_ADMIN
+  FINANCE
+  AUDITOR
+  SUPERVISOR
+  EMPLOYEE
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  ON_LEAVE
+  TERMINATED
+  RESIGNED
+  EXITED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum DocumentType {
+  NATIONAL_ID
+  PASSPORT
+  DRIVERS_LICENSE
+  GUARD_LICENSE
+  FIREARMS_LICENSE
+  MEDICAL_CERTIFICATE
+  POLICE_CLEARANCE
+  EMPLOYMENT_CONTRACT
+  ACADEMIC_CERTIFICATE
+  OTHER
+}
+
+enum TrainingStatus {
+  VALID
+  EXPIRED
+  REVOKED
+}
+
+enum DisciplinaryType {
+  QUERY
+  VERBAL_WARNING
+  WRITTEN_WARNING
+  SUSPENSION
+  TERMINATION_RECOMMENDATION
+  COMMENDATION
+}
+
+enum ChecklistStatus {
+  PENDING
+  DONE
+  NOT_APPLICABLE
+}
+
+enum ExitType {
+  RESIGNATION
+  TERMINATION
+  END_OF_CONTRACT
+  RETIREMENT
+  ABSCONDMENT
+  DECEASED
+}
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum ContractStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  TERMINATED
+}
+
+enum BillingMethod {
+  PER_HEAD_MONTHLY
+  LUMP_SUM_MONTHLY
+  PER_SHIFT
+}
+
+enum BeatStatus {
+  UNMAPPED
+  MAPPED
+  UNDERSTAFFED
+  OVERSTAFFED
+  INACTIVE
+}
+
+enum StructureStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+}
+
+enum StructureMethod {
+  PERCENTAGE_OF_GROSS
+  MIXED
+}
+
+enum ComponentCalcType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  FORMULA
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PROCESSED
+  CANCELLED
+}
+
+enum DeploymentStatus {
+  ACTIVE
+  ENDED
+}
+
+enum MovementType {
+  PERMANENT_TRANSFER
+  TEMPORARY_TRANSFER
+  RELIEF
+  REPLACEMENT
+  CLIENT_TRANSFER
+  LOCATION_TRANSFER
+  SHIFT_CHANGE
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  ABSENT
+  LEAVE
+  OFF
+  SUSPENDED
+}
+
+enum Shift {
+  DAY
+  NIGHT
+  FULL
+}
+
+enum EntrySource {
+  MANUAL
+  IMPORT
+  SUPERVISOR
+  CLIENT_SCHEDULE
+  SYSTEM
+}
+
+enum PeriodStatus {
+  OPEN
+  PROCESSING
+  PENDING_VALIDATION
+  PENDING_APPROVAL
+  APPROVED
+  LOCKED
+  PAID
+  CLOSED
+}
+
+enum RunType {
+  REGULAR
+  SUPPLEMENTARY
+}
+
+enum RunStatus {
+  DRAFT
+  CALCULATED
+  PENDING_APPROVAL
+  APPROVED
+  LOCKED
+  PAID
+  SUPERSEDED
+}
+
+enum Severity {
+  CRITICAL
+  WARNING
+  INFO
+}
+
+enum DeductionType {
+  PENALTY
+  RECOVERY
+  LOAN
+  SALARY_ADVANCE
+  OTHER
+}
+
+enum ArrearsType {
+  SALARY_ADJUSTMENT
+  LATE_SALARY_INCREASE
+  PAYROLL_CORRECTION
+  MISSED_PAYMENT
+  RETROSPECTIVE_PROMOTION
+  APPROVED_ALLOWANCE
+  APPROVED_CORRECTION
+}
+
+enum ReliefType {
+  PERCENT_OF_GROSS
+  FIXED_ANNUAL
+  PERCENT_OF_RENT_CAPPED
+  EMPLOYEE_PENSION
+  NHF
+  NHIS
+}
+
+enum ProrationBasis {
+  CALENDAR_DAYS
+  FIXED_30
+}
+
+/// Which line of business a contract belongs to. Back-office staff carry no contract at all
+/// (paid via EmployeePayRate) and are treated as their own segment by that absence.
+enum BusinessLine {
+  GUARDING
+  OUTSOURCING
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+enum RemittanceType {
+  PAYE
+  PENSION
+  ITF
+  NSITF
+  NHF_MEDICAL
+  INSURANCE
+  UNIFORM_KITS
+  RECRUITMENT_TRAINING
+  LEAVE_RELIEVER
+  OUTSOURCING_LEAVE_ALLOWANCE
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum GlAccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  INCOME
+  EXPENSE
+}
+
+/// How a payroll head is posted: EARNING → debit expense; DEDUCTION → credit liability;
+/// EMPLOYER → debit expense + credit liability; NET_PAY → credit net salaries payable.
+enum GlHeadType {
+  EARNING
+  DEDUCTION
+  EMPLOYER
+  NET_PAY
+}
+
+enum InvoiceStatus {
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+// ─────────────────────────── TENANCY & ACCESS ───────────────────────────
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  address   String?
+  phone     String?
+  email     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users                   User[]
+  numberingRules          NumberingRule[]
+  departments             Department[]
+  categories              EmployeeCategory[]
+  employees               Employee[]
+  clients                 Client[]
+  contracts               Contract[]
+  contractRates           ContractRate[]
+  beats                   Beat[]
+  salaryStructures        SalaryStructure[]
+  salaryOverrides         EmployeeSalaryOverride[]
+  payRates                EmployeePayRate[]
+  deployments             Deployment[]
+  movements               StaffMovement[]
+  workRegister            WorkRegister[]
+  payrollPeriods          PayrollPeriod[]
+  payrollRuns             PayrollRun[]
+  payrollRecords          PayrollRecord[]
+  allocations             PayrollAllocation[]
+  validationIssues        PayrollValidationIssue[]
+  overtime                Overtime[]
+  arrears                 Arrears[]
+  deductions              Deduction[]
+  otherEarnings           OtherEarning[]
+  taxRules                TaxRule[]
+  pensionRules            PensionRule[]
+  payrollRules            PayrollRule[]
+  employerCostRules       EmployerCostRule[]
+  paymentBatches          PaymentBatch[]
+  paymentTxns             PaymentTransaction[]
+  remittances             StatutoryRemittance[]
+  auditLogs               AuditLog[]
+  leavePolicy             LeavePolicy?
+  leaveRequests           LeaveRequest[]
+  glAccounts              GlAccount[]
+  glMappings              PayrollGlMapping[]
+  journalEntries          JournalEntry[]
+  clientInvoices          ClientInvoice[]
+  clientReceipts          ClientReceipt[]
+  clientInvoiceDeductions ClientInvoiceDeduction[]
+  employeeDocuments       EmployeeDocument[]
+  employeeTrainings       EmployeeTraining[]
+  disciplinaryRecords     DisciplinaryRecord[]
+  onboardingTasks         OnboardingTask[]
+  exitRecords             ExitRecord[]
+  exitTasks               ExitTask[]
+}
+
+model User {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  email           String       @unique
+  name            String
+  passwordHash    String
+  role            Role
+  active          Boolean      @default(true)
+  employeeId      String?      @unique
+  employee        Employee?    @relation(fields: [employeeId], references: [id])
+  supervisedBeats Beat[]       @relation("BeatSupervisor")
+  lastLoginAt     DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([organizationId])
+}
+
+model NumberingRule {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  entity         String // EMPLOYEE, CLIENT, CONTRACT, BEAT, PAYMENT_BATCH
+  prefix         String
+  separator      String       @default("-")
+  digits         Int          @default(6)
+  nextNumber     Int          @default(1)
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, entity])
+}
+
+// ─────────────────────────────── WORKFORCE ───────────────────────────────
+
+model Department {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  code           String
+  name           String
+  employees      Employee[]
+
+  @@unique([organizationId, code])
+}
+
+model EmployeeCategory {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  code           String
+  name           String
+  description    String?
+  employees      Employee[]
+  contractRates  ContractRate[]
+  deployments    Deployment[]
+  workRegister   WorkRegister[]
+
+  @@unique([organizationId, code])
+}
+
+model Employee {
+  id                 String           @id @default(cuid())
+  organizationId     String
+  organization       Organization     @relation(fields: [organizationId], references: [id])
+  employeeNumber     String
+  firstName          String
+  middleName         String?
+  lastName           String
+  gender             Gender?
+  dateOfBirth        DateTime?        @db.Date
+  phone              String?
+  email              String?
+  address            String?
+  employmentDate     DateTime         @db.Date
+  exitDate           DateTime?        @db.Date
+  status             EmployeeStatus   @default(ACTIVE)
+  categoryId         String
+  category           EmployeeCategory @relation(fields: [categoryId], references: [id])
+  departmentId       String?
+  department         Department?      @relation(fields: [departmentId], references: [id])
+  bankName           String?
+  accountNumber      String?
+  accountName        String?
+  taxId              String?
+  pensionPin         String?
+  pfa                String?
+  annualRent         Decimal?         @db.Decimal(14, 2) // declared rent for NTA 2025 rent relief
+  currentClientId    String?
+  currentClient      Client?          @relation(fields: [currentClientId], references: [id])
+  currentBeatId      String?
+  currentBeat        Beat?            @relation("CurrentBeat", fields: [currentBeatId], references: [id])
+  reportingManagerId String?
+  reportingManager   Employee?        @relation("ReportingLine", fields: [reportingManagerId], references: [id])
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  user                User?
+  deployments         Deployment[]
+  movements           StaffMovement[]
+  workRegister        WorkRegister[]
+  salaryOverrides     EmployeeSalaryOverride[]
+  payRates            EmployeePayRate[]
+  payrollRecords      PayrollRecord[]
+  overtime            Overtime[]
+  arrears             Arrears[]
+  deductions          Deduction[]
+  otherEarnings       OtherEarning[]
+  validationIssues    PayrollValidationIssue[]
+  paymentTxns         PaymentTransaction[]
+  leaveRequests       LeaveRequest[]
+  directReports       Employee[]               @relation("ReportingLine")
+  documents           EmployeeDocument[]
+  trainings           EmployeeTraining[]
+  disciplinaryRecords DisciplinaryRecord[]
+  onboardingTasks     OnboardingTask[]
+  exitRecords         ExitRecord[]
+
+  @@unique([organizationId, employeeNumber])
+  @@index([organizationId, status])
+}
+
+// ─────────────────────────── HR / HRIS RECORDS ───────────────────────────
+
+/// Employee documents (ID, licenses, contracts, certificates). Metadata-only — fileReference is a
+/// filename/reference/description, matching the ClientInvoiceDeduction.supportingDocument convention
+/// (this app has no object storage configured).
+model EmployeeDocument {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  employeeId     String
+  employee       Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  documentType   DocumentType
+  documentNumber String?
+  issueDate      DateTime?    @db.Date
+  expiryDate     DateTime?    @db.Date
+  fileReference  String // filename / reference / description — proof of the physical/scanned document
+  notes          String?
+  uploadedBy     String
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, employeeId])
+  @@index([organizationId, expiryDate])
+}
+
+/// Training & certifications — critical for a security workforce (firearms license, first aid,
+/// tactical training). expiryDate drives compliance/expiry reports and alerts.
+model EmployeeTraining {
+  id                String         @id @default(cuid())
+  organizationId    String
+  organization      Organization   @relation(fields: [organizationId], references: [id])
+  employeeId        String
+  employee          Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  courseName        String
+  provider          String?
+  certificateNumber String?
+  issueDate         DateTime       @db.Date
+  expiryDate        DateTime?      @db.Date
+  status            TrainingStatus @default(VALID)
+  fileReference     String?
+  recordedBy        String
+  createdAt         DateTime       @default(now())
+
+  @@index([organizationId, employeeId])
+  @@index([organizationId, expiryDate])
+}
+
+/// Disciplinary actions and commendations — maker/checker: raised PENDING, then approved/rejected
+/// (mirrors StaffMovement's request→approve pattern).
+model DisciplinaryRecord {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  employeeId     String
+  employee       Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  type           DisciplinaryType
+  incidentDate   DateTime         @db.Date
+  description    String
+  actionTaken    String?
+  issuedBy       String
+  status         ApprovalStatus   @default(PENDING)
+  approvedBy     String?
+  remarks        String?
+  createdAt      DateTime         @default(now())
+
+  @@index([organizationId, employeeId])
+}
+
+/// Per-employee onboarding checklist — standard tasks are seeded automatically on hire
+/// (see ONBOARDING_TASKS); HR can also add ad-hoc tasks and check them off.
+model OnboardingTask {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  employeeId     String
+  employee       Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  taskName       String
+  status         ChecklistStatus @default(PENDING)
+  dueDate        DateTime?       @db.Date
+  completedBy    String?
+  completedAt    DateTime?
+  notes          String?
+  sortOrder      Int             @default(0)
+  createdAt      DateTime        @default(now())
+
+  @@index([organizationId, employeeId])
+}
+
+/// Offboarding / exit management — maker/checker like StaffMovement. Approval sets Employee.status
+/// + exitDate and auto-seeds the clearance checklist (see EXIT_CLEARANCE_TASKS).
+model ExitRecord {
+  id              String         @id @default(cuid())
+  organizationId  String
+  organization    Organization   @relation(fields: [organizationId], references: [id])
+  employeeId      String
+  employee        Employee       @relation(fields: [employeeId], references: [id])
+  exitType        ExitType
+  noticeDate      DateTime       @db.Date
+  lastWorkingDate DateTime       @db.Date
+  reason          String
+  status          ApprovalStatus @default(PENDING)
+  initiatedBy     String
+  approvedBy      String?
+  remarks         String?
+  createdAt       DateTime       @default(now())
+
+  tasks ExitTask[]
+
+  @@index([organizationId, employeeId])
+}
+
+model ExitTask {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  exitRecordId   String
+  exitRecord     ExitRecord      @relation(fields: [exitRecordId], references: [id], onDelete: Cascade)
+  taskName       String
+  status         ChecklistStatus @default(PENDING)
+  completedBy    String?
+  completedAt    DateTime?
+  notes          String?
+  sortOrder      Int             @default(0)
+  createdAt      DateTime        @default(now())
+
+  @@index([organizationId, exitRecordId])
+}
+
+// ─────────────────────────────── CLIENTS ───────────────────────────────
+
+model Client {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  code           String
+  name           String
+  contactPerson  String?
+  address        String?
+  phone          String?
+  email          String?
+  status         ClientStatus @default(ACTIVE)
+  startDate      DateTime?    @db.Date
+  endDate        DateTime?    @db.Date
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  contracts         Contract[]
+  beats             Beat[]
+  employees         Employee[]
+  deployments       Deployment[]
+  workRegister      WorkRegister[]
+  overtime          Overtime[]
+  allocations       PayrollAllocation[]
+  movementsFrom     StaffMovement[]          @relation("MoveFromClient")
+  movementsTo       StaffMovement[]          @relation("MoveToClient")
+  invoices          ClientInvoice[]
+  receipts          ClientReceipt[]
+  invoiceDeductions ClientInvoiceDeduction[]
+
+  @@unique([organizationId, code])
+}
+
+model Contract {
+  id                 String           @id @default(cuid())
+  organizationId     String
+  organization       Organization     @relation(fields: [organizationId], references: [id])
+  clientId           String
+  client             Client           @relation(fields: [clientId], references: [id])
+  contractNumber     String
+  name               String
+  startDate          DateTime         @db.Date
+  endDate            DateTime?        @db.Date
+  contractValue      Decimal?         @db.Decimal(16, 2)
+  billingMethod      BillingMethod    @default(PER_HEAD_MONTHLY)
+  status             ContractStatus   @default(ACTIVE)
+  operativeSharePct  Decimal          @default(70) @db.Decimal(5, 2) // 70:30 sharing ratio
+  businessLine       BusinessLine     @default(GUARDING) // drives which employer add-on costs apply
+  defaultStructureId String?
+  defaultStructure   SalaryStructure? @relation(fields: [defaultStructureId], references: [id])
+  notes              String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  rates         ContractRate[]
+  beats         Beat[]
+  deployments   Deployment[]
+  workRegister  WorkRegister[]
+  overtime      Overtime[]
+  allocations   PayrollAllocation[]
+  invoiceLines  ClientInvoiceLine[]
+  movementsFrom StaffMovement[]     @relation("MoveFromContract")
+  movementsTo   StaffMovement[]     @relation("MoveToContract")
+
+  @@unique([organizationId, contractNumber])
+}
+
+/// CLIENT → CONTRACT → EMPLOYEE CATEGORY → SALARY STRUCTURE → AGREED RATE (effective-dated)
+model ContractRate {
+  id                String           @id @default(cuid())
+  organizationId    String
+  organization      Organization     @relation(fields: [organizationId], references: [id])
+  contractId        String
+  contract          Contract         @relation(fields: [contractId], references: [id])
+  categoryId        String
+  category          EmployeeCategory @relation(fields: [categoryId], references: [id])
+  salaryStructureId String
+  salaryStructure   SalaryStructure  @relation(fields: [salaryStructureId], references: [id])
+  agreedRate        Decimal          @db.Decimal(14, 2) // amount billed to client per head per month
+  operativeSharePct Decimal?         @db.Decimal(5, 2) // overrides contract share when set
+  effectiveFrom     DateTime         @db.Date
+  effectiveTo       DateTime?        @db.Date
+  createdAt         DateTime         @default(now())
+
+  @@index([organizationId, contractId, categoryId])
+}
+
+model Beat {
+  id               String       @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  clientId         String
+  client           Client       @relation(fields: [clientId], references: [id])
+  contractId       String
+  contract         Contract     @relation(fields: [contractId], references: [id])
+  code             String
+  name             String
+  bidReference     String?
+  region           String?
+  state            String?
+  lga              String?
+  address          String?
+  siteContact      String?
+  approvedStrength Int          @default(0)
+  status           BeatStatus   @default(UNMAPPED)
+  startDate        DateTime?    @db.Date
+  endDate          DateTime?    @db.Date
+  supervisorId     String?
+  supervisor       User?        @relation("BeatSupervisor", fields: [supervisorId], references: [id])
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  currentEmployees Employee[]          @relation("CurrentBeat")
+  deployments      Deployment[]
+  workRegister     WorkRegister[]
+  overtime         Overtime[]
+  allocations      PayrollAllocation[]
+  movementsFrom    StaffMovement[]     @relation("MoveFromBeat")
+  movementsTo      StaffMovement[]     @relation("MoveToBeat")
+  invoiceLines     ClientInvoiceLine[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, clientId])
+}
+
+// ─────────────────────────── SALARY STRUCTURES ───────────────────────────
+
+model SalaryStructure {
+  id                String          @id @default(cuid())
+  organizationId    String
+  organization      Organization    @relation(fields: [organizationId], references: [id])
+  code              String
+  name              String
+  description       String?
+  calculationMethod StructureMethod @default(PERCENTAGE_OF_GROSS)
+  isPartial         Boolean         @default(false)
+  isDefault         Boolean         @default(false)
+  status            StructureStatus @default(DRAFT)
+  effectiveFrom     DateTime        @db.Date
+  effectiveTo       DateTime?       @db.Date
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  components    SalaryComponent[]
+  contractRates ContractRate[]
+  contracts     Contract[]
+
+  @@unique([organizationId, code])
+}
+
+model SalaryComponent {
+  id           String            @id @default(cuid())
+  structureId  String
+  structure    SalaryStructure   @relation(fields: [structureId], references: [id], onDelete: Cascade)
+  code         String
+  name         String
+  calcType     ComponentCalcType @default(PERCENTAGE)
+  percentage   Decimal?          @db.Decimal(7, 4)
+  fixedAmount  Decimal?          @db.Decimal(14, 2)
+  formula      String?
+  taxable      Boolean           @default(true)
+  pensionable  Boolean           @default(false)
+  employerCost Boolean           @default(false)
+  active       Boolean           @default(true)
+  sortOrder    Int               @default(0)
+
+  @@unique([structureId, code])
+}
+
+/// Employee-specific component override (never overwrites the base structure)
+model EmployeeSalaryOverride {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  employeeId     String
+  employee       Employee          @relation(fields: [employeeId], references: [id])
+  componentCode  String
+  calcType       ComponentCalcType @default(PERCENTAGE)
+  percentage     Decimal?          @db.Decimal(7, 4)
+  fixedAmount    Decimal?          @db.Decimal(14, 2)
+  reason         String
+  effectiveFrom  DateTime          @db.Date
+  effectiveTo    DateTime?         @db.Date
+  approvedBy     String
+  status         ApprovalStatus    @default(APPROVED)
+  createdAt      DateTime          @default(now())
+
+  @@index([organizationId, employeeId])
+}
+
+/// Employee-specific monthly gross (e.g. office staff / supervisors not billed per head), effective-dated
+model EmployeePayRate {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  employeeId     String
+  employee       Employee     @relation(fields: [employeeId], references: [id])
+  monthlyGross   Decimal      @db.Decimal(14, 2)
+  structureCode  String? // structure used to split gross; default structure when empty
+  reason         String
+  approvedBy     String
+  effectiveFrom  DateTime     @db.Date
+  effectiveTo    DateTime?    @db.Date
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, employeeId])
+}
+
+// ─────────────────────────────── OPERATIONS ───────────────────────────────
+
+model Deployment {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  employeeId     String
+  employee       Employee         @relation(fields: [employeeId], references: [id])
+  clientId       String
+  client         Client           @relation(fields: [clientId], references: [id])
+  contractId     String
+  contract       Contract         @relation(fields: [contractId], references: [id])
+  beatId         String
+  beat           Beat             @relation(fields: [beatId], references: [id])
+  categoryId     String
+  category       EmployeeCategory @relation(fields: [categoryId], references: [id])
+  shift          Shift            @default(FULL)
+  startDate      DateTime         @db.Date
+  endDate        DateTime?        @db.Date
+  status         DeploymentStatus @default(ACTIVE)
+  movementId     String?
+  createdAt      DateTime         @default(now())
+
+  @@index([organizationId, employeeId])
+  @@index([organizationId, beatId])
+}
+
+model StaffMovement {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  employeeId     String
+  employee       Employee       @relation(fields: [employeeId], references: [id])
+  movementType   MovementType
+  fromClientId   String?
+  fromClient     Client?        @relation("MoveFromClient", fields: [fromClientId], references: [id])
+  fromContractId String?
+  fromContract   Contract?      @relation("MoveFromContract", fields: [fromContractId], references: [id])
+  fromBeatId     String?
+  fromBeat       Beat?          @relation("MoveFromBeat", fields: [fromBeatId], references: [id])
+  toClientId     String
+  toClient       Client         @relation("MoveToClient", fields: [toClientId], references: [id])
+  toContractId   String
+  toContract     Contract       @relation("MoveToContract", fields: [toContractId], references: [id])
+  toBeatId       String
+  toBeat         Beat           @relation("MoveToBeat", fields: [toBeatId], references: [id])
+  movementDate   DateTime       @db.Date
+  effectiveDate  DateTime       @db.Date
+  endDate        DateTime?      @db.Date // for temporary/relief movements
+  reason         String
+  requestedBy    String
+  approvedBy     String?
+  status         ApprovalStatus @default(PENDING)
+  remarks        String?
+  createdAt      DateTime       @default(now())
+
+  @@index([organizationId, employeeId])
+}
+
+/// Operational source of truth for WHERE an employee worked on each day.
+model WorkRegister {
+  id               String           @id @default(cuid())
+  organizationId   String
+  organization     Organization     @relation(fields: [organizationId], references: [id])
+  date             DateTime         @db.Date
+  employeeId       String
+  employee         Employee         @relation(fields: [employeeId], references: [id])
+  clientId         String
+  client           Client           @relation(fields: [clientId], references: [id])
+  contractId       String
+  contract         Contract         @relation(fields: [contractId], references: [id])
+  beatId           String
+  beat             Beat             @relation(fields: [beatId], references: [id])
+  categoryId       String
+  category         EmployeeCategory @relation(fields: [categoryId], references: [id])
+  shift            Shift            @default(FULL)
+  attendanceStatus AttendanceStatus
+  hoursWorked      Decimal          @default(0) @db.Decimal(5, 2)
+  overtimeHours    Decimal          @default(0) @db.Decimal(5, 2)
+  supervisor       String?
+  remarks          String?
+  source           EntrySource      @default(MANUAL)
+  locationMismatch Boolean          @default(false)
+  mismatchResolved Boolean          @default(false)
+  resolutionNote   String?
+  recordedBy       String
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@unique([organizationId, employeeId, date])
+  @@index([organizationId, date])
+  @@index([organizationId, beatId, date])
+}
+
+// ─────────────────────────────── PAYROLL ───────────────────────────────
+
+model PayrollPeriod {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  year           Int
+  month          Int
+  startDate      DateTime     @db.Date
+  endDate        DateTime     @db.Date
+  status         PeriodStatus @default(OPEN)
+  approvedBy     String?
+  approvedAt     DateTime?
+  lockedBy       String?
+  lockedAt       DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  runs             PayrollRun[]
+  overtime         Overtime[]
+  deductions       Deduction[]
+  otherEarnings    OtherEarning[]
+  arrearsOriginal  Arrears[]       @relation("ArrearsOriginal")
+  arrearsProcessed Arrears[]       @relation("ArrearsProcessed")
+  invoices         ClientInvoice[]
+
+  @@unique([organizationId, year, month])
+}
+
+model PayrollRun {
+  id                             String        @id @default(cuid())
+  organizationId                 String
+  organization                   Organization  @relation(fields: [organizationId], references: [id])
+  periodId                       String
+  period                         PayrollPeriod @relation(fields: [periodId], references: [id])
+  runNumber                      Int
+  type                           RunType       @default(REGULAR)
+  status                         RunStatus     @default(DRAFT)
+  description                    String?
+  taxRuleVersion                 String?
+  pensionRuleVersion             String?
+  employeeCount                  Int           @default(0)
+  totalGross                     Decimal       @default(0) @db.Decimal(16, 2)
+  totalNet                       Decimal       @default(0) @db.Decimal(16, 2)
+  totalPaye                      Decimal       @default(0) @db.Decimal(16, 2)
+  totalEmployeePension           Decimal       @default(0) @db.Decimal(16, 2)
+  totalEmployerPension           Decimal       @default(0) @db.Decimal(16, 2)
+  totalDeductions                Decimal       @default(0) @db.Decimal(16, 2)
+  totalOvertime                  Decimal       @default(0) @db.Decimal(16, 2)
+  totalArrears                   Decimal       @default(0) @db.Decimal(16, 2)
+  totalClientBilling             Decimal       @default(0) @db.Decimal(16, 2)
+  totalManagementShare           Decimal       @default(0) @db.Decimal(16, 2)
+  totalEmployerCost              Decimal       @default(0) @db.Decimal(16, 2)
+  // Guarding/outsourcing employer add-on costs (see PayrollGlMapping / EmployerCostRule) — zero for
+  // back-office (pay-rate, no contract) staff.
+  totalItf                       Decimal       @default(0) @db.Decimal(16, 2)
+  totalNsitf                     Decimal       @default(0) @db.Decimal(16, 2)
+  totalNhfMedical                Decimal       @default(0) @db.Decimal(16, 2)
+  totalInsurance                 Decimal       @default(0) @db.Decimal(16, 2)
+  totalUniformKits               Decimal       @default(0) @db.Decimal(16, 2)
+  totalRecruitmentTraining       Decimal       @default(0) @db.Decimal(16, 2)
+  totalLeaveReliever             Decimal       @default(0) @db.Decimal(16, 2)
+  totalOutsourcingLeaveAllowance Decimal       @default(0) @db.Decimal(16, 2)
+  totalEmployerAddOns            Decimal       @default(0) @db.Decimal(16, 2)
+  calculatedBy                   String?
+  calculatedAt                   DateTime?
+  calculationCount               Int           @default(0)
+  createdAt                      DateTime      @default(now())
+  updatedAt                      DateTime      @updatedAt
+
+  records        PayrollRecord[]
+  allocations    PayrollAllocation[]
+  issues         PayrollValidationIssue[]
+  paymentBatches PaymentBatch[]
+  remittances    StatutoryRemittance[]
+  journalEntry   JournalEntry?
+  invoices       ClientInvoice[]
+
+  @@unique([periodId, runNumber])
+}
+
+model PayrollRecord {
+  id                              String       @id @default(cuid())
+  organizationId                  String
+  organization                    Organization @relation(fields: [organizationId], references: [id])
+  runId                           String
+  run                             PayrollRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  employeeId                      String
+  employee                        Employee     @relation(fields: [employeeId], references: [id])
+  employeeNumber                  String
+  employeeName                    String
+  categoryName                    String
+  departmentName                  String?
+  bankName                        String?
+  accountNumber                   String?
+  accountName                     String?
+  pensionPin                      String?
+  pfa                             String?
+  taxId                           String?
+  basisDays                       Int
+  daysWorked                      Decimal      @db.Decimal(6, 2)
+  daysAbsent                      Int          @default(0)
+  suspensionDays                  Int          @default(0)
+  overtimeHours                   Decimal      @default(0) @db.Decimal(8, 2)
+  monthlyGross                    Decimal      @db.Decimal(14, 2) // full-month contractual operative gross
+  earnedGross                     Decimal      @db.Decimal(14, 2) // prorated structure earnings
+  overtimeAmount                  Decimal      @default(0) @db.Decimal(14, 2)
+  arrearsAmount                   Decimal      @default(0) @db.Decimal(14, 2)
+  otherEarnings                   Decimal      @default(0) @db.Decimal(14, 2)
+  totalEarnings                   Decimal      @db.Decimal(14, 2)
+  pensionBase                     Decimal      @db.Decimal(14, 2)
+  employeePension                 Decimal      @db.Decimal(14, 2)
+  employerPension                 Decimal      @db.Decimal(14, 2)
+  taxableIncome                   Decimal      @db.Decimal(14, 2)
+  paye                            Decimal      @db.Decimal(14, 2)
+  otherDeductions                 Decimal      @default(0) @db.Decimal(14, 2)
+  totalDeductions                 Decimal      @db.Decimal(14, 2)
+  netPay                          Decimal      @db.Decimal(14, 2)
+  clientBilling                   Decimal      @default(0) @db.Decimal(14, 2)
+  managementShare                 Decimal      @default(0) @db.Decimal(14, 2)
+  employerCost                    Decimal      @db.Decimal(14, 2)
+  // Guarding/outsourcing employer add-on costs — see EmployerCostRule. Zero for back-office staff.
+  itfAmount                       Decimal      @default(0) @db.Decimal(14, 2)
+  nsitfAmount                     Decimal      @default(0) @db.Decimal(14, 2)
+  nhfMedicalAmount                Decimal      @default(0) @db.Decimal(14, 2)
+  insuranceAmount                 Decimal      @default(0) @db.Decimal(14, 2)
+  uniformKitsAmount               Decimal      @default(0) @db.Decimal(14, 2)
+  recruitmentTrainingAmount       Decimal      @default(0) @db.Decimal(14, 2)
+  leaveRelieverAmount             Decimal      @default(0) @db.Decimal(14, 2)
+  outsourcingLeaveAllowanceAmount Decimal      @default(0) @db.Decimal(14, 2)
+  totalEmployerAddOns             Decimal      @default(0) @db.Decimal(14, 2)
+  /// GUARDING / OUTSOURCING when every paid segment shares one business line, BACK_OFFICE when the
+  /// employee has no contract segments at all (pay-rate only), MIXED otherwise.
+  businessLine                    String       @default("BACK_OFFICE")
+  taxRuleVersion                  String
+  hasOverride                     Boolean      @default(false)
+  lines                           Json // [{type, code, name, amount}]
+  locations                       Json // [{clientName, beatName, days, from, to}]
+  calcTrace                       Json?
+  createdAt                       DateTime     @default(now())
+
+  allocations PayrollAllocation[]
+  paymentTxns PaymentTransaction[]
+
+  @@unique([runId, employeeId])
+  @@index([organizationId, employeeId])
+}
+
+/// Split of every payroll record by client / contract / beat — powers client & beat reports.
+model PayrollAllocation {
+  id                        String        @id @default(cuid())
+  organizationId            String
+  organization              Organization  @relation(fields: [organizationId], references: [id])
+  runId                     String
+  run                       PayrollRun    @relation(fields: [runId], references: [id], onDelete: Cascade)
+  recordId                  String
+  record                    PayrollRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  employeeId                String
+  clientId                  String?
+  client                    Client?       @relation(fields: [clientId], references: [id])
+  contractId                String?
+  contract                  Contract?     @relation(fields: [contractId], references: [id])
+  beatId                    String?
+  beat                      Beat?         @relation(fields: [beatId], references: [id])
+  days                      Decimal       @db.Decimal(6, 2)
+  grossAmount               Decimal       @db.Decimal(14, 2)
+  overtimeAmount            Decimal       @default(0) @db.Decimal(14, 2)
+  employerPension           Decimal       @db.Decimal(14, 2)
+  clientBilling             Decimal       @db.Decimal(14, 2)
+  managementShare           Decimal       @db.Decimal(14, 2)
+  // Individual employer add-on costs attributable to this client/contract/beat (see EmployerCostRule).
+  itf                       Decimal       @default(0) @db.Decimal(14, 2)
+  nsitf                     Decimal       @default(0) @db.Decimal(14, 2)
+  nhfMedical                Decimal       @default(0) @db.Decimal(14, 2)
+  insurance                 Decimal       @default(0) @db.Decimal(14, 2)
+  uniformKits               Decimal       @default(0) @db.Decimal(14, 2)
+  recruitmentTraining       Decimal       @default(0) @db.Decimal(14, 2)
+  leaveReliever             Decimal       @default(0) @db.Decimal(14, 2)
+  outsourcingLeaveAllowance Decimal       @default(0) @db.Decimal(14, 2)
+  /// Sum of the individual costs above — ITF + NSITF + insurance + uniform&kits + recruitment/training
+  /// + leave reliever + outsourcing leave allowance (+ NHF/medical if configured).
+  businessCosts             Decimal       @default(0) @db.Decimal(14, 2)
+  netAmount                 Decimal       @default(0) @db.Decimal(14, 2)
+
+  @@index([organizationId, runId, clientId, beatId])
+}
+
+model PayrollValidationIssue {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  runId          String
+  run            PayrollRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  employeeId     String?
+  employee       Employee?    @relation(fields: [employeeId], references: [id])
+  category       String // POPULATION, SALARY, ATTENDANCE, LOCATION, BANK, PENSION, PAYE, OVERTIME, ARREARS, DEDUCTIONS, DUPLICATES
+  severity       Severity
+  code           String
+  message        String
+  resolved       Boolean      @default(false)
+  overridden     Boolean      @default(false)
+  overrideReason String?
+  overriddenBy   String?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, runId, severity])
+}
+
+model Overtime {
+  id                String         @id @default(cuid())
+  organizationId    String
+  organization      Organization   @relation(fields: [organizationId], references: [id])
+  employeeId        String
+  employee          Employee       @relation(fields: [employeeId], references: [id])
+  clientId          String
+  client            Client         @relation(fields: [clientId], references: [id])
+  contractId        String
+  contract          Contract       @relation(fields: [contractId], references: [id])
+  beatId            String
+  beat              Beat           @relation(fields: [beatId], references: [id])
+  periodId          String
+  period            PayrollPeriod  @relation(fields: [periodId], references: [id])
+  date              DateTime       @db.Date
+  hours             Decimal        @db.Decimal(6, 2)
+  rate              Decimal?       @db.Decimal(12, 2) // hourly rate; computed when empty
+  amount            Decimal        @db.Decimal(14, 2)
+  approvalReference String?
+  approvedBy        String?
+  source            EntrySource    @default(CLIENT_SCHEDULE)
+  status            ApprovalStatus @default(PENDING)
+  createdBy         String
+  createdAt         DateTime       @default(now())
+
+  @@index([organizationId, periodId, employeeId])
+}
+
+model Arrears {
+  id                 String         @id @default(cuid())
+  organizationId     String
+  organization       Organization   @relation(fields: [organizationId], references: [id])
+  employeeId         String
+  employee           Employee       @relation(fields: [employeeId], references: [id])
+  originalPeriodId   String
+  originalPeriod     PayrollPeriod  @relation("ArrearsOriginal", fields: [originalPeriodId], references: [id])
+  arrearsType        ArrearsType
+  originalAmount     Decimal        @db.Decimal(14, 2)
+  correctedAmount    Decimal        @db.Decimal(14, 2)
+  difference         Decimal        @db.Decimal(14, 2)
+  grossImpact        Decimal        @db.Decimal(14, 2)
+  pensionableImpact  Decimal        @default(0) @db.Decimal(14, 2)
+  taxImpact          Decimal        @default(0) @db.Decimal(14, 2)
+  pensionImpact      Decimal        @default(0) @db.Decimal(14, 2)
+  netImpact          Decimal        @default(0) @db.Decimal(14, 2)
+  reason             String
+  supportingDocument String?
+  requestedBy        String
+  approvedBy         String?
+  status             ApprovalStatus @default(PENDING)
+  processedPeriodId  String?
+  processedPeriod    PayrollPeriod? @relation("ArrearsProcessed", fields: [processedPeriodId], references: [id])
+  processedRunId     String?
+  createdAt          DateTime       @default(now())
+
+  @@index([organizationId, employeeId])
+}
+
+model Deduction {
+  id                 String         @id @default(cuid())
+  organizationId     String
+  organization       Organization   @relation(fields: [organizationId], references: [id])
+  employeeId         String
+  employee           Employee       @relation(fields: [employeeId], references: [id])
+  deductionType      DeductionType
+  amount             Decimal        @db.Decimal(14, 2)
+  periodId           String
+  period             PayrollPeriod  @relation(fields: [periodId], references: [id])
+  reason             String
+  authorityReference String
+  supportingDocument String?
+  requestedBy        String
+  approvedBy         String?
+  status             ApprovalStatus @default(PENDING)
+  createdAt          DateTime       @default(now())
+
+  @@index([organizationId, periodId])
+}
+
+model OtherEarning {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  employeeId     String
+  employee       Employee       @relation(fields: [employeeId], references: [id])
+  periodId       String
+  period         PayrollPeriod  @relation(fields: [periodId], references: [id])
+  name           String
+  amount         Decimal        @db.Decimal(14, 2)
+  taxable        Boolean        @default(true)
+  reason         String
+  approvedBy     String?
+  status         ApprovalStatus @default(PENDING)
+  createdAt      DateTime       @default(now())
+}
+
+// ─────────────────────────── STATUTORY RULES ───────────────────────────
+
+model TaxRule {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  code           String
+  name           String
+  version        String
+  legalBasis     String?
+  effectiveFrom  DateTime     @db.Date
+  effectiveTo    DateTime?    @db.Date
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+
+  bands      TaxBand[]
+  reliefs    TaxRelief[]
+  exemptions TaxExemption[]
+
+  @@unique([organizationId, code, version])
+}
+
+model TaxBand {
+  id         String   @id @default(cuid())
+  taxRuleId  String
+  taxRule    TaxRule  @relation(fields: [taxRuleId], references: [id], onDelete: Cascade)
+  sortOrder  Int
+  lowerBound Decimal  @db.Decimal(16, 2)
+  upperBound Decimal? @db.Decimal(16, 2)
+  rate       Decimal  @db.Decimal(6, 3)
+}
+
+model TaxRelief {
+  id        String     @id @default(cuid())
+  taxRuleId String
+  taxRule   TaxRule    @relation(fields: [taxRuleId], references: [id], onDelete: Cascade)
+  code      String
+  name      String
+  type      ReliefType
+  rate      Decimal?   @db.Decimal(7, 4)
+  amount    Decimal?   @db.Decimal(16, 2)
+  cap       Decimal?   @db.Decimal(16, 2)
+  active    Boolean    @default(true)
+}
+
+model TaxExemption {
+  id                 String  @id @default(cuid())
+  taxRuleId          String
+  taxRule            TaxRule @relation(fields: [taxRuleId], references: [id], onDelete: Cascade)
+  code               String
+  description        String
+  annualGrossCeiling Decimal @db.Decimal(16, 2) // gross at or below this is exempt
+  active             Boolean @default(true)
+}
+
+model PensionRule {
+  id               String       @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  version          String
+  employeeRate     Decimal      @db.Decimal(6, 3)
+  employerRate     Decimal      @db.Decimal(6, 3)
+  pensionableCodes String[]
+  effectiveFrom    DateTime     @db.Date
+  effectiveTo      DateTime?    @db.Date
+  createdAt        DateTime     @default(now())
+}
+
+model PayrollRule {
+  id                       String         @id @default(cuid())
+  organizationId           String
+  organization             Organization   @relation(fields: [organizationId], references: [id])
+  version                  String
+  prorationBasis           ProrationBasis @default(CALENDAR_DAYS)
+  defaultOperativeSharePct Decimal        @default(70) @db.Decimal(5, 2)
+  standardHoursPerDay      Decimal        @default(12) @db.Decimal(5, 2)
+  overtimeMultiplier       Decimal        @default(1.5) @db.Decimal(5, 2)
+  maxOvertimeHoursPerMonth Decimal        @default(60) @db.Decimal(6, 2)
+  maxDeductionPctOfGross   Decimal        @default(33.33) @db.Decimal(5, 2)
+  /// Overhead allocation used in Contract Profitability — % of contract revenue charged as back-office cost.
+  backOfficeChargePct      Decimal        @default(15) @db.Decimal(5, 2)
+  effectiveFrom            DateTime       @db.Date
+  effectiveTo              DateTime?      @db.Date
+  createdAt                DateTime       @default(now())
+}
+
+/// Employer add-on costs beyond employer pension, specific to guarding / outsourcing contracts.
+/// ITF and NSITF-ECA are % of gross salary; the rest are % of (management fee less pension employer,
+/// ITF, NSITF and NHF/medical if configured). Uniform & Kits applies to GUARDING only; Outsourcing
+/// Leave Allowance (% of Basic) applies to OUTSOURCING only. Back-office (no-contract) pay is unaffected.
+model EmployerCostRule {
+  id                           String       @id @default(cuid())
+  organizationId               String
+  organization                 Organization @relation(fields: [organizationId], references: [id])
+  version                      String
+  itfPct                       Decimal      @default(1) @db.Decimal(5, 2)
+  nsitfPct                     Decimal      @default(1) @db.Decimal(5, 2)
+  nhfMedicalPct                Decimal      @default(0) @db.Decimal(5, 2) // 0 = not provided
+  insurancePct                 Decimal      @default(7.5) @db.Decimal(5, 2)
+  uniformKitsPct               Decimal      @default(25) @db.Decimal(5, 2) // GUARDING only
+  recruitmentTrainingPct       Decimal      @default(10.5) @db.Decimal(5, 2)
+  leaveRelieverPct             Decimal      @default(22) @db.Decimal(5, 2)
+  outsourcingLeaveAllowancePct Decimal      @default(20) @db.Decimal(5, 2) // OUTSOURCING only, % of Basic
+  effectiveFrom                DateTime     @db.Date
+  effectiveTo                  DateTime?    @db.Date
+  createdAt                    DateTime     @default(now())
+}
+
+// ─────────────────────────────── PAYMENTS ───────────────────────────────
+
+model PaymentBatch {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  runId          String
+  run            PayrollRun    @relation(fields: [runId], references: [id])
+  batchNumber    String
+  bankName       String
+  totalAmount    Decimal       @db.Decimal(16, 2)
+  count          Int
+  status         PaymentStatus @default(PENDING)
+  createdBy      String
+  createdAt      DateTime      @default(now())
+
+  transactions PaymentTransaction[]
+
+  @@unique([organizationId, batchNumber])
+}
+
+model PaymentTransaction {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  batchId        String
+  batch          PaymentBatch  @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  recordId       String
+  record         PayrollRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       Employee      @relation(fields: [employeeId], references: [id])
+  amount         Decimal       @db.Decimal(14, 2)
+  bankName       String?
+  accountNumber  String?
+  accountName    String?
+  status         PaymentStatus @default(PENDING)
+  bankReference  String?
+  reconciled     Boolean       @default(false)
+  reconciledAt   DateTime?
+}
+
+model StatutoryRemittance {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  runId          String
+  run            PayrollRun     @relation(fields: [runId], references: [id])
+  type           RemittanceType
+  payee          String // PFA name or tax authority
+  employeeAmount Decimal        @db.Decimal(16, 2)
+  employerAmount Decimal        @db.Decimal(16, 2)
+  totalAmount    Decimal        @db.Decimal(16, 2)
+  headcount      Int
+  status         PaymentStatus  @default(PENDING)
+  reference      String?
+  createdAt      DateTime       @default(now())
+}
+
+// ───────────────────────── CLIENT BILLING / INVOICING ─────────────────────────
+
+/// One invoice per client per payroll run, generated from that run's client billing
+/// (payrollByClientAndBeat) — the accounts-receivable side of payroll, never edited once issued.
+model ClientInvoice {
+  id                  String        @id @default(cuid())
+  organizationId      String
+  organization        Organization  @relation(fields: [organizationId], references: [id])
+  clientId            String
+  client              Client        @relation(fields: [clientId], references: [id])
+  runId               String
+  run                 PayrollRun    @relation(fields: [runId], references: [id])
+  periodId            String
+  period              PayrollPeriod @relation(fields: [periodId], references: [id])
+  invoiceNumber       String
+  invoiceDate         DateTime      @db.Date
+  dueDate             DateTime      @db.Date
+  subtotal            Decimal       @db.Decimal(16, 2)
+  /// Each line's charge-out amount is split direct/indirect (defaults 90%/10%) — see ClientInvoiceLine.
+  /// VAT is charged on the indirect-charge total only, not on the full subtotal.
+  directChargePct     Decimal       @default(90) @db.Decimal(5, 2)
+  indirectChargePct   Decimal       @default(10) @db.Decimal(5, 2)
+  totalDirectCharge   Decimal       @default(0) @db.Decimal(16, 2)
+  totalIndirectCharge Decimal       @default(0) @db.Decimal(16, 2)
+  vatPct              Decimal       @default(0) @db.Decimal(5, 2)
+  vatAmount           Decimal       @default(0) @db.Decimal(16, 2)
+  /// Informational only — the client is expected to withhold this on payment and remit it to the
+  /// tax authority on the vendor's behalf. Does not change totalAmount; the actual amount the client
+  /// withholds is recorded as a ClientInvoiceDeduction (type WITHHOLDING_TAX) against the WHT credit
+  /// note when they pay, so it stays justified and evidenced like any other deduction.
+  whtPct              Decimal       @default(0) @db.Decimal(5, 2)
+  whtAmount           Decimal       @default(0) @db.Decimal(16, 2)
+  totalAmount         Decimal       @db.Decimal(16, 2)
+  amountPaid          Decimal       @default(0) @db.Decimal(16, 2)
+  /// Sum of ClientInvoiceDeduction — WHT actually withheld, or any other justified/evidenced
+  /// deduction (e.g. leave allowance credit) a client applies instead of paying in full.
+  totalDeductions     Decimal       @default(0) @db.Decimal(16, 2)
+  status              InvoiceStatus @default(ISSUED)
+  notes               String?
+  createdBy           String
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  lines      ClientInvoiceLine[]
+  receipts   ClientReceipt[]
+  deductions ClientInvoiceDeduction[]
+
+  @@unique([organizationId, invoiceNumber])
+  @@unique([clientId, runId])
+  @@index([organizationId, clientId])
+  @@index([organizationId, status])
+}
+
+/// One line per category (Guard, Supervisor, …) billed on the invoice — quantity × rate = amount.
+/// Prefixed with the contract name when a client has more than one contract on the same invoice.
+model ClientInvoiceLine {
+  id             String        @id @default(cuid())
+  invoiceId      String
+  invoice        ClientInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  contractId     String?
+  contract       Contract?     @relation(fields: [contractId], references: [id])
+  categoryName   String?
+  description    String
+  headcount      Int
+  rate           Decimal       @default(0) @db.Decimal(14, 2)
+  /// Legacy: paid-day count for a beat-based line generated before category-based invoicing. Unused
+  /// (and not populated) for lines generated after; kept nullable for older invoices.
+  days           Decimal?      @db.Decimal(6, 2)
+  beatId         String?
+  beat           Beat?         @relation(fields: [beatId], references: [id])
+  amount         Decimal       @db.Decimal(14, 2)
+  /// amount split direct/indirect at the invoice's directChargePct/indirectChargePct — direct +
+  /// indirect always sums to amount. VAT is charged on the sum of indirectCharge across all lines.
+  directCharge   Decimal       @default(0) @db.Decimal(14, 2)
+  indirectCharge Decimal       @default(0) @db.Decimal(14, 2)
+  sortOrder      Int           @default(0)
+}
+
+enum InvoiceDeductionType {
+  WITHHOLDING_TAX
+  LEAVE_ALLOWANCE
+  OTHER
+}
+
+/// A justified, evidenced deduction a client applies instead of paying an invoice in full —
+/// withholding tax, a leave-allowance credit, or any other agreed deduction. Never deleted.
+model ClientInvoiceDeduction {
+  id                 String               @id @default(cuid())
+  organizationId     String
+  organization       Organization         @relation(fields: [organizationId], references: [id])
+  invoiceId          String
+  invoice            ClientInvoice        @relation(fields: [invoiceId], references: [id])
+  clientId           String
+  client             Client               @relation(fields: [clientId], references: [id])
+  type               InvoiceDeductionType
+  amount             Decimal              @db.Decimal(16, 2)
+  reason             String // justification — required
+  supportingDocument String // proof (reference / filename / description) — required
+  recordedBy         String
+  createdAt          DateTime             @default(now())
+
+  @@index([organizationId, invoiceId])
+  @@index([organizationId, clientId])
+}
+
+/// A payment received from a client against an invoice. Never deleted — cancel/reverse with a
+/// documented reason instead if one is recorded in error.
+model ClientReceipt {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  invoiceId      String
+  invoice        ClientInvoice @relation(fields: [invoiceId], references: [id])
+  clientId       String
+  client         Client        @relation(fields: [clientId], references: [id])
+  amount         Decimal       @db.Decimal(16, 2)
+  receivedDate   DateTime      @db.Date
+  method         String?
+  reference      String?
+  recordedBy     String
+  createdAt      DateTime      @default(now())
+
+  @@index([organizationId, invoiceId])
+  @@index([organizationId, clientId])
+}
+
+// ─────────────────────────────── AUDIT ───────────────────────────────
+
+model AuditLog {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  userId         String?
+  userName       String
+  action         String
+  entity         String
+  entityId       String?
+  oldValue       Json?
+  newValue       Json?
+  reason         String?
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, entity, entityId])
+}
+
+// ─────────────────────────────── LEAVE ───────────────────────────────
+
+/// One policy per organization. Defaults: 10 working days a year, due after 12 months' service.
+model LeavePolicy {
+  id                 String       @id @default(cuid())
+  organizationId     String       @unique
+  organization       Organization @relation(fields: [organizationId], references: [id])
+  annualDays         Int          @default(10)
+  eligibilityMonths  Int          @default(12) // months of service before the first entitlement is due
+  workingDaysPerWeek Int          @default(5) // 5 = Mon–Fri, 6 = Mon–Sat, 7 = every day
+  updatedAt          DateTime     @updatedAt
+}
+
+model LeaveRequest {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  employeeId     String
+  employee       Employee     @relation(fields: [employeeId], references: [id])
+  cycleStart     DateTime     @db.Date // the leave year the days are charged to
+  cycleEnd       DateTime     @db.Date
+  startDate      DateTime     @db.Date
+  endDate        DateTime     @db.Date
+  workingDays    Int
+  reason         String?
+  status         LeaveStatus  @default(PENDING)
+  requestedBy    String
+  decidedBy      String?
+  decidedById    String?
+  decidedAt      DateTime?
+  decisionNote   String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId, employeeId])
+  @@index([organizationId, status])
+}
+
+// ─────────────────────────── GENERAL LEDGER ───────────────────────────
+
+model GlAccount {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  code           String
+  name           String
+  type           GlAccountType
+  active         Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+
+  debitMappings  PayrollGlMapping[] @relation("MappingDebit")
+  creditMappings PayrollGlMapping[] @relation("MappingCredit")
+  lines          JournalLine[]
+
+  @@unique([organizationId, code])
+}
+
+/// Which GL accounts a payroll head (salary component, deduction, employer cost) posts to.
+model PayrollGlMapping {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  headCode        String
+  headName        String
+  headType        GlHeadType
+  debitAccountId  String?
+  debitAccount    GlAccount?   @relation("MappingDebit", fields: [debitAccountId], references: [id])
+  creditAccountId String?
+  creditAccount   GlAccount?   @relation("MappingCredit", fields: [creditAccountId], references: [id])
+
+  @@unique([organizationId, headCode])
+}
+
+/// One balanced journal per payroll run, posted automatically when the run is locked.
+model JournalEntry {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  entryNumber    String
+  runId          String       @unique
+  run            PayrollRun   @relation(fields: [runId], references: [id])
+  periodName     String
+  postingDate    DateTime     @db.Date
+  description    String
+  source         String // PAYROLL_LOCK | PAYROLL_CLOSE | MANUAL_POST
+  totalDebit     Decimal      @db.Decimal(16, 2)
+  totalCredit    Decimal      @db.Decimal(16, 2)
+  postedBy       String
+  postedAt       DateTime     @default(now())
+  remarks        String?
+
+  lines JournalLine[]
+
+  @@unique([organizationId, entryNumber])
+  @@index([organizationId, postingDate])
+}
+
+model JournalLine {
+  id          String       @id @default(cuid())
+  journalId   String
+  journal     JournalEntry @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  accountId   String
+  account     GlAccount    @relation(fields: [accountId], references: [id])
+  accountCode String
+  accountName String
+  headCode    String
+  description String
+  debit       Decimal      @default(0) @db.Decimal(16, 2)
+  credit      Decimal      @default(0) @db.Decimal(16, 2)
+  sortOrder   Int          @default(0)
+
+  @@index([journalId])
+}
