@@ -144,6 +144,12 @@ export const NAV: NavGroup[] = [
         section: "Payables",
       },
       { href: "/finance/payables", label: "Billing & Payables", perm: "gl.view" },
+      {
+        href: "/finance/fixed-assets",
+        label: "Fixed Asset Register",
+        perm: "gl.view",
+        section: "Fixed Assets",
+      },
       { href: "/accounting/journals", label: "Payroll Journals", perm: "gl.view", section: "Accounting" },
       { href: "/accounting/mapping", label: "Payroll GL Mapping", perm: "gl.view" },
       { href: "/accounting/accounts", label: "Chart of Accounts", perm: "gl.view" },
