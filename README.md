@@ -283,6 +283,26 @@ Ikoyi (19–25), XYZ Manufacturing Lekki (26–30).
   organization's chosen currency through yet. `formatMoney(v, code)` / `compactMoney(v, code)` are
   the currency-aware building blocks a future multi-currency UI would call instead.
 
+### Bank reconciliation (operating account)
+
+- **Finance / Accounting → Bank Accounts** — the organization's own operating account(s), with an
+  opening balance/date and an optional link to a GL account. Distinct from the payroll-disbursement
+  reconciliation under Payroll → Bank Reconciliation, which only matches the bank statement against
+  employee payment transactions.
+- **Finance / Accounting → Bank Reconciliation** — import a bank statement (CSV:
+  `date,description,amount,reference`; positive = money in, negative = money out). Each line is
+  auto-matched against an existing client receipt or vendor payment by amount (±1 kobo) and date
+  (within 5 days) — only when **exactly one** candidate qualifies; an ambiguous amount is left for
+  manual review rather than guessed. Leftover lines can be matched by hand to a specific receipt/
+  payment, or marked as a bank-only item (charges, interest, transfers) with a required note.
+- The page shows a textbook reconciliation statement: balance per bank statement and balance per
+  books, each adjusted for what the other side hasn't caught up to yet (deposits/payments in
+  transit on the book side; bank-only items not yet recorded on the book side) — the two adjusted
+  balances should match once every line is accounted for.
+- Scoped to a single primary operating account for now: receipts and payments aren't tied to a
+  specific bank account, so matching draws from the org-wide, not-yet-matched pool (a record can
+  only ever be claimed by one statement line).
+
 ### Navigation
 
 - The sidebar is grouped into collapsible menus — **Dashboard, Workforce / Personnel, Payroll, Operations,
