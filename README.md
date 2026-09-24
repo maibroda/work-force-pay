@@ -273,6 +273,16 @@ Ikoyi (19–25), XYZ Manufacturing Lekki (26–30).
 - **Disposal** is terminal (no re-activation): records a disposal date, proceeds and a reason;
   depreciation freezes at the disposal date, and the detail page shows the resulting gain/(loss).
 
+### Currency
+
+- **Settings → Organization → Currency** — an organization-level setting (`NGN`, `USD`, `GBP`,
+  `EUR`, `GHS`, `KES`, `ZAR`), backed by a registry in `src/lib/money.ts` (locale + symbol per
+  code) rather than a hardcoded `₦`/`NGN` in the formatter.
+- This is display-only readiness, not multi-currency support: amounts aren't converted, most
+  screens still call the NGN-defaulted `naira()`/`compactNaira()` helpers, and nothing threads an
+  organization's chosen currency through yet. `formatMoney(v, code)` / `compactMoney(v, code)` are
+  the currency-aware building blocks a future multi-currency UI would call instead.
+
 ### Navigation
 
 - The sidebar is grouped into collapsible menus — **Dashboard, Workforce / Personnel, Payroll, Operations,

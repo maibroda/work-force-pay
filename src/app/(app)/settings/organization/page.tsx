@@ -1,6 +1,7 @@
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { CURRENCIES, CURRENCY_CODES } from "@/lib/money";
 import { KV, PageHeader, Section } from "@/components/page";
 import { SmartForm } from "@/components/smart-form";
 import { updateOrganizationAction } from "@/app/actions/workforce";
@@ -22,11 +23,15 @@ export default async function OrganizationPage() {
             ["Address", org.address],
             ["Phone", org.phone],
             ["Email", org.email],
+            ["Currency", `${org.currency} (${CURRENCIES[org.currency as keyof typeof CURRENCIES]?.symbol ?? org.currency})`],
           ]}
         />
       </Section>
       {can(ctx.role, "settings.manage") && (
-        <Section title="Edit">
+        <Section
+          title="Edit"
+          description="Currency is a display setting only — amounts aren't converted, and most of the app still assumes NGN."
+        >
           <SmartForm
             resetOnSuccess={false}
             fields={[
@@ -34,6 +39,14 @@ export default async function OrganizationPage() {
               { name: "email", label: "Email", type: "email", defaultValue: org.email ?? undefined },
               { name: "phone", label: "Phone", defaultValue: org.phone ?? undefined },
               { name: "address", label: "Address", defaultValue: org.address ?? undefined },
+              {
+                name: "currency",
+                label: "Currency",
+                type: "select",
+                required: true,
+                defaultValue: org.currency,
+                options: CURRENCY_CODES.map((c) => ({ value: c, label: `${c} — ${CURRENCIES[c].symbol}` })),
+              },
             ]}
             action={updateOrganizationAction}
           />
