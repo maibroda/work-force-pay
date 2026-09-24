@@ -76,7 +76,12 @@ describe("client billing / invoicing", () => {
 
   it("records partial and full payments, updates status, and rejects overpayment", async () => {
     const fin = await ctxFor("FINANCE");
-    const inv = await db.clientInvoice.findFirstOrThrow({ where: { organizationId: fin.orgId } });
+    const july = await periodFor(fin, 2026, 7);
+    const run = await db.payrollRun.findFirstOrThrow({ where: { periodId: july.id, type: "REGULAR" } });
+    // Scoped to this file's own July run — other test files (e.g. bank-reconciliation) generate
+    // their own ISSUED invoices for other runs in the same shared test org, so an unscoped query
+    // here could pick up one of theirs instead.
+    const inv = await db.clientInvoice.findFirstOrThrow({ where: { organizationId: fin.orgId, runId: run.id } });
     const total = num(inv.totalAmount);
     const half = Math.round((total / 2) * 100) / 100;
 
@@ -114,8 +119,10 @@ describe("client billing / invoicing", () => {
 
   it("records a justified, evidenced deduction (WHT or other) which reduces the balance and can bring an invoice to PAID", async () => {
     const fin = await ctxFor("FINANCE");
+    const july = await periodFor(fin, 2026, 7);
+    const run = await db.payrollRun.findFirstOrThrow({ where: { periodId: july.id, type: "REGULAR" } });
     const inv = await db.clientInvoice.findFirstOrThrow({
-      where: { organizationId: fin.orgId, status: "ISSUED" },
+      where: { organizationId: fin.orgId, runId: run.id, status: "ISSUED" },
     });
     const total = num(inv.totalAmount);
     const wht = round2(num(inv.whtAmount));
@@ -182,8 +189,10 @@ describe("client billing / invoicing", () => {
 
   it("cancelling an invoice with no receipts or deductions needs a reason and is excluded from receivables", async () => {
     const fin = await ctxFor("FINANCE");
+    const july = await periodFor(fin, 2026, 7);
+    const run = await db.payrollRun.findFirstOrThrow({ where: { periodId: july.id, type: "REGULAR" } });
     const inv = await db.clientInvoice.findFirstOrThrow({
-      where: { organizationId: fin.orgId, amountPaid: 0, totalDeductions: 0, status: "ISSUED" },
+      where: { organizationId: fin.orgId, runId: run.id, amountPaid: 0, totalDeductions: 0, status: "ISSUED" },
     });
     await expect(cancelInvoice(fin, inv.id, "")).rejects.toThrow(/reason/);
     await cancelInvoice(fin, inv.id, "Duplicate invoice raised in error");
