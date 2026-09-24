@@ -221,6 +221,29 @@ Ikoyi (19–25), XYZ Manufacturing Lekki (26–30).
   matching the standard contract P&L layout, with Gross/Net Contribution % and a negative Net Contribution
   shown in parentheses. Filterable by payroll run and by a single contract.
 
+### Recurring deductions (Global / Location / Individual)
+
+- **Settings → Recurring Deductions** — deductions applied automatically on every **regular** run
+  (never on a supplementary run, so nothing is charged twice within the same period): **Global**
+  applies to every paid employee (e.g. a company-wide development levy); **Location** applies to
+  everyone who worked at least one day at the chosen beat that period (e.g. site radio rental);
+  **Individual** applies to one named employee (e.g. a cooperative contribution). Each is either a
+  fixed amount or a percentage of the employee's total earnings for the period, and requires a
+  documented reason. Deactivating a rule stops it from the next calculation onward; history already
+  paid is untouched.
+
+### Cost centers & budgeting
+
+- **Settings → Cost Centers** — an independent cost-grouping dimension, assignable to departments,
+  contracts, and beats, for grouping costs your own way (e.g. by region or business unit)
+  independent of the client/contract structure. Each payroll allocation resolves to exactly **one**
+  cost center — a beat's own assignment first, then its contract's, then the employee's
+  department's — so nothing is ever double-counted; unassigned activity is grouped separately
+  rather than silently dropped.
+- **Analytics → Cost Center P&L** rolls up revenue, cost and margin by cost center for a selected
+  payroll run, alongside that period's budget (Settings → Cost Centers → Set a monthly budget) and
+  the variance between them.
+
 ### Navigation
 
 - The sidebar is grouped into collapsible menus — **Dashboard, Workforce / Personnel, Payroll, Operations,

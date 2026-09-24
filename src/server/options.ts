@@ -6,7 +6,7 @@ export const opt = (value: string, label: string) => ({ value, label });
 export const enumOptions = (values: readonly string[]) => values.map((v) => opt(v, titleCase(v)));
 
 export async function options(ctx: Ctx) {
-  const [categories, departments, clients, contracts, beats, structures, periods, employees] =
+  const [categories, departments, clients, contracts, beats, structures, periods, employees, costCenters] =
     await Promise.all([
       db.employeeCategory.findMany({ where: { organizationId: ctx.orgId }, orderBy: { name: "asc" } }),
       db.department.findMany({ where: { organizationId: ctx.orgId }, orderBy: { name: "asc" } }),
@@ -38,6 +38,10 @@ export async function options(ctx: Ctx) {
           status: true,
         },
       }),
+      db.costCenter.findMany({
+        where: { organizationId: ctx.orgId, active: true },
+        orderBy: { name: "asc" },
+      }),
     ]);
   return {
     categories: categories.map((c) => opt(c.id, c.name)),
@@ -59,6 +63,7 @@ export async function options(ctx: Ctx) {
         `${e.employeeNumber} — ${fullName(e)}${e.status !== "ACTIVE" ? ` (${e.status.toLowerCase()})` : ""}`,
       ),
     ),
+    costCenters: costCenters.map((c) => opt(c.id, `${c.code} — ${c.name}`)),
   };
 }
 

@@ -85,6 +85,17 @@ enum ExitType {
   DECEASED
 }
 
+enum DeductionScope {
+  GLOBAL
+  LOCATION
+  INDIVIDUAL
+}
+
+enum RecurringDeductionCalcType {
+  PERCENTAGE_OF_GROSS
+  FIXED_AMOUNT
+}
+
 enum ClientStatus {
   ACTIVE
   INACTIVE
@@ -356,6 +367,9 @@ model Organization {
   exitRecords             ExitRecord[]
   exitTasks               ExitTask[]
   passwordResetTokens     PasswordResetToken[]
+  recurringDeductionRules RecurringDeductionRule[]
+  costCenters             CostCenter[]
+  costCenterBudgets       CostCenterBudget[]
 }
 
 model User {
@@ -432,8 +446,51 @@ model Department {
   code           String
   name           String
   employees      Employee[]
+  costCenterId   String?
+  costCenter     CostCenter?  @relation(fields: [costCenterId], references: [id])
 
   @@unique([organizationId, code])
+}
+
+/// An independent cost-grouping dimension — assignable to departments, contracts, and beats — for
+/// grouping costs your own way (e.g. by region or business unit) independent of the client/contract
+/// structure. Feeds budgeting and cost-center reporting.
+model CostCenter {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  code           String
+  name           String
+  description    String?
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  departments Department[]
+  contracts   Contract[]
+  beats       Beat[]
+  budgets     CostCenterBudget[]
+
+  @@unique([organizationId, code])
+}
+
+/// A per-cost-center, per-period budget for budget-vs-actual variance reporting.
+model CostCenterBudget {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  costCenterId   String
+  costCenter     CostCenter   @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
+  year           Int
+  month          Int
+  budgetedAmount Decimal      @db.Decimal(16, 2)
+  notes          String?
+  createdBy      String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([costCenterId, year, month])
+  @@index([organizationId, year, month])
 }
 
 model EmployeeCategory {
@@ -487,26 +544,27 @@ model Employee {
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
-  user                User?
-  deployments         Deployment[]
-  movements           StaffMovement[]
-  workRegister        WorkRegister[]
-  salaryOverrides     EmployeeSalaryOverride[]
-  payRates            EmployeePayRate[]
-  payrollRecords      PayrollRecord[]
-  overtime            Overtime[]
-  arrears             Arrears[]
-  deductions          Deduction[]
-  otherEarnings       OtherEarning[]
-  validationIssues    PayrollValidationIssue[]
-  paymentTxns         PaymentTransaction[]
-  leaveRequests       LeaveRequest[]
-  directReports       Employee[]               @relation("ReportingLine")
-  documents           EmployeeDocument[]
-  trainings           EmployeeTraining[]
-  disciplinaryRecords DisciplinaryRecord[]
-  onboardingTasks     OnboardingTask[]
-  exitRecords         ExitRecord[]
+  user                    User?
+  deployments             Deployment[]
+  movements               StaffMovement[]
+  workRegister            WorkRegister[]
+  salaryOverrides         EmployeeSalaryOverride[]
+  payRates                EmployeePayRate[]
+  payrollRecords          PayrollRecord[]
+  overtime                Overtime[]
+  arrears                 Arrears[]
+  deductions              Deduction[]
+  otherEarnings           OtherEarning[]
+  validationIssues        PayrollValidationIssue[]
+  paymentTxns             PaymentTransaction[]
+  leaveRequests           LeaveRequest[]
+  directReports           Employee[]               @relation("ReportingLine")
+  documents               EmployeeDocument[]
+  trainings               EmployeeTraining[]
+  disciplinaryRecords     DisciplinaryRecord[]
+  onboardingTasks         OnboardingTask[]
+  exitRecords             ExitRecord[]
+  recurringDeductionRules RecurringDeductionRule[]
 
   @@unique([organizationId, employeeNumber])
   @@index([organizationId, status])
@@ -690,6 +748,8 @@ model Contract {
   businessLine       BusinessLine     @default(GUARDING) // drives which employer add-on costs apply
   defaultStructureId String?
   defaultStructure   SalaryStructure? @relation(fields: [defaultStructureId], references: [id])
+  costCenterId       String?
+  costCenter         CostCenter?      @relation(fields: [costCenterId], references: [id])
   notes              String?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
@@ -749,17 +809,20 @@ model Beat {
   endDate          DateTime?    @db.Date
   supervisorId     String?
   supervisor       User?        @relation("BeatSupervisor", fields: [supervisorId], references: [id])
+  costCenterId     String?
+  costCenter       CostCenter?  @relation(fields: [costCenterId], references: [id])
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
-  currentEmployees Employee[]          @relation("CurrentBeat")
-  deployments      Deployment[]
-  workRegister     WorkRegister[]
-  overtime         Overtime[]
-  allocations      PayrollAllocation[]
-  movementsFrom    StaffMovement[]     @relation("MoveFromBeat")
-  movementsTo      StaffMovement[]     @relation("MoveToBeat")
-  invoiceLines     ClientInvoiceLine[]
+  currentEmployees        Employee[]               @relation("CurrentBeat")
+  deployments             Deployment[]
+  workRegister            WorkRegister[]
+  overtime                Overtime[]
+  allocations             PayrollAllocation[]
+  movementsFrom           StaffMovement[]          @relation("MoveFromBeat")
+  movementsTo             StaffMovement[]          @relation("MoveToBeat")
+  invoiceLines            ClientInvoiceLine[]
+  recurringDeductionRules RecurringDeductionRule[]
 
   @@unique([organizationId, code])
   @@index([organizationId, clientId])
@@ -1228,6 +1291,41 @@ model Deduction {
   createdAt          DateTime       @default(now())
 
   @@index([organizationId, periodId])
+}
+
+/// Recurring payroll deductions applied automatically on every REGULAR run — distinct from the
+/// one-off, per-instance-approved Deduction model above. Scope determines who it applies to:
+/// GLOBAL (every paid employee that period), LOCATION (everyone who worked any day at the given
+/// beat that period), INDIVIDUAL (one named employee). Never applied on supplementary runs, to
+/// avoid double-charging within the same period.
+model RecurringDeductionRule {
+  id             String                     @id @default(cuid())
+  organizationId String
+  organization   Organization               @relation(fields: [organizationId], references: [id])
+  name           String
+  /// Short code — becomes the payslip line / GL head code (e.g. "DEV_LEVY").
+  code           String
+  scope          DeductionScope
+  beatId         String?
+  beat           Beat?                      @relation(fields: [beatId], references: [id])
+  employeeId     String?
+  employee       Employee?                  @relation(fields: [employeeId], references: [id])
+  calcType       RecurringDeductionCalcType
+  /// % of the employee's total earnings for the period, when calcType = PERCENTAGE_OF_GROSS.
+  percentage     Decimal?                   @db.Decimal(6, 3)
+  fixedAmount    Decimal?                   @db.Decimal(14, 2)
+  active         Boolean                    @default(true)
+  effectiveFrom  DateTime                   @db.Date
+  effectiveTo    DateTime?                  @db.Date
+  reason         String
+  createdBy      String
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+
+  @@unique([organizationId, code])
+  @@index([organizationId, scope])
+  @@index([organizationId, beatId])
+  @@index([organizationId, employeeId])
 }
 
 model OtherEarning {

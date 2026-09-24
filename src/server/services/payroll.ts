@@ -14,6 +14,7 @@ import type { ComponentOverride } from "@/lib/payroll/structure";
 import { postRunToGl } from "./accounting";
 import { assertCan, BusinessError, db, toJson } from "./_base";
 import { logAudit } from "./audit";
+import { activeRecurringDeductionRules } from "./deduction-rules";
 import { findDuplicates } from "./employees";
 import { CLIENT_MISMATCH, LOCATION_MISMATCH } from "./operations";
 import { loadRateBook } from "./rates";
@@ -105,7 +106,17 @@ async function assemble(
     rules.defaultOperativeSharePct,
   );
 
-  const [employees, work, overrides, overtime, arrears, others, deductions, movements] = await Promise.all([
+  const [
+    employees,
+    work,
+    overrides,
+    overtime,
+    arrears,
+    others,
+    deductions,
+    movements,
+    recurringDeductionRules,
+  ] = await Promise.all([
     db.employee.findMany({
       where: {
         organizationId: ctx.orgId,
@@ -169,6 +180,7 @@ async function assemble(
         effectiveDate: { gte: period.startDate, lte: period.endDate },
       },
     }),
+    activeRecurringDeductionRules(ctx.orgId, period.endDate),
   ]);
   return {
     tax,
@@ -183,6 +195,7 @@ async function assemble(
     overtime,
     arrears,
     others,
+    recurringDeductionRules,
     deductions,
     movements,
   };
@@ -204,6 +217,39 @@ function workDaysFor(a: Assembled, employeeId: string): WorkDay[] {
       status: w.attendanceStatus as AttendanceStatus,
       overtimeHours: num(w.overtimeHours),
     }));
+}
+
+type EngineDeductionInput = NonNullable<Parameters<typeof calculateEmployeePayroll>[0]["deductions"]>[number];
+
+/**
+ * Recurring deduction rules (Global / Location / Individual, see RecurringDeductionRule) that
+ * apply to this employee this period. GLOBAL applies to every paid employee; LOCATION applies if
+ * the employee worked any day at that beat; INDIVIDUAL applies only to the named employee.
+ * A rule being active/effective IS the authorization, so it always passes the engine's
+ * authority-reference check.
+ */
+function recurringDeductionsFor(
+  a: Assembled,
+  employeeId: string,
+  days: WorkDay[],
+  totalEarnings: number,
+): EngineDeductionInput[] {
+  const beatIds = new Set(days.map((d) => d.beatId).filter((x): x is string => Boolean(x)));
+  const applicable = a.recurringDeductionRules.filter((r) => {
+    if (r.scope === "GLOBAL") return true;
+    if (r.scope === "LOCATION") return r.beatId !== null && beatIds.has(r.beatId);
+    return r.employeeId === employeeId;
+  });
+  return applicable.map((r) => ({
+    id: r.id,
+    type: r.code,
+    amount:
+      r.calcType === "PERCENTAGE_OF_GROSS"
+        ? round2((totalEarnings * num(r.percentage)) / 100)
+        : num(r.fixedAmount),
+    authorityReference: r.code,
+    reason: r.reason,
+  }));
 }
 
 function overridesFor(a: Assembled, employeeId: string): ComponentOverride[] {
@@ -280,11 +326,18 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
         });
       continue;
     }
-    const res = calculateEmployeePayroll({
+    const adHocDeductions: EngineDeductionInput[] = ded.map((x) => ({
+      id: x.id,
+      type: x.deductionType,
+      amount: num(x.amount),
+      authorityReference: x.authorityReference,
+      reason: x.reason,
+    }));
+    const buildInput = (deductions: EngineDeductionInput[]) => ({
       basisDays: a.basisDays,
       days,
-      resolveRate: (day) => a.book.resolve(emp.id, day),
-      businessLineFor: (contractId) => a.book.businessLineOf(contractId),
+      resolveRate: (day: WorkDay) => a.book.resolve(emp.id, day),
+      businessLineFor: (contractId: string | null) => a.book.businessLineOf(contractId),
       employerCostRule: a.employerCosts,
       overrides: overridesFor(a, emp.id),
       overtime: ot.map((o) => ({
@@ -301,13 +354,7 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
         pensionableImpact: num(x.pensionableImpact),
       })),
       otherEarnings: oth.map((x) => ({ id: x.id, name: x.name, amount: num(x.amount), taxable: x.taxable })),
-      deductions: ded.map((x) => ({
-        id: x.id,
-        type: x.deductionType,
-        amount: num(x.amount),
-        authorityReference: x.authorityReference,
-        reason: x.reason,
-      })),
+      deductions,
       pension: {
         employeeRate: a.pension.employeeRate,
         employerRate: a.pension.employerRate,
@@ -316,6 +363,12 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
       taxRule: a.tax.def,
       annualRent: emp.annualRent ? num(emp.annualRent) : 0,
     });
+    let res = calculateEmployeePayroll(buildInput(adHocDeductions));
+    // Recurring deduction rules (Global/Location/Individual) need this pass's totalEarnings to
+    // compute a percentage-of-gross amount, so — only when at least one applies — recalculate
+    // once more with them included. Pure/cheap function; a second pass costs nothing meaningful.
+    const recurring = recurringDeductionsFor(a, emp.id, days, res.totalEarnings);
+    if (recurring.length) res = calculateEmployeePayroll(buildInput([...adHocDeductions, ...recurring]));
     rows.push({ emp, res });
   }
 
