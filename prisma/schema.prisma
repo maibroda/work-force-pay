@@ -401,6 +401,8 @@ model Organization {
   purchaseInvoiceDeductions PurchaseInvoiceDeduction[]
   vendorPayments            VendorPayment[]
   fixedAssets               FixedAsset[]
+  bankAccounts              BankAccount[]
+  bankStatementLines        BankStatementLine[]
 }
 
 model User {
@@ -1667,6 +1669,8 @@ model ClientReceipt {
   recordedBy     String
   createdAt      DateTime      @default(now())
 
+  matchedByLines BankStatementLine[]
+
   @@index([organizationId, invoiceId])
   @@index([organizationId, clientId])
 }
@@ -1787,6 +1791,8 @@ model VendorPayment {
   recordedBy     String
   createdAt      DateTime        @default(now())
 
+  matchedByLines BankStatementLine[]
+
   @@index([organizationId, invoiceId])
   @@index([organizationId, vendorId])
 }
@@ -1841,6 +1847,66 @@ model FixedAsset {
   @@unique([organizationId, assetNumber])
   @@index([organizationId, category])
   @@index([organizationId, status])
+}
+
+// ───────────────────────── BANK RECONCILIATION (OPERATING ACCOUNT) ─────────────────────────
+// Reconciles the organization's own bank account(s) against everything that moves through them —
+// client receipts in, vendor payments out. Distinct from PaymentTransaction.reconciled above, which
+// only matches payroll disbursements. Scoped to a single primary operating account for now: receipts
+// and payments carry no bankAccountId, so a statement line can be matched to any org-wide, unmatched
+// receipt/payment (a record can only ever be claimed by one line).
+
+model BankAccount {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  bankName       String
+  accountNumber  String
+  glAccountId    String?
+  glAccount      GlAccount?   @relation(fields: [glAccountId], references: [id])
+  openingBalance Decimal      @default(0) @db.Decimal(16, 2)
+  openingDate    DateTime     @db.Date
+  active         Boolean      @default(true)
+  createdBy      String
+  createdAt      DateTime     @default(now())
+
+  statementLines BankStatementLine[]
+
+  @@unique([organizationId, name])
+}
+
+enum BankLineMatchType {
+  CLIENT_RECEIPT
+  VENDOR_PAYMENT
+  MANUAL
+}
+
+/// One imported bank statement line. Positive amount = money in, negative = money out. Matched
+/// against an existing ClientReceipt/VendorPayment, or marked MANUAL (bank charges, interest,
+/// inter-account transfers) with a required note — never silently ignored.
+model BankStatementLine {
+  id                     String             @id @default(cuid())
+  organizationId         String
+  organization           Organization       @relation(fields: [organizationId], references: [id])
+  bankAccountId          String
+  bankAccount            BankAccount        @relation(fields: [bankAccountId], references: [id])
+  date                   DateTime           @db.Date
+  description            String
+  amount                 Decimal            @db.Decimal(16, 2)
+  reference              String?
+  matchType              BankLineMatchType?
+  matchedClientReceiptId String?
+  matchedClientReceipt   ClientReceipt?     @relation(fields: [matchedClientReceiptId], references: [id])
+  matchedVendorPaymentId String?
+  matchedVendorPayment   VendorPayment?     @relation(fields: [matchedVendorPaymentId], references: [id])
+  matchNote              String?
+  matchedBy              String?
+  matchedAt              DateTime?
+  createdAt              DateTime           @default(now())
+
+  @@index([organizationId, bankAccountId])
+  @@index([organizationId, matchType])
 }
 
 // ─────────────────────────────── AUDIT ───────────────────────────────
@@ -1917,6 +1983,7 @@ model GlAccount {
   debitMappings  PayrollGlMapping[] @relation("MappingDebit")
   creditMappings PayrollGlMapping[] @relation("MappingCredit")
   lines          JournalLine[]
+  bankAccounts   BankAccount[]
 
   @@unique([organizationId, code])
 }
