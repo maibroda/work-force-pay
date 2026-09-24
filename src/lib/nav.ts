@@ -186,6 +186,7 @@ export const SELF_NAV: NavGroup[] = [
       { href: "/supervisor", label: "Today's Work Register", perm: "attendance.record" },
       { href: "/me", label: "My Dashboard", perm: "self.view" },
       { href: "/me/leave", label: "My Leave", perm: "leave.apply" },
+      { href: "/settings/security", label: "My Security", perm: "self.security" },
     ],
   },
 ];

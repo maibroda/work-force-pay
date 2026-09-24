@@ -10,9 +10,10 @@ import type { Ctx } from "@/lib/auth/context";
 import { BusinessError } from "@/server/services/_base";
 import { logger } from "@/lib/logger";
 
-/** Wraps a server action: authorization, error → friendly message, revalidation. */
+/** Wraps a server action: authorization, error → friendly message, revalidation. Pass permission
+ *  `undefined` for self-service actions that only require being logged in (e.g. account security). */
 export async function act(
-  permission: Permission,
+  permission: Permission | undefined,
   fn: (ctx: Ctx) => Promise<Partial<ActionResult> | void>,
   revalidate: string[] = [],
 ): Promise<ActionResult> {

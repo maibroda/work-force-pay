@@ -1,5 +1,3 @@
-import "server-only";
-
 type Level = "debug" | "info" | "warn" | "error";
 type Meta = Record<string, unknown>;
 

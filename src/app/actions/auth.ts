@@ -1,14 +1,30 @@
 "use server";
 import { redirect } from "next/navigation";
-import { createSession, destroySession, getSession } from "@/lib/auth/session";
+import type { User } from "@prisma/client";
+import { db } from "@/lib/db";
+import {
+  createLoginChallenge,
+  createSession,
+  destroySession,
+  getSession,
+  verifyLoginChallenge,
+} from "@/lib/auth/session";
 import { authenticate } from "@/server/services/users";
+import * as security from "@/server/services/security";
 import { logAudit } from "@/server/services/audit";
+import { act } from "./_run";
 
-export async function loginAction(_prev: { error?: string } | undefined, form: FormData) {
-  const email = String(form.get("email") ?? "");
-  const password = String(form.get("password") ?? "");
-  const user = await authenticate(email, password);
-  if (!user) return { error: "Invalid email or password." };
+export interface LoginState {
+  error?: string;
+  needsTotp?: boolean;
+  challenge?: string;
+}
+
+function redirectPath(role: User["role"]) {
+  return role === "EMPLOYEE" ? "/me" : role === "SUPERVISOR" ? "/supervisor" : "/";
+}
+
+async function completeLogin(user: User): Promise<never> {
   const ctx = {
     userId: user.id,
     orgId: user.organizationId,
@@ -19,7 +35,33 @@ export async function loginAction(_prev: { error?: string } | undefined, form: F
   };
   await createSession(ctx);
   await logAudit(ctx, { action: "LOGIN", entity: "User", entityId: user.id });
-  redirect(user.role === "EMPLOYEE" ? "/me" : user.role === "SUPERVISOR" ? "/supervisor" : "/");
+  return redirect(redirectPath(user.role));
+}
+
+const LOCKED_OR_INVALID =
+  "Invalid email or password, or your account is temporarily locked after repeated failed attempts — try again in a few minutes.";
+
+export async function loginAction(_prev: LoginState | undefined, form: FormData): Promise<LoginState> {
+  const email = String(form.get("email") ?? "");
+  const password = String(form.get("password") ?? "");
+  const user = await authenticate(email, password);
+  if (!user) return { error: LOCKED_OR_INVALID };
+  if (user.totpEnabled) return { needsTotp: true, challenge: await createLoginChallenge(user.id) };
+  return completeLogin(user);
+}
+
+export async function verifyTotpLoginAction(
+  _prev: LoginState | undefined,
+  form: FormData,
+): Promise<LoginState> {
+  const challenge = String(form.get("challenge") ?? "");
+  const code = String(form.get("code") ?? "").replace(/\s+/g, "");
+  const userId = await verifyLoginChallenge(challenge);
+  if (!userId) return { error: "Your sign-in session expired — please start again." };
+  const ok = await security.verifyTotpLogin(userId, code);
+  if (!ok) return { error: "Incorrect code.", needsTotp: true, challenge };
+  const user = await db.user.findUniqueOrThrow({ where: { id: userId } });
+  return completeLogin(user);
 }
 
 export async function logoutAction() {
@@ -27,4 +69,73 @@ export async function logoutAction() {
   if (ctx) await logAudit(ctx, { action: "LOGOUT", entity: "User", entityId: ctx.userId });
   await destroySession();
   redirect("/login");
+}
+
+// ─────────────────────────────── Forgot / reset password ───────────────────────────────
+
+export interface SimpleState {
+  ok?: boolean;
+  error?: string;
+}
+
+export async function requestPasswordResetAction(
+  _prev: SimpleState | undefined,
+  form: FormData,
+): Promise<SimpleState> {
+  const email = String(form.get("email") ?? "");
+  await security.requestPasswordReset(email);
+  // Always the same response — never reveals whether the email exists.
+  return { ok: true };
+}
+
+export async function resetPasswordAction(
+  _prev: SimpleState | undefined,
+  form: FormData,
+): Promise<SimpleState> {
+  try {
+    await security.resetPassword({
+      token: String(form.get("token") ?? ""),
+      password: String(form.get("password") ?? ""),
+    });
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+  redirect("/login?reset=1");
+}
+
+// ─────────────────────────────── Account security (self-service) ───────────────────────────────
+
+export async function changePasswordAction(v: Record<string, unknown>) {
+  return act(undefined, async (ctx) => {
+    await security.changeOwnPassword(ctx, String(v.currentPassword), String(v.newPassword));
+    return { message: "Password changed. You'll need to sign in again on your other devices." };
+  });
+}
+
+export async function logoutEverywhereAction() {
+  return act(undefined, async (ctx) => {
+    await security.logoutEverywhere(ctx);
+    return { message: "Signed out of every device, including this one on next page load." };
+  });
+}
+
+export async function beginTotpEnrollmentAction() {
+  return act(undefined, async (ctx) => {
+    const enrollment = await security.beginTotpEnrollment(ctx);
+    return { message: "Scan the QR code, then enter a code to confirm.", data: enrollment };
+  });
+}
+
+export async function confirmTotpEnrollmentAction(v: Record<string, unknown>) {
+  return act(undefined, async (ctx) => {
+    const backupCodes = await security.confirmTotpEnrollment(ctx, String(v.code));
+    return { message: "Two-factor authentication is now on. Save your backup codes.", data: { backupCodes } };
+  });
+}
+
+export async function disableTotpAction(v: Record<string, unknown>) {
+  return act(undefined, async (ctx) => {
+    await security.disableTotp(ctx, String(v.code));
+    return { message: "Two-factor authentication turned off." };
+  });
 }

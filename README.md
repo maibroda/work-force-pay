@@ -6,7 +6,7 @@ contracts and beats (locations) within a payroll month.
 
 **Stack:** Next.js 15 (App Router) · React 19 · TypeScript · Tailwind CSS + shadcn-style UI · PostgreSQL ·
 Prisma 6 (pg driver adapter) · Zod · React Hook Form · Recharts · JWT sessions (jose, httpOnly cookie) ·
-Vitest · Playwright · ESLint · Prettier.
+Sentry (error tracking) · Resend (transactional email) · Vitest · Playwright · ESLint · Prettier.
 
 ---
 
@@ -228,6 +228,31 @@ Ikoyi (19–25), XYZ Manufacturing Lekki (26–30).
   business is organized. Click a menu to expand it; the menu containing the current page auto-expands.
   Long menus (Payroll, Finance / Accounting) carry small sub-headings (e.g. "Payments", "Payroll reports")
   above the items they group. The Reports hub (`/reports`) mirrors the same grouping.
+
+### Security & platform hardening
+
+- **Login protection.** Rate limiting locks an account for 15 minutes after 5 failed attempts;
+  lockout is indistinguishable from a wrong password to the client, so it can't be used to
+  enumerate valid accounts.
+- **Two-factor authentication.** Optional TOTP (Google Authenticator, Authy, etc.), self-service
+  enrollment with a QR code, 10 single-use hashed backup codes, under **My Workspace → My
+  Security**. Not yet enforced by role — see `docs/data-protection-policy.md` for what's still a
+  gap versus what's actually built.
+- **Password reset.** `/forgot-password` → emailed single-use link (30-minute expiry) →
+  `/reset-password`. Resets and self-service password changes both invalidate every other signed-in
+  session. Email sends via Resend when `RESEND_API_KEY` is set; otherwise the link is logged to the
+  server console so local development needs no email account at all.
+- **Session revocation.** Every session JWT carries a `sessionVersion`; bumping it (logout
+  everywhere, password change, deactivating a user) invalidates every outstanding token instantly,
+  without a server-side session store.
+- **Error tracking & logging.** Unexpected errors are logged as structured JSON and reported to
+  Sentry (inert until `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` are set) with cookies/auth headers
+  stripped before the event ever leaves the process; expected business/permission errors still show
+  their real message to the user. A global error boundary replaces Next's default crash screen.
+- **CI.** `.github/workflows/ci.yml` runs lint, typecheck, the full test suite, and a production
+  build against a real Postgres service on every push/PR.
+- **Data protection.** `docs/data-protection-policy.md` — an honest first pass, including the gaps
+  that still need a decision (retention schedule, subject-access tooling, breach runbook).
 
 ---
 

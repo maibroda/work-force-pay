@@ -355,6 +355,7 @@ model Organization {
   onboardingTasks         OnboardingTask[]
   exitRecords             ExitRecord[]
   exitTasks               ExitTask[]
+  passwordResetTokens     PasswordResetToken[]
 }
 
 model User {
@@ -370,10 +371,42 @@ model User {
   employee        Employee?    @relation(fields: [employeeId], references: [id])
   supervisedBeats Beat[]       @relation("BeatSupervisor")
   lastLoginAt     DateTime?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+
+  // Login rate limiting — reset on success, incremented on failure.
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+
+  // Bumped on logout-everywhere / password change — invalidates every outstanding session JWT at once.
+  sessionVersion Int @default(1)
+
+  // TOTP two-factor authentication (optional; not yet enforced by role).
+  totpSecret     String?
+  totpEnabled    Boolean   @default(false)
+  totpVerifiedAt DateTime?
+  /// Bcrypt-hashed one-time backup codes; a code is removed from the array once used.
+  backupCodes    String[]  @default([])
+
+  passwordResetTokens PasswordResetToken[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([organizationId])
+}
+
+/// Single-use, short-lived password reset tokens — only the bcrypt hash is stored, never the raw token.
+model PasswordResetToken {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash      String       @unique
+  expiresAt      DateTime
+  usedAt         DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([userId])
 }
 
 model NumberingRule {

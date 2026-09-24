@@ -40,6 +40,7 @@ export const PERMISSIONS = [
   "users.manage",
   "audit.view",
   "self.view",
+  "self.security", // change own password, manage own 2FA, sign out of other sessions
   "leave.view", // see leave requests & balances (supervisors: their own guards only)
   "leave.apply", // apply for own annual leave
   "leave.approve", // approve / reject leave (supervisors: their own guards only)
@@ -64,6 +65,7 @@ const READ_ALL: Permission[] = [
   "audit.view",
   "leave.view",
   "gl.view",
+  "self.security",
 ];
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
@@ -88,6 +90,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "leave.view",
     "leave.approve",
     "leave.manage",
+    "self.security",
   ],
   OPERATIONS: [
     "dashboard.view",
@@ -102,6 +105,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "payroll.inputs",
     "reports.view",
     "leave.view",
+    "self.security",
   ],
   PAYROLL_ADMIN: [
     "dashboard.view",
@@ -122,6 +126,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "audit.view",
     "leave.view",
     "gl.view",
+    "self.security",
   ],
   FINANCE: [
     ...READ_ALL,
@@ -138,11 +143,12 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "operations.view",
     "attendance.record",
     "self.view",
+    "self.security",
     "leave.view",
     "leave.approve",
     "leave.apply",
   ],
-  EMPLOYEE: ["self.view", "leave.apply"],
+  EMPLOYEE: ["self.view", "self.security", "leave.apply"],
 };
 
 export function can(role: Role, permission: Permission): boolean {
