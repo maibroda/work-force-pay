@@ -339,6 +339,10 @@ model Organization {
   address   String?
   phone     String?
   email     String?
+  /// ISO 4217 currency code this organization reports and bills in. See CURRENCIES in
+  /// src/lib/money.ts for the supported set and their symbol/locale. Changing this is purely a
+  /// display setting for now — amounts are not converted, and most of the app still assumes NGN.
+  currency  String   @default("NGN")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

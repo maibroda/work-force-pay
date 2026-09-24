@@ -5,6 +5,8 @@ import * as nr from "@/server/services/numbering";
 import * as users from "@/server/services/users";
 import { db } from "@/lib/db";
 import { logAudit } from "@/server/services/audit";
+import { BusinessError } from "@/server/services/_base";
+import { CURRENCY_CODES, type CurrencyCode } from "@/lib/money";
 
 type V = Record<string, unknown>;
 
@@ -108,6 +110,9 @@ export async function updateOrganizationAction(v: V) {
   return act(
     "settings.manage",
     async (ctx) => {
+      const currency = String(v.currency ?? "NGN");
+      if (!CURRENCY_CODES.includes(currency as CurrencyCode))
+        throw new BusinessError(`Unsupported currency code: ${currency}`);
       const old = await db.organization.findUniqueOrThrow({ where: { id: ctx.orgId } });
       const o = await db.organization.update({
         where: { id: ctx.orgId },
@@ -116,6 +121,7 @@ export async function updateOrganizationAction(v: V) {
           address: (v.address as string) ?? null,
           phone: (v.phone as string) ?? null,
           email: (v.email as string) ?? null,
+          currency,
         },
       });
       await logAudit(ctx, {
