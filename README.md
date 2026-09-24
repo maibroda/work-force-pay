@@ -261,6 +261,18 @@ Ikoyi (19–25), XYZ Manufacturing Lekki (26–30).
   neither can be cancelled, one with either cannot. The payables summary totals billed / paid /
   deducted / outstanding / overdue by vendor, same shape as the receivables summary.
 
+### Fixed asset register
+
+- **Finance / Accounting → Fixed Asset Register** — company-owned capital assets: vehicles, radios,
+  CCTV, firearms, office/IT equipment, furniture. Each is auto-numbered `FA-######`, optionally
+  tagged with a cost center and/or assigned to an employee, and carries cost, salvage value and
+  useful life (months).
+- **Depreciation is straight-line and computed on the fly** — never stored as a running schedule, so
+  there's nothing to re-run when a rate or "as of" date changes. Whole calendar months only (the
+  acquisition month counts as month 1; day-of-month is ignored), capped at the useful life.
+- **Disposal** is terminal (no re-activation): records a disposal date, proceeds and a reason;
+  depreciation freezes at the disposal date, and the detail page shows the resulting gain/(loss).
+
 ### Navigation
 
 - The sidebar is grouped into collapsible menus — **Dashboard, Workforce / Personnel, Payroll, Operations,

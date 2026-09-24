@@ -16,6 +16,7 @@ const DEFAULTS: Record<string, { prefix: string; digits: number }> = {
   JOURNAL: { prefix: "JV", digits: 6 },
   INVOICE: { prefix: "INV", digits: 6 },
   PURCHASE_INVOICE: { prefix: "PINV", digits: 6 },
+  FIXED_ASSET: { prefix: "FA", digits: 6 },
 };
 
 /**

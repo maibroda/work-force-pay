@@ -396,6 +396,7 @@ model Organization {
   purchaseInvoices          PurchaseInvoice[]
   purchaseInvoiceDeductions PurchaseInvoiceDeduction[]
   vendorPayments            VendorPayment[]
+  fixedAssets               FixedAsset[]
 }
 
 model User {
@@ -497,6 +498,7 @@ model CostCenter {
   beats            Beat[]
   budgets          CostCenterBudget[]
   purchaseInvoices PurchaseInvoice[]
+  fixedAssets      FixedAsset[]
 
   @@unique([organizationId, code])
 }
@@ -592,6 +594,7 @@ model Employee {
   onboardingTasks         OnboardingTask[]
   exitRecords             ExitRecord[]
   recurringDeductionRules RecurringDeductionRule[]
+  assignedFixedAssets     FixedAsset[]
 
   @@unique([organizationId, employeeNumber])
   @@index([organizationId, status])
@@ -1782,6 +1785,58 @@ model VendorPayment {
 
   @@index([organizationId, invoiceId])
   @@index([organizationId, vendorId])
+}
+
+// ─────────────────────────────── FIXED ASSET REGISTER ───────────────────────────────
+
+enum FixedAssetCategory {
+  VEHICLE
+  RADIO_COMMS
+  CCTV_SECURITY
+  FIREARM
+  OFFICE_EQUIPMENT
+  IT_EQUIPMENT
+  FURNITURE
+  OTHER
+}
+
+enum FixedAssetStatus {
+  ACTIVE
+  DISPOSED
+}
+
+/// Company-owned capital assets — vehicles, radios, CCTV, firearms, office/IT equipment. Straight-line
+/// depreciation is computed on the fly (see fixed-assets.ts), never stored, so there's nothing to
+/// re-run when a rate or date changes. Auto-numbered `FA-######`, never deleted — dispose it instead.
+model FixedAsset {
+  id                   String             @id @default(cuid())
+  organizationId       String
+  organization         Organization       @relation(fields: [organizationId], references: [id])
+  assetNumber          String
+  name                 String
+  category             FixedAssetCategory
+  costCenterId         String?
+  costCenter           CostCenter?        @relation(fields: [costCenterId], references: [id])
+  serialNumber         String?
+  locationDescription  String?
+  assignedToEmployeeId String?
+  assignedToEmployee   Employee?          @relation(fields: [assignedToEmployeeId], references: [id])
+  acquisitionDate      DateTime           @db.Date
+  cost                 Decimal            @db.Decimal(16, 2)
+  usefulLifeMonths     Int
+  salvageValue         Decimal            @default(0) @db.Decimal(16, 2)
+  status               FixedAssetStatus   @default(ACTIVE)
+  disposalDate         DateTime?          @db.Date
+  disposalProceeds     Decimal?           @db.Decimal(16, 2)
+  disposalReason       String?
+  notes                String?
+  createdBy            String
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@unique([organizationId, assetNumber])
+  @@index([organizationId, category])
+  @@index([organizationId, status])
 }
 
 // ─────────────────────────────── AUDIT ───────────────────────────────
