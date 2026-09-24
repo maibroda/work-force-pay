@@ -20,13 +20,17 @@ npm install                      # also runs `prisma generate`
 
 # 2. Configure
 cp .env.example .env             # set DATABASE_URL, TEST_DATABASE_URL, AUTH_SECRET
-createdb workforcepay            # or create the databases in pgAdmin
-createdb workforcepay_test
 
-# 3. Database: run migrations + load demo data
+# 3. Database — either run Postgres yourself and `createdb workforcepay workforcepay_test`,
+#    or start it with Docker Compose (restart: unless-stopped, so it survives a Docker restart):
+docker compose up -d
+docker exec workforcepay-db createdb -U postgres workforcepay
+docker exec workforcepay-db createdb -U postgres workforcepay_test
+
+# 4. Run migrations + load demo data
 npm run db:setup                 # = prisma migrate deploy && tsx prisma/seed.ts
 
-# 4. Run
+# 5. Run
 npm run dev                      # http://localhost:3000
 # or production mode
 npm run build && npm start
@@ -243,6 +247,19 @@ Ikoyi (19–25), XYZ Manufacturing Lekki (26–30).
 - **Analytics → Cost Center P&L** rolls up revenue, cost and margin by cost center for a selected
   payroll run, alongside that period's budget (Settings → Cost Centers → Set a monthly budget) and
   the variance between them.
+
+### Accounts payable
+
+- **Finance / Accounting → Vendors** — suppliers you owe money to (uniforms/kits, equipment,
+  utilities, professional services, rent, maintenance), with bank details for payment.
+- **Finance / Accounting → Billing & Payables** — the mirror image of Billing & Receivables, for
+  money going out: record a vendor bill with line items and VAT (auto-numbered `PINV-######`,
+  optionally tagged with a cost center), then track cash payments (`VendorPayment`) and non-cash
+  deductions (`PurchaseInvoiceDeduction` — e.g. withholding tax we're required to remit on the
+  vendor's behalf — always with a reason and a supporting document reference) against it. A bill
+  moves RECORDED → PARTIALLY_PAID → PAID as payments/deductions cover the total; a clean bill with
+  neither can be cancelled, one with either cannot. The payables summary totals billed / paid /
+  deducted / outstanding / overdue by vendor, same shape as the receivables summary.
 
 ### Navigation
 

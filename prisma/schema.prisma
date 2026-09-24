@@ -308,6 +308,28 @@ enum InvoiceStatus {
   CANCELLED
 }
 
+enum VendorCategory {
+  UNIFORM_KITS
+  EQUIPMENT
+  UTILITIES
+  PROFESSIONAL_SERVICES
+  RENT
+  MAINTENANCE
+  OTHER
+}
+
+enum PurchaseInvoiceStatus {
+  RECORDED
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+enum PurchaseInvoiceDeductionType {
+  WITHHOLDING_TAX
+  OTHER
+}
+
 // ─────────────────────────── TENANCY & ACCESS ───────────────────────────
 
 model Organization {
@@ -320,56 +342,60 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users                   User[]
-  numberingRules          NumberingRule[]
-  departments             Department[]
-  categories              EmployeeCategory[]
-  employees               Employee[]
-  clients                 Client[]
-  contracts               Contract[]
-  contractRates           ContractRate[]
-  beats                   Beat[]
-  salaryStructures        SalaryStructure[]
-  salaryOverrides         EmployeeSalaryOverride[]
-  payRates                EmployeePayRate[]
-  deployments             Deployment[]
-  movements               StaffMovement[]
-  workRegister            WorkRegister[]
-  payrollPeriods          PayrollPeriod[]
-  payrollRuns             PayrollRun[]
-  payrollRecords          PayrollRecord[]
-  allocations             PayrollAllocation[]
-  validationIssues        PayrollValidationIssue[]
-  overtime                Overtime[]
-  arrears                 Arrears[]
-  deductions              Deduction[]
-  otherEarnings           OtherEarning[]
-  taxRules                TaxRule[]
-  pensionRules            PensionRule[]
-  payrollRules            PayrollRule[]
-  employerCostRules       EmployerCostRule[]
-  paymentBatches          PaymentBatch[]
-  paymentTxns             PaymentTransaction[]
-  remittances             StatutoryRemittance[]
-  auditLogs               AuditLog[]
-  leavePolicy             LeavePolicy?
-  leaveRequests           LeaveRequest[]
-  glAccounts              GlAccount[]
-  glMappings              PayrollGlMapping[]
-  journalEntries          JournalEntry[]
-  clientInvoices          ClientInvoice[]
-  clientReceipts          ClientReceipt[]
-  clientInvoiceDeductions ClientInvoiceDeduction[]
-  employeeDocuments       EmployeeDocument[]
-  employeeTrainings       EmployeeTraining[]
-  disciplinaryRecords     DisciplinaryRecord[]
-  onboardingTasks         OnboardingTask[]
-  exitRecords             ExitRecord[]
-  exitTasks               ExitTask[]
-  passwordResetTokens     PasswordResetToken[]
-  recurringDeductionRules RecurringDeductionRule[]
-  costCenters             CostCenter[]
-  costCenterBudgets       CostCenterBudget[]
+  users                     User[]
+  numberingRules            NumberingRule[]
+  departments               Department[]
+  categories                EmployeeCategory[]
+  employees                 Employee[]
+  clients                   Client[]
+  contracts                 Contract[]
+  contractRates             ContractRate[]
+  beats                     Beat[]
+  salaryStructures          SalaryStructure[]
+  salaryOverrides           EmployeeSalaryOverride[]
+  payRates                  EmployeePayRate[]
+  deployments               Deployment[]
+  movements                 StaffMovement[]
+  workRegister              WorkRegister[]
+  payrollPeriods            PayrollPeriod[]
+  payrollRuns               PayrollRun[]
+  payrollRecords            PayrollRecord[]
+  allocations               PayrollAllocation[]
+  validationIssues          PayrollValidationIssue[]
+  overtime                  Overtime[]
+  arrears                   Arrears[]
+  deductions                Deduction[]
+  otherEarnings             OtherEarning[]
+  taxRules                  TaxRule[]
+  pensionRules              PensionRule[]
+  payrollRules              PayrollRule[]
+  employerCostRules         EmployerCostRule[]
+  paymentBatches            PaymentBatch[]
+  paymentTxns               PaymentTransaction[]
+  remittances               StatutoryRemittance[]
+  auditLogs                 AuditLog[]
+  leavePolicy               LeavePolicy?
+  leaveRequests             LeaveRequest[]
+  glAccounts                GlAccount[]
+  glMappings                PayrollGlMapping[]
+  journalEntries            JournalEntry[]
+  clientInvoices            ClientInvoice[]
+  clientReceipts            ClientReceipt[]
+  clientInvoiceDeductions   ClientInvoiceDeduction[]
+  employeeDocuments         EmployeeDocument[]
+  employeeTrainings         EmployeeTraining[]
+  disciplinaryRecords       DisciplinaryRecord[]
+  onboardingTasks           OnboardingTask[]
+  exitRecords               ExitRecord[]
+  exitTasks                 ExitTask[]
+  passwordResetTokens       PasswordResetToken[]
+  recurringDeductionRules   RecurringDeductionRule[]
+  costCenters               CostCenter[]
+  costCenterBudgets         CostCenterBudget[]
+  vendors                   Vendor[]
+  purchaseInvoices          PurchaseInvoice[]
+  purchaseInvoiceDeductions PurchaseInvoiceDeduction[]
+  vendorPayments            VendorPayment[]
 }
 
 model User {
@@ -466,10 +492,11 @@ model CostCenter {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  departments Department[]
-  contracts   Contract[]
-  beats       Beat[]
-  budgets     CostCenterBudget[]
+  departments      Department[]
+  contracts        Contract[]
+  beats            Beat[]
+  budgets          CostCenterBudget[]
+  purchaseInvoices PurchaseInvoice[]
 
   @@unique([organizationId, code])
 }
@@ -1635,6 +1662,126 @@ model ClientReceipt {
 
   @@index([organizationId, invoiceId])
   @@index([organizationId, clientId])
+}
+
+// ───────────────────────── ACCOUNTS PAYABLE ─────────────────────────
+// Mirrors the client billing (accounts-receivable) models above, but for money going OUT —
+// uniform/kit suppliers, equipment vendors, utilities, professional services, etc.
+
+model Vendor {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  name           String
+  category       VendorCategory @default(OTHER)
+  contactPerson  String?
+  phone          String?
+  email          String?
+  address        String?
+  taxId          String?
+  bankName       String?
+  accountNumber  String?
+  accountName    String?
+  active         Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  invoices   PurchaseInvoice[]
+  payments   VendorPayment[]
+  deductions PurchaseInvoiceDeduction[]
+
+  @@unique([organizationId, name])
+}
+
+/// A vendor bill. Never edited once recorded — corrections go through a deduction or a new invoice.
+model PurchaseInvoice {
+  id              String                @id @default(cuid())
+  organizationId  String
+  organization    Organization          @relation(fields: [organizationId], references: [id])
+  vendorId        String
+  vendor          Vendor                @relation(fields: [vendorId], references: [id])
+  invoiceNumber   String // our internal sequence number
+  vendorRef       String? // the vendor's own invoice/bill number
+  costCenterId    String?
+  costCenter      CostCenter?           @relation(fields: [costCenterId], references: [id])
+  invoiceDate     DateTime              @db.Date
+  dueDate         DateTime              @db.Date
+  description     String
+  subtotal        Decimal               @db.Decimal(16, 2)
+  vatPct          Decimal               @default(0) @db.Decimal(5, 2)
+  vatAmount       Decimal               @default(0) @db.Decimal(16, 2)
+  totalAmount     Decimal               @db.Decimal(16, 2)
+  amountPaid      Decimal               @default(0) @db.Decimal(16, 2)
+  /// Sum of PurchaseInvoiceDeduction — WHT we withheld from the vendor, or any other justified,
+  /// evidenced deduction (short-payment, damaged-goods credit, etc.).
+  totalDeductions Decimal               @default(0) @db.Decimal(16, 2)
+  status          PurchaseInvoiceStatus @default(RECORDED)
+  notes           String?
+  createdBy       String
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  lines      PurchaseInvoiceLine[]
+  payments   VendorPayment[]
+  deductions PurchaseInvoiceDeduction[]
+
+  @@unique([organizationId, invoiceNumber])
+  @@index([organizationId, vendorId])
+  @@index([organizationId, status])
+}
+
+model PurchaseInvoiceLine {
+  id          String          @id @default(cuid())
+  invoiceId   String
+  invoice     PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Decimal         @default(1) @db.Decimal(10, 2)
+  rate        Decimal         @db.Decimal(14, 2)
+  amount      Decimal         @db.Decimal(14, 2)
+  sortOrder   Int             @default(0)
+}
+
+/// A justified, evidenced deduction WE apply instead of paying a vendor bill in full — withholding
+/// tax we're required to remit on the vendor's behalf, or any other agreed short-payment. Never
+/// deleted.
+model PurchaseInvoiceDeduction {
+  id                 String                       @id @default(cuid())
+  organizationId     String
+  organization       Organization                 @relation(fields: [organizationId], references: [id])
+  invoiceId          String
+  invoice            PurchaseInvoice              @relation(fields: [invoiceId], references: [id])
+  vendorId           String
+  vendor             Vendor                       @relation(fields: [vendorId], references: [id])
+  type               PurchaseInvoiceDeductionType
+  amount             Decimal                      @db.Decimal(16, 2)
+  reason             String
+  supportingDocument String
+  recordedBy         String
+  createdAt          DateTime                     @default(now())
+
+  @@index([organizationId, invoiceId])
+  @@index([organizationId, vendorId])
+}
+
+/// A payment made to a vendor against a bill. Never deleted — cancel/reverse with a documented
+/// reason instead if one is recorded in error.
+model VendorPayment {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  invoiceId      String
+  invoice        PurchaseInvoice @relation(fields: [invoiceId], references: [id])
+  vendorId       String
+  vendor         Vendor          @relation(fields: [vendorId], references: [id])
+  amount         Decimal         @db.Decimal(16, 2)
+  paidDate       DateTime        @db.Date
+  method         String?
+  reference      String?
+  recordedBy     String
+  createdAt      DateTime        @default(now())
+
+  @@index([organizationId, invoiceId])
+  @@index([organizationId, vendorId])
 }
 
 // ─────────────────────────────── AUDIT ───────────────────────────────

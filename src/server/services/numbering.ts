@@ -15,6 +15,7 @@ const DEFAULTS: Record<string, { prefix: string; digits: number }> = {
   PAYMENT_BATCH: { prefix: "PAY", digits: 6 },
   JOURNAL: { prefix: "JV", digits: 6 },
   INVOICE: { prefix: "INV", digits: 6 },
+  PURCHASE_INVOICE: { prefix: "PINV", digits: 6 },
 };
 
 /**
