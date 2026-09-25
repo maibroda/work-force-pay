@@ -9,11 +9,12 @@
  */
 import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
-import { d, iso } from "@/lib/dates";
+import { addDays, d, iso, monthEnd, monthStart } from "@/lib/dates";
 import { num, round2 } from "@/lib/money";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { nextNumber } from "./numbering";
+import { postDepreciation, postFixedAssetAcquisition, postFixedAssetDisposal } from "./gl-posting";
 
 const opt = z
   .string()
@@ -81,6 +82,7 @@ export async function createFixedAsset(ctx: Ctx, raw: z.input<typeof fixedAssetS
         createdBy: ctx.name,
       },
     });
+    await postFixedAssetAcquisition(ctx, tx, asset);
     await logAudit(
       ctx,
       { action: "FIXED_ASSET_CREATE", entity: "FixedAsset", entityId: asset.id, newValue: asset },
@@ -104,23 +106,37 @@ export async function disposeFixedAsset(ctx: Ctx, id: string, raw: z.input<typeo
   if (asset.status === "DISPOSED") throw new BusinessError("This asset has already been disposed of.");
   if (d(v.disposalDate) < asset.acquisitionDate)
     throw new BusinessError("Disposal date can't be before the acquisition date.");
-  const updated = await db.fixedAsset.update({
-    where: { id },
-    data: {
-      status: "DISPOSED",
-      disposalDate: d(v.disposalDate),
-      disposalProceeds: v.disposalProceeds,
-      disposalReason: v.disposalReason,
-    },
+  const disposalDate = d(v.disposalDate);
+  const accumDepAtDisposal = accumulatedDepreciation(asset, disposalDate);
+  return db.$transaction(async (tx) => {
+    const updated = await tx.fixedAsset.update({
+      where: { id },
+      data: {
+        status: "DISPOSED",
+        disposalDate,
+        disposalProceeds: v.disposalProceeds,
+        disposalReason: v.disposalReason,
+      },
+    });
+    await postFixedAssetDisposal(
+      ctx,
+      tx,
+      { assetNumber: asset.assetNumber, disposalDate, cost: asset.cost, disposalProceeds: v.disposalProceeds },
+      accumDepAtDisposal,
+    );
+    await logAudit(
+      ctx,
+      {
+        action: "FIXED_ASSET_DISPOSE",
+        entity: "FixedAsset",
+        entityId: id,
+        reason: v.disposalReason,
+        newValue: { disposalDate: v.disposalDate, disposalProceeds: v.disposalProceeds },
+      },
+      tx,
+    );
+    return updated;
   });
-  await logAudit(ctx, {
-    action: "FIXED_ASSET_DISPOSE",
-    entity: "FixedAsset",
-    entityId: id,
-    reason: v.disposalReason,
-    newValue: { disposalDate: v.disposalDate, disposalProceeds: v.disposalProceeds },
-  });
-  return updated;
 }
 
 /** Whole calendar months elapsed from `from` to `to`, with the starting month counting as month 1. */
@@ -227,4 +243,48 @@ export async function assetRegister(ctx: Ctx, asOf?: string) {
     totals,
     byCategory: [...byCategory.entries()].map(([category, v]) => ({ category, ...v })),
   };
+}
+
+/**
+ * Posts one journal (Dr Depreciation Expense / Cr Accumulated Depreciation) for the incremental
+ * depreciation every active asset accrued during a calendar month — the same monthsElapsed math
+ * assetRegister/incomeStatement already use, just as a difference between two as-of dates instead
+ * of a single snapshot. Blocked from running twice for the same month per organization.
+ */
+export async function postDepreciationForMonth(ctx: Ctx, year: number, month: number) {
+  assertCan(ctx, "payment.manage");
+  const periodEnd = monthEnd(year, month);
+  const periodLabel = periodEnd.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+  const already = await db.journalEntry.findFirst({
+    where: { organizationId: ctx.orgId, source: "DEPRECIATION", postingDate: periodEnd },
+  });
+  if (already) throw new BusinessError(`Depreciation for ${periodLabel} has already been posted.`);
+
+  const dayBeforePeriod = addDays(monthStart(year, month), -1);
+  const assets = await db.fixedAsset.findMany({
+    where: { organizationId: ctx.orgId, acquisitionDate: { lte: periodEnd } },
+  });
+  const inService = assets.filter(
+    (a) => !(a.status === "DISPOSED" && a.disposalDate && a.disposalDate < monthStart(year, month)),
+  );
+  const perAssetAmounts = inService.map((a) => ({
+    assetNumber: a.assetNumber,
+    amount: round2(accumulatedDepreciation(a, periodEnd) - accumulatedDepreciation(a, dayBeforePeriod)),
+  }));
+
+  return db.$transaction(async (tx) => {
+    const journal = await postDepreciation(ctx, tx, periodEnd, periodLabel, perAssetAmounts);
+    if (!journal) throw new BusinessError(`No depreciation accrued for ${periodLabel}.`);
+    await logAudit(
+      ctx,
+      {
+        action: "FIXED_ASSET_DEPRECIATION_POST",
+        entity: "JournalEntry",
+        entityId: journal.id,
+        newValue: { period: periodLabel, assets: perAssetAmounts.filter((a) => a.amount > 0).length },
+      },
+      tx,
+    );
+    return journal;
+  });
 }

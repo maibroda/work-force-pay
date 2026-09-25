@@ -315,23 +315,39 @@ Ikoyi (19–25), XYZ Manufacturing Lekki (26–30).
 
 ### Financial statements
 
-- **Finance / Accounting → Trial Balance / Income Statement / Balance Sheet** — management
-  financial statements, computed from existing records rather than a fully GL-integrated ledger.
-  The GL (`JournalEntry`/`JournalLine`) today only ever gets posted from payroll locks — client
-  billing, vendor bills, fixed-asset depreciation and bank accounts never post journal entries.
-- **Trial Balance** is the one statement that's fully GL-sourced: every account's debit/credit
-  activity as of a date, always balancing by construction (every journal posts equal debits and
-  credits).
-- **Income Statement** combines revenue from `ClientInvoice` (not GL-posted), payroll expenses from
-  `JournalLine` (GL-sourced), and depreciation for the period from the Fixed Asset Register (not
-  GL-posted) — clearly separated in the UI.
-- **Balance Sheet** assembles cash (bank account balances), accounts receivable, and fixed assets
-  (net book value) against accounts payable and the GL's payroll-related payables (PAYE, pension,
-  net salaries). Equity is a balancing figure (assets − liabilities), not an independently tracked
-  account — labeled as such rather than presented as precisely derived.
-- A future phase could retrofit real GL postings for AR/AP/fixed-assets/bank (mirroring how
-  `PayrollGlMapping` already works for payroll) to make these statements fully GL-sourced; that's
-  explicitly out of scope here.
+- **Finance / Accounting → Trial Balance / Income Statement / Balance Sheet** — fully GL-sourced.
+  Every figure is summed straight from `JournalLine` debits/credits grouped by GL account, the same
+  ledger payroll locks post to. Client billing, vendor billing, bank account openings and
+  fixed-asset acquisition/disposal/depreciation all post their own journal entries too
+  (`src/server/services/gl-posting.ts`), so nothing here is computed from a side table anymore.
+- Because every `JournalEntry` posts equal debits and credits, the fundamental accounting identity
+  (Assets = Liabilities + Equity + Income − Expense) holds exactly across the whole ledger once
+  account-type balances are summed — verified by the balance-sheet always balancing to the kobo,
+  not approximately.
+- **Trial Balance** is every GL account's debit/credit activity as of a date; **Income Statement**
+  is INCOME/EXPENSE account balances for a period, split into revenue and expense rows; **Balance
+  Sheet** groups ASSET/LIABILITY/EQUITY balances as of a date, with named rows for the accounts
+  every screen posts to (cash, AR, AP, fixed assets/accumulated depreciation, opening balance
+  equity) and catch-all rows for any other account in that type so nothing is silently dropped.
+- **Equity is genuinely derived, not a plug**: Opening Balance Equity (from bank-account openings)
+  plus Retained Earnings (the ledger's own cumulative Income − Expense to the cutoff date), both
+  summed from `JournalLine` like everything else.
+- **What posts where**: client invoices/receipts/deductions post to AR (`billing.ts`); vendor
+  invoices/payments/deductions post to AP (`payables.ts`); opening a bank account posts Opening
+  Balance Equity (`bank-reconciliation.ts`); creating/disposing a fixed asset posts its cost/gain-
+  loss (`fixed-assets.ts`); and **Fixed Asset Register → Post depreciation for a month** posts one
+  journal per calendar month for every asset's incremental depreciation that month, blocked from
+  running twice for the same month.
+- **Known simplifications** (see `gl-posting.ts`'s header comment): all AP spend posts to one
+  generic expense account regardless of vendor category, VAT on a purchase is folded into that
+  expense rather than tracked as input VAT, and AR/AP cash movements post to one default operating-
+  cash account rather than a specific `BankAccount`. There's also no link between a vendor-billed
+  purchase and a fixed-asset registration, so an asset bought via Payables and then separately
+  entered in the Fixed Asset Register posts its cost twice (accepted simplification, not a bug) —
+  a future phase could add that link.
+- The Fixed Asset Register's own net-book-value column stays a live, on-the-fly calculation from
+  the asset's own fields (unchanged from before) — it can differ from the Balance Sheet's GL-posted
+  net book value until "Post depreciation for a month" has actually been run for a given month.
 
 ### Navigation
 

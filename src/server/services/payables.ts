@@ -15,6 +15,7 @@ import { num, round2 } from "@/lib/money";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { nextNumber } from "./numbering";
+import { postApDeduction, postApInvoice, postApPayment } from "./gl-posting";
 
 const opt = z
   .string()
@@ -147,6 +148,7 @@ export async function createPurchaseInvoice(ctx: Ctx, raw: z.input<typeof purcha
         lines: { create: lineData },
       },
     });
+    await postApInvoice(ctx, tx, inv);
     await logAudit(
       ctx,
       { action: "PURCHASE_INVOICE_CREATE", entity: "PurchaseInvoice", entityId: inv.id, newValue: inv },
@@ -286,6 +288,7 @@ export async function recordVendorPayment(ctx: Ctx, raw: z.input<typeof vendorPa
         status: amountPaid + num(inv.totalDeductions) >= num(inv.totalAmount) ? "PAID" : "PARTIALLY_PAID",
       },
     });
+    await postApPayment(ctx, tx, payment, inv.invoiceNumber);
     await logAudit(
       ctx,
       {
@@ -346,6 +349,7 @@ export async function recordPurchaseInvoiceDeduction(
         status: num(inv.amountPaid) + totalDeductions >= num(inv.totalAmount) ? "PAID" : "PARTIALLY_PAID",
       },
     });
+    await postApDeduction(ctx, tx, deduction, inv.invoiceNumber);
     await logAudit(
       ctx,
       {

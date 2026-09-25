@@ -20,7 +20,7 @@ export default async function TrialBalancePage({
     <>
       <PageHeader
         title="Trial balance"
-        description="Every GL account's debit/credit activity from posted payroll journals, as of a date. This is the one statement here that's fully GL-sourced — it always balances by construction."
+        description="Every GL account's debit/credit activity, as of a date — payroll, client and vendor billing, bank accounts and fixed assets all post here. Always balances by construction, since every journal entry posts equal debits and credits."
       />
       <FilterBar>
         <FilterField label="As of">
@@ -64,7 +64,7 @@ export default async function TrialBalancePage({
             </TR>
           </TFoot>
         </Table>
-        {!tb.rows.length && <Empty>No journal activity yet — post a payroll run to the GL first.</Empty>}
+        {!tb.rows.length && <Empty>No journal activity yet.</Empty>}
       </Section>
     </>
   );

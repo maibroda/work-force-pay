@@ -14,6 +14,16 @@ const SOURCE: Record<string, string> = {
   PAYROLL_LOCK: "Payroll locked",
   PAYROLL_CLOSE: "Period closed",
   MANUAL_POST: "Posted manually",
+  AR_INVOICE: "Client invoice",
+  AR_RECEIPT: "Client receipt",
+  AR_DEDUCTION: "Client deduction",
+  AP_INVOICE: "Vendor bill",
+  AP_PAYMENT: "Vendor payment",
+  AP_DEDUCTION: "Vendor deduction",
+  DEPRECIATION: "Depreciation",
+  BANK_ACCOUNT_OPENING: "Bank account opening balance",
+  FIXED_ASSET_ACQUISITION: "Fixed asset acquired",
+  FIXED_ASSET_DISPOSAL: "Fixed asset disposed",
 };
 
 export default async function JournalsPage() {
@@ -23,8 +33,8 @@ export default async function JournalsPage() {
   return (
     <>
       <PageHeader
-        title="Payroll journals"
-        description="One balanced journal is posted to the general ledger for every payroll run when it is locked (or its period is closed)."
+        title="Journal entries"
+        description="Every balanced journal posted to the general ledger — payroll (posted automatically at lock/close), client billing and vendor billing (posted automatically on each invoice, receipt, payment and deduction), and fixed-asset depreciation (posted manually per period)."
       />
       {unposted.length > 0 && (
         <Section

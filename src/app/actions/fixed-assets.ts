@@ -3,7 +3,7 @@ import { act } from "./_run";
 import * as fixedAssets from "@/server/services/fixed-assets";
 
 type V = Record<string, unknown>;
-const PATHS = ["/finance/fixed-assets"];
+const PATHS = ["/finance/fixed-assets", "/accounting/journals"];
 
 export async function createFixedAssetAction(v: V) {
   return act(
@@ -22,6 +22,17 @@ export async function disposeFixedAssetAction(v: V) {
     async (ctx) => {
       await fixedAssets.disposeFixedAsset(ctx, String(v.id), v as never);
       return { message: "Asset disposed." };
+    },
+    PATHS,
+  );
+}
+
+export async function postDepreciationForMonthAction(v: V) {
+  return act(
+    "payment.manage",
+    async (ctx) => {
+      const journal = await fixedAssets.postDepreciationForMonth(ctx, Number(v.year), Number(v.month));
+      return { message: `Depreciation posted — journal ${journal.entryNumber}.` };
     },
     PATHS,
   );
