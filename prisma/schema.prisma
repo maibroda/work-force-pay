@@ -397,6 +397,7 @@ model Organization {
   costCenters               CostCenter[]
   costCenterBudgets         CostCenterBudget[]
   vendors                   Vendor[]
+  purchaseOrders            PurchaseOrder[]
   purchaseInvoices          PurchaseInvoice[]
   purchaseInvoiceDeductions PurchaseInvoiceDeduction[]
   vendorPayments            VendorPayment[]
@@ -503,6 +504,7 @@ model CostCenter {
   contracts        Contract[]
   beats            Beat[]
   budgets          CostCenterBudget[]
+  purchaseOrders   PurchaseOrder[]
   purchaseInvoices PurchaseInvoice[]
   fixedAssets      FixedAsset[]
 
@@ -1700,8 +1702,63 @@ model Vendor {
   invoices   PurchaseInvoice[]
   payments   VendorPayment[]
   deductions PurchaseInvoiceDeduction[]
+  orders     PurchaseOrder[]
 
   @@unique([organizationId, name])
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  CONVERTED
+  CANCELLED
+}
+
+/// A purchase order raised before a vendor bill exists — request, approve, then convert to a
+/// PurchaseInvoice once the bill actually arrives. Lines are fixed once submitted for approval;
+/// corrections mean cancelling and raising a new order.
+model PurchaseOrder {
+  id             String              @id @default(cuid())
+  organizationId String
+  organization   Organization        @relation(fields: [organizationId], references: [id])
+  orderNumber    String
+  vendorId       String
+  vendor         Vendor              @relation(fields: [vendorId], references: [id])
+  costCenterId   String?
+  costCenter     CostCenter?         @relation(fields: [costCenterId], references: [id])
+  description    String
+  subtotal       Decimal             @db.Decimal(16, 2)
+  vatPct         Decimal             @default(0) @db.Decimal(5, 2)
+  vatAmount      Decimal             @default(0) @db.Decimal(16, 2)
+  totalAmount    Decimal             @db.Decimal(16, 2)
+  status         PurchaseOrderStatus @default(DRAFT)
+  requestedBy    String
+  requestedAt    DateTime            @default(now())
+  decidedBy      String?
+  decidedAt      DateTime?
+  decisionReason String?
+  notes          String?
+  updatedAt      DateTime            @updatedAt
+
+  lines            PurchaseOrderLine[]
+  convertedInvoice PurchaseInvoice?
+
+  @@unique([organizationId, orderNumber])
+  @@index([organizationId, vendorId])
+  @@index([organizationId, status])
+}
+
+model PurchaseOrderLine {
+  id          String        @id @default(cuid())
+  orderId     String
+  order       PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Decimal       @default(1) @db.Decimal(10, 2)
+  rate        Decimal       @db.Decimal(14, 2)
+  amount      Decimal       @db.Decimal(14, 2)
+  sortOrder   Int           @default(0)
 }
 
 /// A vendor bill. Never edited once recorded — corrections go through a deduction or a new invoice.
@@ -1715,6 +1772,8 @@ model PurchaseInvoice {
   vendorRef       String? // the vendor's own invoice/bill number
   costCenterId    String?
   costCenter      CostCenter?           @relation(fields: [costCenterId], references: [id])
+  purchaseOrderId String?               @unique
+  purchaseOrder   PurchaseOrder?        @relation(fields: [purchaseOrderId], references: [id])
   invoiceDate     DateTime              @db.Date
   dueDate         DateTime              @db.Date
   description     String

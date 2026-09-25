@@ -144,6 +144,7 @@ export const NAV: NavGroup[] = [
         section: "Payables",
       },
       { href: "/finance/payables", label: "Billing & Payables", perm: "gl.view" },
+      { href: "/finance/purchase-orders", label: "Purchase Orders", perm: "gl.view" },
       {
         href: "/finance/fixed-assets",
         label: "Fixed Asset Register",
