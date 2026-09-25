@@ -10,7 +10,7 @@ import { SmartForm } from "@/components/smart-form";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { createFixedAssetAction } from "@/app/actions/fixed-assets";
+import { createFixedAssetAction, postDepreciationForMonthAction } from "@/app/actions/fixed-assets";
 
 export default async function FixedAssetsPage({
   searchParams,
@@ -110,6 +110,41 @@ export default async function FixedAssetsPage({
         </Table>
         {!register.rows.length && <Empty>No fixed assets recorded yet.</Empty>}
       </Section>
+
+      {manage && (
+        <FormPanel title="Post depreciation for a month">
+          <p className="mb-3 text-sm text-muted-foreground">
+            Posts one journal (Dr Depreciation Expense / Cr Accumulated Depreciation) for every
+            active asset&apos;s incremental depreciation that month. Blocked from running twice for
+            the same month.
+          </p>
+          <SmartForm
+            columns={3}
+            submitLabel="Post depreciation"
+            action={postDepreciationForMonthAction}
+            fields={[
+              {
+                name: "month",
+                label: "Month",
+                type: "select",
+                required: true,
+                options: Array.from({ length: 12 }, (_, i) => ({
+                  value: String(i + 1),
+                  label: new Date(Date.UTC(2000, i, 1)).toLocaleDateString("en-US", { month: "long" }),
+                })),
+                defaultValue: String(new Date().getUTCMonth() + 1),
+              },
+              {
+                name: "year",
+                label: "Year",
+                type: "number",
+                required: true,
+                defaultValue: new Date().getUTCFullYear(),
+              },
+            ]}
+          />
+        </FormPanel>
+      )}
 
       {manage && (
         <FormPanel title="Add a fixed asset">

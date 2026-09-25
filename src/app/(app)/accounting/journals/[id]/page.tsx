@@ -19,7 +19,7 @@ export default async function JournalPage({ params }: { params: Promise<{ id: st
     <>
       <PageHeader
         title={`Journal ${j.entryNumber}`}
-        crumbs={[{ href: "/accounting/journals", label: "Payroll journals" }]}
+        crumbs={[{ href: "/accounting/journals", label: "Journal entries" }]}
         description={j.description}
         actions={<PrintButton />}
       />
@@ -28,15 +28,19 @@ export default async function JournalPage({ params }: { params: Promise<{ id: st
           cols={4}
           items={[
             ["Posting date", fmtDate(j.postingDate)],
-            ["Payroll period", j.periodName],
+            ["Payroll period", j.periodName ?? "—"],
             [
               "Payroll run",
-              <Link key="r" className="text-primary underline" href={`/payroll/runs/${j.runId}`}>
-                #{j.run.runNumber} {j.run.type.toLowerCase()}
-              </Link>,
+              j.run ? (
+                <Link key="r" className="text-primary underline" href={`/payroll/runs/${j.runId}`}>
+                  #{j.run.runNumber} {j.run.type.toLowerCase()}
+                </Link>
+              ) : (
+                "—"
+              ),
             ],
             ["Posted by", `${j.postedBy} · ${fmtDate(j.postedAt)}`],
-            ["Trigger", j.source.replace("_", " ").toLowerCase()],
+            ["Trigger", j.source.replace(/_/g, " ").toLowerCase()],
             [
               "Status",
               <Badge key="s" tone={balanced ? "green" : "red"}>

@@ -1,27 +1,46 @@
 /**
- * Management financial statements (Trial Balance, Income Statement, Balance Sheet) — computed on
- * the fly from existing operational records, the same way payablesSummary/receivablesSummary/
- * costCenterActuals already work, rather than from a fully GL-integrated ledger.
+ * Financial statements (Trial Balance, Income Statement, Balance Sheet) — fully GL-sourced. Every
+ * figure here is a sum of JournalLine debits/credits grouped by GL account (or account type), the
+ * same way payroll's own posting (accounting.ts) and client/vendor billing, bank accounts and
+ * fixed-asset depreciation/disposal (gl-posting.ts) all post to the same ledger.
  *
- * The GL (JournalEntry/JournalLine) today only ever gets posted from payroll locks — client
- * billing (AR), vendor bills (AP), fixed-asset depreciation, and bank accounts never post journal
- * entries. So:
- *  - Trial Balance is 100% GL-accurate (it's literally what JournalLine tracks).
- *  - Income Statement / Balance Sheet combine that GL data (payroll expenses, statutory payables)
- *    with figures pulled directly from AR/AP/fixed-assets/bank records for everything the GL
- *    doesn't see. Equity is a balancing plug (assets − liabilities), not independently tracked —
- *    every result labels it as such rather than presenting it as precisely derived.
- * A future phase could retrofit real GL postings for AR/AP/fixed-assets/bank (mirroring
- * PayrollGlMapping) to make these statements fully GL-sourced; that's out of scope here.
+ * Because every JournalEntry posts equal debits and credits, the fundamental accounting identity
+ * (Assets = Liabilities + Equity + Income − Expense) holds exactly across the whole ledger. Equity
+ * is therefore never a plug figure here — it's Opening Balance Equity (from bank-account openings)
+ * plus Retained Earnings (the ledger's own cumulative Income − Expense up to the cutoff date), both
+ * summed straight from JournalLine like everything else.
+ *
+ * Known simplification: all AP spend posts to one generic expense account regardless of vendor
+ * category, VAT on a purchase is folded into that expense rather than tracked as input VAT, and
+ * AR/AP cash movements post to one default operating-cash account rather than a specific
+ * BankAccount (see gl-posting.ts's own header comment for why).
  */
 import type { Ctx } from "@/lib/auth/context";
-import { d, iso, addDays } from "@/lib/dates";
+import { d, iso } from "@/lib/dates";
 import { num, round2 } from "@/lib/money";
 import { assertCan, db } from "./_base";
-import { accumulatedDepreciation, netBookValue } from "./fixed-assets";
+import { GL_POSTING_ACCOUNTS } from "./gl-posting";
 
 function asOfDate(asOf?: string): Date {
   return d(asOf && asOf.length >= 10 ? asOf : iso(new Date()));
+}
+
+type AccountRow = { account: { id: string; code: string; name: string; type: string }; net: number };
+
+/** Every JournalLine in range, grouped by account, net = debit − credit (each account's own
+ *  natural balance side is whichever of debit/credit that nets positive). */
+async function accountBalances(orgId: string, where: { lte?: Date; gte?: Date }) {
+  const lines = await db.journalLine.findMany({
+    where: { journal: { organizationId: orgId, postingDate: where } },
+    include: { account: true },
+  });
+  const byAccount = new Map<string, AccountRow>();
+  for (const l of lines) {
+    const row = byAccount.get(l.accountId) ?? { account: l.account, net: 0 };
+    row.net = round2(row.net + num(l.debit) - num(l.credit));
+    byAccount.set(l.accountId, row);
+  }
+  return [...byAccount.values()];
 }
 
 /** Every GL account's debit/credit activity and net balance, as of a date. Always balances
@@ -29,28 +48,12 @@ function asOfDate(asOf?: string): Date {
 export async function trialBalance(ctx: Ctx, asOf?: string) {
   assertCan(ctx, "gl.view");
   const cutoff = asOfDate(asOf);
-  const lines = await db.journalLine.findMany({
-    where: { journal: { organizationId: ctx.orgId, postingDate: { lte: cutoff } } },
-    include: { account: true },
-  });
-  const byAccount = new Map<string, { account: (typeof lines)[number]["account"]; debit: number; credit: number }>();
-  for (const l of lines) {
-    const row = byAccount.get(l.accountId) ?? { account: l.account, debit: 0, credit: 0 };
-    row.debit = round2(row.debit + num(l.debit));
-    row.credit = round2(row.credit + num(l.credit));
-    byAccount.set(l.accountId, row);
-  }
-  const rows = [...byAccount.values()]
-    .map((r) => {
-      const net = round2(r.debit - r.credit);
-      return {
-        account: r.account,
-        debit: r.debit,
-        credit: r.credit,
-        debitBalance: net > 0 ? net : 0,
-        creditBalance: net < 0 ? -net : 0,
-      };
-    })
+  const rows = (await accountBalances(ctx.orgId, { lte: cutoff }))
+    .map((r) => ({
+      account: r.account,
+      debitBalance: r.net > 0 ? r.net : 0,
+      creditBalance: r.net < 0 ? -r.net : 0,
+    }))
     .sort((a, b) => a.account.code.localeCompare(b.account.code));
   const totals = {
     debit: round2(rows.reduce((s, r) => s + r.debitBalance, 0)),
@@ -64,140 +67,104 @@ export async function trialBalance(ctx: Ctx, asOf?: string) {
   };
 }
 
-/** Revenue from client billing, expenses from the GL (payroll) plus depreciation, for a period. */
+/** Revenue (INCOME accounts) less expenses (EXPENSE accounts), from the GL, for a period. A
+ *  contra-revenue account (e.g. client deductions) reduces revenue rather than appearing as a
+ *  separate expense — it shows as a negative income row. */
 export async function incomeStatement(ctx: Ctx, from: string, to: string) {
   assertCan(ctx, "gl.view");
   const fromDate = d(from);
   const toDate = d(to);
   if (toDate < fromDate) throw new Error("'to' must be on or after 'from'.");
-  const dayBeforeFrom = addDays(fromDate, -1);
 
-  const invoices = await db.clientInvoice.findMany({
-    where: {
-      organizationId: ctx.orgId,
-      status: { not: "CANCELLED" },
-      invoiceDate: { gte: fromDate, lte: toDate },
-    },
-  });
-  const revenue = round2(invoices.reduce((s, i) => s + num(i.subtotal), 0));
+  const balances = await accountBalances(ctx.orgId, { gte: fromDate, lte: toDate });
+  const sortByCode = (a: { account: { code: string } }, b: { account: { code: string } }) =>
+    a.account.code.localeCompare(b.account.code);
 
-  const expenseLines = await db.journalLine.findMany({
-    where: {
-      journal: { organizationId: ctx.orgId, postingDate: { gte: fromDate, lte: toDate } },
-      account: { type: "EXPENSE" },
-    },
-    include: { account: true },
-  });
-  const byAccount = new Map<string, { account: (typeof expenseLines)[number]["account"]; amount: number }>();
-  for (const l of expenseLines) {
-    const row = byAccount.get(l.accountId) ?? { account: l.account, amount: 0 };
-    row.amount = round2(row.amount + num(l.debit) - num(l.credit));
-    byAccount.set(l.accountId, row);
-  }
-  const payrollExpenseRows = [...byAccount.values()].sort((a, b) => a.account.code.localeCompare(b.account.code));
-  const payrollExpenseTotal = round2(payrollExpenseRows.reduce((s, r) => s + r.amount, 0));
+  const incomeRows = balances
+    .filter((r) => r.account.type === "INCOME" && Math.abs(r.net) > 0.01)
+    .map((r) => ({ account: r.account, amount: round2(-r.net) })) // income's natural side is credit
+    .sort(sortByCode);
+  const revenue = round2(incomeRows.reduce((s, r) => s + r.amount, 0));
 
-  const assets = await db.fixedAsset.findMany({
-    where: { organizationId: ctx.orgId, acquisitionDate: { lte: toDate } },
-  });
-  const depreciationExpense = round2(
-    assets.reduce(
-      (s, a) => s + (accumulatedDepreciation(a, toDate) - accumulatedDepreciation(a, dayBeforeFrom)),
-      0,
-    ),
-  );
+  const expenseRows = balances
+    .filter((r) => r.account.type === "EXPENSE" && Math.abs(r.net) > 0.01)
+    .map((r) => ({ account: r.account, amount: r.net })) // expense's natural side is debit
+    .sort(sortByCode);
+  const totalExpenses = round2(expenseRows.reduce((s, r) => s + r.amount, 0));
 
-  const totalExpenses = round2(payrollExpenseTotal + depreciationExpense);
   const netIncome = round2(revenue - totalExpenses);
 
-  return {
-    from: iso(fromDate),
-    to: iso(toDate),
-    revenue,
-    payrollExpenseRows,
-    payrollExpenseTotal,
-    depreciationExpense,
-    totalExpenses,
-    netIncome,
-  };
+  return { from: iso(fromDate), to: iso(toDate), incomeRows, revenue, expenseRows, totalExpenses, netIncome };
 }
 
-/** Assets/liabilities assembled from AR, AP, fixed assets, bank accounts and GL payroll payables;
- *  equity is a balancing plug (assets − liabilities), not an independently tracked figure. */
+/** Assets, liabilities and equity, all summed straight from the GL as of a date. Equity is Opening
+ *  Balance Equity plus Retained Earnings (cumulative income − expense to date) — both genuinely
+ *  computed, not a balancing plug — so `assets.total === liabilities.total + equity.total` holds
+ *  exactly, the same way a trial balance always balances. */
 export async function balanceSheet(ctx: Ctx, asOf?: string) {
   assertCan(ctx, "gl.view");
   const cutoff = asOfDate(asOf);
+  const balances = await accountBalances(ctx.orgId, { lte: cutoff });
+  const netOf = (code: string) => balances.find((r) => r.account.code === code)?.net ?? 0;
+  const sortByCode = (a: { account: { code: string } }, b: { account: { code: string } }) =>
+    a.account.code.localeCompare(b.account.code);
 
-  const [bankAccounts, receipts, payments] = await Promise.all([
-    db.bankAccount.findMany({ where: { organizationId: ctx.orgId, openingDate: { lte: cutoff } } }),
-    db.clientReceipt.findMany({ where: { organizationId: ctx.orgId, receivedDate: { lte: cutoff } } }),
-    db.vendorPayment.findMany({ where: { organizationId: ctx.orgId, paidDate: { lte: cutoff } } }),
-  ]);
-  const cash = round2(
-    bankAccounts.reduce((s, a) => s + num(a.openingBalance), 0) +
-      receipts.reduce((s, r) => s + num(r.amount), 0) -
-      payments.reduce((s, p) => s + num(p.amount), 0),
+  const namedAssetCodes = [
+    GL_POSTING_ACCOUNTS.CASH,
+    GL_POSTING_ACCOUNTS.AR,
+    GL_POSTING_ACCOUNTS.WHT_RECEIVABLE,
+    GL_POSTING_ACCOUNTS.FIXED_ASSETS_COST,
+    GL_POSTING_ACCOUNTS.ACCUM_DEPRECIATION,
+  ] as string[];
+  const cash = netOf(GL_POSTING_ACCOUNTS.CASH);
+  const accountsReceivable = netOf(GL_POSTING_ACCOUNTS.AR);
+  const withholdingTaxReceivable = netOf(GL_POSTING_ACCOUNTS.WHT_RECEIVABLE);
+  const fixedAssetsNet = round2(
+    netOf(GL_POSTING_ACCOUNTS.FIXED_ASSETS_COST) + netOf(GL_POSTING_ACCOUNTS.ACCUM_DEPRECIATION),
   );
+  // Any other ASSET account (e.g. 1210 Staff Loans & Salary Advances from payroll) rolls up here
+  // rather than being silently dropped.
+  const otherAssetRows = balances
+    .filter((r) => r.account.type === "ASSET" && !namedAssetCodes.includes(r.account.code) && Math.abs(r.net) > 0.01)
+    .map((r) => ({ account: r.account, amount: r.net }))
+    .sort(sortByCode);
+  const otherAssetsTotal = round2(otherAssetRows.reduce((s, r) => s + r.amount, 0));
+  const totalAssets = round2(cash + accountsReceivable + withholdingTaxReceivable + fixedAssetsNet + otherAssetsTotal);
 
-  const clientInvoices = await db.clientInvoice.findMany({
-    where: { organizationId: ctx.orgId, status: { not: "CANCELLED" }, invoiceDate: { lte: cutoff } },
-  });
-  const accountsReceivable = round2(
-    clientInvoices.reduce(
-      (s, i) => s + round2(num(i.totalAmount) - num(i.amountPaid) - num(i.totalDeductions)),
-      0,
-    ),
+  const accountsPayable = round2(-netOf(GL_POSTING_ACCOUNTS.AP));
+  const otherLiabilityRows = balances
+    .filter((r) => r.account.type === "LIABILITY" && r.account.code !== GL_POSTING_ACCOUNTS.AP && Math.abs(r.net) > 0.01)
+    .map((r) => ({ account: r.account, amount: round2(-r.net) })) // liability's natural side is credit
+    .sort(sortByCode);
+  const otherLiabilitiesTotal = round2(otherLiabilityRows.reduce((s, r) => s + r.amount, 0));
+  const totalLiabilities = round2(accountsPayable + otherLiabilitiesTotal);
+
+  const openingBalanceEquity = round2(-netOf(GL_POSTING_ACCOUNTS.OPENING_BALANCE_EQUITY));
+  const otherEquityRows = balances
+    .filter(
+      (r) => r.account.type === "EQUITY" && r.account.code !== GL_POSTING_ACCOUNTS.OPENING_BALANCE_EQUITY && Math.abs(r.net) > 0.01,
+    )
+    .map((r) => ({ account: r.account, amount: round2(-r.net) }))
+    .sort(sortByCode);
+  const totalIncome = round2(balances.filter((r) => r.account.type === "INCOME").reduce((s, r) => s - r.net, 0));
+  const totalExpense = round2(balances.filter((r) => r.account.type === "EXPENSE").reduce((s, r) => s + r.net, 0));
+  const retainedEarnings = round2(totalIncome - totalExpense);
+  const totalEquity = round2(
+    openingBalanceEquity + otherEquityRows.reduce((s, r) => s + r.amount, 0) + retainedEarnings,
   );
-
-  const purchaseInvoices = await db.purchaseInvoice.findMany({
-    where: { organizationId: ctx.orgId, status: { not: "CANCELLED" }, invoiceDate: { lte: cutoff } },
-  });
-  const accountsPayable = round2(
-    purchaseInvoices.reduce(
-      (s, i) => s + round2(num(i.totalAmount) - num(i.amountPaid) - num(i.totalDeductions)),
-      0,
-    ),
-  );
-
-  const fixedAssetRows = await db.fixedAsset.findMany({
-    where: { organizationId: ctx.orgId, acquisitionDate: { lte: cutoff } },
-  });
-  const activeAssets = fixedAssetRows.filter(
-    (a) => !(a.status === "DISPOSED" && a.disposalDate && a.disposalDate <= cutoff),
-  );
-  const fixedAssetsNet = round2(activeAssets.reduce((s, a) => s + netBookValue(a, cutoff), 0));
-
-  const liabilityLines = await db.journalLine.findMany({
-    where: {
-      journal: { organizationId: ctx.orgId, postingDate: { lte: cutoff } },
-      account: { type: "LIABILITY" },
-    },
-    include: { account: true },
-  });
-  const byAccount = new Map<string, { account: (typeof liabilityLines)[number]["account"]; amount: number }>();
-  for (const l of liabilityLines) {
-    const row = byAccount.get(l.accountId) ?? { account: l.account, amount: 0 };
-    row.amount = round2(row.amount + num(l.credit) - num(l.debit));
-    byAccount.set(l.accountId, row);
-  }
-  const payrollLiabilityRows = [...byAccount.values()]
-    .filter((r) => Math.abs(r.amount) > 0.01)
-    .sort((a, b) => a.account.code.localeCompare(b.account.code));
-  const payrollLiabilityTotal = round2(payrollLiabilityRows.reduce((s, r) => s + r.amount, 0));
-
-  const totalAssets = round2(cash + accountsReceivable + fixedAssetsNet);
-  const totalLiabilities = round2(accountsPayable + payrollLiabilityTotal);
-  const equity = round2(totalAssets - totalLiabilities);
 
   return {
     asOf: iso(cutoff),
-    assets: { cash, accountsReceivable, fixedAssetsNet, total: totalAssets },
-    liabilities: {
-      accountsPayable,
-      payrollLiabilityRows,
-      payrollLiabilityTotal,
-      total: totalLiabilities,
+    assets: {
+      cash,
+      accountsReceivable,
+      withholdingTaxReceivable,
+      fixedAssetsNet,
+      otherAssetRows,
+      otherAssetsTotal,
+      total: totalAssets,
     },
-    equity,
+    liabilities: { accountsPayable, otherLiabilityRows, otherLiabilitiesTotal, total: totalLiabilities },
+    equity: { openingBalanceEquity, otherEquityRows, retainedEarnings, total: totalEquity },
   };
 }

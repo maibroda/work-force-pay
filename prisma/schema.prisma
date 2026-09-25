@@ -2064,17 +2064,21 @@ model PayrollGlMapping {
 }
 
 /// One balanced journal per payroll run, posted automatically when the run is locked.
+/// One balanced journal entry. `runId` is set only for payroll-sourced entries (PAYROLL_LOCK /
+/// PAYROLL_CLOSE / MANUAL_POST) — everything else (AR/AP/depreciation postings) leaves it null.
+/// Postgres treats each NULL as distinct, so the unique constraint still guarantees at most one
+/// journal per payroll run without blocking any number of non-payroll entries.
 model JournalEntry {
   id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   entryNumber    String
-  runId          String       @unique
-  run            PayrollRun   @relation(fields: [runId], references: [id])
-  periodName     String
+  runId          String?      @unique
+  run            PayrollRun?  @relation(fields: [runId], references: [id])
+  periodName     String?
   postingDate    DateTime     @db.Date
   description    String
-  source         String // PAYROLL_LOCK | PAYROLL_CLOSE | MANUAL_POST
+  source         String // PAYROLL_LOCK | PAYROLL_CLOSE | MANUAL_POST | AR_INVOICE | AR_RECEIPT | AR_DEDUCTION | AP_INVOICE | AP_PAYMENT | AP_DEDUCTION | DEPRECIATION
   totalDebit     Decimal      @db.Decimal(16, 2)
   totalCredit    Decimal      @db.Decimal(16, 2)
   postedBy       String
@@ -2085,6 +2089,7 @@ model JournalEntry {
 
   @@unique([organizationId, entryNumber])
   @@index([organizationId, postingDate])
+  @@index([organizationId, source])
 }
 
 model JournalLine {

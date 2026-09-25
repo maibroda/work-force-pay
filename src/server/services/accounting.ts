@@ -66,6 +66,22 @@ const DEFAULT_ACCOUNTS: Array<{ code: string; name: string; type: (typeof ACCOUN
   { code: "5350", name: "Annual Leave Reliever Expense", type: "EXPENSE" },
   { code: "5360", name: "Outsourcing Leave Allowance Expense", type: "EXPENSE" },
   { code: "5990", name: "Payroll Rounding Differences", type: "EXPENSE" },
+  // Client billing (AR), vendor billing (AP) and fixed-asset depreciation — see gl-posting.ts.
+  // Not payroll-head-mapped like the accounts above; posted directly by their own service.
+  { code: "1200", name: "Accounts Receivable", type: "ASSET" },
+  { code: "1220", name: "Withholding Tax Receivable", type: "ASSET" },
+  { code: "1230", name: "Cash and Bank — Operating", type: "ASSET" },
+  { code: "1240", name: "Fixed Assets — Cost", type: "ASSET" },
+  { code: "1250", name: "Accumulated Depreciation", type: "ASSET" },
+  { code: "2180", name: "Accounts Payable", type: "LIABILITY" },
+  { code: "2190", name: "VAT Payable", type: "LIABILITY" },
+  { code: "2195", name: "Withholding Tax Payable", type: "LIABILITY" },
+  { code: "3100", name: "Opening Balance Equity", type: "EQUITY" },
+  { code: "4100", name: "Client Billing Revenue", type: "INCOME" },
+  { code: "4190", name: "Client Deductions (contra-revenue)", type: "INCOME" },
+  { code: "4200", name: "Gain / (Loss) on Disposal of Fixed Assets", type: "INCOME" },
+  { code: "5400", name: "Vendor Operating Expenses", type: "EXPENSE" },
+  { code: "5410", name: "Depreciation Expense", type: "EXPENSE" },
 ];
 
 // headCode, headName, type, debit account code, credit account code

@@ -15,6 +15,7 @@ import { d, iso } from "@/lib/dates";
 import { num, round2 } from "@/lib/money";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
+import { postBankAccountOpening } from "./gl-posting";
 
 const opt = z
   .string()
@@ -45,25 +46,27 @@ export async function createBankAccount(ctx: Ctx, raw: z.input<typeof bankAccoun
     const gl = await db.glAccount.findFirst({ where: { id: v.glAccountId, organizationId: ctx.orgId } });
     if (!gl) throw new BusinessError("GL account not found.");
   }
-  const acct = await db.bankAccount.create({
-    data: {
-      organizationId: ctx.orgId,
-      name: v.name,
-      bankName: v.bankName,
-      accountNumber: v.accountNumber,
-      glAccountId: v.glAccountId ?? null,
-      openingBalance: v.openingBalance,
-      openingDate: d(v.openingDate),
-      createdBy: ctx.name,
-    },
+  return db.$transaction(async (tx) => {
+    const acct = await tx.bankAccount.create({
+      data: {
+        organizationId: ctx.orgId,
+        name: v.name,
+        bankName: v.bankName,
+        accountNumber: v.accountNumber,
+        glAccountId: v.glAccountId ?? null,
+        openingBalance: v.openingBalance,
+        openingDate: d(v.openingDate),
+        createdBy: ctx.name,
+      },
+    });
+    await postBankAccountOpening(ctx, tx, acct);
+    await logAudit(
+      ctx,
+      { action: "BANK_ACCOUNT_CREATE", entity: "BankAccount", entityId: acct.id, newValue: acct },
+      tx,
+    );
+    return acct;
   });
-  await logAudit(ctx, {
-    action: "BANK_ACCOUNT_CREATE",
-    entity: "BankAccount",
-    entityId: acct.id,
-    newValue: acct,
-  });
-  return acct;
 }
 
 export async function setBankAccountActive(ctx: Ctx, id: string, active: boolean) {

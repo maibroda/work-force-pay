@@ -22,7 +22,7 @@ export default async function IncomeStatementPage({
     <>
       <PageHeader
         title="Income statement"
-        description="Revenue from client billing, expenses from posted payroll journals plus fixed-asset depreciation, for a period. Revenue and depreciation aren't posted to the GL — they're pulled directly from Billing & Receivables and the Fixed Asset Register."
+        description="Revenue and expenses for a period, summed straight from the general ledger — every client invoice, vendor bill, payment, deduction, bank account opening and depreciation run posts here automatically."
       />
       <FilterBar>
         <FilterField label="From">
@@ -43,7 +43,7 @@ export default async function IncomeStatementPage({
         />
       </StatGrid>
 
-      <Section title="Expenses" flush description="From posted payroll journals, plus fixed-asset depreciation for the period.">
+      <Section title="Revenue" flush>
         <Table>
           <THead>
             <TR>
@@ -53,18 +53,41 @@ export default async function IncomeStatementPage({
             </TR>
           </THead>
           <TBody>
-            {stmt.payrollExpenseRows.map((r) => (
+            {stmt.incomeRows.map((r) => (
               <TR key={r.account.id}>
                 <TD className="font-mono text-xs">{r.account.code}</TD>
                 <TD>{r.account.name}</TD>
                 <TD className="text-right">{naira(r.amount)}</TD>
               </TR>
             ))}
-            <TR>
-              <TD className="font-mono text-xs">—</TD>
-              <TD>Depreciation expense (Fixed Asset Register)</TD>
-              <TD className="text-right">{naira(stmt.depreciationExpense)}</TD>
+          </TBody>
+          <TFoot>
+            <TR className="font-semibold">
+              <TD colSpan={2}>Total revenue</TD>
+              <TD className="text-right">{naira(stmt.revenue)}</TD>
             </TR>
+          </TFoot>
+        </Table>
+        {!stmt.incomeRows.length && <Empty>No revenue in this period.</Empty>}
+      </Section>
+
+      <Section title="Expenses" flush>
+        <Table>
+          <THead>
+            <TR>
+              <TH>Code</TH>
+              <TH>Account</TH>
+              <TH className="text-right">Amount</TH>
+            </TR>
+          </THead>
+          <TBody>
+            {stmt.expenseRows.map((r) => (
+              <TR key={r.account.id}>
+                <TD className="font-mono text-xs">{r.account.code}</TD>
+                <TD>{r.account.name}</TD>
+                <TD className="text-right">{naira(r.amount)}</TD>
+              </TR>
+            ))}
           </TBody>
           <TFoot>
             <TR className="font-semibold">
@@ -73,9 +96,7 @@ export default async function IncomeStatementPage({
             </TR>
           </TFoot>
         </Table>
-        {!stmt.payrollExpenseRows.length && stmt.depreciationExpense === 0 && (
-          <Empty>No expenses in this period.</Empty>
-        )}
+        {!stmt.expenseRows.length && <Empty>No expenses in this period.</Empty>}
       </Section>
     </>
   );

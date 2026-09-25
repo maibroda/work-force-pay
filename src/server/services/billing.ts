@@ -22,6 +22,7 @@ import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { nextNumber } from "./numbering";
 import { payrollByContractAndCategory } from "./reports";
+import { postArDeduction, postArInvoice, postArReceipt } from "./gl-posting";
 
 const DEFAULT_PAYMENT_TERMS_DAYS = 30;
 
@@ -124,6 +125,7 @@ export async function generateInvoices(ctx: Ctx, runId: string, opts: GenerateIn
           lines: { create: lineData },
         },
       });
+      await postArInvoice(ctx, tx, inv);
       invoices.push(inv);
     }
     await logAudit(
@@ -288,6 +290,7 @@ export async function recordReceipt(ctx: Ctx, raw: z.input<typeof receiptSchema>
         status: amountPaid + num(inv.totalDeductions) >= num(inv.totalAmount) ? "PAID" : "PARTIALLY_PAID",
       },
     });
+    await postArReceipt(ctx, tx, receipt, inv.invoiceNumber);
     await logAudit(
       ctx,
       {
@@ -345,6 +348,7 @@ export async function recordDeduction(ctx: Ctx, raw: z.input<typeof deductionSch
         status: num(inv.amountPaid) + totalDeductions >= num(inv.totalAmount) ? "PAID" : "PARTIALLY_PAID",
       },
     });
+    await postArDeduction(ctx, tx, deduction, inv.invoiceNumber);
     await logAudit(
       ctx,
       {

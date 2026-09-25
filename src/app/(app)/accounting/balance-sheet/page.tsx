@@ -20,7 +20,7 @@ export default async function BalanceSheetPage({
     <>
       <PageHeader
         title="Balance sheet"
-        description="Assets and liabilities as of a date, assembled from bank accounts, receivables, payables, fixed assets and posted payroll journals. Equity is a balancing figure (assets − liabilities), not independently tracked — this isn't a strictly GL-balanced statement."
+        description="Assets, liabilities and equity as of a date, summed straight from the general ledger. Equity is Opening Balance Equity plus Retained Earnings (the ledger's own cumulative income − expense) — both genuinely computed, not a balancing plug, so total assets equal total liabilities + equity exactly."
       />
       <FilterBar>
         <FilterField label="As of">
@@ -31,7 +31,7 @@ export default async function BalanceSheetPage({
       <StatGrid cols={3}>
         <Stat label="Total assets" value={naira(bs.assets.total)} tone="green" />
         <Stat label="Total liabilities" value={naira(bs.liabilities.total)} tone="amber" />
-        <Stat label="Equity (balancing figure)" value={naira(bs.equity)} />
+        <Stat label="Total equity" value={naira(bs.equity.total)} />
       </StatGrid>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -39,17 +39,31 @@ export default async function BalanceSheetPage({
           <Table>
             <TBody>
               <TR>
-                <TD>Cash (bank accounts)</TD>
+                <TD>Cash and bank</TD>
                 <TD className="text-right">{naira(bs.assets.cash)}</TD>
               </TR>
               <TR>
                 <TD>Accounts receivable</TD>
                 <TD className="text-right">{naira(bs.assets.accountsReceivable)}</TD>
               </TR>
+              {bs.assets.withholdingTaxReceivable !== 0 && (
+                <TR>
+                  <TD>Withholding tax receivable</TD>
+                  <TD className="text-right">{naira(bs.assets.withholdingTaxReceivable)}</TD>
+                </TR>
+              )}
               <TR>
                 <TD>Fixed assets (net book value)</TD>
                 <TD className="text-right">{naira(bs.assets.fixedAssetsNet)}</TD>
               </TR>
+              {bs.assets.otherAssetRows.map((r) => (
+                <TR key={r.account.id}>
+                  <TD className="text-xs">
+                    <span className="font-mono">{r.account.code}</span> {r.account.name}
+                  </TD>
+                  <TD className="text-right">{naira(r.amount)}</TD>
+                </TR>
+              ))}
             </TBody>
             <TFoot>
               <TR className="font-semibold">
@@ -73,7 +87,7 @@ export default async function BalanceSheetPage({
                 <TD>Accounts payable</TD>
                 <TD className="text-right">{naira(bs.liabilities.accountsPayable)}</TD>
               </TR>
-              {bs.liabilities.payrollLiabilityRows.map((r) => (
+              {bs.liabilities.otherLiabilityRows.map((r) => (
                 <TR key={r.account.id}>
                   <TD className="text-xs">
                     <span className="font-mono">{r.account.code}</span> {r.account.name}
@@ -86,8 +100,24 @@ export default async function BalanceSheetPage({
                 <TD className="text-right">{naira(bs.liabilities.total)}</TD>
               </TR>
               <TR>
-                <TD>Equity (balancing figure)</TD>
-                <TD className="text-right">{naira(bs.equity)}</TD>
+                <TD>Opening balance equity</TD>
+                <TD className="text-right">{naira(bs.equity.openingBalanceEquity)}</TD>
+              </TR>
+              {bs.equity.otherEquityRows.map((r) => (
+                <TR key={r.account.id}>
+                  <TD className="text-xs">
+                    <span className="font-mono">{r.account.code}</span> {r.account.name}
+                  </TD>
+                  <TD className="text-right">{naira(r.amount)}</TD>
+                </TR>
+              ))}
+              <TR>
+                <TD>Retained earnings</TD>
+                <TD className="text-right">{naira(bs.equity.retainedEarnings)}</TD>
+              </TR>
+              <TR className="font-medium">
+                <TD>Total equity</TD>
+                <TD className="text-right">{naira(bs.equity.total)}</TD>
               </TR>
             </TBody>
             <TFoot>
