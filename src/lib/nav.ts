@@ -161,6 +161,14 @@ export const NAV: NavGroup[] = [
       { href: "/accounting/mapping", label: "Payroll GL Mapping", perm: "gl.view" },
       { href: "/accounting/accounts", label: "Chart of Accounts", perm: "gl.view" },
       {
+        href: "/accounting/trial-balance",
+        label: "Trial Balance",
+        perm: "gl.view",
+        section: "Financial Statements",
+      },
+      { href: "/accounting/income-statement", label: "Income Statement", perm: "gl.view" },
+      { href: "/accounting/balance-sheet", label: "Balance Sheet", perm: "gl.view" },
+      {
         href: "/reports/client-beat",
         label: "Client / Beat Report",
         perm: "reports.view",
