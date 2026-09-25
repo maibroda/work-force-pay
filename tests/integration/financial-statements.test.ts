@@ -119,8 +119,11 @@ describe("financial statements", () => {
     const client = await db.client.create({
       data: { organizationId: fin.orgId, code: `BSTEST-${tag}`, name: `BS Test Client ${tag}` },
     });
-    const august = await periodFor(fin, 2026, 8);
-    const run = await db.payrollRun.findFirstOrThrow({ where: { periodId: august.id, type: "REGULAR" } });
+    // September's run only (see the income-statement test above) — any invoice we create here
+    // makes generateInvoices' "already exist" guard trip early for whichever run we pick, which
+    // would starve bank-reconciliation.test.ts's own multi-client invoice generation on July/August.
+    const september = await periodFor(fin, 2026, 9);
+    const run = await db.payrollRun.findFirstOrThrow({ where: { periodId: september.id, type: "REGULAR" } });
     const invoice = await db.clientInvoice.create({
       data: {
         organizationId: fin.orgId,
