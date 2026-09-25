@@ -303,6 +303,26 @@ Ikoyi (19–25), XYZ Manufacturing Lekki (26–30).
   specific bank account, so matching draws from the org-wide, not-yet-matched pool (a record can
   only ever be claimed by one statement line).
 
+### Financial statements
+
+- **Finance / Accounting → Trial Balance / Income Statement / Balance Sheet** — management
+  financial statements, computed from existing records rather than a fully GL-integrated ledger.
+  The GL (`JournalEntry`/`JournalLine`) today only ever gets posted from payroll locks — client
+  billing, vendor bills, fixed-asset depreciation and bank accounts never post journal entries.
+- **Trial Balance** is the one statement that's fully GL-sourced: every account's debit/credit
+  activity as of a date, always balancing by construction (every journal posts equal debits and
+  credits).
+- **Income Statement** combines revenue from `ClientInvoice` (not GL-posted), payroll expenses from
+  `JournalLine` (GL-sourced), and depreciation for the period from the Fixed Asset Register (not
+  GL-posted) — clearly separated in the UI.
+- **Balance Sheet** assembles cash (bank account balances), accounts receivable, and fixed assets
+  (net book value) against accounts payable and the GL's payroll-related payables (PAYE, pension,
+  net salaries). Equity is a balancing figure (assets − liabilities), not an independently tracked
+  account — labeled as such rather than presented as precisely derived.
+- A future phase could retrofit real GL postings for AR/AP/fixed-assets/bank (mirroring how
+  `PayrollGlMapping` already works for payroll) to make these statements fully GL-sourced; that's
+  explicitly out of scope here.
+
 ### Navigation
 
 - The sidebar is grouped into collapsible menus — **Dashboard, Workforce / Personnel, Payroll, Operations,
