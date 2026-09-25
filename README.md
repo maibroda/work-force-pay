@@ -261,6 +261,16 @@ Ikoyi (19–25), XYZ Manufacturing Lekki (26–30).
   neither can be cancelled, one with either cannot. The payables summary totals billed / paid /
   deducted / outstanding / overdue by vendor, same shape as the receivables summary.
 
+### Purchase orders
+
+- **Finance / Accounting → Purchase Orders** — raised before a vendor bill exists: request an order
+  (auto-numbered `PO-######`, vendor + line items + VAT, shared vendor/cost-center list with
+  Billing & Payables) → submit for approval → an approver (`payment.manage`, same permission as the
+  requester — this app has no separate maker-checker role split) approves or rejects it with a
+  reason → once **APPROVED**, convert it to a `PurchaseInvoice` when the bill actually arrives,
+  carrying over vendor, cost center, lines and VAT automatically. A converted order is terminal (no
+  re-cancelling); a draft or approved order not yet converted can still be cancelled with a reason.
+
 ### Fixed asset register
 
 - **Finance / Accounting → Fixed Asset Register** — company-owned capital assets: vehicles, radios,
