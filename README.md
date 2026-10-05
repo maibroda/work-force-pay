@@ -401,6 +401,12 @@ settings change, not a code change. **HR Lifecycle → HR Overview** shows every
   any leave request still awaiting a decision and stamps the clearance checklist. HR records the **exit
   interview** and an *eligible for rehire* flag (which Recruitment enforces). The exit page lists the
   **company assets still assigned** to the leaver from the Fixed Asset Register.
+- **Attrition report** (HR Lifecycle → Attrition Report). From approved exits in a chosen period:
+  leavers, **turnover rate** (leavers ÷ average of opening and closing headcount, with an annualised
+  figure), voluntary vs involuntary, leavers who left **within a year of joining**, those flagged not
+  eligible for rehire, average service, and breakdowns by reason, exit type, length of service, category,
+  department and month. It is only as good as the reason category recorded at exit — unrecorded ones show
+  as "Not recorded".
 - **End-of-service settlement** (Payroll → End-of-Service Settlements, `EOS-#####`). For an approved
   exit it works out, from the HR policy, what is owed **on top of the final month's pay** (payroll
   already pays the days worked up to the last day): *unused leave* — what is left of the current leave
@@ -555,8 +561,8 @@ First run of Playwright on a new machine: `npx playwright install chromium`.
   them; barcode / QR scanning; and an employee sign-off (acknowledgement) when kit is issued.
 - **HR lifecycle — not built yet, in rough order of value:** a staff **loan / advance ledger** (so
   recoveries at exit fill themselves in instead of being entered by hand); **letter generation** (offer,
-  contract, termination, experience and clearance letters from templates, with e-signature); an
-  **attrition report** (the exit reason categories are already captured); **email / SMS reminders**
+  contract, termination, experience and clearance letters from templates, with e-signature);
+  **email / SMS reminders**
   for contract expiry, probation, overdue onboarding and case targets (today these are dashboard
   alerts only); a **monthly gratuity accrual** to the GL (today it posts only when paid through
   payroll); **per-country end-of-service presets** (gratuity / severance / tax defaults as

@@ -45,6 +45,7 @@ export const NAV: NavGroup[] = [
       { href: "/hr/contracts", label: "Employment Contracts", perm: "hr.view", section: "Contracts" },
       { href: "/hr/relations", label: "Employee Relations", perm: "hr.view", section: "Employee relations" },
       { href: "/hr/exits", label: "Exits & Clearance", perm: "hr.view", section: "Exit" },
+      { href: "/hr/attrition", label: "Attrition Report", perm: "hr.view" },
       { href: "/payroll/settlements", label: "End-of-Service Settlements", perm: "payroll.view" },
     ],
   },
