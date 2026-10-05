@@ -357,3 +357,17 @@ export async function employeeLoanBalances(orgId: string, employeeId: string) {
     .filter((l) => l.outstanding > 0)
     .map((l) => ({ id: l.id, loanNumber: l.loanNumber, type: l.type, outstanding: l.outstanding, scheduled: l.scheduled, unscheduled: l.unscheduled }));
 }
+
+/** Live loans still owed by people who have left, one row per leaver — for reminders (no permission check). */
+export async function loansOwedByLeavers(orgId: string) {
+  const loans = await withPositions(await loadWithInstallments(orgId, { status: "ACTIVE" }));
+  const byEmployee = new Map<string, { employee: (typeof loans)[number]["employee"]; loans: number; outstanding: number }>();
+  for (const l of loans) {
+    if (!GONE.includes(l.employee.status) || l.outstanding <= 0) continue;
+    const e = byEmployee.get(l.employeeId) ?? { employee: l.employee, loans: 0, outstanding: 0 };
+    e.loans += 1;
+    e.outstanding = round2(e.outstanding + l.outstanding);
+    byEmployee.set(l.employeeId, e);
+  }
+  return [...byEmployee.values()];
+}

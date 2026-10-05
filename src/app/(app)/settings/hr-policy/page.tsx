@@ -111,6 +111,24 @@ export default async function HrPolicyPage() {
         />
       </Section>
 
+      <Section
+        title="Reminder email"
+        description={`One email a day to every active HR admin (plus the addresses below) listing contracts ending, probation reviews, overdue onboarding, case deadlines, approvals waiting, and leavers still holding kit or owing a loan. Never sent when there's nothing to report. ${
+          p.lastDigestAt ? `Last sent ${p.lastDigestAt.toISOString().slice(0, 16).replace("T", " ")} UTC.` : "Not sent yet."
+        } It's sent by a scheduler calling /api/cron/hr-digest (see the README).`}
+      >
+        <SmartForm
+          columns={3}
+          submitLabel="Save"
+          resetOnSuccess={false}
+          action={updateHrPolicyAction.bind(null, "reminders")}
+          fields={[
+            { name: "reminderEmailsEnabled", label: "Send the daily digest", type: "checkbox", defaultValue: p.reminderEmailsEnabled },
+            { name: "extraEmails", label: "Also send to (separate with commas)", type: "textarea", span: 2, defaultValue: p.reminderExtraEmails.join(", "), help: "Blank = HR admins only." },
+          ]}
+        />
+      </Section>
+
       <p className="mb-8 text-xs text-muted-foreground">
         Tax treatment of end-of-service payments varies by country — each payment above can be marked taxable or not, and defaults to taxable. Confirm the right treatment with your tax adviser before relying on a setting.
       </p>

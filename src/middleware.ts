@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password"];
+// /api/cron/* is called by a scheduler with no session — each route checks its own bearer secret.
+const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password", "/api/cron"];
 
 // Cheap edge gate: no session cookie → login. Full verification + RBAC happens server-side per page/action.
 export function middleware(req: NextRequest) {

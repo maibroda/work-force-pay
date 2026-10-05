@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
+import { can } from "@/lib/auth/permissions";
 import { hrOverview } from "@/server/services/hr-overview";
+import { previewHrDigest } from "@/server/services/reminders";
+import { ActionButton } from "@/components/action-button";
+import { sendDigestNowAction } from "@/app/actions/hr-lifecycle";
 import { PageHeader, Section, Stat, StatGrid } from "@/components/page";
 
 function L({
@@ -25,7 +29,7 @@ function L({
 
 export default async function HrOverviewPage() {
   const ctx = await requirePage("hr.view");
-  const o = await hrOverview(ctx);
+  const [o, digest] = await Promise.all([hrOverview(ctx), previewHrDigest(ctx)]);
   return (
     <>
       <PageHeader
@@ -68,6 +72,30 @@ export default async function HrOverviewPage() {
           <L href="/payroll/settlements?status=PENDING_APPROVAL" label="Settlements awaiting approval" value={o.settlements.pendingApproval} tone="amber" />
           <L href="/payroll/settlements?status=APPROVED" label="Approved, not yet in payroll" value={o.settlements.approvedNotReleased} tone="amber" />
         </StatGrid>
+      </Section>
+
+      <Section
+        title="Daily reminder email"
+        description={`${digest.enabled ? `Goes to ${digest.recipientCount} recipient(s) once a day` : "Switched off"} · ${digest.lastSentAt ? `last sent ${digest.lastSentAt.toISOString().slice(0, 16).replace("T", " ")} UTC` : "not sent yet"}. This is what it would say today.`}
+        actions={
+          can(ctx.role, "hr.manage") && (
+            <ActionButton action={sendDigestNowAction} confirm="Email the digest now?" variant="outline">
+              Send now
+            </ActionButton>
+          )
+        }
+      >
+        {digest.digest.sections.length ? (
+          <ul className="space-y-1.5 text-sm">
+            {digest.digest.sections.map((s) => (
+              <li key={s.key}>
+                <span className="font-medium">{s.title}</span> <span className="text-muted-foreground">({s.count})</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">Nothing needs attention today, so no email would be sent.</p>
+        )}
       </Section>
 
       <Section title="Compliance">
