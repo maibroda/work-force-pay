@@ -162,8 +162,13 @@ describe("tenancy", () => {
     expect(aList.rows.every((e) => e.organizationId === a.orgId)).toBe(true);
     const bClients = await listClients(b);
     expect(bClients.map((c) => c.name)).toEqual(["Northern Cement"]);
-    // Both orgs have an EMP-000001 — numbers are unique only within an organization.
-    expect(await db.employee.count({ where: { employeeNumber: "EMP-000001" } })).toBe(2);
+    // Both seeded orgs have an EMP-000001 — numbers are unique only within an organization. (Scoped
+    // to the two seeded orgs: other test files create throwaway orgs that also start at EMP-000001.)
+    expect(
+      await db.employee.count({
+        where: { employeeNumber: "EMP-000001", organizationId: { in: [a.orgId, b.orgId] } },
+      }),
+    ).toBe(2);
   });
 });
 

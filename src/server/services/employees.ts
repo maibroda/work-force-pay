@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import type { Ctx } from "@/lib/auth/context";
 import { d } from "@/lib/dates";
 import { fullName } from "@/lib/utils";
-import { assertCan, BusinessError, db } from "./_base";
+import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
 import { nextNumber } from "./numbering";
 import { seedOnboardingTasks } from "./hr";
@@ -103,29 +103,28 @@ export async function createEmployee(ctx: Ctx, raw: EmployeeInput) {
   assertCan(ctx, "employee.manage");
   const v = employeeSchema.parse(raw);
   await assertOrgRefs(ctx, v.categoryId, v.departmentId, v.reportingManagerId);
-  return db.$transaction(async (tx) => {
-    const employeeNumber = await nextNumber(tx, ctx.orgId, "EMPLOYEE");
-    const emp = await tx.employee.create({
-      data: { organizationId: ctx.orgId, employeeNumber, ...toData(v) },
-    });
-    await logAudit(
-      ctx,
-      {
-        action: "EMPLOYEE_NUMBER_GENERATED",
-        entity: "Employee",
-        entityId: emp.id,
-        newValue: { employeeNumber },
-      },
-      tx,
-    );
-    await logAudit(
-      ctx,
-      { action: "EMPLOYEE_CREATE", entity: "Employee", entityId: emp.id, newValue: emp },
-      tx,
-    );
-    await seedOnboardingTasks(ctx, emp.id, tx);
-    return emp;
+  return db.$transaction((tx) => createEmployeeInTx(ctx, tx, v));
+}
+
+/** The transactional core of createEmployee — also used when a recruitment candidate is hired. */
+export async function createEmployeeInTx(ctx: Ctx, tx: Tx, v: z.output<typeof employeeSchema>) {
+  const employeeNumber = await nextNumber(tx, ctx.orgId, "EMPLOYEE");
+  const emp = await tx.employee.create({
+    data: { organizationId: ctx.orgId, employeeNumber, ...toData(v) },
   });
+  await logAudit(
+    ctx,
+    {
+      action: "EMPLOYEE_NUMBER_GENERATED",
+      entity: "Employee",
+      entityId: emp.id,
+      newValue: { employeeNumber },
+    },
+    tx,
+  );
+  await logAudit(ctx, { action: "EMPLOYEE_CREATE", entity: "Employee", entityId: emp.id, newValue: emp }, tx);
+  await seedOnboardingTasks(ctx, emp.id, tx);
+  return emp;
 }
 
 const SENSITIVE_BANK = ["bankName", "accountNumber", "accountName"] as const;
@@ -270,7 +269,11 @@ export async function getEmployee(ctx: Ctx, id: string) {
       trainings: { orderBy: { createdAt: "desc" } },
       disciplinaryRecords: { orderBy: { createdAt: "desc" } },
       onboardingTasks: { orderBy: { sortOrder: "asc" } },
-      exitRecords: { include: { tasks: { orderBy: { sortOrder: "asc" } } }, orderBy: { createdAt: "desc" } },
+      exitRecords: {
+        include: { tasks: { orderBy: { sortOrder: "asc" } }, settlement: true },
+        orderBy: { createdAt: "desc" },
+      },
+      employmentContracts: { orderBy: { startDate: "desc" } },
     },
   });
 }

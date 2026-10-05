@@ -16,7 +16,11 @@ export const PERMISSIONS = [
   "employee.sensitive", // bank / tax / pension details
   "hr.view", // documents, training/certifications, disciplinary records, onboarding/exit
   "hr.manage", // record documents/training, raise disciplinary actions, run onboarding/exit checklists
-  "hr.approve", // sign off disciplinary actions and exits (maker/checker)
+  "hr.approve", // sign off disciplinary actions, exits, requisitions and job offers (maker/checker)
+  "hr.configure", // edit the HR & lifecycle policy and the onboarding / exit checklist templates
+  "relations.raise", // raise your own grievance or confidential concern (self-service)
+  "settlement.manage", // prepare end-of-service settlements (compute, add manual lines, submit)
+  "settlement.approve", // approve and release settlements into payroll (never the preparer)
   "client.view",
   "client.manage",
   "structure.view",
@@ -79,6 +83,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "hr.view",
     "hr.manage",
     "hr.approve",
+    "hr.configure",
+    "settlement.manage",
     "client.view",
     "structure.view",
     "override.manage",
@@ -121,6 +127,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "payroll.inputs",
     "payroll.inputs.approve",
     "payment.manage",
+    "settlement.manage",
     "reports.view",
     "analytics.view",
     "audit.view",
@@ -135,6 +142,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "payroll.lock",
     "payroll.override",
     "payment.manage",
+    "settlement.approve",
     "gl.manage",
   ],
   AUDITOR: READ_ALL,
@@ -147,8 +155,9 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "leave.view",
     "leave.approve",
     "leave.apply",
+    "relations.raise",
   ],
-  EMPLOYEE: ["self.view", "self.security", "leave.apply"],
+  EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise"],
 };
 
 export function can(role: Role, permission: Permission): boolean {

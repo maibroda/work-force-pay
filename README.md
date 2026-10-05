@@ -44,10 +44,10 @@ npm run build && npm start
 | Role          | Email                        | Use it to…                                                           |
 | ------------- | ---------------------------- | -------------------------------------------------------------------- |
 | Company Admin | admin@demosecurity.test      | everything                                                           |
-| Payroll Admin | payroll@demosecurity.test    | structures, inputs, run/recalculate payroll                          |
-| Finance       | finance@demosecurity.test    | approve inputs, override criticals, approve & lock payroll, payments |
+| Payroll Admin | payroll@demosecurity.test    | structures, inputs, run/recalculate payroll, prepare settlements     |
+| Finance       | finance@demosecurity.test    | approve inputs, override criticals, approve & lock payroll, payments, approve & release settlements |
 | Operations    | ops@demosecurity.test        | clients, beats, deployment, movements, work register                 |
-| HR Admin      | hr@demosecurity.test         | employee master, overrides                                           |
+| HR Admin      | hr@demosecurity.test         | employee master, overrides, recruitment, contracts, employee relations, exits, HR policy, prepare settlements |
 | Auditor       | auditor@demosecurity.test    | read-only everything + audit trail                                   |
 | Supervisor    | supervisor@demosecurity.test | mobile "Today's work register" for his beats                         |
 | Employee      | emp25@demosecurity.test      | mobile self-service for EMP-000025                                   |
@@ -349,10 +349,100 @@ Ikoyi (19–25), XYZ Manufacturing Lekki (26–30).
   the asset's own fields (unchanged from before) — it can differ from the Balance Sheet's GL-posted
   net book value until "Post depreciation for a month" has actually been run for a given month.
 
+### HR lifecycle (hire to retire)
+
+One connected employee record from the day a role is requested to the day the final settlement is paid.
+Nothing about the process is hard-coded to one company — the policy numbers and the onboarding / exit
+checklists are settings (see **Configuring it for a buyer** below), so a different buyer's process is a
+settings change, not a code change. **HR Lifecycle → HR Overview** shows everything needing attention.
+
+- **Recruitment** (HR Lifecycle → Job Requisitions / Candidates & Pipeline).
+  A requisition (`REQ-#####`: role, category, department, positions, budget) must be approved by
+  someone **other than the requester**. Candidates (`CAN-######`) can only be added to an approved
+  requisition, and the same phone/email can't be entered twice into one requisition. Candidates move
+  through screening → interview → assessment → offer; interviews carry a 1–5 scorecard and a hire /
+  no-hire recommendation, and a candidate can't reach the offer stage without a completed interview.
+  **Vetting** (reference, ID, police clearance, guarantor, medical…) must be cleared — or waived with a
+  reason — before a hire. Offers (`OFR-#####`) are also maker/checker, then sent, then accepted or
+  declined, and expire after the policy's validity window. **Hiring** creates the employee, their
+  employment contract, a personal pay rate (optional — guards are normally paid from the client
+  contract's rates) and the onboarding checklist in **one transaction**. It refuses a person who is
+  already on staff with the same phone/email, or whose previous exit was flagged *not eligible for
+  rehire*, and it closes the requisition when its headcount is filled.
+- **Onboarding** (Onboarding Tracker). The onboarding template is stamped onto every new hire — due
+  dates counted from the start date, a responsible role per step, required vs optional, and steps that
+  apply to one employee category only. The tracker lists everyone with open steps, most overdue first;
+  a step that doesn't apply is waived with a reason.
+- **Employment contracts** (Employment Contracts). The employee's own terms (`EC-######`), separate
+  from the client service contracts: permanent, fixed-term, probation, casual, consultant or
+  internship, each with its own rules (e.g. fixed-term needs an end date, permanent has none). One is
+  active at a time; **renewals** and **probation confirmations** supersede the old one and link back, so
+  history is never lost. Probation is tracked with an outcome — *confirm* (converting a probationary
+  contract to permanent), *extend* (capped by the policy's longest probation) or *fail* (HR then starts
+  an exit). The **Alerts & gaps** tab lists contracts ending soon or already past their end date,
+  probation reviews due or overdue, and staff with no contract on file. The contract's notice period
+  is what an exit uses.
+- **Employee relations** (Employee Relations; employees use **My Workspace → My Grievances**).
+  Grievances, misconduct investigations, harassment and whistleblowing concerns, counselling and
+  mediation are *cases* (`ER-#####`) with a resolution target from the policy. Employees can raise
+  their own grievance / harassment / whistleblowing concern; harassment and whistleblowing cases are
+  **always confidential** — read-only viewers (e.g. an auditor) see that the case exists but never its
+  contents, and an employee sees only the status and outcome of their own cases. The **case file is
+  append-only** (notes, evidence, hearings, decisions can't be edited or deleted). A case moves open →
+  investigating → hearing → resolved → closed (closing needs a second person with `hr.approve`) and can
+  be re-opened on appeal. A substantiated finding can raise a **sanction**, which still goes through the
+  existing disciplinary maker/checker and is linked back to the case; an employee's own grievance can't
+  be turned into a sanction against them.
+- **Exit & clearance** (Exits & Clearance; start an exit from the employee's *Onboarding & exit* tab).
+  The existing exit workflow now records a **reason category** (better pay, redundancy, misconduct…,
+  for attrition reporting), a **summary-dismissal** flag (terminations only), and freezes the **notice
+  period owed** at initiation (the contract's term, else the policy default) so a later policy edit
+  can't rewrite a settlement already in progress. Approving an exit ends the active contract, cancels
+  any leave request still awaiting a decision and stamps the clearance checklist. HR records the **exit
+  interview** and an *eligible for rehire* flag (which Recruitment enforces). The exit page lists the
+  **company assets still assigned** to the leaver from the Fixed Asset Register.
+- **End-of-service settlement** (Payroll → End-of-Service Settlements, `EOS-#####`). For an approved
+  exit it works out, from the HR policy, what is owed **on top of the final month's pay** (payroll
+  already pays the days worked up to the last day): *unused leave* — what is left of the current leave
+  year plus what has accrued toward the next, paid at a day rate of monthly pay ÷ the policy's divisor;
+  *gratuity* — days of pay per completed year (optionally pro-rating a part-year) once the minimum
+  service is met; *severance* on a redundancy; and *notice* — pay in lieu when the employer ends
+  employment short of notice, or a recovery when the employee leaves short of notice. A summary
+  dismissal forfeits notice pay, gratuity and severance. Monthly pay is taken from the latest payroll's
+  contractual gross, else the personal pay rate, else entered manually. HR/payroll can add **manual
+  lines** (loan balance, unreturned property, ex-gratia). Every settlement stores its workings and the
+  rules it applied.
+  Workflow: *draft → submitted → approved → released*. The **approver must be a different person** from
+  the preparer, and every *required* clearance step marked "blocks settlement" must be done (or waived)
+  first. **Release** doesn't pay anyone directly: it creates approved earnings and deductions in the
+  payroll period containing the last working day, so PAYE, pension, the payslip, payment batches and GL
+  posting all happen in the normal payroll run — or a **supplementary run** if that period is already
+  locked. (A period that is approved but not yet locked blocks release until it is locked.) A released
+  settlement is corrected with a normal payroll adjustment, not edited. Each payment carries a
+  **taxable** flag; lump sums are *irregular* income in the PAYE engine (added once, not annualised).
+
+**Configuring it for a buyer**
+
+| Where | What it controls |
+| ----- | ---------------- |
+| Settings → HR & Lifecycle Policy → *Employment terms & alerts* | default and longest probation, default notice period, retirement age, how early contract / probation alerts fire, offer validity, employee-relations target days, and the days-in-a-month divisor behind every day rate |
+| …→ *Unused leave* | on/off, paid at gross or basic, maximum days, whether the leave policy's service period must be complete, taxable, and which exit types it applies to |
+| …→ *Gratuity* | **off by default** (jurisdiction-specific) — basis, completed years needed, days of pay per year, part-year pro-rating, taxable, which exit types |
+| …→ *Severance & notice* | redundancy severance, pay in lieu of notice, recovery of a notice shortfall, each with its taxable flag |
+| Settings → Onboarding & Exit Checklists | add, edit, reorder, switch off or remove steps; due offsets, responsible role, required vs optional, "blocks settlement", per-category steps |
+| Settings → Numbering Rules | the `REQ`, `CAN`, `OFR`, `EC`, `ER` and `EOS` number formats |
+| Roles | `hr.configure` (policy & checklists), `settlement.manage` (prepare), `settlement.approve` (approve & release), `relations.raise` (employee self-service), plus the existing `hr.view / hr.manage / hr.approve` |
+
+Changes apply **going forward**: contracts, offers, exits and settlements already created keep the
+values they were created with. Tax treatment of end-of-service payments differs by country — every
+payment has its own taxable flag and defaults to taxable; confirm the right treatment before relying
+on a setting.
+
 ### Navigation
 
-- The sidebar is grouped into collapsible menus — **Dashboard, Workforce / Personnel, Payroll, Operations,
-  Leave Management, Finance / Accounting, Analytics, Settings / Support, My Workspace** — matching how the
+- The sidebar is grouped into collapsible menus — **Dashboard, Workforce / Personnel, HR Lifecycle,
+  Payroll, Operations, Leave Management, Finance / Accounting, Analytics, Settings / Support,
+  My Workspace** — matching how the
   business is organized. Click a menu to expand it; the menu containing the current page auto-expands.
   Long menus (Payroll, Finance / Accounting) carry small sub-headings (e.g. "Payments", "Payroll reports")
   above the items they group. The Reports hub (`/reports`) mirrors the same grouping.
@@ -390,6 +480,9 @@ Ikoyi (19–25), XYZ Manufacturing Lekki (26–30).
 prisma/schema.prisma            data model (47 tables)
 prisma/migrations/              SQL migrations
 prisma/seed.ts                  demo data (110 employees, 5 clients, 8 contracts, 20 beats, 3 periods)
+prisma/hr-demo.ts               HR lifecycle demo data — run by the seed, or alone against a live database
+                                (`npx tsx prisma/hr-demo.ts`; idempotent, never touches existing records)
+src/lib/eos.ts                  pure end-of-service rules (leave, gratuity, severance, notice) — unit-tested
 src/lib/payroll/                pure calculation engine — engine.ts, structure.ts, paye.ts, formula.ts
 src/server/services/            service layer (all business logic, tenancy, RBAC re-checks, audit)
 src/app/actions/                server actions (thin wrappers: auth + revalidate)
@@ -420,6 +513,10 @@ with all locations → payroll register, pension & PAYE reports → client/beat 
 
 The spec's 30 numbered test cases are labelled `#1 … #30` in the test names.
 
+Tests that change org-wide settings (HR policy, checklist templates) or need exact figures use
+`isolatedOrg()` from `tests/helpers.ts` — a throwaway organization with its own users per role — so they
+can't disturb the other files, which share the seeded org and run in parallel.
+
 First run of Playwright on a new machine: `npx playwright install chromium`.
 
 ---
@@ -429,6 +526,16 @@ First run of Playwright on a new machine: `npx playwright install chromium`.
 - Payroll month proration uses calendar days (configurable to fixed 30). Monthly PAYE annualises the
   month's regular income; a cumulative (year-to-date) PAYE method is a sensible next enhancement.
 - NHF relief exists in the rule engine but is disabled in the seed.
+- **HR lifecycle — not built yet, in rough order of value:** a staff **loan / advance ledger** (so
+  recoveries at exit fill themselves in instead of being entered by hand); **letter generation** (offer,
+  contract, termination, experience and clearance letters from templates, with e-signature); an
+  **attrition report** (the exit reason categories are already captured); **email / SMS reminders**
+  for contract expiry, probation, overdue onboarding and case targets (today these are dashboard
+  alerts only); a **monthly gratuity accrual** to the GL (today it posts only when paid through
+  payroll); **per-country end-of-service presets** (gratuity / severance / tax defaults as
+  selectable packs); **performance reviews** feeding probation decisions; a **retention schedule**
+  for rejected candidates and closed cases (privacy law); **approval chains by amount** with delegation
+  for approvers on leave; and a public careers page / candidate portal.
 - Future integrations (biometric, GPS, QR, bank APIs, NIBSS/PFA file formats) are out of scope for the MVP.
 - Prisma uses the `pg` driver adapter with the query-compiler preview (no native query-engine binary).
   If you prefer the classic engine, remove `previewFeatures`/`engineType` from `schema.prisma` and the

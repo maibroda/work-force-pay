@@ -4,6 +4,7 @@ import { d } from "@/lib/dates";
 import { num, round2 } from "@/lib/money";
 import { balanceSheet, incomeStatement, trialBalance } from "@/server/services/financial-statements";
 import { generateInvoices, recordDeduction, recordReceipt } from "@/server/services/billing";
+import { ensureDefaultChart } from "@/server/services/accounting";
 import { createBankAccount } from "@/server/services/bank-reconciliation";
 import { createFixedAsset, disposeFixedAsset, postDepreciationForMonth } from "@/server/services/fixed-assets";
 import {
@@ -12,7 +13,7 @@ import {
   recordPurchaseInvoiceDeduction,
   recordVendorPayment,
 } from "@/server/services/payables";
-import { ctxFor, periodFor, uid } from "../helpers";
+import { ctxFor, isolatedOrg, periodFor, uid } from "../helpers";
 import type { Ctx } from "@/lib/auth/context";
 
 /**
@@ -51,34 +52,55 @@ describe("financial statements", () => {
     await expect(balanceSheet(employee, "2026-08-31")).rejects.toThrow();
   });
 
-  it("trial balance sums every JournalLine per account and always balances", async () => {
-    const fin = await ctxFor("FINANCE");
-    const asOf = "2026-08-31";
-
-    // Other test files can post journal entries dated on/before this cutoff at any point while this
-    // test runs, but they only ever ADD lines, never remove them — so a snapshot taken just before
-    // trialBalance() and one taken just after bracket the true total at the instant it ran, even
-    // though the three queries aren't in a single transaction.
-    const lineTotals = async () => {
-      const rawLines = await db.journalLine.findMany({
-        where: { journal: { organizationId: fin.orgId, postingDate: { lte: d(asOf) } } },
+  it("trial balance nets each account's activity, balances, and honours the as-of date", async () => {
+    // Known journals in a throwaway org, so the figures are exact whatever the other test files
+    // (which share the seeded org and run in parallel) are posting. Cash is both debited and
+    // credited — a trial balance reports each account's NET balance, not gross debits and credits.
+    const t = await isolatedOrg();
+    const fin = t.ctx("FINANCE");
+    await ensureDefaultChart(db, t.org.id);
+    const post = async (n: number, date: string, lines: Array<[string, number, number]>) => {
+      const accts = await db.glAccount.findMany({
+        where: { organizationId: t.org.id, code: { in: lines.map((l) => l[0]) } },
       });
-      return {
-        debit: round2(rawLines.reduce((s, l) => s + num(l.debit), 0)),
-        credit: round2(rawLines.reduce((s, l) => s + num(l.credit), 0)),
-      };
+      return db.journalEntry.create({
+        data: {
+          organizationId: t.org.id,
+          entryNumber: `TB-${n}`,
+          postingDate: d(date),
+          description: "Trial balance test",
+          source: "MANUAL_POST",
+          totalDebit: lines.reduce((a, l) => a + l[1], 0),
+          totalCredit: lines.reduce((a, l) => a + l[2], 0),
+          postedBy: "test",
+          lines: {
+            create: lines.map(([code, debit, credit], i) => {
+              const a = accts.find((x) => x.code === code)!;
+              return { accountId: a.id, accountCode: a.code, accountName: a.name, headCode: "TEST", description: "t", debit, credit, sortOrder: i };
+            }),
+          },
+        },
+      });
     };
+    await post(1, "2026-01-10", [["1230", 1000, 0], ["3100", 0, 1000]]); // cash in, equity
+    await post(2, "2026-02-10", [["1200", 500, 0], ["4100", 0, 500]]); // invoice raised
+    await post(3, "2026-02-20", [["5400", 200, 0], ["1230", 0, 200]]); // expense paid from cash
 
-    const before = await lineTotals();
-    const tb = await trialBalance(fin, asOf);
-    const after = await lineTotals();
-
-    expect(tb.rows.length).toBeGreaterThan(0);
+    const tb = await trialBalance(fin, "2026-12-31");
+    const row = (code: string) => tb.rows.find((r) => r.account.code === code)!;
+    expect(row("1230").debitBalance).toBe(800); // 1,000 in − 200 out, shown net
+    expect(row("1230").creditBalance).toBe(0);
+    expect(row("1200").debitBalance).toBe(500);
+    expect(row("5400").debitBalance).toBe(200);
+    expect(row("3100").creditBalance).toBe(1000);
+    expect(row("4100").creditBalance).toBe(500);
+    expect(tb.rows).toHaveLength(5);
+    expect(tb.totals).toEqual({ debit: 1500, credit: 1500 }); // gross debits would be 1,700
     expect(tb.balanced).toBe(true);
-    expect(tb.totals.debit).toBeGreaterThanOrEqual(before.debit - 0.01);
-    expect(tb.totals.debit).toBeLessThanOrEqual(after.debit + 0.01);
-    expect(tb.totals.credit).toBeGreaterThanOrEqual(before.credit - 0.01);
-    expect(tb.totals.credit).toBeLessThanOrEqual(after.credit + 0.01);
+
+    const early = await trialBalance(fin, "2026-01-31"); // only the first journal is dated by then
+    expect(early.rows.map((r) => r.account.code).sort()).toEqual(["1230", "3100"]);
+    expect(early.totals).toEqual({ debit: 1000, credit: 1000 });
   });
 
   it("income statement sums INCOME and EXPENSE accounts for a period, matching an independent recomputation", async () => {
@@ -119,11 +141,16 @@ describe("financial statements", () => {
 
     const receipt = await recordReceipt(fin, {
       invoiceId: inv.id,
-      amount: 1000,
+      amount: 1234.56, // distinctive: other files also post receipts against August invoices
       receivedDate: "2026-09-15",
     });
     const receiptJournal = await db.journalEntry.findFirst({
-      where: { organizationId: fin.orgId, source: "AR_RECEIPT", description: { contains: inv.invoiceNumber } },
+      where: {
+        organizationId: fin.orgId,
+        source: "AR_RECEIPT",
+        description: { contains: inv.invoiceNumber },
+        totalDebit: 1234.56,
+      },
       include: { lines: true },
     });
     expect(receiptJournal).toBeTruthy();
@@ -134,12 +161,17 @@ describe("financial statements", () => {
     await recordDeduction(fin, {
       invoiceId: inv.id,
       type: "WITHHOLDING_TAX",
-      amount: 500,
+      amount: 543.21,
       reason: "5% WHT withheld per client's credit note",
       supportingDocument: "WHT-FS-TEST",
     });
     const deductionJournal = await db.journalEntry.findFirst({
-      where: { organizationId: fin.orgId, source: "AR_DEDUCTION", description: { contains: inv.invoiceNumber } },
+      where: {
+        organizationId: fin.orgId,
+        source: "AR_DEDUCTION",
+        description: { contains: inv.invoiceNumber },
+        totalDebit: 543.21,
+      },
       include: { lines: true },
     });
     expect(deductionJournal).toBeTruthy();
