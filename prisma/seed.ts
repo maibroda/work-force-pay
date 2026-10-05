@@ -38,6 +38,7 @@ import {
 import { createPaymentBatches, generateRemittances, markBatchPaid } from "../src/server/services/payments";
 import { ensureDefaultChart } from "../src/server/services/accounting";
 import { applyForLeave, decideLeave } from "../src/server/services/leave";
+import { seedHrDemo } from "./hr-demo";
 
 export const DEMO_PASSWORD = "Password123!";
 
@@ -1276,6 +1277,8 @@ async function main() {
         categoryId: ngCat.id,
       },
     });
+
+  await seedHrDemo(org.id);
 
   const counts = {
     employees: await db.employee.count({ where: { organizationId: org.id } }),

@@ -85,6 +85,177 @@ enum ExitType {
   DECEASED
 }
 
+/// Why an employee is leaving — drives attrition analytics and (for REDUNDANCY) severance.
+enum ExitReasonCategory {
+  BETTER_PAY
+  CAREER_GROWTH
+  RELOCATION
+  PERSONAL_OR_HEALTH
+  WORK_CONDITIONS
+  MANAGER_RELATIONSHIP
+  PERFORMANCE
+  MISCONDUCT
+  REDUNDANCY
+  CONTRACT_END
+  RETIREMENT
+  DEATH
+  OTHER
+}
+
+enum EmploymentType {
+  PERMANENT
+  FIXED_TERM
+  PROBATION
+  CASUAL
+  CONSULTANT
+  INTERNSHIP
+}
+
+enum EmploymentContractStatus {
+  ACTIVE
+  SUPERSEDED
+  TERMINATED
+  EXPIRED
+}
+
+enum ProbationOutcome {
+  PENDING
+  CONFIRMED
+  EXTENDED
+  FAILED
+}
+
+enum ChecklistKind {
+  ONBOARDING
+  EXIT_CLEARANCE
+}
+
+enum RequisitionStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  ON_HOLD
+  FILLED
+  CLOSED
+}
+
+enum CandidateStage {
+  APPLIED
+  SCREENING
+  INTERVIEW
+  ASSESSMENT
+  OFFER
+  HIRED
+  REJECTED
+  WITHDRAWN
+}
+
+enum CandidateSource {
+  REFERRAL
+  JOB_BOARD
+  WALK_IN
+  AGENCY
+  INTERNAL
+  SOCIAL_MEDIA
+  OTHER
+}
+
+enum InterviewRecommendation {
+  STRONG_HIRE
+  HIRE
+  NO_HIRE
+  STRONG_NO_HIRE
+}
+
+enum CandidateCheckType {
+  REFERENCE
+  ID_VERIFICATION
+  POLICE_CLEARANCE
+  GUARANTOR
+  MEDICAL
+  EDUCATION
+  CREDIT
+  OTHER
+}
+
+enum CheckStatus {
+  PENDING
+  CLEARED
+  FAILED
+  WAIVED
+}
+
+enum OfferStatus {
+  PENDING_APPROVAL
+  APPROVED
+  SENT
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  WITHDRAWN
+  REJECTED
+}
+
+enum RelationsCaseType {
+  GRIEVANCE
+  MISCONDUCT
+  HARASSMENT
+  WHISTLEBLOWING
+  COUNSELLING
+  MEDIATION
+  OTHER
+}
+
+enum CaseSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum CaseStatus {
+  OPEN
+  INVESTIGATING
+  HEARING
+  RESOLVED
+  CLOSED
+}
+
+enum CaseOutcome {
+  SUBSTANTIATED
+  PARTIALLY_SUBSTANTIATED
+  UNSUBSTANTIATED
+  RESOLVED_INFORMALLY
+  WITHDRAWN
+}
+
+enum CaseNoteKind {
+  NOTE
+  INVESTIGATION
+  HEARING
+  EVIDENCE
+  DECISION
+  APPEAL
+}
+
+enum SettlementStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  RELEASED
+  CANCELLED
+}
+
+enum SettlementLineKind {
+  EARNING
+  DEDUCTION
+}
+
+/// Which monthly figure a pay-in-service formula (gratuity, leave encashment) is based on.
+enum EosPayBasis {
+  GROSS
+  BASIC
+}
+
 enum DeductionScope {
   GLOBAL
   LOCATION
@@ -404,6 +575,18 @@ model Organization {
   fixedAssets               FixedAsset[]
   bankAccounts              BankAccount[]
   bankStatementLines        BankStatementLine[]
+  hrPolicy                  HrPolicy?
+  checklistTemplateItems    ChecklistTemplateItem[]
+  employmentContracts       EmploymentContract[]
+  jobRequisitions           JobRequisition[]
+  candidates                Candidate[]
+  interviews                Interview[]
+  candidateChecks           CandidateCheck[]
+  jobOffers                 JobOffer[]
+  relationsCases            RelationsCase[]
+  relationsCaseNotes        RelationsCaseNote[]
+  exitSettlements           ExitSettlement[]
+  exitSettlementLines       ExitSettlementLine[]
 }
 
 model User {
@@ -474,14 +657,15 @@ model NumberingRule {
 // ─────────────────────────────── WORKFORCE ───────────────────────────────
 
 model Department {
-  id             String       @id @default(cuid())
+  id             String           @id @default(cuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  organization   Organization     @relation(fields: [organizationId], references: [id])
   code           String
   name           String
   employees      Employee[]
   costCenterId   String?
-  costCenter     CostCenter?  @relation(fields: [costCenterId], references: [id])
+  costCenter     CostCenter?      @relation(fields: [costCenterId], references: [id])
+  requisitions   JobRequisition[]
 
   @@unique([organizationId, code])
 }
@@ -507,6 +691,7 @@ model CostCenter {
   purchaseOrders   PurchaseOrder[]
   purchaseInvoices PurchaseInvoice[]
   fixedAssets      FixedAsset[]
+  jobRequisitions  JobRequisition[]
 
   @@unique([organizationId, code])
 }
@@ -531,9 +716,9 @@ model CostCenterBudget {
 }
 
 model EmployeeCategory {
-  id             String         @id @default(cuid())
+  id             String                  @id @default(cuid())
   organizationId String
-  organization   Organization   @relation(fields: [organizationId], references: [id])
+  organization   Organization            @relation(fields: [organizationId], references: [id])
   code           String
   name           String
   description    String?
@@ -541,6 +726,8 @@ model EmployeeCategory {
   contractRates  ContractRate[]
   deployments    Deployment[]
   workRegister   WorkRegister[]
+  requisitions   JobRequisition[]
+  checklistItems ChecklistTemplateItem[]
 
   @@unique([organizationId, code])
 }
@@ -603,6 +790,11 @@ model Employee {
   exitRecords             ExitRecord[]
   recurringDeductionRules RecurringDeductionRule[]
   assignedFixedAssets     FixedAsset[]
+  employmentContracts     EmploymentContract[]
+  relationsCases          RelationsCase[]
+  exitSettlements         ExitSettlement[]
+  candidateRecord         Candidate?               @relation("CandidateEmployee")
+  managedRequisitions     JobRequisition[]         @relation("RequisitionManager")
 
   @@unique([organizationId, employeeNumber])
   @@index([organizationId, status])
@@ -670,6 +862,9 @@ model DisciplinaryRecord {
   status         ApprovalStatus   @default(PENDING)
   approvedBy     String?
   remarks        String?
+  /// The employee-relations case (investigation / hearing) this sanction came out of, if any.
+  caseId         String?
+  relationsCase  RelationsCase?   @relation(fields: [caseId], references: [id])
   createdAt      DateTime         @default(now())
 
   @@index([organizationId, employeeId])
@@ -678,19 +873,22 @@ model DisciplinaryRecord {
 /// Per-employee onboarding checklist — standard tasks are seeded automatically on hire
 /// (see ONBOARDING_TASKS); HR can also add ad-hoc tasks and check them off.
 model OnboardingTask {
-  id             String          @id @default(cuid())
-  organizationId String
-  organization   Organization    @relation(fields: [organizationId], references: [id])
-  employeeId     String
-  employee       Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  taskName       String
-  status         ChecklistStatus @default(PENDING)
-  dueDate        DateTime?       @db.Date
-  completedBy    String?
-  completedAt    DateTime?
-  notes          String?
-  sortOrder      Int             @default(0)
-  createdAt      DateTime        @default(now())
+  id              String          @id @default(cuid())
+  organizationId  String
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  employeeId      String
+  employee        Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  taskName        String
+  status          ChecklistStatus @default(PENDING)
+  dueDate         DateTime?       @db.Date
+  completedBy     String?
+  completedAt     DateTime?
+  notes           String?
+  sortOrder       Int             @default(0)
+  /// Who is expected to do it (free text — "HR", "IT", "Supervisor"), copied from the template.
+  responsibleRole String?
+  mandatory       Boolean         @default(true)
+  createdAt       DateTime        @default(now())
 
   @@index([organizationId, employeeId])
 }
@@ -698,41 +896,461 @@ model OnboardingTask {
 /// Offboarding / exit management — maker/checker like StaffMovement. Approval sets Employee.status
 /// + exitDate and auto-seeds the clearance checklist (see EXIT_CLEARANCE_TASKS).
 model ExitRecord {
-  id              String         @id @default(cuid())
-  organizationId  String
-  organization    Organization   @relation(fields: [organizationId], references: [id])
-  employeeId      String
-  employee        Employee       @relation(fields: [employeeId], references: [id])
-  exitType        ExitType
-  noticeDate      DateTime       @db.Date
-  lastWorkingDate DateTime       @db.Date
-  reason          String
-  status          ApprovalStatus @default(PENDING)
-  initiatedBy     String
-  approvedBy      String?
-  remarks         String?
-  createdAt       DateTime       @default(now())
+  id                 String              @id @default(cuid())
+  organizationId     String
+  organization       Organization        @relation(fields: [organizationId], references: [id])
+  employeeId         String
+  employee           Employee            @relation(fields: [employeeId], references: [id])
+  exitType           ExitType
+  noticeDate         DateTime            @db.Date
+  lastWorkingDate    DateTime            @db.Date
+  reason             String
+  status             ApprovalStatus      @default(PENDING)
+  initiatedBy        String
+  approvedBy         String?
+  remarks            String?
+  reasonCategory     ExitReasonCategory?
+  /// Notice the employee owed under their contract (or the org default) — frozen at initiation so a
+  /// later policy edit can't rewrite a settlement that's already being prepared.
+  noticePeriodDays   Int?
+  /// Gross-misconduct dismissal: no notice pay is owed by the employer.
+  summaryDismissal   Boolean             @default(false)
+  eligibleForRehire  Boolean?
+  exitInterviewDate  DateTime?           @db.Date
+  exitInterviewNotes String?
+  exitInterviewBy    String?
+  createdAt          DateTime            @default(now())
 
-  tasks ExitTask[]
+  tasks      ExitTask[]
+  settlement ExitSettlement?
 
   @@index([organizationId, employeeId])
 }
 
 model ExitTask {
-  id             String          @id @default(cuid())
-  organizationId String
-  organization   Organization    @relation(fields: [organizationId], references: [id])
-  exitRecordId   String
-  exitRecord     ExitRecord      @relation(fields: [exitRecordId], references: [id], onDelete: Cascade)
-  taskName       String
-  status         ChecklistStatus @default(PENDING)
-  completedBy    String?
-  completedAt    DateTime?
-  notes          String?
-  sortOrder      Int             @default(0)
-  createdAt      DateTime        @default(now())
+  id               String          @id @default(cuid())
+  organizationId   String
+  organization     Organization    @relation(fields: [organizationId], references: [id])
+  exitRecordId     String
+  exitRecord       ExitRecord      @relation(fields: [exitRecordId], references: [id], onDelete: Cascade)
+  taskName         String
+  status           ChecklistStatus @default(PENDING)
+  completedBy      String?
+  completedAt      DateTime?
+  notes            String?
+  sortOrder        Int             @default(0)
+  dueDate          DateTime?       @db.Date
+  responsibleRole  String?
+  mandatory        Boolean         @default(true)
+  /// When true the settlement can't be approved until this item is DONE / NOT_APPLICABLE.
+  blocksSettlement Boolean         @default(true)
+  /// "FINAL_SETTLEMENT" is auto-completed by the system when the settlement is approved.
+  systemKey        String?
+  createdAt        DateTime        @default(now())
 
   @@index([organizationId, exitRecordId])
+}
+
+// ───────────────────── HR LIFECYCLE: POLICY & TEMPLATES ─────────────────────
+
+/// One per organization — every number a buyer might want to change without a code change:
+/// probation/notice defaults, alert windows, offer validity, and the end-of-service rules
+/// (leave encashment, gratuity, severance, notice pay). Defaults are conservative; gratuity and
+/// severance ship OFF because they're jurisdiction-specific.
+model HrPolicy {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  // Employment terms & alerts
+  defaultProbationMonths Int @default(3)
+  maxProbationMonths     Int @default(6)
+  defaultNoticeDays      Int @default(30)
+  retirementAge          Int @default(60)
+  contractAlertDays      Int @default(60)
+  probationAlertDays     Int @default(30)
+  offerValidityDays      Int @default(14)
+  relationsCaseSlaDays   Int @default(21)
+
+  // End-of-service: shared
+  /// Monthly pay ÷ this = one day's pay (30 = calendar-month convention; 26 = working days).
+  dailyRateDivisor Int @default(30)
+
+  // Leave encashment
+  leaveEncashmentEnabled             Boolean     @default(true)
+  leaveEncashmentBasis               EosPayBasis @default(GROSS)
+  /// Only encash leave once the employee has served the leave policy's eligibility period.
+  leaveEncashmentRespectsEligibility Boolean     @default(true)
+  leaveEncashmentMaxDays             Int?
+  leaveEncashmentTaxable             Boolean     @default(true)
+  leaveEncashmentExitTypes           ExitType[]  @default([RESIGNATION, TERMINATION, END_OF_CONTRACT, RETIREMENT, DECEASED])
+
+  // Gratuity
+  gratuityEnabled      Boolean     @default(false)
+  gratuityBasis        EosPayBasis @default(BASIC)
+  gratuityMinYears     Int         @default(5)
+  gratuityDaysPerYear  Decimal     @default(15) @db.Decimal(6, 2)
+  /// Count a part-year proportionally instead of only completed years.
+  gratuityPartialYears Boolean     @default(false)
+  gratuityTaxable      Boolean     @default(true)
+  gratuityExitTypes    ExitType[]  @default([RESIGNATION, END_OF_CONTRACT, RETIREMENT, DECEASED])
+
+  // Severance (redundancy)
+  severanceEnabled     Boolean @default(false)
+  severanceDaysPerYear Decimal @default(15) @db.Decimal(6, 2)
+  severanceTaxable     Boolean @default(true)
+
+  // Notice
+  noticePayEnabled      Boolean @default(true) // employer ends employment short of notice → pay in lieu
+  noticeRecoveryEnabled Boolean @default(true) // employee leaves short of notice → recover the shortfall
+  noticePayTaxable      Boolean @default(true)
+
+  updatedAt DateTime @updatedAt
+}
+
+/// A checklist step that is instantiated onto every new hire (ONBOARDING) or every approved exit
+/// (EXIT_CLEARANCE). Edited in Settings so each buyer's own process is what gets seeded.
+model ChecklistTemplateItem {
+  id               String            @id @default(cuid())
+  organizationId   String
+  organization     Organization      @relation(fields: [organizationId], references: [id])
+  kind             ChecklistKind
+  taskName         String
+  /// Onboarding: days after the start date. Exit: days relative to the last working date (negative = before).
+  dueOffsetDays    Int               @default(0)
+  responsibleRole  String?
+  mandatory        Boolean           @default(true)
+  /// Exit only — see ExitTask.blocksSettlement.
+  blocksSettlement Boolean           @default(true)
+  systemKey        String?
+  /// Limit the step to one employee category (null = everyone).
+  categoryId       String?
+  category         EmployeeCategory? @relation(fields: [categoryId], references: [id])
+  active           Boolean           @default(true)
+  sortOrder        Int               @default(0)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@unique([organizationId, kind, taskName])
+  @@index([organizationId, kind, active])
+}
+
+// ───────────────────────── HR LIFECYCLE: CONTRACTS ─────────────────────────
+
+/// The employee's own terms of employment (distinct from `Contract`, which is a CLIENT service
+/// contract). Renewals form a chain via previousContractId; exactly one contract per employee is
+/// ACTIVE at a time (enforced in the service).
+model EmploymentContract {
+  id                  String                   @id @default(cuid())
+  organizationId      String
+  organization        Organization             @relation(fields: [organizationId], references: [id])
+  contractNumber      String
+  employeeId          String
+  employee            Employee                 @relation(fields: [employeeId], references: [id])
+  type                EmploymentType
+  status              EmploymentContractStatus @default(ACTIVE)
+  jobTitle            String
+  startDate           DateTime                 @db.Date
+  endDate             DateTime?                @db.Date
+  probationMonths     Int                      @default(0)
+  probationEndDate    DateTime?                @db.Date
+  probationOutcome    ProbationOutcome?
+  probationExtensions Int                      @default(0)
+  noticePeriodDays    Int                      @default(30)
+  signedDate          DateTime?                @db.Date
+  documentReference   String?
+  previousContractId  String?
+  previousContract    EmploymentContract?      @relation("ContractChain", fields: [previousContractId], references: [id])
+  renewals            EmploymentContract[]     @relation("ContractChain")
+  terminatedAt        DateTime?                @db.Date
+  terminationReason   String?
+  notes               String?
+  createdBy           String
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+
+  @@unique([organizationId, contractNumber])
+  @@index([organizationId, employeeId])
+  @@index([organizationId, status, endDate])
+}
+
+// ──────────────────────── HR LIFECYCLE: RECRUITMENT ────────────────────────
+
+model JobRequisition {
+  id                   String            @id @default(cuid())
+  organizationId       String
+  organization         Organization      @relation(fields: [organizationId], references: [id])
+  requisitionNumber    String
+  title                String
+  departmentId         String?
+  department           Department?       @relation(fields: [departmentId], references: [id])
+  categoryId           String
+  category             EmployeeCategory  @relation(fields: [categoryId], references: [id])
+  costCenterId         String?
+  costCenter           CostCenter?       @relation(fields: [costCenterId], references: [id])
+  /// Free reference to the beat/location being staffed — validated in the service.
+  beatId               String?
+  hiringManagerId      String?
+  hiringManager        Employee?         @relation("RequisitionManager", fields: [hiringManagerId], references: [id])
+  headcount            Int               @default(1)
+  employmentType       EmploymentType    @default(PERMANENT)
+  budgetedMonthlyGross Decimal?          @db.Decimal(14, 2)
+  justification        String
+  targetStartDate      DateTime?         @db.Date
+  status               RequisitionStatus @default(PENDING_APPROVAL)
+  requestedBy          String
+  requestedById        String
+  approvedBy           String?
+  approvedAt           DateTime?
+  decisionNote         String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  candidates Candidate[]
+
+  @@unique([organizationId, requisitionNumber])
+  @@index([organizationId, status])
+}
+
+model Candidate {
+  id                   String          @id @default(cuid())
+  organizationId       String
+  organization         Organization    @relation(fields: [organizationId], references: [id])
+  candidateNumber      String
+  requisitionId        String
+  requisition          JobRequisition  @relation(fields: [requisitionId], references: [id])
+  firstName            String
+  lastName             String
+  phone                String?
+  email                String?
+  source               CandidateSource @default(OTHER)
+  stage                CandidateStage  @default(APPLIED)
+  expectedMonthlyGross Decimal?        @db.Decimal(14, 2)
+  resumeReference      String?
+  notes                String?
+  rejectionReason      String?
+  stageChangedAt       DateTime        @default(now())
+  /// Set once the candidate is converted into an employee.
+  employeeId           String?         @unique
+  employee             Employee?       @relation("CandidateEmployee", fields: [employeeId], references: [id])
+  createdBy            String
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  interviews Interview[]
+  checks     CandidateCheck[]
+  offers     JobOffer[]
+
+  @@unique([organizationId, candidateNumber])
+  @@index([organizationId, requisitionId, stage])
+}
+
+model Interview {
+  id             String                   @id @default(cuid())
+  organizationId String
+  organization   Organization             @relation(fields: [organizationId], references: [id])
+  candidateId    String
+  candidate      Candidate                @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  round          Int                      @default(1)
+  scheduledAt    DateTime
+  mode           String?
+  interviewer    String
+  /// 1–5 scorecard rating, set when feedback is recorded.
+  score          Int?
+  recommendation InterviewRecommendation?
+  feedback       String?
+  completedAt    DateTime?
+  createdBy      String
+  createdAt      DateTime                 @default(now())
+
+  @@index([organizationId, candidateId])
+}
+
+/// Pre-employment vetting step (references, ID, police clearance, guarantor, medical…). A candidate
+/// can't be hired while any check is still PENDING or FAILED.
+model CandidateCheck {
+  id             String             @id @default(cuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  candidateId    String
+  candidate      Candidate          @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  checkType      CandidateCheckType
+  status         CheckStatus        @default(PENDING)
+  notes          String?
+  checkedBy      String?
+  checkedAt      DateTime?
+  createdAt      DateTime           @default(now())
+
+  @@unique([candidateId, checkType])
+  @@index([organizationId, candidateId])
+}
+
+model JobOffer {
+  id               String         @id @default(cuid())
+  organizationId   String
+  organization     Organization   @relation(fields: [organizationId], references: [id])
+  offerNumber      String
+  candidateId      String
+  candidate        Candidate      @relation(fields: [candidateId], references: [id])
+  jobTitle         String
+  monthlyGross     Decimal        @db.Decimal(14, 2)
+  employmentType   EmploymentType @default(PERMANENT)
+  probationMonths  Int            @default(0)
+  noticePeriodDays Int            @default(30)
+  startDate        DateTime       @db.Date
+  validUntil       DateTime       @db.Date
+  /// Create an effective-dated personal pay rate on hire (office staff). Guards are normally paid
+  /// from the client contract's agreed rates, so this is switched off for them.
+  setPayRate       Boolean        @default(true)
+  status           OfferStatus    @default(PENDING_APPROVAL)
+  createdBy        String
+  createdById      String
+  approvedBy       String?
+  approvedAt       DateTime?
+  sentAt           DateTime?
+  respondedAt      DateTime?
+  declineReason    String?
+  decisionNote     String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([organizationId, offerNumber])
+  @@index([organizationId, candidateId])
+  @@index([organizationId, status])
+}
+
+// ─────────────────────── HR LIFECYCLE: EMPLOYEE RELATIONS ───────────────────────
+
+model RelationsCase {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  caseNumber     String
+  /// The employee the case is about (the complainant for a grievance, the subject for misconduct).
+  employeeId     String
+  employee       Employee          @relation(fields: [employeeId], references: [id])
+  type           RelationsCaseType
+  severity       CaseSeverity      @default(MEDIUM)
+  status         CaseStatus        @default(OPEN)
+  /// Confidential cases show only their existence (not content) to read-only HR viewers.
+  confidential   Boolean           @default(false)
+  summary        String
+  description    String
+  raisedBy       String
+  raisedByUserId String
+  selfRaised     Boolean           @default(false)
+  assignedTo     String?
+  openedAt       DateTime          @default(now())
+  dueDate        DateTime?         @db.Date
+  outcome        CaseOutcome?
+  resolution     String?
+  resolvedAt     DateTime?
+  closedAt       DateTime?
+  closedBy       String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  notes               RelationsCaseNote[]
+  disciplinaryRecords DisciplinaryRecord[]
+
+  @@unique([organizationId, caseNumber])
+  @@index([organizationId, status])
+  @@index([organizationId, employeeId])
+}
+
+/// Append-only case file entries — never edited or deleted, so the investigation record is intact.
+model RelationsCaseNote {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  caseId         String
+  relationsCase  RelationsCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  kind           CaseNoteKind  @default(NOTE)
+  note           String
+  authorName     String
+  authorUserId   String
+  createdAt      DateTime      @default(now())
+
+  @@index([organizationId, caseId])
+}
+
+// ─────────────────────── END-OF-SERVICE SETTLEMENT ───────────────────────
+
+/// What an exiting employee is owed (or owes) beyond their final month's pay. Computed from the
+/// HrPolicy, reviewed and approved (preparer ≠ approver), then RELEASED into a payroll period as
+/// approved OtherEarning / Deduction rows — so PAYE, pension, payslips, payment batches and GL
+/// posting all happen in the normal payroll run (or a supplementary run for a locked period).
+model ExitSettlement {
+  id                  String           @id @default(cuid())
+  organizationId      String
+  organization        Organization     @relation(fields: [organizationId], references: [id])
+  settlementNumber    String
+  exitRecordId        String           @unique
+  exitRecord          ExitRecord       @relation(fields: [exitRecordId], references: [id])
+  employeeId          String
+  employee            Employee         @relation(fields: [employeeId], references: [id])
+  status              SettlementStatus @default(DRAFT)
+  /// Reference monthly pay the formulas used (snapshot) and how it was found.
+  monthlyGross        Decimal          @db.Decimal(14, 2)
+  monthlyBasic        Decimal          @db.Decimal(14, 2)
+  dailyRate           Decimal          @db.Decimal(14, 2)
+  payBasisSource      String
+  serviceDays         Int
+  serviceYears        Decimal          @db.Decimal(6, 2)
+  leaveAccruedDays    Decimal          @default(0) @db.Decimal(6, 2)
+  leaveTakenDays      Decimal          @default(0) @db.Decimal(6, 2)
+  leavePayableDays    Decimal          @default(0) @db.Decimal(6, 2)
+  noticeRequiredDays  Int              @default(0)
+  noticeServedDays    Int              @default(0)
+  noticeShortfallDays Int              @default(0)
+  grossEarnings       Decimal          @default(0) @db.Decimal(14, 2)
+  totalDeductions     Decimal          @default(0) @db.Decimal(14, 2)
+  netSettlement       Decimal          @default(0) @db.Decimal(14, 2)
+  payrollPeriodId     String?
+  payrollPeriod       PayrollPeriod?   @relation(fields: [payrollPeriodId], references: [id])
+  preparedBy          String
+  preparedById        String
+  computedAt          DateTime         @default(now())
+  submittedAt         DateTime?
+  approvedBy          String?
+  approvedAt          DateTime?
+  releasedBy          String?
+  releasedAt          DateTime?
+  remarks             String?
+  calcTrace           Json?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  lines ExitSettlementLine[]
+
+  @@unique([organizationId, settlementNumber])
+  @@index([organizationId, status])
+  @@index([organizationId, employeeId])
+}
+
+model ExitSettlementLine {
+  id             String             @id @default(cuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  settlementId   String
+  settlement     ExitSettlement     @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  kind           SettlementLineKind
+  /// LEAVE_ENCASHMENT, GRATUITY, SEVERANCE, NOTICE_PAY, NOTICE_RECOVERY, or a manual code.
+  code           String
+  description    String
+  quantity       Decimal?           @db.Decimal(8, 2)
+  rate           Decimal?           @db.Decimal(14, 2)
+  amount         Decimal            @db.Decimal(14, 2)
+  taxable        Boolean            @default(true)
+  /// Manual lines (loan recovery, unreturned property, ex-gratia…) survive a recompute.
+  manual         Boolean            @default(false)
+  /// Traceability once released: the payroll input rows this line became.
+  otherEarningId String?
+  deductionId    String?
+  sortOrder      Int                @default(0)
+  createdAt      DateTime           @default(now())
+
+  @@index([organizationId, settlementId])
 }
 
 // ─────────────────────────────── CLIENTS ───────────────────────────────
@@ -1066,9 +1684,10 @@ model PayrollPeriod {
   overtime         Overtime[]
   deductions       Deduction[]
   otherEarnings    OtherEarning[]
-  arrearsOriginal  Arrears[]       @relation("ArrearsOriginal")
-  arrearsProcessed Arrears[]       @relation("ArrearsProcessed")
+  arrearsOriginal  Arrears[]        @relation("ArrearsOriginal")
+  arrearsProcessed Arrears[]        @relation("ArrearsProcessed")
   invoices         ClientInvoice[]
+  exitSettlements  ExitSettlement[]
 
   @@unique([organizationId, year, month])
 }

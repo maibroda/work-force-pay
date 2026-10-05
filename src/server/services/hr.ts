@@ -3,6 +3,14 @@ import type { Ctx } from "@/lib/auth/context";
 import { d } from "@/lib/dates";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
+import {
+  DEFAULT_EXIT_TEMPLATE,
+  DEFAULT_ONBOARDING_TEMPLATE,
+  getHrPolicy,
+  instantiateExitTasks,
+  instantiateOnboardingTasks,
+} from "./hr-policy";
+import { endActiveContract } from "./contracts";
 
 const opt = z
   .string()
@@ -10,29 +18,9 @@ const opt = z
   .optional()
   .transform((v) => (v ? v : undefined));
 
-/** Standard checklist seeded automatically for every new hire — HR can also add ad-hoc tasks. */
-export const ONBOARDING_TASKS = [
-  "Offer letter signed",
-  "Documents collected (ID, certificates, references)",
-  "Medical examination",
-  "Guard / firearms license verified",
-  "Uniform & kit issued",
-  "ID card issued",
-  "Induction & orientation training",
-  "Bank & pension details captured",
-  "Deployed to beat",
-];
-
-/** Standard clearance checklist seeded automatically when an exit is approved. */
-export const EXIT_CLEARANCE_TASKS = [
-  "Handover of duties",
-  "Return of uniform & kit",
-  "Return of ID card",
-  "Return of company property / equipment",
-  "Exit interview conducted",
-  "Final settlement computed",
-  "Clearance sign-off",
-];
+/** The out-of-the-box checklists. Each organization edits its own copy under Settings → Checklists. */
+export const ONBOARDING_TASKS = DEFAULT_ONBOARDING_TEMPLATE.map((t) => t.taskName);
+export const EXIT_CLEARANCE_TASKS = DEFAULT_EXIT_TEMPLATE.map((t) => t.taskName);
 
 async function assertEmployee(ctx: Ctx, employeeId: string) {
   const emp = await db.employee.findFirst({ where: { id: employeeId, organizationId: ctx.orgId } });
@@ -195,6 +183,8 @@ export const disciplinarySchema = z.object({
   incidentDate: z.string().min(10, "Incident date is required"),
   description: z.string().trim().min(5, "A description is required"),
   actionTaken: opt,
+  /** Set when the sanction comes out of an employee-relations case. */
+  caseId: opt,
 });
 
 /** Raises a disciplinary action or commendation — PENDING until signed off (maker/checker). */
@@ -202,6 +192,10 @@ export async function raiseDisciplinary(ctx: Ctx, raw: z.input<typeof disciplina
   assertCan(ctx, "hr.manage");
   const v = disciplinarySchema.parse(raw);
   await assertEmployee(ctx, v.employeeId);
+  if (v.caseId) {
+    const c = await db.relationsCase.findFirst({ where: { id: v.caseId, organizationId: ctx.orgId } });
+    if (!c || c.employeeId !== v.employeeId) throw new BusinessError("That case doesn't belong to this employee.");
+  }
   const rec = await db.disciplinaryRecord.create({
     data: {
       organizationId: ctx.orgId,
@@ -211,6 +205,7 @@ export async function raiseDisciplinary(ctx: Ctx, raw: z.input<typeof disciplina
       description: v.description,
       actionTaken: v.actionTaken ?? null,
       issuedBy: ctx.name,
+      caseId: v.caseId ?? null,
     },
   });
   await logAudit(ctx, {
@@ -260,16 +255,10 @@ export async function rejectDisciplinary(ctx: Ctx, id: string, remarks: string) 
 
 // ─────────────────────────────── Onboarding ───────────────────────────────
 
-/** Seeds the standard onboarding checklist — called automatically on hire. */
+/** Stamps the organization's onboarding template onto a new hire — called automatically on hire. */
 export async function seedOnboardingTasks(ctx: Ctx, employeeId: string, tx: Tx = db) {
-  await tx.onboardingTask.createMany({
-    data: ONBOARDING_TASKS.map((taskName, i) => ({
-      organizationId: ctx.orgId,
-      employeeId,
-      taskName,
-      sortOrder: i,
-    })),
-  });
+  const emp = await tx.employee.findFirstOrThrow({ where: { id: employeeId, organizationId: ctx.orgId } });
+  await instantiateOnboardingTasks(ctx, emp, tx);
 }
 
 export async function addOnboardingTask(ctx: Ctx, employeeId: string, taskName: string, dueDate?: string) {
@@ -326,6 +315,26 @@ export const exitSchema = z.object({
   noticeDate: z.string().min(10, "Notice date is required"),
   lastWorkingDate: z.string().min(10, "Last working date is required"),
   reason: z.string().trim().min(5, "A reason is required"),
+  reasonCategory: z
+    .enum([
+      "BETTER_PAY",
+      "CAREER_GROWTH",
+      "RELOCATION",
+      "PERSONAL_OR_HEALTH",
+      "WORK_CONDITIONS",
+      "MANAGER_RELATIONSHIP",
+      "PERFORMANCE",
+      "MISCONDUCT",
+      "REDUNDANCY",
+      "CONTRACT_END",
+      "RETIREMENT",
+      "DEATH",
+      "OTHER",
+    ])
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
+  /** Gross-misconduct dismissal — forfeits notice pay, gratuity and severance. */
+  summaryDismissal: z.boolean().default(false),
 });
 
 const EXIT_TO_EMPLOYEE_STATUS: Record<string, string> = {
@@ -350,6 +359,16 @@ export async function initiateExit(ctx: Ctx, raw: z.input<typeof exitSchema>) {
   if (existing) throw new BusinessError("An exit is already pending for this employee.");
   if (d(v.lastWorkingDate) < d(v.noticeDate))
     throw new BusinessError("Last working date cannot be before the notice date.");
+  if (v.summaryDismissal && v.exitType !== "TERMINATION")
+    throw new BusinessError("Only a termination can be a summary dismissal.");
+  // The notice owed is fixed now (contract term, else the org default) so a later policy edit
+  // can't change a settlement that's already being prepared.
+  const [contract, policy] = await Promise.all([
+    db.employmentContract.findFirst({
+      where: { organizationId: ctx.orgId, employeeId: v.employeeId, status: "ACTIVE" },
+    }),
+    getHrPolicy(ctx.orgId),
+  ]);
   const rec = await db.exitRecord.create({
     data: {
       organizationId: ctx.orgId,
@@ -358,6 +377,9 @@ export async function initiateExit(ctx: Ctx, raw: z.input<typeof exitSchema>) {
       noticeDate: d(v.noticeDate),
       lastWorkingDate: d(v.lastWorkingDate),
       reason: v.reason,
+      reasonCategory: v.reasonCategory ?? null,
+      summaryDismissal: v.summaryDismissal,
+      noticePeriodDays: contract?.noticePeriodDays ?? policy.defaultNoticeDays,
       initiatedBy: ctx.name,
     },
   });
@@ -381,20 +403,19 @@ export async function approveExit(ctx: Ctx, id: string, remarks?: string) {
       where: { id },
       data: { status: "APPROVED", approvedBy: ctx.name, remarks: remarks ?? null },
     });
-    await tx.employee.update({
+    const emp = await tx.employee.update({
       where: { id: rec.employeeId },
       data: {
         status: EXIT_TO_EMPLOYEE_STATUS[rec.exitType] as never,
         exitDate: rec.lastWorkingDate,
       },
     });
-    await tx.exitTask.createMany({
-      data: EXIT_CLEARANCE_TASKS.map((taskName, i) => ({
-        organizationId: ctx.orgId,
-        exitRecordId: id,
-        taskName,
-        sortOrder: i,
-      })),
+    await instantiateExitTasks(ctx, rec, emp, tx);
+    await endActiveContract(tx, ctx.orgId, rec.employeeId, rec.lastWorkingDate, `Exit — ${rec.exitType.replace(/_/g, " ").toLowerCase()}`);
+    // Leave that was still awaiting a decision can't be taken any more.
+    await tx.leaveRequest.updateMany({
+      where: { organizationId: ctx.orgId, employeeId: rec.employeeId, status: "PENDING" },
+      data: { status: "CANCELLED" },
     });
     await logAudit(
       ctx,
@@ -441,6 +462,72 @@ export async function completeExitTask(ctx: Ctx, id: string) {
     newValue: updated,
   });
   return updated;
+}
+
+/** Waives a checklist step that doesn't apply (e.g. no firearm issued) — a reason is mandatory. */
+export async function markTaskNotApplicable(ctx: Ctx, kind: "onboarding" | "exit", id: string, reason: string) {
+  assertCan(ctx, "hr.manage");
+  if (!reason || reason.trim().length < 3) throw new BusinessError("Give a reason for waiving this step.");
+  const notes = reason.trim();
+  if (kind === "onboarding") {
+    const task = await db.onboardingTask.findFirst({ where: { id, organizationId: ctx.orgId } });
+    if (!task) throw new BusinessError("Onboarding task not found.");
+    if (task.status !== "PENDING") throw new BusinessError("Only a pending step can be waived.");
+    const updated = await db.onboardingTask.update({
+      where: { id },
+      data: { status: "NOT_APPLICABLE", completedBy: ctx.name, completedAt: new Date(), notes },
+    });
+    await logAudit(ctx, { action: "ONBOARDING_TASK_WAIVE", entity: "Employee", entityId: task.employeeId, newValue: updated, reason: notes });
+    return updated;
+  }
+  const task = await db.exitTask.findFirst({ where: { id, organizationId: ctx.orgId }, include: { exitRecord: true } });
+  if (!task) throw new BusinessError("Clearance task not found.");
+  if (task.status !== "PENDING") throw new BusinessError("Only a pending step can be waived.");
+  const updated = await db.exitTask.update({
+    where: { id },
+    data: { status: "NOT_APPLICABLE", completedBy: ctx.name, completedAt: new Date(), notes },
+  });
+  await logAudit(ctx, { action: "EXIT_TASK_WAIVE", entity: "Employee", entityId: task.exitRecord.employeeId, newValue: updated, reason: notes });
+  return updated;
+}
+
+export const exitInterviewSchema = z.object({
+  exitRecordId: z.string().min(1),
+  interviewDate: z.string().min(10, "Interview date is required"),
+  notes: z.string().trim().min(5, "Record what was discussed"),
+  eligibleForRehire: z.boolean(),
+  reasonCategory: exitSchema.shape.reasonCategory,
+});
+
+/** Records the exit interview, the rehire flag (which the recruitment module enforces) and ticks the clearance step. */
+export async function recordExitInterview(ctx: Ctx, raw: z.input<typeof exitInterviewSchema>) {
+  assertCan(ctx, "hr.manage");
+  const v = exitInterviewSchema.parse(raw);
+  const rec = await db.exitRecord.findFirst({ where: { id: v.exitRecordId, organizationId: ctx.orgId } });
+  if (!rec) throw new BusinessError("Exit record not found.");
+  if (rec.status === "REJECTED") throw new BusinessError("This exit was rejected.");
+  return db.$transaction(async (tx) => {
+    const updated = await tx.exitRecord.update({
+      where: { id: rec.id },
+      data: {
+        exitInterviewDate: d(v.interviewDate),
+        exitInterviewNotes: v.notes,
+        exitInterviewBy: ctx.name,
+        eligibleForRehire: v.eligibleForRehire,
+        ...(v.reasonCategory ? { reasonCategory: v.reasonCategory } : {}),
+      },
+    });
+    await tx.exitTask.updateMany({
+      where: {
+        exitRecordId: rec.id,
+        status: "PENDING",
+        taskName: { contains: "exit interview", mode: "insensitive" },
+      },
+      data: { status: "DONE", completedBy: ctx.name, completedAt: new Date() },
+    });
+    await logAudit(ctx, { action: "EXIT_INTERVIEW_RECORD", entity: "Employee", entityId: rec.employeeId, newValue: updated }, tx);
+    return updated;
+  });
 }
 
 // ─────────────────────────────── Org chart ───────────────────────────────

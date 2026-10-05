@@ -4,9 +4,10 @@ import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { getEmployee } from "@/server/services/employees";
 import { employeeLocationHistory } from "@/server/services/operations";
+import { employeeTimeline } from "@/server/services/hr-overview";
 import { employeePayslips } from "@/server/services/payroll";
 import { options, enumOptions } from "@/server/options";
-import { d, fmtDate, fmtShort, monthEnd, monthStart, MONTHS } from "@/lib/dates";
+import { d, fmtDate, fmtShort, iso, monthEnd, monthStart, MONTHS } from "@/lib/dates";
 import { naira, num } from "@/lib/money";
 import { fullName } from "@/lib/utils";
 import { FilterBar, FilterField, FormPanel, KV, PageHeader, Section, Empty } from "@/components/page";
@@ -34,6 +35,7 @@ import {
   revokeTrainingAction,
 } from "@/app/actions/hr";
 import { ActionButton } from "@/components/action-button";
+import { createContractAction } from "@/app/actions/hr-lifecycle";
 
 type SP = Promise<Record<string, string | undefined>>;
 
@@ -86,6 +88,8 @@ export default async function EmployeePage({
                 { key: "documents", label: "Documents & training" },
                 { key: "conduct", label: "Disciplinary" },
                 { key: "lifecycle", label: "Onboarding & exit" },
+                { key: "contracts", label: "Contracts" },
+                { key: "timeline", label: "Lifecycle timeline" },
               ]
             : []),
           { key: "payslips", label: "Payslips" },
@@ -742,6 +746,7 @@ export default async function EmployeePage({
                   <TH>Reason</TH>
                   <TH>Initiated by</TH>
                   <TH>Status</TH>
+                  <TH>Settlement</TH>
                   <TH />
                 </TR>
               </THead>
@@ -756,7 +761,23 @@ export default async function EmployeePage({
                     <TD>
                       <StatusBadge status={x.status} />
                     </TD>
+                    <TD className="text-xs">
+                      {x.settlement ? (
+                        <Link className="text-primary underline" href={`/payroll/settlements/${x.settlement.id}`}>
+                          {x.settlement.settlementNumber} · {x.settlement.status.replace(/_/g, " ").toLowerCase()}
+                        </Link>
+                      ) : x.status === "APPROVED" ? (
+                        <Link className="text-primary underline" href={`/hr/exits/${x.id}`}>
+                          Prepare
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
+                    </TD>
                     <TD>
+                      <Link className="mr-2 text-xs text-primary underline" href={`/hr/exits/${x.id}`}>
+                        Open
+                      </Link>
                       {hrApprove && x.status === "PENDING" && (
                         <div className="flex gap-1">
                           <ActionButton action={approveExitAction.bind(null, x.id)} variant="success">
@@ -843,6 +864,33 @@ export default async function EmployeePage({
                   },
                   { name: "noticeDate", label: "Notice date", type: "date", required: true },
                   { name: "lastWorkingDate", label: "Last working date", type: "date", required: true },
+                  {
+                    name: "reasonCategory",
+                    label: "Reason category",
+                    type: "select",
+                    options: enumOptions([
+                      "BETTER_PAY",
+                      "CAREER_GROWTH",
+                      "RELOCATION",
+                      "PERSONAL_OR_HEALTH",
+                      "WORK_CONDITIONS",
+                      "MANAGER_RELATIONSHIP",
+                      "PERFORMANCE",
+                      "MISCONDUCT",
+                      "REDUNDANCY",
+                      "CONTRACT_END",
+                      "RETIREMENT",
+                      "DEATH",
+                      "OTHER",
+                    ]),
+                    help: "Redundancy drives severance; the rest feed attrition reporting.",
+                  },
+                  {
+                    name: "summaryDismissal",
+                    label: "Summary dismissal (gross misconduct — forfeits notice pay, gratuity & severance)",
+                    type: "checkbox",
+                    span: 2,
+                  },
                   { name: "reason", label: "Reason", type: "textarea", required: true, span: 3 },
                 ]}
               />
@@ -850,6 +898,81 @@ export default async function EmployeePage({
           )}
         </>
       )}
+
+      {tab === "contracts" && hrView && (
+        <>
+          <Section
+            title="Employment contracts"
+            description="One is active at a time; renewals and probation confirmations keep the history."
+            flush
+          >
+            <Table>
+              <THead>
+                <TR>
+                  <TH>Contract</TH>
+                  <TH>Type</TH>
+                  <TH>Job title</TH>
+                  <TH>Term</TH>
+                  <TH>Probation</TH>
+                  <TH>Notice</TH>
+                  <TH>Status</TH>
+                </TR>
+              </THead>
+              <TBody>
+                {e.employmentContracts.map((c) => (
+                  <TR key={c.id}>
+                    <TD className="font-mono text-xs">
+                      <Link className="text-primary underline" href={`/hr/contracts/${c.id}`}>
+                        {c.contractNumber}
+                      </Link>
+                    </TD>
+                    <TD className="text-xs">{c.type.replace(/_/g, " ").toLowerCase()}</TD>
+                    <TD>{c.jobTitle}</TD>
+                    <TD className="text-xs">
+                      {fmtDate(c.startDate)} → {c.endDate ? fmtDate(c.endDate) : "open-ended"}
+                    </TD>
+                    <TD className="text-xs">{c.probationOutcome ? <StatusBadge status={c.probationOutcome} /> : "—"}</TD>
+                    <TD className="text-xs">{c.noticePeriodDays}d</TD>
+                    <TD>
+                      <StatusBadge status={c.status} />
+                    </TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+            {!e.employmentContracts.length && <Empty>No contract on file for this employee.</Empty>}
+          </Section>
+          {hrManage &&
+            !e.employmentContracts.some((c) => c.status === "ACTIVE") &&
+            !["EXITED", "TERMINATED", "RESIGNED"].includes(e.status) && (
+              <FormPanel title="Record a contract" open={!e.employmentContracts.length}>
+                <SmartForm
+                  columns={3}
+                  submitLabel="Record contract"
+                  action={createContractAction}
+                  fields={[
+                    { name: "employeeId", label: "", type: "hidden", defaultValue: e.id },
+                    {
+                      name: "type",
+                      label: "Type",
+                      type: "select",
+                      required: true,
+                      defaultValue: "PERMANENT",
+                      options: enumOptions(["PERMANENT", "FIXED_TERM", "PROBATION", "CASUAL", "CONSULTANT", "INTERNSHIP"]),
+                    },
+                    { name: "jobTitle", label: "Job title", required: true, defaultValue: e.category.name },
+                    { name: "startDate", label: "Start date", type: "date", required: true, defaultValue: iso(e.employmentDate) },
+                    { name: "endDate", label: "End date", type: "date", help: "Needed for fixed-term, casual, consultant, internship." },
+                    { name: "probationMonths", label: "Probation (months)", type: "number", min: 0 },
+                    { name: "noticePeriodDays", label: "Notice period (days)", type: "number", min: 0 },
+                  ]}
+                />
+              </FormPanel>
+            )}
+        </>
+      )}
+
+      {tab === "timeline" && hrView && <TimelineTab employeeId={e.id} ctx={ctx} />}
 
       {tab === "payslips" && <PayslipsTab employeeId={e.id} ctx={ctx} />}
     </>
@@ -914,6 +1037,37 @@ async function LocationsTab({
       ) : (
         <Empty>No work register records for this month.</Empty>
       )}
+    </Section>
+  );
+}
+
+async function TimelineTab({
+  ctx,
+  employeeId,
+}: {
+  ctx: Awaited<ReturnType<typeof requirePage>>;
+  employeeId: string;
+}) {
+  const events = await employeeTimeline(ctx, employeeId);
+  const tone = { blue: "blue", green: "green", amber: "amber", red: "red", slate: "gray" } as const;
+  return (
+    <Section
+      title="Lifecycle timeline"
+      description="Everything that has happened to this employee — joining, contracts and probation, movements, pay changes, conduct, leave, training and exit — newest first."
+    >
+      <ol className="space-y-2">
+        {events.map((ev, i) => (
+          <li key={i} className="flex flex-wrap items-start gap-3 rounded-md border p-3 text-sm">
+            <span className="w-24 shrink-0 font-mono text-xs text-muted-foreground">{fmtDate(ev.date)}</span>
+            <Badge tone={tone[ev.tone]}>{ev.kind}</Badge>
+            <span className="flex-1">
+              <span className="font-medium">{ev.title}</span>
+              {ev.detail && <span className="block text-xs text-muted-foreground">{ev.detail}</span>}
+            </span>
+          </li>
+        ))}
+      </ol>
+      {!events.length && <Empty>Nothing recorded yet.</Empty>}
     </Section>
   );
 }

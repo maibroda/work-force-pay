@@ -36,6 +36,19 @@ export const NAV: NavGroup[] = [
     ],
   },
   {
+    title: "HR Lifecycle",
+    items: [
+      { href: "/hr", label: "HR Overview", perm: "hr.view" },
+      { href: "/hr/requisitions", label: "Job Requisitions", perm: "hr.view", section: "Recruitment" },
+      { href: "/hr/candidates", label: "Candidates & Pipeline", perm: "hr.view" },
+      { href: "/hr/onboarding", label: "Onboarding Tracker", perm: "hr.view", section: "Onboarding" },
+      { href: "/hr/contracts", label: "Employment Contracts", perm: "hr.view", section: "Contracts" },
+      { href: "/hr/relations", label: "Employee Relations", perm: "hr.view", section: "Employee relations" },
+      { href: "/hr/exits", label: "Exits & Clearance", perm: "hr.view", section: "Exit" },
+      { href: "/payroll/settlements", label: "End-of-Service Settlements", perm: "payroll.view" },
+    ],
+  },
+  {
     title: "Payroll",
     items: [
       { href: "/payroll/structures", label: "Salary Structures", perm: "structure.view" },
@@ -52,6 +65,7 @@ export const NAV: NavGroup[] = [
       { href: "/payroll/approval", label: "Payroll Approval", perm: "payroll.view" },
       { href: "/payroll/lock", label: "Payroll Lock", perm: "payroll.view" },
       { href: "/payroll/supplementary", label: "Supplementary Payroll", perm: "payroll.view" },
+      { href: "/payroll/settlements", label: "End-of-Service Settlements", perm: "payroll.view" },
       {
         href: "/payments/batches",
         label: "Payment Batches",
@@ -205,6 +219,8 @@ export const NAV: NavGroup[] = [
       { href: "/settings/employer-costs", label: "Employer Cost Rules", perm: "payroll.view" },
       { href: "/settings/recurring-deductions", label: "Recurring Deductions", perm: "payroll.view" },
       { href: "/settings/cost-centers", label: "Cost Centers", perm: "payroll.view" },
+      { href: "/settings/hr-policy", label: "HR & Lifecycle Policy", perm: "hr.configure" },
+      { href: "/settings/checklists", label: "Onboarding & Exit Checklists", perm: "hr.configure" },
       { href: "/settings/numbering", label: "Numbering Rules", perm: "employee.view" },
       { href: "/reports/audit", label: "Audit Logs", perm: "audit.view" },
     ],
@@ -218,6 +234,7 @@ export const SELF_NAV: NavGroup[] = [
       { href: "/supervisor", label: "Today's Work Register", perm: "attendance.record" },
       { href: "/me", label: "My Dashboard", perm: "self.view" },
       { href: "/me/leave", label: "My Leave", perm: "leave.apply" },
+      { href: "/me/grievances", label: "My Grievances", perm: "relations.raise" },
       { href: "/settings/security", label: "My Security", perm: "self.security" },
     ],
   },

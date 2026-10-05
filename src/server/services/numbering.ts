@@ -18,6 +18,12 @@ const DEFAULTS: Record<string, { prefix: string; digits: number }> = {
   PURCHASE_INVOICE: { prefix: "PINV", digits: 6 },
   PURCHASE_ORDER: { prefix: "PO", digits: 6 },
   FIXED_ASSET: { prefix: "FA", digits: 6 },
+  EMPLOYMENT_CONTRACT: { prefix: "EC", digits: 6 },
+  REQUISITION: { prefix: "REQ", digits: 5 },
+  CANDIDATE: { prefix: "CAN", digits: 6 },
+  JOB_OFFER: { prefix: "OFR", digits: 5 },
+  RELATIONS_CASE: { prefix: "ER", digits: 5 },
+  SETTLEMENT: { prefix: "EOS", digits: 5 },
 };
 
 /**
