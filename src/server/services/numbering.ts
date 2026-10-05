@@ -26,6 +26,7 @@ const DEFAULTS: Record<string, { prefix: string; digits: number }> = {
   SETTLEMENT: { prefix: "EOS", digits: 5 },
   INVENTORY_ITEM: { prefix: "ITM", digits: 5 },
   LOAN: { prefix: "LN", digits: 5 },
+  LETTER: { prefix: "LET", digits: 5 },
 };
 
 /**

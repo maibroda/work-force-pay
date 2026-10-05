@@ -13,6 +13,7 @@ import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { approveExitAction, completeExitTaskAction, rejectExitAction } from "@/app/actions/hr";
 import { prepareSettlementAction, recordExitInterviewAction, waiveTaskAction } from "@/app/actions/hr-lifecycle";
+import { generateLetterAction } from "@/app/actions/letters";
 
 const REASONS = [
   "BETTER_PAY",
@@ -266,6 +267,22 @@ export default async function ExitPage({ params }: { params: Promise<{ id: strin
             ]}
           />
         </FormPanel>
+      )}
+
+      {manage && x.status === "APPROVED" && (
+        <Section title="Letters" description="The clearance certificate is only available once every required clearance step is done.">
+          <div className="flex flex-wrap gap-2">
+            <ActionButton action={generateLetterAction.bind(null, { type: "EXIT_LETTER", exitRecordId: x.id })} variant="outline">
+              Exit letter
+            </ActionButton>
+            <ActionButton action={generateLetterAction.bind(null, { type: "CLEARANCE_CERTIFICATE", exitRecordId: x.id })} variant="outline">
+              Clearance certificate
+            </ActionButton>
+            <ActionButton action={generateLetterAction.bind(null, { type: "EXPERIENCE", employeeId: x.employeeId })} variant="outline">
+              Experience letter
+            </ActionButton>
+          </div>
+        </Section>
       )}
 
       <Section title="End-of-service settlement" description="What the leaver is owed on top of their final month's pay — unused leave, gratuity, severance, notice pay or recovery.">

@@ -593,6 +593,8 @@ model Organization {
   kitPackLines              KitPackLine[]
   staffLoans                StaffLoan[]
   loanInstallments          LoanInstallment[]
+  letterTemplates           LetterTemplate[]
+  generatedLetters          GeneratedLetter[]
 }
 
 model User {
@@ -804,6 +806,7 @@ model Employee {
   managedRequisitions     JobRequisition[]         @relation("RequisitionManager")
   stockMovements          StockMovement[]
   staffLoans              StaffLoan[]
+  generatedLetters        GeneratedLetter[]
 
   @@unique([organizationId, employeeNumber])
   @@index([organizationId, status])
@@ -2938,4 +2941,61 @@ model LoanInstallment {
   createdAt      DateTime            @default(now())
 
   @@index([organizationId, loanId])
+}
+
+// ───────────────────────────── LETTERS ─────────────────────────────
+
+enum LetterType {
+  OFFER
+  EMPLOYMENT_CONFIRMATION
+  PROBATION_CONFIRMATION
+  WARNING
+  EXIT_LETTER
+  EXPERIENCE
+  CLEARANCE_CERTIFICATE
+}
+
+/// The wording of one kind of letter, per organization. The body is plain text with {{field}} merge
+/// placeholders; saving rejects any placeholder the letter type doesn't offer.
+model LetterTemplate {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  type           LetterType
+  subject        String
+  body           String
+  signatoryName  String       @default("")
+  signatoryTitle String       @default("Human Resources")
+  updatedBy      String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, type])
+}
+
+/// A letter as it was issued — the merged text is stored, so changing the template later never
+/// rewrites a letter already given to someone.
+model GeneratedLetter {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  referenceNumber String
+  type            LetterType
+  /// Who it is about (the employee, or the candidate for an offer).
+  recipientName   String
+  employeeId      String?
+  employee        Employee?    @relation(fields: [employeeId], references: [id])
+  candidateId     String?
+  /// The record it was generated from (offer, exit, disciplinary record…), for traceability.
+  sourceId        String?
+  subject         String
+  body            String
+  signatoryName   String       @default("")
+  signatoryTitle  String       @default("")
+  generatedBy     String
+  createdAt       DateTime     @default(now())
+
+  @@unique([organizationId, referenceNumber])
+  @@index([organizationId, employeeId])
+  @@index([organizationId, type])
 }
