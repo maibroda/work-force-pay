@@ -68,6 +68,7 @@ import {
 } from "@/server/services/settlements";
 import { employeeTimeline, getExitDetail, hrOverview } from "@/server/services/hr-overview";
 import { createFixedAsset } from "@/server/services/fixed-assets";
+import { attritionReport } from "@/server/services/attrition";
 import { isolatedOrg } from "../helpers";
 
 const today = () => todayUtc();
@@ -644,5 +645,58 @@ describe("HR overview", () => {
     expect(o.recruitment.requisitionsPending).toBe(1);
     expect(o.onboarding.employeesIncomplete).toBe(1);
     await expect(hrOverview(t.ctx("EMPLOYEE"))).rejects.toThrow();
+  });
+});
+
+describe("attrition report", () => {
+  it("counts approved exits in the window with the right rate, split, tenure and monthly series", async () => {
+    const t = await isolatedOrg();
+    const hr = t.ctx("HR_ADMIN");
+    const mk = (name: string, joined: string) =>
+      createEmployee(hr, { firstName: name, lastName: "Attrit", employmentDate: joined, categoryId: t.guardId, departmentId: t.deptId });
+    // one at a time — concurrent hires would race on the employee-number sequence
+    const a = await mk("A", "2020-01-01");
+    const b = await mk("B", "2026-01-15");
+    const c = await mk("C", "2023-06-01");
+    const dd = await mk("D", "2021-03-01");
+    await mk("E", "2022-01-01");
+    await mk("F", "2024-01-01");
+    const leave = async (id: string, exitType: "RESIGNATION" | "TERMINATION" | "END_OF_CONTRACT", lwd: string, reasonCategory: string) => {
+      const x = await initiateExit(hr, { employeeId: id, exitType, noticeDate: lwd, lastWorkingDate: lwd, reason: "Test exit reason", reasonCategory: reasonCategory as never });
+      await approveExit(hr, x.id);
+      return x;
+    };
+    await leave(a.id, "RESIGNATION", "2026-02-28", "BETTER_PAY");
+    await leave(b.id, "RESIGNATION", "2026-04-30", "RELOCATION");
+    const cx = await leave(c.id, "TERMINATION", "2026-04-15", "MISCONDUCT");
+    await leave(dd.id, "END_OF_CONTRACT", "2026-06-30", "CONTRACT_END"); // outside the window below
+    await recordExitInterview(hr, { exitRecordId: cx.id, interviewDate: "2026-04-14", notes: "Declined to comment", eligibleForRehire: false });
+
+    const r = await attritionReport(hr, "2026-01-01", "2026-05-31");
+    expect(r.leavers).toBe(3);
+    expect(r.headcountStart).toBe(5); // A, C, D, E, F — B hadn't joined yet
+    expect(r.headcountEnd).toBe(3); // D, E, F
+    expect(r.averageHeadcount).toBe(4);
+    expect(r.turnoverRate).toBe(75);
+    expect(r.annualisedRate).toBe(181.3);
+    expect([r.voluntary, r.involuntary, r.other]).toEqual([2, 1, 0]);
+    expect(r.earlyLeavers).toBe(1); // B left after under four months
+    expect(r.notEligibleForRehire).toBe(1);
+    expect(r.byReason.map((s) => s.key).sort()).toEqual(["BETTER_PAY", "MISCONDUCT", "RELOCATION"]);
+    expect(r.byTenure.find((s) => s.key === "5+ years")!.count).toBe(1);
+    expect(r.byTenure.find((s) => s.key === "Under 6 months")!.count).toBe(1);
+    expect(r.byMonth).toEqual([
+      { month: "2026-01", count: 0 },
+      { month: "2026-02", count: 1 },
+      { month: "2026-03", count: 0 },
+      { month: "2026-04", count: 2 },
+      { month: "2026-05", count: 0 },
+    ]);
+    expect(r.byDepartment).toEqual([{ key: "Operations", count: 3, pct: 100 }]);
+
+    const wider = await attritionReport(hr, "2026-01-01", "2026-12-31");
+    expect(wider.leavers).toBe(4);
+    await expect(attritionReport(hr, "2026-06-01", "2026-01-01")).rejects.toThrow(/can't be before/);
+    await expect(attritionReport(t.ctx("EMPLOYEE"), "2026-01-01", "2026-05-31")).rejects.toThrow();
   });
 });
