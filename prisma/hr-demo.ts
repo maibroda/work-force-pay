@@ -29,6 +29,35 @@ import {
 } from "../src/server/services/recruitment";
 import { raiseCase, setCaseStatus, addCaseNote } from "../src/server/services/relations";
 import { createItem, createPack, issuePack, setPackLine } from "../src/server/services/inventory";
+import { approveLoan, requestLoan } from "../src/server/services/loans";
+
+/** One loan being repaid and one advance waiting for approval, for people who already have payroll history. Idempotent. */
+export async function seedLoanDemo(orgId: string) {
+  if (await db.staffLoan.count({ where: { organizationId: orgId } })) {
+    console.log("• Loan demo data already present — skipped");
+    return;
+  }
+  const [hrUser, finUser] = await Promise.all([
+    db.user.findFirst({ where: { organizationId: orgId, role: "HR_ADMIN" } }),
+    db.user.findFirst({ where: { organizationId: orgId, role: "FINANCE" } }),
+  ]);
+  if (!hrUser || !finUser) return;
+  const asCtx = (u: typeof hrUser): Ctx => ({ userId: u.id, orgId, role: u.role as Ctx["role"], name: u.name, email: u.email, employeeId: u.employeeId });
+  const hr = asCtx(hrUser);
+  const fin = asCtx(finUser);
+  const paid = await db.payrollRecord.findMany({
+    where: { organizationId: orgId, monthlyGross: { gt: 0 }, employee: { status: "ACTIVE" } },
+    select: { employeeId: true },
+    distinct: ["employeeId"],
+    orderBy: { employeeNumber: "asc" },
+    take: 12,
+  });
+  if (paid.length < 2) return;
+  const loan = await requestLoan(hr, { employeeId: paid[10 % paid.length].employeeId, type: "LOAN", principal: 120000, installmentCount: 12, reason: "School fees for two children" });
+  await approveLoan(fin, loan.id, "Within policy");
+  await requestLoan(hr, { employeeId: paid[11 % paid.length].employeeId, type: "SALARY_ADVANCE", principal: 20000, reason: "Medical bill" });
+  console.log("✔ Loan demo data seeded");
+}
 
 /** Stock list, a starter kit pack, and a couple of employees already holding it. Idempotent. */
 export async function seedInventoryDemo(orgId: string) {
@@ -184,6 +213,7 @@ if (process.argv[1] && /hr-demo\.(ts|js)$/.test(process.argv[1])) {
     .then(async (o) => {
       await seedHrDemo(o.id);
       await seedInventoryDemo(o.id);
+      await seedLoanDemo(o.id);
     })
     .then(() => db.$disconnect())
     .catch(async (e) => {

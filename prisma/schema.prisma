@@ -591,6 +591,8 @@ model Organization {
   stockMovements            StockMovement[]
   kitPacks                  KitPack[]
   kitPackLines              KitPackLine[]
+  staffLoans                StaffLoan[]
+  loanInstallments          LoanInstallment[]
 }
 
 model User {
@@ -801,6 +803,7 @@ model Employee {
   candidateRecord         Candidate?               @relation("CandidateEmployee")
   managedRequisitions     JobRequisition[]         @relation("RequisitionManager")
   stockMovements          StockMovement[]
+  staffLoans              StaffLoan[]
 
   @@unique([organizationId, employeeNumber])
   @@index([organizationId, status])
@@ -1010,6 +1013,11 @@ model HrPolicy {
   noticePayEnabled      Boolean @default(true) // employer ends employment short of notice → pay in lieu
   noticeRecoveryEnabled Boolean @default(true) // employee leaves short of notice → recover the shortfall
   noticePayTaxable      Boolean @default(true)
+
+  // Staff loans & advances (0 = no limit)
+  loanMaxGrossMultiple Decimal @default(3) @db.Decimal(4, 2)
+  loanMaxDeductionPct  Int     @default(33)
+  advanceMaxGrossPct   Int     @default(50)
 
   updatedAt DateTime @updatedAt
 }
@@ -1353,6 +1361,8 @@ model ExitSettlementLine {
   /// Traceability once released: the payroll input rows this line became.
   otherEarningId String?
   deductionId    String?
+  /// Set when the line recovers the balance of a staff loan.
+  loanId         String?
   sortOrder      Int                @default(0)
   createdAt      DateTime           @default(now())
 
@@ -2844,4 +2854,82 @@ model KitPackLine {
   quantity       Int
 
   @@unique([packId, itemId])
+}
+
+// ─────────────────────── STAFF LOANS & SALARY ADVANCES ───────────────────────
+
+enum LoanType {
+  LOAN
+  SALARY_ADVANCE
+}
+
+enum LoanStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  REJECTED
+  CANCELLED
+  WRITTEN_OFF
+}
+
+/// How an instalment is settled: by a payroll deduction, by a deduction on the end-of-service
+/// settlement, or in cash/transfer paid straight to the company.
+enum LoanInstallmentKind {
+  PAYROLL
+  SETTLEMENT
+  CASH
+}
+
+/// Money lent to an employee, interest-free, repaid from payroll. The balance is never stored: it is
+/// worked out from the instalments (a payroll deduction counts as paid once its payroll is locked).
+model StaffLoan {
+  id                  String       @id @default(cuid())
+  organizationId      String
+  organization        Organization @relation(fields: [organizationId], references: [id])
+  loanNumber          String
+  employeeId          String
+  employee            Employee     @relation(fields: [employeeId], references: [id])
+  type                LoanType     @default(LOAN)
+  principal           Decimal      @db.Decimal(14, 2)
+  installmentCount    Int          @default(1)
+  installmentAmount   Decimal      @db.Decimal(14, 2)
+  /// The first payroll month a repayment is taken in.
+  firstDeductionYear  Int
+  firstDeductionMonth Int
+  reason              String
+  status              LoanStatus   @default(PENDING_APPROVAL)
+  requestedBy         String
+  requestedById       String
+  approvedBy          String?
+  approvedAt          DateTime?
+  decisionNote        String?
+  disbursedOn         DateTime?    @db.Date
+  writtenOffAmount    Decimal?     @db.Decimal(14, 2)
+  writtenOffReason    String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  installments LoanInstallment[]
+
+  @@unique([organizationId, loanNumber])
+  @@index([organizationId, employeeId])
+  @@index([organizationId, status])
+}
+
+model LoanInstallment {
+  id             String              @id @default(cuid())
+  organizationId String
+  organization   Organization        @relation(fields: [organizationId], references: [id])
+  loanId         String
+  loan           StaffLoan           @relation(fields: [loanId], references: [id])
+  kind           LoanInstallmentKind
+  amount         Decimal             @db.Decimal(14, 2)
+  /// The payroll Deduction this instalment became (PAYROLL / SETTLEMENT kinds).
+  deductionId    String?             @unique
+  periodId       String?
+  paidOn         DateTime?           @db.Date
+  reference      String?
+  createdBy      String
+  createdAt      DateTime            @default(now())
+
+  @@index([organizationId, loanId])
 }

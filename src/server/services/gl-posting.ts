@@ -37,6 +37,8 @@ const ACCOUNTS = {
   GAIN_LOSS_ON_DISPOSAL: "4200",
   VENDOR_EXPENSE: "5400",
   DEPRECIATION_EXPENSE: "5410",
+  STAFF_LOANS: "1210",
+  LOAN_WRITE_OFF: "5420",
 } as const;
 
 interface DraftLine {
@@ -339,3 +341,66 @@ export async function postDepreciation(
 }
 
 export { ACCOUNTS as GL_POSTING_ACCOUNTS };
+
+// ───────────────────────────── Staff loans & advances ─────────────────────────────
+// Repayments taken through payroll credit the staff-loans account via the payroll GL mapping
+// (the LOAN / SALARY_ADVANCE heads), so only the cash legs and the write-off post from here.
+
+const loanLabel = (l: { type: string; loanNumber: string }) =>
+  `${l.type === "SALARY_ADVANCE" ? "Salary advance" : "Staff loan"} ${l.loanNumber}`;
+
+/** Money paid out: Dr Staff Loans & Advances / Cr Cash. */
+export async function postLoanDisbursement(
+  ctx: Ctx,
+  tx: Tx,
+  loan: { loanNumber: string; type: string; principal: unknown; disbursedOn: Date },
+) {
+  const amount = num(loan.principal);
+  return postJournal(ctx, tx, {
+    source: "LOAN_DISBURSEMENT",
+    postingDate: loan.disbursedOn,
+    description: `${loanLabel(loan)} paid out`,
+    lines: [
+      { accountCode: ACCOUNTS.STAFF_LOANS, description: loan.loanNumber, debit: amount, credit: 0 },
+      { accountCode: ACCOUNTS.CASH, description: loan.loanNumber, debit: 0, credit: amount },
+    ],
+  });
+}
+
+/** Repayment paid straight to the company: Dr Cash / Cr Staff Loans & Advances. */
+export async function postLoanCashRepayment(
+  ctx: Ctx,
+  tx: Tx,
+  loan: { loanNumber: string; type: string },
+  amount: number,
+  date: Date,
+) {
+  return postJournal(ctx, tx, {
+    source: "LOAN_REPAYMENT",
+    postingDate: date,
+    description: `${loanLabel(loan)} repaid in cash`,
+    lines: [
+      { accountCode: ACCOUNTS.CASH, description: loan.loanNumber, debit: amount, credit: 0 },
+      { accountCode: ACCOUNTS.STAFF_LOANS, description: loan.loanNumber, debit: 0, credit: amount },
+    ],
+  });
+}
+
+/** Bad debt: Dr Staff Loan Write-off / Cr Staff Loans & Advances. */
+export async function postLoanWriteOff(
+  ctx: Ctx,
+  tx: Tx,
+  loan: { loanNumber: string; type: string },
+  amount: number,
+  date: Date,
+) {
+  return postJournal(ctx, tx, {
+    source: "LOAN_WRITE_OFF",
+    postingDate: date,
+    description: `${loanLabel(loan)} written off`,
+    lines: [
+      { accountCode: ACCOUNTS.LOAN_WRITE_OFF, description: loan.loanNumber, debit: amount, credit: 0 },
+      { accountCode: ACCOUNTS.STAFF_LOANS, description: loan.loanNumber, debit: 0, credit: amount },
+    ],
+  });
+}

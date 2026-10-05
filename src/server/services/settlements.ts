@@ -20,6 +20,7 @@ import { logAudit } from "./audit";
 import { eosPolicyOf, getHrPolicy } from "./hr-policy";
 import { outstandingKitValue } from "./inventory";
 import { getLeavePolicy } from "./leave";
+import { employeeLoanBalances } from "./loans";
 import { nextNumber } from "./numbering";
 
 const DEDUCTION_CODES = ["LOAN", "SALARY_ADVANCE", "RECOVERY", "PENALTY", "OTHER"] as const;
@@ -289,6 +290,47 @@ export async function addKitRecovery(ctx: Ctx, settlementId: string) {
   });
 }
 
+/**
+ * Recovers what the leaver still owes on staff loans and advances — one recovery line per loan, for
+ * the part not already queued in payroll. On release each line becomes a deduction that is recorded
+ * against its loan, so the loan's balance falls when that payroll is locked.
+ */
+export async function addLoanRecovery(ctx: Ctx, settlementId: string) {
+  assertCan(ctx, "settlement.manage");
+  const s = await loadSettlement(ctx, settlementId);
+  draftOnly(s);
+  const owing = (await employeeLoanBalances(ctx.orgId, s.employeeId)).filter((l) => l.unscheduled > 0);
+  if (!owing.length) throw new BusinessError("This employee has no loan balance left to recover (anything outstanding is already queued in payroll).");
+  const already = await db.exitSettlementLine.findMany({ where: { settlementId, loanId: { in: owing.map((l) => l.id) } }, select: { loanId: true } });
+  const todo = owing.filter((l) => !already.some((a) => a.loanId === l.id));
+  if (!todo.length) throw new BusinessError("Every outstanding loan is already on this settlement.");
+  return db.$transaction(async (tx) => {
+    const max = await tx.exitSettlementLine.aggregate({ where: { settlementId }, _max: { sortOrder: true } });
+    let order = (max._max.sortOrder ?? -1) + 1;
+    const lines = [];
+    for (const l of todo)
+      lines.push(
+        await tx.exitSettlementLine.create({
+          data: {
+            organizationId: ctx.orgId,
+            settlementId,
+            kind: "DEDUCTION",
+            code: l.type === "SALARY_ADVANCE" ? "SALARY_ADVANCE" : "LOAN",
+            description: `${l.type === "SALARY_ADVANCE" ? "Salary advance" : "Staff loan"} ${l.loanNumber} — balance`,
+            amount: l.unscheduled,
+            taxable: false,
+            manual: true,
+            loanId: l.id,
+            sortOrder: order++,
+          },
+        }),
+      );
+    await recomputeTotals(tx, settlementId);
+    await logAudit(ctx, { action: "SETTLEMENT_LOAN_RECOVERY", entity: "ExitSettlement", entityId: settlementId, newValue: { loans: todo.map((l) => l.loanNumber) } }, tx);
+    return lines;
+  });
+}
+
 export async function removeManualLine(ctx: Ctx, lineId: string) {
   assertCan(ctx, "settlement.manage");
   const line = await db.exitSettlementLine.findFirst({ where: { id: lineId, organizationId: ctx.orgId }, include: { settlement: true } });
@@ -434,6 +476,11 @@ export async function releaseSettlement(ctx: Ctx, id: string, periodId: string) 
           },
         });
         await tx.exitSettlementLine.update({ where: { id: l.id }, data: { deductionId: ded.id } });
+        // A loan recovery is also an instalment of that loan, repaid once this payroll is locked.
+        if (l.loanId)
+          await tx.loanInstallment.create({
+            data: { organizationId: ctx.orgId, loanId: l.loanId, kind: "SETTLEMENT", amount: l.amount, deductionId: ded.id, periodId, createdBy: ctx.name },
+          });
       }
     }
     const u = await tx.exitSettlement.update({
@@ -487,6 +534,7 @@ export async function getSettlement(ctx: Ctx, id: string) {
     suggestedPeriod: period,
     outstandingClearance: await outstandingClearance(ctx.orgId, s.exitRecordId),
     heldKit: await outstandingKitValue(ctx.orgId, s.employeeId),
+    owingLoans: (await employeeLoanBalances(ctx.orgId, s.employeeId)).filter((l) => l.unscheduled > 0),
   };
 }
 

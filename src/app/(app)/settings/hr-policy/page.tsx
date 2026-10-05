@@ -97,6 +97,20 @@ export default async function HrPolicyPage() {
         />
       </Section>
 
+      <Section title="Staff loans & advances" description="Affordability limits checked when a loan or advance is requested. Set a limit to 0 for no limit.">
+        <SmartForm
+          columns={3}
+          submitLabel="Save"
+          resetOnSuccess={false}
+          action={updateHrPolicyAction.bind(null, "loans")}
+          fields={[
+            { name: "loanMaxGrossMultiple", label: "Loans up to this many × monthly gross", type: "number", min: 0, max: 36, defaultValue: num(p.loanMaxGrossMultiple), help: "Counts any loan still outstanding." },
+            { name: "loanMaxDeductionPct", label: "Monthly repayments up to this % of gross", type: "number", min: 0, max: 100, defaultValue: p.loanMaxDeductionPct, help: "Across all of the employee's loans." },
+            { name: "advanceMaxGrossPct", label: "Salary advance up to this % of gross", type: "number", min: 0, max: 100, defaultValue: p.advanceMaxGrossPct },
+          ]}
+        />
+      </Section>
+
       <p className="mb-8 text-xs text-muted-foreground">
         Tax treatment of end-of-service payments varies by country — each payment above can be marked taxable or not, and defaults to taxable. Confirm the right treatment with your tax adviser before relying on a setting.
       </p>
