@@ -118,6 +118,9 @@ export const NAV: NavGroup[] = [
       { href: "/operations/absence", label: "Absence", perm: "operations.view" },
       { href: "/operations/movements?type=REPLACEMENT", label: "Replacements", perm: "operations.view" },
       { href: "/operations/movements?type=PERMANENT_TRANSFER", label: "Transfers", perm: "operations.view" },
+      { href: "/inventory", label: "Stock & Kit", perm: "inventory.view", section: "Uniform & kit" },
+      { href: "/inventory/packs", label: "Kit Packs", perm: "inventory.view" },
+      { href: "/inventory/outstanding", label: "Kit Held by Staff", perm: "inventory.view" },
       {
         href: "/reports/work-register",
         label: "Work Register Report",

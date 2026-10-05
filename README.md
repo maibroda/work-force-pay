@@ -46,7 +46,7 @@ npm run build && npm start
 | Company Admin | admin@demosecurity.test      | everything                                                           |
 | Payroll Admin | payroll@demosecurity.test    | structures, inputs, run/recalculate payroll, prepare settlements     |
 | Finance       | finance@demosecurity.test    | approve inputs, override criticals, approve & lock payroll, payments, approve & release settlements |
-| Operations    | ops@demosecurity.test        | clients, beats, deployment, movements, work register                 |
+| Operations    | ops@demosecurity.test        | clients, beats, deployment, movements, work register, uniform & kit stock |
 | HR Admin      | hr@demosecurity.test         | employee master, overrides, recruitment, contracts, employee relations, exits, HR policy, prepare settlements |
 | Auditor       | auditor@demosecurity.test    | read-only everything + audit trail                                   |
 | Supervisor    | supervisor@demosecurity.test | mobile "Today's work register" for his beats                         |
@@ -438,10 +438,33 @@ values they were created with. Tax treatment of end-of-service payments differs 
 payment has its own taxable flag and defaults to taxable; confirm the right treatment before relying
 on a setting.
 
+### Uniform & kit stock
+
+**Operations → Stock & Kit / Kit Packs / Kit Held by Staff.** A stock ledger for uniform, footwear,
+accessories and equipment, tied to the people who are issued it.
+
+- **Stock items** (`ITM-#####`) — one line per size ("Shirt — L"). Every unit that is received, issued,
+  returned, adjusted or written off is a **ledger entry**; the shelf count and the **weighted-average
+  cost** are updated with it in the same transaction. Stock can't go below zero, a reorder level flags low
+  stock, and a **stocktake** (set the shelf to what was counted) records the difference with a mandatory
+  reason rather than overwriting it.
+- **Issuing** — kit goes to an employee who is still employed; the item must be switched on and in stock.
+  A **kit pack** (e.g. "Guard starter kit") issues all of its items at once — **all or nothing**, so a
+  shortage of one item never leaves a half-issued kit.
+- **Returns** — an employee can only give back what they hold (also after they've left). Only kit returned
+  in **good** condition goes back on the shelf; **damaged** or **lost** kit is recorded with a reason and
+  written off.
+- **Kit held by staff** lists everything out, people who have already left first, with its value. The exit
+  page shows the same, and on the settlement page one click adds the value as a **recovery** line (once,
+  while the settlement is a draft). The employee record has a **Kit & uniform** tab to issue, take back and
+  see what they hold.
+- Roles: `inventory.view` (HR, operations, payroll, finance, auditor) and `inventory.manage` (operations
+  and HR). Stock isn't posted to the GL yet — see next steps.
+
 ### Navigation
 
 - The sidebar is grouped into collapsible menus — **Dashboard, Workforce / Personnel, HR Lifecycle,
-  Payroll, Operations, Leave Management, Finance / Accounting, Analytics, Settings / Support,
+  Payroll, Operations (incl. Stock & Kit), Leave Management, Finance / Accounting, Analytics, Settings / Support,
   My Workspace** — matching how the
   business is organized. Click a menu to expand it; the menu containing the current page auto-expands.
   Long menus (Payroll, Finance / Accounting) carry small sub-headings (e.g. "Payments", "Payroll reports")
@@ -526,6 +549,10 @@ First run of Playwright on a new machine: `npx playwright install chromium`.
 - Payroll month proration uses calendar days (configurable to fixed 30). Monthly PAYE annualises the
   month's regular income; a cumulative (year-to-date) PAYE method is a sensible next enhancement.
 - NHF relief exists in the rule engine but is disabled in the seed.
+- **Stock — not built yet:** posting stock to the GL (inventory asset on receipt, expense on issue — today
+  uniform cost reaches the books through the payroll "Uniform & Kits" employer add-on and vendor bills);
+  receiving stock straight from a purchase order / vendor bill; per-location stores and transfers between
+  them; barcode / QR scanning; and an employee sign-off (acknowledgement) when kit is issued.
 - **HR lifecycle — not built yet, in rough order of value:** a staff **loan / advance ledger** (so
   recoveries at exit fill themselves in instead of being entered by hand); **letter generation** (offer,
   contract, termination, experience and clearance letters from templates, with e-signature); an

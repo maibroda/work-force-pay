@@ -181,6 +181,41 @@ export default async function ExitPage({ params }: { params: Promise<{ id: strin
         </Section>
       )}
 
+      {x.kit && x.kit.items > 0 && (
+        <Section
+          title={`Uniform & kit still held (${x.kit.items} item(s), ${naira(x.kit.value)})`}
+          description="Take it back, or recover its value through the settlement."
+          actions={
+            <Link className="text-xs text-primary underline" href={`/employees/${x.employeeId}?tab=kit`}>
+              Manage kit
+            </Link>
+          }
+          flush
+        >
+          <Table>
+            <THead>
+              <TR>
+                <TH>Item</TH>
+                <TH className="text-right">Held</TH>
+                <TH className="text-right">Value</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {x.kit.rows.map((r) => (
+                <TR key={r.item.id}>
+                  <TD>
+                    {r.item.name}
+                    {r.item.size ? ` — ${r.item.size}` : ""}
+                  </TD>
+                  <TD className="text-right">{r.outstanding}</TD>
+                  <TD className="text-right">{naira(r.value)}</TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </Section>
+      )}
+
       {manage && x.status !== "REJECTED" && (
         <FormPanel title={x.exitInterviewDate ? "Update the exit interview" : "Record the exit interview"}>
           <SmartForm

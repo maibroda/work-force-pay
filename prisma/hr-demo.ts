@@ -28,6 +28,34 @@ import {
   scheduleInterview,
 } from "../src/server/services/recruitment";
 import { raiseCase, setCaseStatus, addCaseNote } from "../src/server/services/relations";
+import { createItem, createPack, issuePack, setPackLine } from "../src/server/services/inventory";
+
+/** Stock list, a starter kit pack, and a couple of employees already holding it. Idempotent. */
+export async function seedInventoryDemo(orgId: string) {
+  if (await db.inventoryItem.count({ where: { organizationId: orgId } })) {
+    console.log("• Inventory demo data already present — skipped");
+    return;
+  }
+  const ops = await db.user.findFirst({ where: { organizationId: orgId, role: "OPERATIONS" } });
+  if (!ops) return;
+  const ctx: Ctx = { userId: ops.id, orgId, role: "OPERATIONS", name: ops.name, email: ops.email, employeeId: ops.employeeId };
+  const shirt = await createItem(ctx, { name: "Uniform shirt", category: "UNIFORM", size: "L", unit: "pcs", reorderLevel: 20, openingQuantity: 60, openingUnitCost: 4500 });
+  const trousers = await createItem(ctx, { name: "Uniform trousers", category: "UNIFORM", size: "34", unit: "pcs", reorderLevel: 20, openingQuantity: 45, openingUnitCost: 6000 });
+  const boots = await createItem(ctx, { name: "Duty boots", category: "FOOTWEAR", size: "42", unit: "pair", reorderLevel: 10, openingQuantity: 18, openingUnitCost: 15000 });
+  const beret = await createItem(ctx, { name: "Beret", category: "ACCESSORY", unit: "pcs", reorderLevel: 15, openingQuantity: 12, openingUnitCost: 2500 });
+  const torch = await createItem(ctx, { name: "Torch", category: "EQUIPMENT", unit: "pcs", reorderLevel: 5, openingQuantity: 25, openingUnitCost: 3500 });
+  const guard = await db.employeeCategory.findFirst({ where: { organizationId: orgId, code: "GUARD" } });
+  const pack = await createPack(ctx, { name: "Guard starter kit", categoryId: guard?.id, description: "Standard first issue for every new guard" });
+  for (const [item, quantity] of [[shirt, 2], [trousers, 2], [boots, 1], [beret, 1], [torch, 1]] as const)
+    await setPackLine(ctx, pack.id, { itemId: item.id, quantity });
+  const guards = await db.employee.findMany({
+    where: { organizationId: orgId, status: "ACTIVE", categoryId: guard?.id },
+    orderBy: { employeeNumber: "asc" },
+    take: 3,
+  });
+  for (const g of guards.slice(0, 2)) await issuePack(ctx, g.id, pack.id);
+  console.log("✔ Inventory demo data seeded");
+}
 
 export async function seedHrDemo(orgId: string) {
   if (await db.employmentContract.count({ where: { organizationId: orgId } })) {
@@ -153,7 +181,10 @@ export async function seedHrDemo(orgId: string) {
 if (process.argv[1] && /hr-demo\.(ts|js)$/.test(process.argv[1])) {
   db.organization
     .findUniqueOrThrow({ where: { code: "DSS" } })
-    .then((o) => seedHrDemo(o.id))
+    .then(async (o) => {
+      await seedHrDemo(o.id);
+      await seedInventoryDemo(o.id);
+    })
     .then(() => db.$disconnect())
     .catch(async (e) => {
       console.error(e);

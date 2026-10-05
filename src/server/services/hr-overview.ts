@@ -6,6 +6,7 @@ import type { Ctx } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { assertCan, db } from "./_base";
 import { contractAlerts } from "./contracts";
+import { outstandingKitValue } from "./inventory";
 import { todayUtc } from "./hr-policy";
 import { caseStats } from "./relations";
 import { recruitmentSummary } from "./recruitment";
@@ -230,6 +231,14 @@ export async function employeeTimeline(ctx: Ctx, employeeId: string): Promise<Ti
 
 export async function getExitDetail(ctx: Ctx, id: string) {
   assertCan(ctx, "hr.view");
+  const exit = await getExitRecord(ctx, id);
+  if (!exit) return null;
+  // Uniform & kit still out — only shown to people who may see stock.
+  const kit = can(ctx.role, "inventory.view") ? await outstandingKitValue(ctx.orgId, exit.employeeId) : null;
+  return { ...exit, kit };
+}
+
+async function getExitRecord(ctx: Ctx, id: string) {
   return db.exitRecord.findFirst({
     where: { id, organizationId: ctx.orgId },
     include: {

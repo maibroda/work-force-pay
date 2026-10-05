@@ -24,6 +24,7 @@ const DEFAULTS: Record<string, { prefix: string; digits: number }> = {
   JOB_OFFER: { prefix: "OFR", digits: 5 },
   RELATIONS_CASE: { prefix: "ER", digits: 5 },
   SETTLEMENT: { prefix: "EOS", digits: 5 },
+  INVENTORY_ITEM: { prefix: "ITM", digits: 5 },
 };
 
 /**
