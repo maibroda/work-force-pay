@@ -291,6 +291,8 @@ export const hrPolicySchema = z
     loanMaxGrossMultiple: z.coerce.number().min(0).max(36),
     loanMaxDeductionPct: z.coerce.number().int().min(0).max(100),
     advanceMaxGrossPct: z.coerce.number().int().min(0).max(100),
+    reminderEmailsEnabled: z.boolean(),
+    reminderExtraEmails: z.array(z.string().trim().toLowerCase().email("That isn't a valid email address")).max(20),
   })
   .partial();
 

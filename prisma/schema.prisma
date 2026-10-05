@@ -1019,6 +1019,12 @@ model HrPolicy {
   loanMaxDeductionPct  Int     @default(33)
   advanceMaxGrossPct   Int     @default(50)
 
+  // Reminder digest email
+  reminderEmailsEnabled Boolean   @default(true)
+  /// Addresses that get the digest in addition to every active HR admin.
+  reminderExtraEmails   String[]  @default([])
+  lastDigestAt          DateTime?
+
   updatedAt DateTime @updatedAt
 }
 

@@ -557,3 +557,16 @@ export async function listPacks(ctx: Ctx) {
   }));
 }
 
+
+/** Kit still held by people who have left, one row per leaver — for reminders (no permission check). */
+export async function kitHeldByLeavers(orgId: string) {
+  const rows = (await heldRows(orgId)).filter((r) => GONE.includes(r.employee.status));
+  const byEmployee = new Map<string, { employee: HeldRow["employee"]; items: number; value: number }>();
+  for (const r of rows) {
+    const e = byEmployee.get(r.employee.id) ?? { employee: r.employee, items: 0, value: 0 };
+    e.items += r.outstanding;
+    e.value = round2(e.value + r.value);
+    byEmployee.set(r.employee.id, e);
+  }
+  return [...byEmployee.values()];
+}

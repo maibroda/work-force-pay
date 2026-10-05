@@ -6,6 +6,7 @@ import * as recruit from "@/server/services/recruitment";
 import * as rel from "@/server/services/relations";
 import * as hr from "@/server/services/hr";
 import * as eos from "@/server/services/settlements";
+import * as reminders from "@/server/services/reminders";
 
 type V = Record<string, unknown>;
 const HR = ["/hr", "/employees", "/me"];
@@ -18,7 +19,7 @@ const zeroIsNone = (n: unknown) => (n === undefined ? undefined : Number(n) === 
 // ───────────────────────────── Policy & templates ─────────────────────────────
 
 /** Each settings form saves its own section; blank numeric fields leave a value unchanged. */
-export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuity" | "severance" | "loans", v: V) {
+export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuity" | "severance" | "loans" | "reminders", v: V) {
   return act(
     "hr.configure",
     async (ctx) => {
@@ -42,6 +43,14 @@ export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuit
           gratuityPartialYears: v.gratuityPartialYears,
           gratuityTaxable: v.gratuityTaxable,
           gratuityExitTypes: pickExitTypes(v, "gratuityExit"),
+        };
+      if (section === "reminders")
+        patch = {
+          reminderEmailsEnabled: v.reminderEmailsEnabled,
+          // blank clears the list; otherwise split on commas, semicolons, spaces or new lines
+          reminderExtraEmails: String(v.extraEmails ?? "")
+            .split(/[\s,;]+/)
+            .filter(Boolean),
         };
       if (section === "loans")
         patch = {
@@ -370,6 +379,13 @@ export async function releaseSettlementAction(id: string, v: V) {
           : `Released into ${r.periodName}. Recalculate that payroll and the settlement lines appear on the payslip.`,
     };
   }, SETTLE);
+}
+
+export async function sendDigestNowAction() {
+  return act("hr.manage", async (ctx) => {
+    const r = await reminders.sendHrDigestNow(ctx);
+    return { message: r.skipped ? `Not sent — ${r.skipped}` : `Digest sent to ${r.sent} recipient(s)${r.failed.length ? ` (${r.failed.length} failed)` : ""}.` };
+  }, HR);
 }
 
 /** Edits one checklist step; the form carries the step's id. */

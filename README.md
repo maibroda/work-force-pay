@@ -444,6 +444,32 @@ values they were created with. Tax treatment of end-of-service payments differs 
 payment has its own taxable flag and defaults to taxable; confirm the right treatment before relying
 on a setting.
 
+### HR reminder email
+
+A **daily digest** so the alerts don't depend on someone opening the dashboard. It lists, for the
+organization: approvals waiting (requisitions, offers, exits, disciplinary records, settlements,
+loans), settlements approved but not yet released, contracts ending or past their end date, probation
+reviews due or overdue, staff with no contract, overdue onboarding steps, employee-relations cases
+past (or within three days of) their target, leavers still holding kit or owing a loan, and documents
+expiring within 30 days. Every item links back into the app; a confidential case shows only that it
+exists.
+
+- It goes to every **active HR admin** plus any extra addresses (**Settings → HR & Lifecycle Policy →
+  Reminder email**, which also switches it off), **at most once a day**, and **never when there is
+  nothing to report**. One address failing doesn't stop the rest.
+- **HR Lifecycle → HR Overview** shows what the email would say today and has **Send now** (which ignores
+  the once-a-day rule but still won't send an empty one).
+- It is sent by a scheduler calling `GET /api/cron/hr-digest` with `Authorization: Bearer <CRON_SECRET>`
+  (the form Vercel Cron sends). **Set `CRON_SECRET`** — with none set the endpoint is switched off, not
+  left open — and set `RESEND_API_KEY` / `EMAIL_FROM` / `APP_URL` so mail actually goes out (without a
+  key it is only written to the server log). Examples:
+  - Vercel: `vercel.json` → `{"crons":[{"path":"/api/cron/hr-digest","schedule":"0 6 * * *"}]}` (06:00 UTC).
+  - Any server: `0 6 * * * curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://your-app/api/cron/hr-digest`
+  - Windows Task Scheduler: a daily task running
+    `curl.exe -fsS -H "Authorization: Bearer <secret>" https://your-app/api/cron/hr-digest`.
+
+  The job covers every organization in turn, so one schedule serves all tenants.
+
 ### Staff loans & advances
 
 **Payroll → Staff Loans & Advances.** Interest-free money lent to an employee and repaid from payroll —
@@ -586,9 +612,8 @@ First run of Playwright on a new machine: `npx playwright install chromium`.
   them; barcode / QR scanning; and an employee sign-off (acknowledgement) when kit is issued.
 - **HR lifecycle — not built yet, in rough order of value:** **letter generation** (offer,
   contract, termination, experience and clearance letters from templates, with e-signature);
-  **email / SMS reminders**
-  for contract expiry, probation, overdue onboarding and case targets (today these are dashboard
-  alerts only); a **monthly gratuity accrual** to the GL (today it posts only when paid through
+  **SMS / push notifications** and per-person alert preferences (the daily email digest exists, but
+  it goes to HR admins only and every item is included); a **monthly gratuity accrual** to the GL (today it posts only when paid through
   payroll); **per-country end-of-service presets** (gratuity / severance / tax defaults as
   selectable packs); **performance reviews** feeding probation decisions; a **retention schedule**
   for rejected candidates and closed cases (privacy law); **approval chains by amount** with delegation
