@@ -51,6 +51,8 @@ export const PERMISSIONS = [
   "leave.manage", // apply on behalf, edit the leave policy
   "gl.view",
   "gl.manage", // chart of accounts, payroll-head mapping, manual GL posting
+  "inventory.view", // see uniform & kit stock, and what each employee holds
+  "inventory.manage", // receive, adjust, issue and take back stock; maintain kit packs
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -69,6 +71,7 @@ const READ_ALL: Permission[] = [
   "audit.view",
   "leave.view",
   "gl.view",
+  "inventory.view",
   "self.security",
 ];
 
@@ -85,6 +88,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "hr.approve",
     "hr.configure",
     "settlement.manage",
+    "inventory.view",
+    "inventory.manage",
     "client.view",
     "structure.view",
     "override.manage",
@@ -111,6 +116,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "payroll.inputs",
     "reports.view",
     "leave.view",
+    "inventory.view",
+    "inventory.manage",
     "self.security",
   ],
   PAYROLL_ADMIN: [
@@ -133,6 +140,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "audit.view",
     "leave.view",
     "gl.view",
+    "inventory.view",
     "self.security",
   ],
   FINANCE: [

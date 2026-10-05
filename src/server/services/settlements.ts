@@ -18,6 +18,7 @@ import { num, round2 } from "@/lib/money";
 import { assertCan, BusinessError, db, toJson, type Tx } from "./_base";
 import { logAudit } from "./audit";
 import { eosPolicyOf, getHrPolicy } from "./hr-policy";
+import { outstandingKitValue } from "./inventory";
 import { getLeavePolicy } from "./leave";
 import { nextNumber } from "./numbering";
 
@@ -267,6 +268,27 @@ export async function addManualLine(ctx: Ctx, settlementId: string, raw: z.input
   });
 }
 
+/** Adds the value of uniform & kit the leaver still holds as a recovery — one click instead of working it out by hand. */
+export async function addKitRecovery(ctx: Ctx, settlementId: string) {
+  assertCan(ctx, "settlement.manage");
+  const s = await loadSettlement(ctx, settlementId);
+  draftOnly(s);
+  const held = await outstandingKitValue(ctx.orgId, s.employeeId);
+  if (!held.items) throw new BusinessError("This employee isn't holding any uniform or kit.");
+  if (held.value <= 0) throw new BusinessError("The kit this employee holds has no recorded value, so there's nothing to recover.");
+  const existing = await db.exitSettlementLine.findFirst({
+    where: { settlementId, manual: true, description: { startsWith: "Unreturned uniform & kit" } },
+  });
+  if (existing) throw new BusinessError("A kit recovery is already on this settlement — remove it first to add it again.");
+  return addManualLine(ctx, settlementId, {
+    kind: "DEDUCTION",
+    code: "RECOVERY",
+    description: `Unreturned uniform & kit — ${held.items} item(s)`,
+    amount: held.value,
+    taxable: false,
+  });
+}
+
 export async function removeManualLine(ctx: Ctx, lineId: string) {
   assertCan(ctx, "settlement.manage");
   const line = await db.exitSettlementLine.findFirst({ where: { id: lineId, organizationId: ctx.orgId }, include: { settlement: true } });
@@ -464,6 +486,7 @@ export async function getSettlement(ctx: Ctx, id: string) {
     paidThroughPayroll: linked.length > 0 && linked.every((x) => x.status === "PROCESSED"),
     suggestedPeriod: period,
     outstandingClearance: await outstandingClearance(ctx.orgId, s.exitRecordId),
+    heldKit: await outstandingKitValue(ctx.orgId, s.employeeId),
   };
 }
 

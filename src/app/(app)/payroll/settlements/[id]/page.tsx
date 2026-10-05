@@ -12,6 +12,7 @@ import { ActionButton } from "@/components/action-button";
 import { SmartForm } from "@/components/smart-form";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TFoot, TH, THead, TR } from "@/components/ui/table";
+import { addKitRecoveryAction } from "@/app/actions/inventory";
 import {
   addSettlementLineAction,
   approveSettlementAction,
@@ -168,6 +169,15 @@ export default async function SettlementPage({ params }: { params: Promise<{ id:
           {!g.rows.length && <p className="px-4 py-4 text-center text-sm text-muted-foreground">None.</p>}
         </Section>
       ))}
+
+      {prepare && draft && s.heldKit.items > 0 && (
+        <p className="mb-4 flex flex-wrap items-center gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {s.employee.firstName} still holds {s.heldKit.items} item(s) of uniform &amp; kit worth {naira(s.heldKit.value)}.
+          <ActionButton action={addKitRecoveryAction.bind(null, s.id)} variant="outline">
+            Add as a recovery
+          </ActionButton>
+        </p>
+      )}
 
       {prepare && draft && (
         <div className="grid gap-5 lg:grid-cols-2">

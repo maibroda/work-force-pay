@@ -5,6 +5,7 @@ import { can } from "@/lib/auth/permissions";
 import { getEmployee } from "@/server/services/employees";
 import { employeeLocationHistory } from "@/server/services/operations";
 import { employeeTimeline } from "@/server/services/hr-overview";
+import { listItems, listPacks, outstandingKit } from "@/server/services/inventory";
 import { employeePayslips } from "@/server/services/payroll";
 import { options, enumOptions } from "@/server/options";
 import { d, fmtDate, fmtShort, iso, monthEnd, monthStart, MONTHS } from "@/lib/dates";
@@ -36,6 +37,7 @@ import {
 } from "@/app/actions/hr";
 import { ActionButton } from "@/components/action-button";
 import { createContractAction } from "@/app/actions/hr-lifecycle";
+import { issueKitAction, issuePackAction, returnHeldAction } from "@/app/actions/inventory";
 
 type SP = Promise<Record<string, string | undefined>>;
 
@@ -92,6 +94,7 @@ export default async function EmployeePage({
                 { key: "timeline", label: "Lifecycle timeline" },
               ]
             : []),
+          ...(can(ctx.role, "inventory.view") ? [{ key: "kit", label: "Kit & uniform" }] : []),
           { key: "payslips", label: "Payslips" },
         ]}
       />
@@ -974,6 +977,10 @@ export default async function EmployeePage({
 
       {tab === "timeline" && hrView && <TimelineTab employeeId={e.id} ctx={ctx} />}
 
+      {tab === "kit" && can(ctx.role, "inventory.view") && (
+        <KitTab employeeId={e.id} active={!["EXITED", "TERMINATED", "RESIGNED"].includes(e.status)} ctx={ctx} />
+      )}
+
       {tab === "payslips" && <PayslipsTab employeeId={e.id} ctx={ctx} />}
     </>
   );
@@ -1038,6 +1045,116 @@ async function LocationsTab({
         <Empty>No work register records for this month.</Empty>
       )}
     </Section>
+  );
+}
+
+async function KitTab({
+  ctx,
+  employeeId,
+  active,
+}: {
+  ctx: Awaited<ReturnType<typeof requirePage>>;
+  employeeId: string;
+  active: boolean;
+}) {
+  const manage = can(ctx.role, "inventory.manage");
+  const [held, items, packs] = await Promise.all([outstandingKit(ctx, employeeId), listItems(ctx), listPacks(ctx)]);
+  return (
+    <>
+      <Section
+        title="Uniform & kit held"
+        description="Issued and not yet returned. Kit still held when someone leaves can be added to their end-of-service settlement as a recovery."
+        flush
+      >
+        <Table>
+          <THead>
+            <TR>
+              <TH>Item</TH>
+              <TH className="text-right">Issued</TH>
+              <TH className="text-right">Returned</TH>
+              <TH className="text-right">Held</TH>
+              <TH className="text-right">Value</TH>
+              <TH />
+            </TR>
+          </THead>
+          <TBody>
+            {held.map((r) => (
+              <TR key={r.item.id}>
+                <TD>
+                  <Link className="text-primary underline" href={`/inventory/${r.item.id}`}>
+                    {r.item.sku}
+                  </Link>{" "}
+                  {r.item.name}
+                  {r.item.size ? ` — ${r.item.size}` : ""}
+                </TD>
+                <TD className="text-right">{r.issued}</TD>
+                <TD className="text-right">{r.returned}</TD>
+                <TD className="text-right font-medium">{r.outstanding}</TD>
+                <TD className="text-right">{naira(r.value)}</TD>
+                <TD>
+                  {manage && (
+                    <div className="flex flex-wrap gap-1">
+                      <ActionButton action={returnHeldAction.bind(null, employeeId, r.item.id, r.outstanding, "GOOD", undefined)} variant="success">
+                        Returned
+                      </ActionButton>
+                      <ActionButton action={returnHeldAction.bind(null, employeeId, r.item.id, r.outstanding, "DAMAGED")} reason reasonPlaceholder="What's wrong with it?" variant="outline">
+                        Damaged
+                      </ActionButton>
+                      <ActionButton action={returnHeldAction.bind(null, employeeId, r.item.id, r.outstanding, "LOST")} reason reasonPlaceholder="What happened to it?" variant="outline">
+                        Lost
+                      </ActionButton>
+                    </div>
+                  )}
+                </TD>
+              </TR>
+            ))}
+          </TBody>
+        </Table>
+        {!held.length && <Empty>This employee isn&apos;t holding any kit.</Empty>}
+      </Section>
+      {manage && active && (
+        <div className="grid gap-5 lg:grid-cols-2">
+          <FormPanel title="Issue a kit pack">
+            <SmartForm
+              columns={1}
+              submitLabel="Issue pack"
+              action={issuePackAction}
+              fields={[
+                { name: "employeeId", label: "", type: "hidden", defaultValue: employeeId },
+                {
+                  name: "packId",
+                  label: "Pack",
+                  type: "select",
+                  required: true,
+                  options: packs.filter((p) => p.active).map((p) => ({ value: p.id, label: `${p.name} — ${p.setsAvailable} set(s) in stock` })),
+                  help: "All items are issued together, or none if anything is short.",
+                },
+              ]}
+            />
+          </FormPanel>
+          <FormPanel title="Issue an item">
+            <SmartForm
+              columns={2}
+              submitLabel="Issue"
+              action={issueKitAction}
+              fields={[
+                { name: "employeeId", label: "", type: "hidden", defaultValue: employeeId },
+                {
+                  name: "itemId",
+                  label: "Item",
+                  type: "select",
+                  required: true,
+                  span: 2,
+                  options: items.map((i) => ({ value: i.id, label: `${i.sku} — ${i.name}${i.size ? ` (${i.size})` : ""} · ${i.quantityOnHand} in stock` })),
+                },
+                { name: "quantity", label: "Quantity", type: "number", required: true, min: 1, defaultValue: 1 },
+                { name: "reference", label: "Reference" },
+              ]}
+            />
+          </FormPanel>
+        </div>
+      )}
+    </>
   );
 }
 

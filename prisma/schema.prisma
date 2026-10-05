@@ -587,6 +587,10 @@ model Organization {
   relationsCaseNotes        RelationsCaseNote[]
   exitSettlements           ExitSettlement[]
   exitSettlementLines       ExitSettlementLine[]
+  inventoryItems            InventoryItem[]
+  stockMovements            StockMovement[]
+  kitPacks                  KitPack[]
+  kitPackLines              KitPackLine[]
 }
 
 model User {
@@ -728,6 +732,7 @@ model EmployeeCategory {
   workRegister   WorkRegister[]
   requisitions   JobRequisition[]
   checklistItems ChecklistTemplateItem[]
+  kitPacks       KitPack[]
 
   @@unique([organizationId, code])
 }
@@ -795,6 +800,7 @@ model Employee {
   exitSettlements         ExitSettlement[]
   candidateRecord         Candidate?               @relation("CandidateEmployee")
   managedRequisitions     JobRequisition[]         @relation("RequisitionManager")
+  stockMovements          StockMovement[]
 
   @@unique([organizationId, employeeNumber])
   @@index([organizationId, status])
@@ -2726,4 +2732,116 @@ model JournalLine {
   sortOrder   Int          @default(0)
 
   @@index([journalId])
+}
+
+// ─────────────────────── INVENTORY: UNIFORM & KIT STOCK ───────────────────────
+
+enum InventoryCategory {
+  UNIFORM
+  FOOTWEAR
+  ACCESSORY
+  EQUIPMENT
+  OTHER
+}
+
+enum StockMovementType {
+  RECEIPT
+  ISSUE
+  RETURN
+  ADJUSTMENT
+  WRITE_OFF
+}
+
+/// What state kit comes back in. Only GOOD kit goes back on the shelf.
+enum ReturnCondition {
+  GOOD
+  DAMAGED
+  LOST
+}
+
+/// A stocked item — one row per size, so "Shirt — L" and "Shirt — XL" count separately.
+/// quantityOnHand and averageCost are kept in step with the movement ledger, which is the record
+/// of truth: every change to either is a StockMovement.
+model InventoryItem {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  sku            String
+  name           String
+  category       InventoryCategory @default(UNIFORM)
+  size           String?
+  unit           String            @default("pcs")
+  reorderLevel   Int               @default(0)
+  quantityOnHand Int               @default(0)
+  /// Weighted-average cost per unit, recalculated on every receipt.
+  averageCost    Decimal           @default(0) @db.Decimal(14, 2)
+  active         Boolean           @default(true)
+  notes          String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  movements StockMovement[]
+  packLines KitPackLine[]
+
+  @@unique([organizationId, sku])
+  @@index([organizationId, active])
+}
+
+model StockMovement {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  itemId         String
+  item           InventoryItem     @relation(fields: [itemId], references: [id])
+  type           StockMovementType
+  /// Units in the transaction — always positive.
+  quantity       Int
+  /// Effect on quantityOnHand (signed). Damaged / lost returns leave stock unchanged.
+  stockDelta     Int
+  unitCost       Decimal           @db.Decimal(14, 2)
+  condition      ReturnCondition?
+  employeeId     String?
+  employee       Employee?         @relation(fields: [employeeId], references: [id])
+  /// Delivery note, invoice, stocktake or requisition reference.
+  reference      String?
+  reason         String?
+  balanceAfter   Int
+  movementDate   DateTime          @db.Date
+  createdBy      String
+  createdAt      DateTime          @default(now())
+
+  @@index([organizationId, itemId])
+  @@index([organizationId, employeeId])
+}
+
+/// A standard issue — e.g. "Guard starter kit" — so onboarding is one click instead of ten.
+model KitPack {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  name           String
+  description    String?
+  /// Suggested for one employee category (informational — any pack can be issued to anyone).
+  categoryId     String?
+  category       EmployeeCategory? @relation(fields: [categoryId], references: [id])
+  active         Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  lines KitPackLine[]
+
+  @@unique([organizationId, name])
+}
+
+model KitPackLine {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  packId         String
+  pack           KitPack       @relation(fields: [packId], references: [id], onDelete: Cascade)
+  itemId         String
+  item           InventoryItem @relation(fields: [itemId], references: [id])
+  quantity       Int
+
+  @@unique([packId, itemId])
 }

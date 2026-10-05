@@ -81,6 +81,11 @@ const STATUS_TONE: Record<string, Tone> = {
   HIGH: "red",
   MEDIUM: "amber",
   LOW: "gray",
+  RECEIPT: "green",
+  ISSUE: "blue",
+  RETURN: "violet",
+  ADJUSTMENT: "amber",
+  WRITE_OFF: "red",
 };
 
 export function Badge({
