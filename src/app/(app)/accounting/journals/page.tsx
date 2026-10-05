@@ -24,6 +24,9 @@ const SOURCE: Record<string, string> = {
   BANK_ACCOUNT_OPENING: "Bank account opening balance",
   FIXED_ASSET_ACQUISITION: "Fixed asset acquired",
   FIXED_ASSET_DISPOSAL: "Fixed asset disposed",
+  LOAN_DISBURSEMENT: "Staff loan / advance paid out",
+  LOAN_REPAYMENT: "Staff loan repaid in cash",
+  LOAN_WRITE_OFF: "Staff loan written off",
 };
 
 export default async function JournalsPage() {

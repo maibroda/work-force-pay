@@ -444,6 +444,31 @@ values they were created with. Tax treatment of end-of-service payments differs 
 payment has its own taxable flag and defaults to taxable; confirm the right treatment before relying
 on a setting.
 
+### Staff loans & advances
+
+**Payroll → Staff Loans & Advances.** Interest-free money lent to an employee and repaid from payroll —
+tracked as a ledger instead of one-off deductions with nobody watching the balance.
+
+- **Request → approve → pay out.** A loan (`LN-#####`, repaid over up to 60 months) or a salary advance
+  (always one repayment) is requested by HR/payroll and approved by **someone else** (`loan.approve`).
+  Approving it is the authority to pay out and posts the GL (Dr Staff Loans & Advances / Cr Cash), so
+  outstanding loans show as an asset on the balance sheet.
+- **Affordability limits** from Settings → HR & Lifecycle Policy → *Staff loans & advances*: a loan up to
+  N× monthly gross (counting what's already owed), monthly repayments up to X% of gross across all of an
+  employee's loans, and an advance up to Y% of gross (0 = no limit). Gross comes from the latest payroll,
+  else the personal pay rate — so a new joiner can borrow after their first payroll.
+- **Repayment through payroll.** *Schedule repayments* adds each active loan's next instalment to an open
+  payroll period as an approved LOAN / SALARY_ADVANCE deduction, so the **existing payroll run takes it** —
+  no engine change — and the existing GL mapping credits the staff-loans account. It's safe to run twice,
+  and a rejected deduction frees that amount to be scheduled again. A repayment counts as **repaid once
+  that payroll is locked**; until then it shows as *queued in payroll*. The balance is never stored — it
+  is worked out from the instalments.
+- **Cash repayments** can be recorded (Dr Cash / Cr Staff Loans) up to what isn't already queued in payroll.
+  **Write-off** needs a reason, a second person and nothing queued (Dr Staff Loan Write-off / Cr Staff Loans).
+- **At exit**, the exit page shows what the leaver still owes, and on the settlement page one click adds the
+  part not already queued as a recovery per loan; on release it becomes a deduction recorded against the loan.
+- Roles: `loan.manage` (HR, payroll), `loan.approve` (finance, admins). Viewing needs `payroll.view`.
+
 ### Uniform & kit stock
 
 **Operations → Stock & Kit / Kit Packs / Kit Held by Staff.** A stock ledger for uniform, footwear,
@@ -559,8 +584,7 @@ First run of Playwright on a new machine: `npx playwright install chromium`.
   uniform cost reaches the books through the payroll "Uniform & Kits" employer add-on and vendor bills);
   receiving stock straight from a purchase order / vendor bill; per-location stores and transfers between
   them; barcode / QR scanning; and an employee sign-off (acknowledgement) when kit is issued.
-- **HR lifecycle — not built yet, in rough order of value:** a staff **loan / advance ledger** (so
-  recoveries at exit fill themselves in instead of being entered by hand); **letter generation** (offer,
+- **HR lifecycle — not built yet, in rough order of value:** **letter generation** (offer,
   contract, termination, experience and clearance letters from templates, with e-signature);
   **email / SMS reminders**
   for contract expiry, probation, overdue onboarding and case targets (today these are dashboard

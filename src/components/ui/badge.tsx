@@ -81,6 +81,8 @@ const STATUS_TONE: Record<string, Tone> = {
   HIGH: "red",
   MEDIUM: "amber",
   LOW: "gray",
+  COMPLETED: "green",
+  WRITTEN_OFF: "red",
   RECEIPT: "green",
   ISSUE: "blue",
   RETURN: "violet",

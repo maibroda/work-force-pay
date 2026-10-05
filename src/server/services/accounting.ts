@@ -82,6 +82,7 @@ const DEFAULT_ACCOUNTS: Array<{ code: string; name: string; type: (typeof ACCOUN
   { code: "4200", name: "Gain / (Loss) on Disposal of Fixed Assets", type: "INCOME" },
   { code: "5400", name: "Vendor Operating Expenses", type: "EXPENSE" },
   { code: "5410", name: "Depreciation Expense", type: "EXPENSE" },
+  { code: "5420", name: "Staff Loan Write-off", type: "EXPENSE" },
 ];
 
 // headCode, headName, type, debit account code, credit account code

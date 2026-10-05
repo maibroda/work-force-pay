@@ -216,6 +216,40 @@ export default async function ExitPage({ params }: { params: Promise<{ id: strin
         </Section>
       )}
 
+      {x.loans.length > 0 && (
+        <Section
+          title={`Staff loans & advances still owed (${naira(x.loans.reduce((s, l) => s + l.outstanding, 0))})`}
+          description="Recover the part not already queued in payroll through the settlement."
+          flush
+        >
+          <Table>
+            <THead>
+              <TR>
+                <TH>Loan</TH>
+                <TH className="text-right">Outstanding</TH>
+                <TH className="text-right">Already queued in payroll</TH>
+                <TH className="text-right">To recover</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {x.loans.map((l) => (
+                <TR key={l.id}>
+                  <TD className="font-mono text-xs">
+                    <Link className="text-primary underline" href={`/payroll/loans/${l.id}`}>
+                      {l.loanNumber}
+                    </Link>{" "}
+                    <span className="text-muted-foreground">{l.type === "SALARY_ADVANCE" ? "advance" : "loan"}</span>
+                  </TD>
+                  <TD className="text-right">{naira(l.outstanding)}</TD>
+                  <TD className="text-right">{naira(l.scheduled)}</TD>
+                  <TD className="text-right font-medium">{naira(l.unscheduled)}</TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </Section>
+      )}
+
       {manage && x.status !== "REJECTED" && (
         <FormPanel title={x.exitInterviewDate ? "Update the exit interview" : "Record the exit interview"}>
           <SmartForm

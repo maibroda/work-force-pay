@@ -58,6 +58,7 @@ export const NAV: NavGroup[] = [
       { href: "/payroll/runs", label: "Payroll Runs", perm: "payroll.view" },
       { href: "/payroll/earnings", label: "Earnings", perm: "payroll.view" },
       { href: "/payroll/deductions", label: "Deductions", perm: "payroll.view" },
+      { href: "/payroll/loans", label: "Staff Loans & Advances", perm: "payroll.view" },
       { href: "/payroll/overtime", label: "Overtime", perm: "payroll.view" },
       { href: "/payroll/arrears", label: "Arrears", perm: "payroll.view" },
       { href: "/payroll/paye", label: "PAYE", perm: "payroll.view" },

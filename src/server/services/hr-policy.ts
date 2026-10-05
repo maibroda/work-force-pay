@@ -288,6 +288,9 @@ export const hrPolicySchema = z
     noticePayEnabled: z.boolean(),
     noticeRecoveryEnabled: z.boolean(),
     noticePayTaxable: z.boolean(),
+    loanMaxGrossMultiple: z.coerce.number().min(0).max(36),
+    loanMaxDeductionPct: z.coerce.number().int().min(0).max(100),
+    advanceMaxGrossPct: z.coerce.number().int().min(0).max(100),
   })
   .partial();
 

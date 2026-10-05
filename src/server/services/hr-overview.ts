@@ -7,6 +7,7 @@ import { can } from "@/lib/auth/permissions";
 import { assertCan, db } from "./_base";
 import { contractAlerts } from "./contracts";
 import { outstandingKitValue } from "./inventory";
+import { employeeLoanBalances } from "./loans";
 import { todayUtc } from "./hr-policy";
 import { caseStats } from "./relations";
 import { recruitmentSummary } from "./recruitment";
@@ -235,7 +236,8 @@ export async function getExitDetail(ctx: Ctx, id: string) {
   if (!exit) return null;
   // Uniform & kit still out — only shown to people who may see stock.
   const kit = can(ctx.role, "inventory.view") ? await outstandingKitValue(ctx.orgId, exit.employeeId) : null;
-  return { ...exit, kit };
+  const loans = can(ctx.role, "payroll.view") ? await employeeLoanBalances(ctx.orgId, exit.employeeId) : [];
+  return { ...exit, kit, loans };
 }
 
 async function getExitRecord(ctx: Ctx, id: string) {
