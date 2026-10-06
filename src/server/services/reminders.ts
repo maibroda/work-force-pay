@@ -23,6 +23,7 @@ import { recordsOverviewFor } from "./personal-records";
 import { complianceFor } from "./training";
 import { pendingChanges } from "./change-requests";
 import { policyAttention } from "./policies";
+import { requestsNeedingAttention } from "./data-requests";
 import { STATE_LABELS } from "@/lib/training-compliance";
 import { appraisalAttention } from "./appraisals";
 
@@ -55,7 +56,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
   const contractHorizon = addDays(today, policy.contractAlertDays);
   const probationHorizon = addDays(today, policy.probationAlertDays);
   const caseHorizon = addDays(today, 3);
-  const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records, training, appraisals, changes, policies] =
+  const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records, training, appraisals, changes, policies, dataRequests] =
     await Promise.all([
       db.organization.findUniqueOrThrow({ where: { id: orgId }, select: { name: true } }),
       db.jobRequisition.findMany({ where: { organizationId: orgId, status: "PENDING_APPROVAL" }, orderBy: { createdAt: "asc" } }),
@@ -86,6 +87,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
       appraisalAttention(orgId, today),
       pendingChanges(orgId),
       policyAttention(orgId, today),
+      requestsNeedingAttention(orgId, today),
     ]);
 
   const sections: DigestSection[] = [];
@@ -231,6 +233,16 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
       "policies",
       "Policies awaiting acknowledgement",
       policies.map((p) => ({ text: `${p.policy.title} — ${p.overdue} of ${p.applicable} overdue`, path: `/hr/policies/${p.policy.id}` })),
+    ),
+  );
+  add(
+    section(
+      "data-requests",
+      "Data access requests overdue or due soon",
+      dataRequests.map((r) => ({
+        text: `${r.requestNumber} — ${name(r.employee)}: ${r.daysLeft < 0 ? `overdue by ${-r.daysLeft} day(s)` : r.daysLeft === 0 ? "due today" : `due in ${r.daysLeft} day(s)`}`,
+        path: "/hr/data-requests",
+      })),
     ),
   );
   add(section("kit", "Leavers still holding uniform & kit", kit.map((k) => ({ text: `${name(k.employee)} — ${k.items} item(s), ${naira(k.value)}`, path: `/employees/${k.employee.id}?tab=kit` }))));

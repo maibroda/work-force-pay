@@ -694,6 +694,32 @@ carry a payload to whoever downloads the report. Such text is now written with a
 spreadsheets show as plain text; numbers the app computed (including negative ones) are left alone. This
 applies to **every** report, not just the new ones.
 
+### Data access requests (right of access)
+
+The NDPA and GDPR give people the right to a copy of the personal data a company holds on them.
+**HR Lifecycle → Data Access Requests** runs that process, and **My Data** lets employees help themselves.
+
+- **The register.** Log a request (employee or former employee, who asked, how it arrived, the date it was
+  received) and it gets a number (`DSR-#####`) and a deadline — **Settings → HR & Lifecycle Policy → Data access
+  requests**, default 30 days from receipt (1–90). The list shows open, due-within-7-days and overdue, and the
+  HR digest flags the late ones. Needs `hr.manage` to act, `hr.view` to see.
+- **The steps.** *Check identity* (a note of how is required) → *Generate & download data* → *Complete*; or
+  *Refuse* with a written reason. The export can't be generated before identity is recorded, and a request
+  can't be completed before it has been generated. Every step is audited.
+- **The file** is JSON built at the moment of the request and **never stored**; the register keeps only a
+  SHA-256 checksum and how many records each section held, as evidence of what was handed over. It covers
+  profile (incl. bank, tax and pension details), contracts, onboarding, postings, an attendance summary,
+  payslips, loans, leave, training and documents, signed-off appraisals, approved disciplinary records and
+  non-confidential cases, the people they told us about, policies acknowledged, letters issued, requests to
+  change their details, exit and settlement, kit still held, and their job application. Generating it needs
+  `employee.sensitive` as well, because it includes bank details.
+- **What it leaves out, and says so in the file:** interviewers' free-text feedback; confidential investigation
+  records (it states that some exist); other people's details — a guarantor or referee shows only name,
+  relationship and status, never their phone, address or ID; unsigned or pending records; and system logs.
+  A colleague's data never appears.
+- **My Data.** An employee can download their own data at any time (`/api/me/data-export`) with no request;
+  it only ever returns the signed-in employee's record, and every download is audited.
+
 ### Route smoke test
 
 Unit and integration tests prove the services; they can't prove a *page* renders. `npm run smoke` does:
