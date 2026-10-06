@@ -611,6 +611,14 @@ approvers do their part.
 - **Visibility for HR.** Cycle pages show progress, average score, the spread across bands, unassigned
   reviewers and disputes; each employee has an **Appraisals** tab with their history. The HR digest lists
   overdue reviews and appraisals awaiting sign-off. Every step is in the audit log.
+- **Probation.** On a contract whose probation is under review, **Start a probation appraisal** creates a
+  one-person review over the probation period (reviewer = the employee's manager if they can review), named
+  after the employee and contract, with further rounds after an extension. The contract page shows where it
+  stands and what it recommends, and the HR digest's probation line says whether the appraisal is in
+  progress, awaiting sign-off or signed off. With **Settings → HR & Lifecycle Policy → Performance
+  appraisals → "Probation can be confirmed only after a signed-off probation appraisal"** on (off by default),
+  *confirming* probation is refused until the newest probation appraisal covering that probation is signed
+  off — and, if you set a minimum score, scored at least that. Extending or failing probation is never blocked.
 - Permissions: `appraisal.view`, `appraisal.manage` (cycles, criteria, assignments), `appraisal.review`
   (supervisors and HR), `appraisal.approve` (HR, company admin).
 

@@ -3,6 +3,11 @@ import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { getContract } from "@/server/services/contracts";
+import { probationAppraisalFor } from "@/server/services/appraisals";
+import { getHrPolicy } from "@/server/services/hr-policy";
+import { RECOMMENDATION_LABELS } from "@/lib/appraisal";
+import { num } from "@/lib/money";
+import { ActionButton } from "@/components/action-button";
 import { enumOptions } from "@/server/options";
 import { fmtDate } from "@/lib/dates";
 import { fullName } from "@/lib/utils";
@@ -10,6 +15,7 @@ import { FormPanel, KV, PageHeader, Section } from "@/components/page";
 import { SmartForm } from "@/components/smart-form";
 import { StatusBadge } from "@/components/ui/badge";
 import { decideProbationAction, renewContractAction } from "@/app/actions/hr-lifecycle";
+import { startProbationAppraisalAction } from "@/app/actions/appraisals";
 
 const TYPES = ["PERMANENT", "FIXED_TERM", "PROBATION", "CASUAL", "CONSULTANT", "INTERNSHIP"];
 
@@ -22,6 +28,8 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
   const approve = can(ctx.role, "hr.approve");
   const active = c.status === "ACTIVE";
   const reviewing = active && (c.probationOutcome === "PENDING" || c.probationOutcome === "EXTENDED");
+  const [pa, policy] = reviewing ? await Promise.all([probationAppraisalFor(ctx.orgId, c), getHrPolicy(ctx.orgId)]) : [null, null];
+  const paOpen = pa && (pa.status === "DRAFT" || pa.status === "SUBMITTED");
   return (
     <>
       <PageHeader
@@ -56,6 +64,43 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
           ]}
         />
       </Section>
+
+      {reviewing && can(ctx.role, "appraisal.view") && (
+        <Section
+          title="Probation appraisal"
+          description={
+            policy?.probationRequiresAppraisal
+              ? `Policy: probation can be confirmed only after a signed-off probation appraisal${num(policy.probationMinScore) > 0 ? ` scoring at least ${num(policy.probationMinScore).toFixed(2)}` : ""}. Extending or failing isn't blocked.`
+              : "A structured review of how the employee performed in probation — optional, but it gives the decision some evidence."
+          }
+        >
+          {pa ? (
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <Link className="text-primary underline" href={`/hr/appraisals/${pa.id}`}>
+                {pa.cycle.name}
+              </Link>
+              <StatusBadge status={pa.status} />
+              {pa.overallScore != null && (
+                <span>
+                  {num(pa.overallScore).toFixed(2)} — {pa.overallBand}
+                  {pa.recommendation !== "NONE" && <> · recommends: {RECOMMENDATION_LABELS[pa.recommendation]}</>}
+                </span>
+              )}
+              {!paOpen && can(ctx.role, "appraisal.manage") && (
+                <ActionButton action={startProbationAppraisalAction.bind(null, c.id)} confirm="Start another probation appraisal?" variant="outline">
+                  Start another
+                </ActionButton>
+              )}
+            </div>
+          ) : can(ctx.role, "appraisal.manage") ? (
+            <ActionButton action={startProbationAppraisalAction.bind(null, c.id)} confirm="Start a probation appraisal for this employee?">
+              Start a probation appraisal
+            </ActionButton>
+          ) : (
+            <p className="text-sm text-muted-foreground">No probation appraisal has been started.</p>
+          )}
+        </Section>
+      )}
 
       {approve && reviewing && (
         <div className="grid gap-5 lg:grid-cols-3">

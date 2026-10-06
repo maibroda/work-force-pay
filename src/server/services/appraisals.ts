@@ -12,8 +12,8 @@
 import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
-import { addDays, d } from "@/lib/dates";
-import { bandFor, commentRequired, DEFAULT_CRITERIA, RECOMMENDATIONS, selfGap, weightedScore } from "@/lib/appraisal";
+import { addDays, d, iso } from "@/lib/dates";
+import { bandFor, commentRequired, DEFAULT_CRITERIA, RECOMMENDATIONS, selfGap, STATUS_PHRASES, weightedScore } from "@/lib/appraisal";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { getHrPolicy } from "./hr-policy";
@@ -444,6 +444,67 @@ export async function assignReviewer(ctx: Ctx, id: string, userId: string) {
   const updated = await db.appraisal.update({ where: { id }, data: { reviewerUserId: u.id, reviewerName: u.name } });
   await logAudit(ctx, { action: "APPRAISAL_ASSIGN", entity: "Appraisal", entityId: id, oldValue: { reviewer: a.reviewerName }, newValue: { reviewer: u.name } });
   return updated;
+}
+
+// ───────────────────────────── Probation ─────────────────────────────
+
+interface ProbationWindow {
+  employeeId: string;
+  startDate: Date;
+  probationEndDate: Date | null;
+}
+
+/** The newest probation appraisal whose period overlaps this contract's probation, if any. */
+export async function probationAppraisalFor(orgId: string, c: ProbationWindow) {
+  if (!c.probationEndDate) return null;
+  return db.appraisal.findFirst({
+    where: { organizationId: orgId, employeeId: c.employeeId, cycle: { kind: "PROBATION", periodStart: { lte: c.probationEndDate }, periodEnd: { gte: c.startDate } } },
+    include: { cycle: true },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+/** Starts a one-person probation review covering the contract's probation period. */
+export async function startProbationAppraisal(ctx: Ctx, contractId: string) {
+  assertCan(ctx, "appraisal.manage");
+  const c = await db.employmentContract.findFirst({ where: { id: contractId, organizationId: ctx.orgId }, include: { employee: true } });
+  if (!c) throw new BusinessError("Contract not found.");
+  if (c.status !== "ACTIVE" || (c.probationOutcome !== "PENDING" && c.probationOutcome !== "EXTENDED") || !c.probationEndDate)
+    throw new BusinessError("Only a contract with a probation still under review can have a probation appraisal.");
+  const existing = await probationAppraisalFor(ctx.orgId, c);
+  if (existing && (existing.status === "DRAFT" || existing.status === "SUBMITTED"))
+    throw new BusinessError(`A probation appraisal is already ${existing.status === "DRAFT" ? "under way" : "awaiting sign-off"} for this employee.`);
+  const base = `Probation review — ${c.employee.employeeNumber} ${c.employee.firstName} ${c.employee.lastName} — ${c.contractNumber}`;
+  const rounds = await db.appraisalCycle.count({ where: { organizationId: ctx.orgId, name: { startsWith: base } } });
+  const today = new Date(`${iso(new Date())}T00:00:00.000Z`);
+  const r = await launchCycle(ctx, {
+    name: rounds ? `${base} (round ${rounds + 1})` : base,
+    kind: "PROBATION",
+    periodStart: iso(c.startDate),
+    periodEnd: iso(c.probationEndDate),
+    dueDate: iso(c.probationEndDate > today ? c.probationEndDate : today),
+    employeeIds: [c.employeeId],
+  });
+  const appraisal = await db.appraisal.findFirstOrThrow({ where: { cycleId: r.cycle.id } });
+  return { appraisal, unassigned: r.unassigned };
+}
+
+/**
+ * When the HR policy requires it, a probation can be confirmed only after a signed-off probation appraisal
+ * (and, if the policy sets a minimum, one that scored at least that). Throws with the reason otherwise.
+ */
+export async function assertProbationAppraisalAllows(orgId: string, c: ProbationWindow) {
+  const policy = await getHrPolicy(orgId);
+  if (!policy.probationRequiresAppraisal) return;
+  const a = await probationAppraisalFor(orgId, c);
+  const need = "The HR policy requires a signed-off probation appraisal before probation can be confirmed";
+  if (!a) throw new BusinessError(`${need} — none has been started. Start one from this contract.`);
+  if (a.status === "DRAFT" || a.status === "SUBMITTED")
+    throw new BusinessError(`${need} — the probation appraisal is ${STATUS_PHRASES[a.status]}.`);
+  const min = num(policy.probationMinScore);
+  const score = a.overallScore == null ? 0 : num(a.overallScore);
+  if (min > 0 && score < min)
+    throw new BusinessError(`The probation appraisal scored ${score.toFixed(2)}, below the minimum of ${min.toFixed(2)} the HR policy sets for confirmation — extend probation, or record why it failed.`);
 }
 
 /** Overdue and waiting appraisals, for the HR digest (no permission check — it runs as the system). */

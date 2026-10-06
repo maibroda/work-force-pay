@@ -59,6 +59,8 @@ export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuit
           appraisalCommentAtOrBelow: v.appraisalCommentAtOrBelow,
           appraisalCommentAtOrAbove: v.appraisalCommentAtOrAbove,
           appraisalMinServiceDays: v.appraisalMinServiceDays,
+          probationRequiresAppraisal: v.probationRequiresAppraisal,
+          probationMinScore: v.probationMinScore,
         };
       if (section === "records")
         patch = {

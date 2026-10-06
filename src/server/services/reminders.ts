@@ -118,12 +118,25 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
       })),
     ),
   );
+  // where each probation's appraisal stands, so the digest says what's holding the decision up
+  const probationAppraisals = probation.length
+    ? await db.appraisal.findMany({
+        where: { organizationId: orgId, employeeId: { in: probation.map((c) => c.employeeId) }, cycle: { kind: "PROBATION" } },
+        include: { cycle: true },
+        orderBy: { createdAt: "desc" },
+      })
+    : [];
+  const appraisalNote = (c: (typeof probation)[number]) => {
+    const a = probationAppraisals.find((x) => x.employeeId === c.employeeId && c.probationEndDate && x.cycle.periodStart <= c.probationEndDate && x.cycle.periodEnd >= c.startDate);
+    if (!a) return policy.probationRequiresAppraisal ? " · no probation appraisal yet" : "";
+    return ` · probation appraisal ${a.status === "DRAFT" ? "in progress" : a.status === "SUBMITTED" ? "awaiting sign-off" : "signed off"}`;
+  };
   add(
     section(
       "probation",
       "Probation reviews",
       probation.map((c) => ({
-        text: `${name(c.employee)}: probation ${c.probationEndDate! < today ? "ended" : "ends"} ${fmtDate(c.probationEndDate)}${c.probationEndDate! < today ? " — overdue" : ""}`,
+        text: `${name(c.employee)}: probation ${c.probationEndDate! < today ? "ended" : "ends"} ${fmtDate(c.probationEndDate)}${c.probationEndDate! < today ? " — overdue" : ""}${appraisalNote(c)}`,
         path: `/hr/contracts/${c.id}`,
       })),
     ),
