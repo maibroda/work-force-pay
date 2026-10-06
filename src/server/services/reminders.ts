@@ -19,9 +19,12 @@ import { logAudit } from "./audit";
 import { getHrPolicy, todayUtc } from "./hr-policy";
 import { kitHeldByLeavers } from "./inventory";
 import { loansOwedByLeavers } from "./loans";
+import { recordsOverviewFor } from "./personal-records";
 
 const OPEN_CASE = ["OPEN", "INVESTIGATING", "HEARING"];
 const SHOWN = 10;
+/** A new joiner isn't chased about their personal records until they've been here this long. */
+const RECORDS_GRACE_DAYS = 30;
 
 export interface DigestItem {
   text: string;
@@ -47,7 +50,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
   const contractHorizon = addDays(today, policy.contractAlertDays);
   const probationHorizon = addDays(today, policy.probationAlertDays);
   const caseHorizon = addDays(today, 3);
-  const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs] =
+  const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records] =
     await Promise.all([
       db.organization.findUniqueOrThrow({ where: { id: orgId }, select: { name: true } }),
       db.jobRequisition.findMany({ where: { organizationId: orgId, status: "PENDING_APPROVAL" }, orderBy: { createdAt: "asc" } }),
@@ -73,6 +76,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
       kitHeldByLeavers(orgId),
       loansOwedByLeavers(orgId),
       db.employeeDocument.findMany({ where: { organizationId: orgId, expiryDate: { not: null, lte: addDays(today, 30) } }, include: { employee: true }, orderBy: { expiryDate: "asc" } }),
+      recordsOverviewFor(orgId),
     ]);
 
   const sections: DigestSection[] = [];
@@ -137,6 +141,31 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
       })),
     ),
   );
+  const pastGrace = records.rows.filter((r) => r.employee.employmentDate <= addDays(today, -RECORDS_GRACE_DAYS));
+  add(
+    section(
+      "guarantors",
+      "Guarantors waiting to be verified",
+      records.rows.flatMap((r) =>
+        r.guarantors.filter((g) => g.status === "PENDING").map((g) => ({ text: `${g.fullName} for ${name(r.employee)} — recorded ${fmtDate(g.createdAt)}`, path: `/employees/${r.employee.id}?tab=contacts` })),
+      ),
+    ),
+  );
+  const noKin = pastGrace.filter((r) => r.gaps.nextOfKinMissing > 0).length;
+  const noEmergency = pastGrace.filter((r) => r.gaps.emergencyMissing > 0).length;
+  const shortGuarantors = pastGrace.filter((r) => r.gaps.guarantorsMissing > 0).length;
+  const incomplete = pastGrace.filter((r) => !r.gaps.complete).length;
+  if (incomplete)
+    sections.push({
+      key: "records",
+      title: "Incomplete personal records",
+      count: incomplete,
+      items: [
+        noKin ? { text: `${noKin} employee(s) have no next of kin on file`, path: "/employees/next-of-kin" } : null,
+        noEmergency ? { text: `${noEmergency} employee(s) have no emergency contact`, path: "/employees/next-of-kin" } : null,
+        shortGuarantors ? { text: `${shortGuarantors} employee(s) are short of verified guarantors`, path: "/employees/guarantors" } : null,
+      ].filter((x): x is DigestItem => x !== null),
+    });
   add(section("kit", "Leavers still holding uniform & kit", kit.map((k) => ({ text: `${name(k.employee)} — ${k.items} item(s), ${naira(k.value)}`, path: `/employees/${k.employee.id}?tab=kit` }))));
   add(section("loans", "Leavers who still owe a staff loan", owed.map((l) => ({ text: `${name(l.employee)} — ${naira(l.outstanding)} across ${l.loans} loan(s)`, path: `/payroll/loans?q=${l.employee.employeeNumber}` }))));
   add(

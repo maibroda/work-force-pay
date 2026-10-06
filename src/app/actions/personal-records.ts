@@ -64,6 +64,12 @@ export async function releaseGuarantorAction(id: string, reason?: string) {
     return { message: "Guarantor released." };
   }, PAGES);
 }
+export async function releaseGuarantorsOnExitAction(employeeId: string, reason?: string) {
+  return act("hr.manage", async (ctx) => {
+    const n = await pr.releaseGuarantorsOnExit(ctx, employeeId, reason ?? "");
+    return { message: `Released ${n} guarantor(s).` };
+  }, [...PAGES, "/payroll/settlements"]);
+}
 export async function deleteGuarantorAction(id: string) {
   return act("hr.manage", async (ctx) => {
     await pr.deleteGuarantor(ctx, id);

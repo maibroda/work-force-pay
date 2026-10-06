@@ -451,7 +451,9 @@ organization: approvals waiting (requisitions, offers, exits, disciplinary recor
 loans), settlements approved but not yet released, contracts ending or past their end date, probation
 reviews due or overdue, staff with no contract, overdue onboarding steps, employee-relations cases
 past (or within three days of) their target, leavers still holding kit or owing a loan, and documents
-expiring within 30 days. Every item links back into the app; a confidential case shows only that it
+expiring within 30 days, guarantors waiting to be verified, and staff whose personal records are incomplete
+(no next of kin, no emergency contact, short of verified guarantors — new joiners get 30 days first).
+Every item links back into the app; a confidential case shows only that it
 exists.
 
 - It goes to every **active HR admin** plus any extra addresses (**Settings → HR & Lifecycle Policy →
@@ -558,6 +560,10 @@ view and `hr.manage` to change.
   contacts and verified guarantors are required (0 = not required), **which categories need guarantors**
   (none ticked = everyone), the per-person guarantee limit, and whether someone other than the recorder must
   verify. Each page counts and lists whoever is short; pending guarantors don't satisfy the requirement.
+- **At exit**, the settlement page lists the leaver's guarantors with their phones, addresses and any
+  capped amount — and says plainly when something is owed (a negative settlement, a loan balance or kit not
+  returned), since that's when a guarantor may be called on. **Release these guarantors** lets them go in one
+  step, but only once employment has ended and nothing is owed; otherwise release them one by one with a reason.
 - Every add, edit, verification and release is in the audit log. Leavers' contact records are frozen.
 
 ### Navigation

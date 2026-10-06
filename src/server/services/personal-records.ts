@@ -23,6 +23,8 @@ import {
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { getHrPolicy, todayUtc } from "./hr-policy";
+import { outstandingKitValue } from "./inventory";
+import { employeeLoanBalances } from "./loans";
 
 const opt = z
   .string()
@@ -371,6 +373,36 @@ export async function releaseGuarantor(ctx: Ctx, id: string, reason: string) {
   return u;
 }
 
+/**
+ * Lets go of a leaver's guarantors in one step once nothing is left to recover. Refused while they still
+ * owe a staff loan or hold kit, because that's when a guarantor may be called on; release one by one
+ * (with a reason) if HR decides otherwise. Rejected entries were never accepted, so they're left alone.
+ */
+export async function releaseGuarantorsOnExit(ctx: Ctx, employeeId: string, reason: string) {
+  assertCan(ctx, "hr.manage");
+  const emp = await loadEmployee(ctx, employeeId);
+  if (!GONE.includes(emp.status as never)) throw new BusinessError("This employee hasn't left — guarantors are released once employment has ended.");
+  if (!reason || reason.trim().length < 3) throw new BusinessError("Give a reason.");
+  const [loans, kit, shortfall] = await Promise.all([
+    employeeLoanBalances(ctx.orgId, employeeId),
+    outstandingKitValue(ctx.orgId, employeeId),
+    db.exitSettlement.findFirst({ where: { organizationId: ctx.orgId, employeeId, status: { not: "CANCELLED" }, netSettlement: { lt: 0 } }, select: { settlementNumber: true } }),
+  ]);
+  const owes = [
+    loans.length ? `a staff loan balance (${loans.map((l) => l.loanNumber).join(", ")})` : null,
+    kit.items > 0 ? `${kit.items} item(s) of kit` : null,
+    shortfall ? `more than they're due on settlement ${shortfall.settlementNumber}` : null,
+  ].filter(Boolean);
+  if (owes.length) throw new BusinessError(`Not yet — they still owe ${owes.join(" and ")}, which a guarantor may be asked to cover.`);
+  const active = await db.employeeGuarantor.findMany({ where: { organizationId: ctx.orgId, employeeId, status: { in: [...ACTIVE_GUARANTOR] } } });
+  if (!active.length) throw new BusinessError("There are no active guarantors to release.");
+  await db.$transaction(async (tx) => {
+    await tx.employeeGuarantor.updateMany({ where: { id: { in: active.map((g) => g.id) } }, data: { status: "RELEASED", releasedAt: new Date(), releaseReason: reason.trim() } });
+    await logAudit(ctx, { action: "GUARANTOR_RELEASE_ON_EXIT", entity: "Employee", entityId: employeeId, newValue: { released: active.map((g) => g.fullName) }, reason }, tx);
+  });
+  return active.length;
+}
+
 /** A pending or rejected entry can be deleted (a mistake); a verified one is released instead, so the history stays. */
 export async function deleteGuarantor(ctx: Ctx, id: string) {
   assertCan(ctx, "hr.manage");
@@ -394,15 +426,20 @@ export async function listGuarantors(ctx: Ctx, f: { employeeId?: string; status?
 /** Every current employee against the policy: who is missing what. */
 export async function recordsOverview(ctx: Ctx) {
   assertCan(ctx, "employee.sensitive");
-  const policy = await getHrPolicy(ctx.orgId);
+  return recordsOverviewFor(ctx.orgId);
+}
+
+/** The same, with no permission check — for the scheduled digest, which runs as the system. */
+export async function recordsOverviewFor(orgId: string) {
+  const policy = await getHrPolicy(orgId);
   const [emps, contacts, guarantors] = await Promise.all([
     db.employee.findMany({
-      where: { organizationId: ctx.orgId, status: { notIn: [...GONE] } },
-      select: { id: true, employeeNumber: true, firstName: true, middleName: true, lastName: true, categoryId: true, category: { select: { name: true } } },
+      where: { organizationId: orgId, status: { notIn: [...GONE] } },
+      select: { id: true, employeeNumber: true, firstName: true, middleName: true, lastName: true, employmentDate: true, categoryId: true, category: { select: { name: true } } },
       orderBy: { employeeNumber: "asc" },
     }),
-    db.employeeContact.findMany({ where: { organizationId: ctx.orgId } }),
-    db.employeeGuarantor.findMany({ where: { organizationId: ctx.orgId, status: { not: "RELEASED" } } }),
+    db.employeeContact.findMany({ where: { organizationId: orgId } }),
+    db.employeeGuarantor.findMany({ where: { organizationId: orgId, status: { not: "RELEASED" } } }),
   ]);
   const rows = emps.map((e) => {
     const cs = contacts.filter((c) => c.employeeId === e.id);

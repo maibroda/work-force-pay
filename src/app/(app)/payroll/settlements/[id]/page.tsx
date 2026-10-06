@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { getSettlement } from "@/server/services/settlements";
+import { listGuarantors } from "@/server/services/personal-records";
+import { releaseGuarantorsOnExitAction } from "@/app/actions/personal-records";
 import { options } from "@/server/options";
 import { fmtDate } from "@/lib/dates";
 import { naira, num } from "@/lib/money";
@@ -38,6 +40,10 @@ export default async function SettlementPage({ params }: { params: Promise<{ id:
   const earnings = s.lines.filter((l) => l.kind === "EARNING");
   const deductions = s.lines.filter((l) => l.kind === "DEDUCTION");
   const draft = s.status === "DRAFT";
+  const guarantors = can(ctx.role, "employee.sensitive")
+    ? (await listGuarantors(ctx, { employeeId: s.employeeId })).filter((g) => g.status === "PENDING" || g.status === "VERIFIED")
+    : [];
+  const owes = num(s.netSettlement) < 0 || s.owingLoans.length > 0 || s.heldKit.items > 0;
   return (
     <>
       <PageHeader
@@ -187,6 +193,31 @@ export default async function SettlementPage({ params }: { params: Promise<{ id:
             Recover the loan balance
           </ActionButton>
         </p>
+      )}
+
+      {guarantors.length > 0 && (
+        <Section
+          title="Guarantors on file"
+          description={
+            owes
+              ? `${s.employee.firstName} owes the company something (see the amounts above), so these guarantors may be asked to cover it. Don't release them yet.`
+              : `Nothing is owed, so these guarantors can be released once the settlement is done.`
+          }
+        >
+          <ul className="mb-3 space-y-1 text-sm">
+            {guarantors.map((g) => (
+              <li key={g.id}>
+                <b>{g.fullName}</b> ({g.relationship}) · {g.phone} · {g.address}
+                {g.guaranteeAmount && <> · guarantees up to {naira(g.guaranteeAmount)}</>} <StatusBadge status={g.status} />
+              </li>
+            ))}
+          </ul>
+          {can(ctx.role, "hr.manage") && !owes && (
+            <ActionButton action={releaseGuarantorsOnExitAction.bind(null, s.employeeId)} reason reasonPlaceholder="Why (e.g. cleared, nothing owed)" variant="outline">
+              Release these guarantors
+            </ActionButton>
+          )}
+        </Section>
       )}
 
       {prepare && draft && (
