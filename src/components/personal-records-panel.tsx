@@ -121,7 +121,10 @@ export async function PersonalRecordsPanel({
   const gaps = [
     g.nextOfKinMissing > 0 && `${g.nextOfKinMissing} next of kin to add`,
     g.emergencyMissing > 0 && `${g.emergencyMissing} emergency contact(s) to add`,
-    g.guarantorsMissing > 0 && `${g.guarantorsMissing} more verified guarantor(s) needed${g.guarantorsPending ? ` (${g.guarantorsPending} awaiting verification)` : ""}`,
+    g.guarantorsMissing > 0 &&
+      (selfService
+        ? `HR still has to verify ${g.guarantorsMissing} guarantor(s) for you`
+        : `${g.guarantorsMissing} more verified guarantor(s) needed${g.guarantorsPending ? ` (${g.guarantorsPending} awaiting verification)` : ""}`),
     status.shares.count > 0 && !status.shares.complete && `beneficiary shares total ${status.shares.total}% — they should total 100%`,
   ].filter(Boolean) as string[];
 

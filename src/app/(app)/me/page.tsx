@@ -5,7 +5,8 @@ import { employeeLocationHistory } from "@/server/services/operations";
 import { employeePayslips } from "@/server/services/payroll";
 import { myLeave } from "@/server/services/leave";
 import { d, fmtDate, fmtShort, iso, monthEnd, monthStart, MONTHS } from "@/lib/dates";
-import { naira, num, round2 } from "@/lib/money";
+import { naira } from "@/lib/money";
+import { employeePensionYtd } from "@/lib/pension-summary";
 import { fullName } from "@/lib/utils";
 import { Empty } from "@/components/page";
 import { Card } from "@/components/ui/card";
@@ -50,11 +51,7 @@ export default async function MePage({
     orderBy: { createdAt: "desc" },
     take: 10,
   });
-  const pensionYtd = round2(
-    slips
-      .filter((s) => s.run.period.year === y)
-      .reduce((a, s) => a + num(s.employeePension) + num(s.employerPension), 0),
-  );
+  const pensionYtd = employeePensionYtd(slips, y);
   const lines = (latest?.lines as Array<{ type: string; name: string; amount: number }> | undefined) ?? [];
   return (
     <div className="mx-auto max-w-lg space-y-4">
@@ -167,9 +164,9 @@ export default async function MePage({
           ))}
       </Card>
       <Card className="p-4">
-        <p className="text-xs text-muted-foreground">My pension ({y})</p>
+        <p className="text-xs text-muted-foreground">Pension deducted from my pay ({y})</p>
         <p className="text-lg font-semibold">{naira(pensionYtd)}</p>
-        <p className="text-xs text-muted-foreground">Employee 8% + employer 10% contributions year to date</p>
+        <p className="text-xs text-muted-foreground">Your contributions so far this year. Your full retirement savings balance is on your PFA statement.</p>
       </Card>
       <Card className="p-4">
         <p className="mb-1 text-xs text-muted-foreground">My deductions</p>
