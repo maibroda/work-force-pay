@@ -31,6 +31,7 @@ import { raiseCase, setCaseStatus, addCaseNote } from "../src/server/services/re
 import { createItem, createPack, issuePack, setPackLine } from "../src/server/services/inventory";
 import { approveLoan, requestLoan } from "../src/server/services/loans";
 import { addContact, addGuarantor, rejectGuarantor, verifyGuarantor } from "../src/server/services/personal-records";
+import { approveAppraisal, assignReviewer, launchCycle, saveReview, saveSelfAssessment, submitReview } from "../src/server/services/appraisals";
 
 /** One loan being repaid and one advance waiting for approval, for people who already have payroll history. Idempotent. */
 export async function seedLoanDemo(orgId: string) {
@@ -58,6 +59,52 @@ export async function seedLoanDemo(orgId: string) {
   await approveLoan(fin, loan.id, "Within policy");
   await requestLoan(hr, { employeeId: paid[11 % paid.length].employeeId, type: "SALARY_ADVANCE", principal: 20000, reason: "Medical bill" });
   console.log("✔ Loan demo data seeded");
+}
+
+/** One review cycle with appraisals in every state: waiting, self-assessed, awaiting sign-off, signed off. Idempotent. */
+export async function seedAppraisalDemo(orgId: string) {
+  if (await db.appraisalCycle.count({ where: { organizationId: orgId } })) {
+    console.log("• Appraisal demo data already present — skipped");
+    return;
+  }
+  const [hrUser, adminUser, supUser] = await Promise.all([
+    db.user.findFirst({ where: { organizationId: orgId, role: "HR_ADMIN" } }),
+    db.user.findFirst({ where: { organizationId: orgId, role: "COMPANY_ADMIN" } }),
+    db.user.findFirst({ where: { organizationId: orgId, role: "SUPERVISOR", active: true } }),
+  ]);
+  if (!hrUser || !adminUser || !supUser) return;
+  const asCtx = (u: typeof hrUser): Ctx => ({ userId: u.id, orgId, role: u.role as Ctx["role"], name: u.name, email: u.email, employeeId: u.employeeId });
+  const hr = asCtx(hrUser);
+  const admin = asCtx(adminUser);
+  const sup = asCtx(supUser);
+  const staff = await db.employee.findMany({ where: { organizationId: orgId, status: "ACTIVE", NOT: { id: supUser.employeeId ?? "" }, employmentDate: { lte: new Date("2026-01-01T00:00:00Z") } }, orderBy: { employeeNumber: "asc" }, take: 6 });
+  if (staff.length < 4) return;
+  const end = iso(todayUtc());
+  const r = await launchCycle(hr, { name: "2026 mid-year review", kind: "ANNUAL", periodStart: "2026-01-01", periodEnd: end, dueDate: iso(addDays(todayUtc(), 21)), employeeIds: staff.map((e) => e.id) });
+  const rows = await db.appraisal.findMany({ where: { cycleId: r.cycle.id }, include: { ratings: true }, orderBy: { employee: { employeeNumber: "asc" } } });
+  for (const a of rows) if (a.reviewerUserId !== sup.userId) await assignReviewer(hr, a.id, sup.userId);
+  const rate = async (a: (typeof rows)[number], pattern: number[]) =>
+    saveReview(sup, a.id, {
+      ratings: a.ratings.map((x, i) => ({ criterionId: x.criterionId, rating: pattern[i % pattern.length], comment: pattern[i % pattern.length] >= 5 || pattern[i % pattern.length] <= 2 ? "See the incident and commendation records" : undefined })),
+      strengths: "Reliable on night shifts and well regarded by the client",
+      improvements: "Keep the occurrence book up to date",
+      goals: "Complete first-aid refresher; lead one shift handover a week",
+      reviewerComment: "A dependable member of the team.",
+      recommendation: "INCREMENT",
+    });
+  // 0: signed off; 1: awaiting sign-off; 2: self-assessed, review under way; the rest: not started
+  const self = async (a: (typeof rows)[number]) => {
+    const e = staff.find((s) => s.id === a.employeeId)!;
+    await saveSelfAssessment({ userId: `self-${e.id}`, orgId, role: "EMPLOYEE", name: e.firstName, email: "", employeeId: e.id }, a.id, { ratings: a.ratings.map((x) => ({ criterionId: x.criterionId, rating: 4 })), comment: "I've been consistent this half-year." });
+  };
+  await self(rows[0]);
+  await rate(rows[0], [4, 4, 3, 5, 4, 3]);
+  await submitReview(sup, rows[0].id);
+  await approveAppraisal(admin, rows[0].id, "Agreed with the reviewer");
+  await rate(rows[1], [3, 3, 4, 3, 2, 3]);
+  await submitReview(sup, rows[1].id);
+  await self(rows[2]);
+  console.log("✔ Appraisal demo data seeded");
 }
 
 /** Next of kin, emergency contacts, dependants and guarantors in every state, for the first few staff. Idempotent. */
@@ -260,6 +307,7 @@ if (process.argv[1] && /hr-demo\.(ts|js)$/.test(process.argv[1])) {
       await seedInventoryDemo(o.id);
       await seedLoanDemo(o.id);
       await seedPersonalRecordsDemo(o.id);
+      await seedAppraisalDemo(o.id);
     })
     .then(() => db.$disconnect())
     .catch(async (e) => {
