@@ -301,6 +301,8 @@ export const hrPolicySchema = z
     guarantorSeparateVerifier: z.boolean(),
     candidateRetentionMonths: z.coerce.number().int().min(0).max(120),
     trainingAlertDays: z.coerce.number().int().min(0).max(365),
+    sensitiveChangeApproval: z.boolean(),
+    bankChangeWatchDays: z.coerce.number().int().min(0).max(365),
     appraisalSelfAssessment: z.boolean(),
     appraisalCommentAtOrBelow: z.coerce.number().int().min(0).max(5),
     appraisalCommentAtOrAbove: z.coerce.number().int().min(0).max(5),

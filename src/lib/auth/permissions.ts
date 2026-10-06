@@ -59,6 +59,7 @@ export const PERMISSIONS = [
   "appraisal.manage", // launch and close cycles, assign reviewers, edit the criteria
   "appraisal.review", // rate the staff you're assigned to review
   "appraisal.approve", // sign off a submitted appraisal (never its reviewer)
+  "employee.approve", // approve a change to an employee's bank, tax or pension details (never the requester)
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -90,6 +91,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "employee.view",
     "employee.manage",
     "employee.sensitive",
+    "employee.approve",
     "hr.view",
     "hr.manage",
     "hr.approve",
@@ -165,6 +167,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "payment.manage",
     "settlement.approve",
     "loan.approve",
+    "employee.approve",
     "gl.manage",
   ],
   AUDITOR: READ_ALL,

@@ -598,6 +598,7 @@ model Organization {
   employeeContacts          EmployeeContact[]
   employeeGuarantors        EmployeeGuarantor[]
   trainingRequirements      TrainingRequirement[]
+  employeeChangeRequests    EmployeeChangeRequest[]
   appraisalCriteria         AppraisalCriterion[]
   appraisalCycles           AppraisalCycle[]
   appraisals                Appraisal[]
@@ -816,6 +817,7 @@ model Employee {
   generatedLetters        GeneratedLetter[]
   contacts                EmployeeContact[]
   guarantors              EmployeeGuarantor[]
+  changeRequests          EmployeeChangeRequest[]
   appraisals              Appraisal[]
 
   @@unique([organizationId, employeeNumber])
@@ -1046,6 +1048,12 @@ model HrPolicy {
   // Training compliance
   /// Flag a certificate this many days before it expires.
   trainingAlertDays Int @default(60)
+
+  // Change control for bank, tax and pension details
+  /// A change needs a second person's approval (otherwise anyone who can edit an employee can change it).
+  sensitiveChangeApproval   Boolean @default(true)
+  /// Payroll validation warns when an employee's bank account was changed within this many days (0 = off).
+  bankChangeWatchDays       Int     @default(30)
   // Performance appraisals
   /// Employees rate themselves before their manager does.
   appraisalSelfAssessment   Boolean @default(true)
@@ -3276,4 +3284,48 @@ model AppraisalRating {
   comment        String?
 
   @@unique([appraisalId, criterionId])
+}
+
+// ─────────────────────────── CHANGE CONTROL FOR SENSITIVE DETAILS ───────────────────────────
+
+enum ChangeKind {
+  BANK
+  TAX
+  PENSION
+}
+
+enum ChangeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+/// A requested change to an employee's bank, tax or pension details. It takes effect only when someone
+/// other than the requester approves it; the details at request time are kept beside what was asked for.
+model EmployeeChangeRequest {
+  id                String       @id @default(cuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  employeeId        String
+  employee          Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  kind              ChangeKind
+  /// The new values, e.g. { bankName, accountNumber, accountName }.
+  proposed          Json
+  /// What the employee had when the request was made.
+  previous          Json
+  reason            String
+  status            ChangeStatus @default(PENDING)
+  requestedBy       String
+  requestedByUserId String
+  createdAt         DateTime     @default(now())
+  decidedBy         String?
+  decidedByUserId   String?
+  decidedAt         DateTime?
+  decisionNote      String?
+  /// When an approved change was written to the employee record.
+  appliedAt         DateTime?
+
+  @@index([organizationId, status])
+  @@index([organizationId, employeeId, kind])
 }
