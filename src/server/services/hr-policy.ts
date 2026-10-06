@@ -310,6 +310,7 @@ export const hrPolicySchema = z
     probationRequiresAppraisal: z.boolean(),
     probationMinScore: z.coerce.number().min(0).max(5),
     dsarResponseDays: z.coerce.number().int().min(1).max(90),
+    breachNotifyHours: z.coerce.number().int().min(1).max(720),
   })
   .partial();
 

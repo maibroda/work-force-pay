@@ -700,8 +700,8 @@ The NDPA and GDPR give people the right to a copy of the personal data a company
 **HR Lifecycle → Data Access Requests** runs that process, and **My Data** lets employees help themselves.
 
 - **The register.** Log a request (employee or former employee, who asked, how it arrived, the date it was
-  received) and it gets a number (`DSR-#####`) and a deadline — **Settings → HR & Lifecycle Policy → Data access
-  requests**, default 30 days from receipt (1–90). The list shows open, due-within-7-days and overdue, and the
+  received) and it gets a number (`DSR-#####`) and a deadline — **Settings → HR & Lifecycle Policy → Privacy**,
+  default 30 days from receipt (1–90). The list shows open, due-within-7-days and overdue, and the
   HR digest flags the late ones. Needs `hr.manage` to act, `hr.view` to see.
 - **The steps.** *Check identity* (a note of how is required) → *Generate & download data* → *Complete*; or
   *Refuse* with a written reason. The export can't be generated before identity is recorded, and a request
@@ -719,6 +719,33 @@ The NDPA and GDPR give people the right to a copy of the personal data a company
   A colleague's data never appears.
 - **My Data.** An employee can download their own data at any time (`/api/me/data-export`) with no request;
   it only ever returns the signed-in employee's record, and every download is audited.
+
+### Data breaches
+
+A personal-data breach that is likely to put people at risk has to be reported to the regulator within a set
+time of the company becoming aware of it (72 hours under the NDPA/GDPR). **HR Lifecycle → Data Breaches** is the
+register, and it runs that clock.
+
+- **Log it** (`hr.manage`) with a number (`BRC-#####`), what happened, **when the company became aware** — the
+  deadline counts from there — the kinds of data involved and roughly how many people. The deadline is
+  **Settings → HR & Lifecycle Policy → Privacy** (default 72 hours, 1–720).
+- **The clock never waits for an assessment.** A breach nobody has assessed is treated as one that may need
+  reporting, so it shows *due soon* in the last 24 hours and *overdue* after the deadline. The HR digest email
+  lists breaches that are unassessed, due soon or overdue.
+- **Assess it** (`hr.approve`, with a written reason of 15+ characters): *unlikely to harm anyone* (nothing to
+  report — still kept in the register), *likely to put people at risk* (tell the regulator) or *high risk*
+  (tell the people affected too). It can't be downgraded to "no risk" once the regulator has been told.
+- **Tell the regulator** — record when and their reference. The time can't be in the future or before the company
+  knew, and after the deadline **the reason for the delay is required**. The page assembles the facts a notice
+  asks for (what, when, what data, how many people, the risk, containment, contact).
+- **Tell the people affected** (high risk only) — record how and what they were told.
+- **Close it** (`hr.approve`) only when assessed, contained (how and when), the cause and the fix are recorded,
+  the regulator has been told if that was required, and the people affected too if that was. A closed breach is
+  read-only.
+- **Everything is on a timeline** (append-only, who and when) and in the audit trail. State — on time, late,
+  overdue — is always worked out from the facts, never stored.
+- *Not covered:* the system keeps the clock and the record; naming the data protection contact and writing the
+  regulator procedure is the company's job — see `docs/data-protection-policy.md` §8.
 
 ### Route smoke test
 
@@ -766,8 +793,15 @@ it opens every page of the running app as each demo role and fails on anything u
   enumerate valid accounts.
 - **Two-factor authentication.** Optional TOTP (Google Authenticator, Authy, etc.), self-service
   enrollment with a QR code, 10 single-use hashed backup codes, under **My Workspace → My
-  Security**. Not yet enforced by role — see `docs/data-protection-policy.md` for what's still a
-  gap versus what's actually built.
+  Security**.
+- **Requiring two-factor by role.** **Settings → Users → Two-factor sign-in** (`users.manage`): tick the roles
+  that must use it and the first day it is compulsory. Before that day those users see a reminder on My
+  security. From it, anyone in those roles who hasn't set it up is sent to My security from every page and
+  refused on every action (so downloads and API routes can't be used to get round it), and can't switch it off
+  again. You can't set a requirement that would lock you out of your own account on the day it starts. If
+  someone loses their phone *and* their backup codes, an administrator can **Reset 2FA** from the Users list —
+  a written reason is required, it's audited, their sessions end, and it never works on your own account. Off
+  until someone sets it.
 - **Password reset.** `/forgot-password` → emailed single-use link (30-minute expiry) →
   `/reset-password`. Resets and self-service password changes both invalidate every other signed-in
   session. Email sends via Resend when `RESEND_API_KEY` is set; otherwise the link is logged to the
@@ -776,13 +810,16 @@ it opens every page of the running app as each demo role and fails on anything u
   everywhere, password change, deactivating a user) invalidates every outstanding token instantly,
   without a server-side session store.
 - **Error tracking & logging.** Unexpected errors are logged as structured JSON and reported to
-  Sentry (inert until `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` are set) with cookies/auth headers
-  stripped before the event ever leaves the process; expected business/permission errors still show
+  Sentry (inert until `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` are set) with cookies, auth headers, request bodies
+  and query strings dropped, the user reduced to an id, and anything that looks like an email address, phone
+  number, account/ID number or token in messages, breadcrumbs and extra data replaced by a placeholder, before
+  the event ever leaves the process (`src/lib/pii-scrub.ts`); expected business/permission errors still show
   their real message to the user. A global error boundary replaces Next's default crash screen.
 - **CI.** `.github/workflows/ci.yml` runs lint, typecheck, the full test suite, and a production
   build against a real Postgres service on every push/PR.
 - **Data protection.** `docs/data-protection-policy.md` — an honest first pass, including the gaps
-  that still need a decision (retention schedule, subject-access tooling, breach runbook).
+  that still need a decision (a retention schedule for employee records, erasure requests, and who is on
+  call for a breach).
 
 ---
 

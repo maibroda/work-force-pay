@@ -109,28 +109,28 @@ export async function changePasswordAction(v: Record<string, unknown>) {
   return act(undefined, async (ctx) => {
     await security.changeOwnPassword(ctx, String(v.currentPassword), String(v.newPassword));
     return { message: "Password changed. You'll need to sign in again on your other devices." };
-  });
+  }, [], { allowUnenrolled: true });
 }
 
 export async function logoutEverywhereAction() {
   return act(undefined, async (ctx) => {
     await security.logoutEverywhere(ctx);
     return { message: "Signed out of every device, including this one on next page load." };
-  });
+  }, [], { allowUnenrolled: true });
 }
 
 export async function beginTotpEnrollmentAction() {
   return act(undefined, async (ctx) => {
     const enrollment = await security.beginTotpEnrollment(ctx);
     return { message: "Scan the QR code, then enter a code to confirm.", data: enrollment };
-  });
+  }, [], { allowUnenrolled: true });
 }
 
 export async function confirmTotpEnrollmentAction(v: Record<string, unknown>) {
   return act(undefined, async (ctx) => {
     const backupCodes = await security.confirmTotpEnrollment(ctx, String(v.code));
     return { message: "Two-factor authentication is now on. Save your backup codes.", data: { backupCodes } };
-  });
+  }, [], { allowUnenrolled: true });
 }
 
 export async function disableTotpAction(v: Record<string, unknown>) {
@@ -138,4 +138,22 @@ export async function disableTotpAction(v: Record<string, unknown>) {
     await security.disableTotp(ctx, String(v.code));
     return { message: "Two-factor authentication turned off." };
   });
+}
+
+// ─────────────────────────────── Two-factor requirement (administrators) ───────────────────────────────
+
+export async function setTwoFactorRequirementAction(v: Record<string, unknown>) {
+  return act("users.manage", async (ctx) => {
+    // one tick box per role (role_HR_ADMIN …)
+    const roles = Object.keys(v).filter((k) => k.startsWith("role_") && v[k] === true).map((k) => k.slice(5));
+    await security.setTwoFactorRequirement(ctx, { roles, enforceFrom: v.enforceFrom ? String(v.enforceFrom) : undefined });
+    return { message: roles.length ? "Two-factor requirement saved." : "Two-factor is no longer required for any role." };
+  }, ["/settings"]);
+}
+
+export async function resetUserTwoFactorAction(userId: string, reason?: string) {
+  return act("users.manage", async (ctx) => {
+    await security.resetUserTwoFactor(ctx, userId, reason ?? "");
+    return { message: "Two-factor switched off for that user. They must set it up again." };
+  }, ["/settings"]);
 }

@@ -29,7 +29,7 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 function permOf(source: string): PageInfo["perm"] {
-  const m = source.match(/requirePage\(\s*(?:"([a-z]+\.[a-z]+)"\s*)?\)/);
+  const m = source.match(/requirePage\(\s*(?:"([a-z]+\.[a-z]+)"\s*)?(?:,\s*\{[^}]*\}\s*)?\)/);
   if (m) return (m[1] as Permission | undefined) ?? null;
   return "custom";
 }

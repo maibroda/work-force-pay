@@ -101,6 +101,63 @@ export async function seedDataRequestDemo(orgId: string) {
   console.log("✔ Data access request demo data seeded");
 }
 
+/** Two breaches: a lost laptop whose regulator notice is nearly due, and a closed misdirected email. Idempotent. */
+export async function seedBreachDemo(orgId: string) {
+  if (await db.dataBreach.count({ where: { organizationId: orgId } })) {
+    console.log("• Data breach demo data already present — skipped");
+    return;
+  }
+  const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000);
+  const mk = async (data: Record<string, unknown>, notes: Array<[number, string, string]>) => {
+    const b = await db.dataBreach.create({
+      data: { organizationId: orgId, incidentNumber: await db.$transaction((tx) => nextNumber(tx, orgId, "DATA_BREACH")), reportedBy: "Seed HR", ...data } as never,
+    });
+    for (const [h, author, note] of notes) await db.dataBreachUpdate.create({ data: { organizationId: orgId, breachId: b.id, author, note, createdAt: hoursAgo(h) } });
+  };
+  await mk(
+    {
+      title: "HR laptop lost on a site visit",
+      description: "An unencrypted laptop holding the August payroll spreadsheet was left in a taxi. Staff names, account numbers and salaries were on it.",
+      discoveredAt: hoursAgo(55),
+      dataCategories: ["Names and contact details", "Bank account details", "Payroll and pay records"],
+      individualsAffected: 110,
+      assessment: "RISK",
+      assessmentNote: "Account numbers and salaries together could be used for fraud; the disk was not encrypted.",
+      assessedBy: "Seed HR",
+      assessedAt: hoursAgo(50),
+    },
+    [
+      [55, "Seed HR", "Breach logged."],
+      [50, "Seed HR", "Assessed as \"risk\": Account numbers and salaries together could be used for fraud; the disk was not encrypted."],
+    ],
+  );
+  await mk(
+    {
+      title: "Payslip emailed to the wrong colleague",
+      description: "One payslip went to a colleague with a similar name. Recalled the same hour; the recipient confirmed deletion.",
+      discoveredAt: hoursAgo(24 * 20),
+      dataCategories: ["Payroll and pay records"],
+      individualsAffected: 1,
+      assessment: "NO_RISK",
+      assessmentNote: "Internal recipient, deleted unread, confirmed in writing.",
+      assessedBy: "Seed HR",
+      assessedAt: hoursAgo(24 * 20 - 2),
+      containedAt: hoursAgo(24 * 20 - 1),
+      containmentNote: "Email recalled and deletion confirmed by the recipient.",
+      rootCause: "Autocomplete picked the wrong address.",
+      remediation: "Payslips are now sent from the system, not by hand.",
+      status: "CLOSED",
+      closedAt: hoursAgo(24 * 19),
+      closedBy: "Seed HR",
+    },
+    [
+      [24 * 20, "Seed HR", "Breach logged."],
+      [24 * 19, "Seed HR", "Closed."],
+    ],
+  );
+  console.log("✔ Data breach demo data seeded");
+}
+
 /** Three policies, one with a recent second version, and acknowledgements in every state. Idempotent. */
 export async function seedPolicyDemo(orgId: string) {
   if (await db.companyPolicy.count({ where: { organizationId: orgId } })) {
@@ -439,6 +496,7 @@ if (process.argv[1] && /hr-demo\.(ts|js)$/.test(process.argv[1])) {
       await seedAppraisalDemo(o.id);
       await seedPolicyDemo(o.id);
       await seedDataRequestDemo(o.id);
+      await seedBreachDemo(o.id);
     })
     .then(() => db.$disconnect())
     .catch(async (e) => {

@@ -4,7 +4,7 @@
 honestly, including known gaps — it is not a claim of full NDPR compliance. Sections marked
 **⚠ Gap** describe something that should be decided and built, not something already in place.
 
-Last reviewed: 2026-09-24.
+Last reviewed: 2026-10-06.
 
 ## 1. Scope
 
@@ -38,14 +38,18 @@ organization's contract with its clients.
 
 ## 4. Retention
 
-**⚠ Gap — current state, stated honestly**: the application does not purge any personal data
-today. An exited, terminated, or resigned employee's bank details, tax ID, pension PIN, and full
-history remain in the database indefinitely, with no automated retention/purge job.
+**Built — job applicants.** A rejected or withdrawn candidate's personal details (name, contact details,
+CV reference, notes, interview comments) are anonymised once they have been out of the pipeline longer than
+the retention period set in Settings → HR & Lifecycle Policy (24 months by default; 0 keeps everything). A
+scheduled call to `/api/cron/data-retention` runs it daily and the same button can be run by hand. Hired
+candidates and anyone still in the pipeline are never touched. The requisition, stage and offer figures stay
+for reporting.
 
-This should be revisited with an explicit retention schedule — Nigerian practice commonly
-references 6 years for tax-relevant records (FIRS) and longer for pension records (PENCOM), but no
-such schedule is implemented in code today. Until a retention job exists, treat "indefinite
-retention" as the actual, current practice — not a documented policy choice.
+**⚠ Gap — employees.** Nothing purges an exited employee's records. Bank details, tax ID, pension PIN and
+full history stay in the database indefinitely. Nigerian practice commonly references 6 years for
+tax-relevant records (FIRS) and longer for pension records (PENCOM); no such schedule is implemented for
+employee data. Until one is decided and built, treat "indefinite retention" of employee records as the
+actual, current practice, not a documented policy choice.
 
 ## 5. Security measures in place
 
@@ -57,6 +61,13 @@ retention" as the actual, current practice — not a documented policy choice.
 - **Login protection**: rate limiting with account lockout after repeated failed attempts
   (indistinguishable from a wrong password, so it can't be used to enumerate valid accounts);
   optional TOTP two-factor authentication with hashed one-time backup codes.
+- **Two-factor by role**: an administrator (Settings → Users) picks the roles that must use two-factor and the
+  first day it is compulsory. Before that day those users see a reminder on My security; from it, anyone in
+  those roles who hasn't set it up can reach nothing but My security, and server actions are refused. Those
+  users can't switch it off themselves. An administrator can reset a colleague who has lost their phone and
+  backup codes (reason required, audited, their sessions end); never their own. It is off until someone sets it.
+- **Change control on payment details**: bank, tax and pension details can require a second person's approval
+  to change (maker/checker), and payroll validation warns after a recent bank change.
 - **Session security**: signed, httpOnly, `secure`-in-production session cookies; a per-user
   session version that instantly invalidates every outstanding session on password change,
   logout-everywhere, or account deactivation.
@@ -65,28 +76,60 @@ retention" as the actual, current practice — not a documented policy choice.
 - **Error handling**: unexpected errors are logged and reported (Sentry) without leaking internal
   details to the end user; expected business/permission errors show their real message since
   those are meant to be user-facing.
+- **Exports**: CSV downloads neutralise spreadsheet formulas so a name like `=HYPERLINK(...)` can't run when
+  opened in Excel.
 
 ## 6. Sub-processors
 
 | Processor | Purpose | Data involved |
 | --- | --- | --- |
-| Sentry | Error tracking | Request metadata, stack traces. A `beforeSend` hook (`src/lib/sentry-scrub.ts`) strips session cookies and auth headers before an event leaves the process; it does not yet scrub arbitrary PII that might appear in a logged error's message or stack (e.g. an email address in an error string) — review case by case as errors occur. |
-| Resend | Transactional email (password reset) | Recipient email address, reset link. Inactive until `RESEND_API_KEY` is configured. |
+| Sentry | Error tracking | Stack traces and request metadata. Before an event leaves the process (`src/lib/sentry-scrub.ts`, `src/lib/pii-scrub.ts`) cookies, auth headers, request bodies and query strings are dropped, the user is reduced to an id, and anything in error messages, breadcrumbs and extra data that looks like an email address, phone number, account/ID number or token is replaced with a placeholder. This is pattern matching: it removes too much rather than too little, but a name written in free text will not be recognised. |
+| Resend | Transactional email (password reset, HR digest) | Recipient email address, reset link. Inactive until `RESEND_API_KEY` is configured. |
 | [Hosting/DB provider — TBD] | Application hosting, database | All of the above, at rest. |
 
 ## 7. Data subject rights
 
-**⚠ Gap**: there is no self-service data export or erasure tooling yet. Access, correction, and
-erasure requests currently require a database administrator to act manually. This should be
-tracked and formalized (a documented SLA and, ideally, a self-service or semi-automated path)
-before this policy can be called complete.
+**Built — access.** HR logs each request under HR → Data Access Requests (who asked, how, when it arrived),
+records how identity was checked, and generates the person's data on the spot: a file covering everything held
+on them, in plain language, with a checksum recorded. The file is never stored. The deadline is counted from
+receipt (30 days by default, Settings → HR & Lifecycle Policy) and overdue requests appear in the HR digest.
+Employees can also download their own data at any time under My Data. The file states what is left out and why:
+interviewers' free-text feedback, confidential investigation records, other people's contact details, and system
+logs.
+
+**Built — correction.** Employees see their details under My Details and can ask for a change to bank, tax or
+pension details, which a second person approves. Contacts and dependants they maintain themselves.
+
+**⚠ Gap — erasure.** There is no tool for an erasure request outside the candidate retention job. Deleting an
+employee's records is a manual database task and has to be weighed against the tax and pension retention
+duties above, which usually override it for payroll data.
 
 ## 8. Breach notification
 
-**⚠ Gap**: no formal incident response runbook exists yet. At minimum, a breach affecting personal
-data should be reported to the organization's data protection contact and, where required by the
-NDPA, to the Nigeria Data Protection Commission, within the statutory window. This needs an owner
-and a written runbook, not just this paragraph.
+**Built — register and clock.** Every personal-data breach is logged under HR → Data Breaches with the moment
+the company became aware, because the regulator's deadline (72 hours by default, Settings → HR & Lifecycle
+Policy) is counted from then, not from when someone assesses it. A breach nobody has assessed yet is treated as
+one that may need notifying, so it goes overdue on time. The digest email lists breaches that are unassessed,
+due soon, or overdue.
+
+The steps the system enforces:
+
+1. **Log it** (HR). What happened, when it was discovered, what data and roughly how many people.
+2. **Assess it** (someone with approval rights, with a written reason). *Unlikely to harm anyone* — no
+   notification is owed, but the breach stays in the register. *Likely to put people at risk* — the regulator
+   must be told. *High risk* — the people affected must be told as well.
+3. **Tell the regulator** and record when, with their reference. After the deadline the reason for the delay is
+   required. The breach page assembles the facts a notice asks for.
+4. **Tell the people affected** (high risk only) and record how and what they were told.
+5. **Contain and explain.** How it was contained, the cause, and what stops it recurring.
+6. **Close.** Only when assessed, contained, explained and everyone who had to be told has been. A closed breach
+   can't be edited.
+
+Every step lands in an append-only timeline and the audit trail.
+
+**⚠ Gap — people.** The system keeps the clock and the record; it doesn't decide who is on call. The company
+still needs to name its data protection contact, put the regulator's notification address and procedure in its
+own runbook, and decide who may assess a breach (today: anyone with HR approval rights).
 
 ## 9. Review
 

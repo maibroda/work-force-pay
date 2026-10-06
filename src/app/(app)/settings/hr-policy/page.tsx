@@ -184,7 +184,7 @@ export default async function HrPolicyPage() {
         />
       </Section>
 
-      <Section title="Data access requests" description="Employees and former employees can ask for a copy of the personal data held on them. Log each request under HR → Data Access Requests; the deadline is counted from the day it was received.">
+      <Section title="Privacy: access requests and breaches" description="Employees and former employees can ask for a copy of the personal data held on them. Log each request under HR → Data Access Requests; the deadline is counted from the day it was received. A personal-data breach that is likely to put people at risk must be reported to the regulator within a set time of the company becoming aware: log it under HR → Data Breaches.">
         <SmartForm
           columns={3}
           submitLabel="Save"
@@ -192,6 +192,7 @@ export default async function HrPolicyPage() {
           action={updateHrPolicyAction.bind(null, "privacy")}
           fields={[
             { name: "dsarResponseDays", label: "Days to answer a request", type: "number", min: 1, max: 90, defaultValue: p.dsarResponseDays, help: "30 matches a month, the usual legal limit." },
+            { name: "breachNotifyHours", label: "Hours to tell the regulator about a breach", type: "number", min: 1, max: 720, defaultValue: p.breachNotifyHours, help: "72 is the usual legal limit." },
           ]}
         />
       </Section>

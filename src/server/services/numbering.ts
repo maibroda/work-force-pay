@@ -28,6 +28,7 @@ const DEFAULTS: Record<string, { prefix: string; digits: number }> = {
   LOAN: { prefix: "LN", digits: 5 },
   LETTER: { prefix: "LET", digits: 5 },
   DATA_REQUEST: { prefix: "DSR", digits: 5 },
+  DATA_BREACH: { prefix: "BRC", digits: 5 },
 };
 
 /**
