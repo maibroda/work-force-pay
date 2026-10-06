@@ -614,6 +614,29 @@ approvers do their part.
 - Permissions: `appraisal.view`, `appraisal.manage` (cycles, criteria, assignments), `appraisal.review`
   (supervisors and HR), `appraisal.approve` (HR, company admin).
 
+### Change control for bank, tax and pension details
+
+Quietly changing someone's bank account is the classic payroll fraud. With **Settings → HR & Lifecycle Policy →
+Change control** on (the default), an employee's **bank, tax and pension details can't be edited directly** —
+the employee form refuses, and a change is *requested* and takes effect only when someone else approves it.
+
+- **Requesting.** HR (or anyone with `employee.manage`) from the employee's **Bank, tax & pension** tab, or the
+  employee themselves for their own details under **My Bank & Tax Details**. A reason is required; the form
+  validates (10-digit NUBAN, etc.) and refuses a request that changes nothing or duplicates one already pending.
+- **Approving** (`employee.approve`: HR admins, Finance, company admins) from **Employees → Detail Change
+  Requests** or the employee's tab. The approver sees *what is on file → what is asked for*, the reason, and two
+  checks: **does the account name look like the employee's** (first and last name both present, any order), and
+  **does anyone else already hold that account number / tax ID / PIN** — if so approval is refused. **The
+  requester can never approve their own request, and an employee can never approve changes to their own
+  details**, whatever permissions they hold. A request is also refused if the employee's details changed after
+  it was made, or they've left.
+- **Payroll watches the result.** For *N* days after an approved bank change (policy, default 30; 0 = off),
+  payroll validation raises a warning — "bank details changed on …, requested by …, approved by … — confirm with
+  the employee before paying" — for that employee only. It's a warning, not a blocker.
+- Every request, approval, rejection and cancellation is audited, and an approved change is also logged under
+  the long-standing `BANK_/TAX_/PENSION_INFORMATION_CHANGE` actions. The HR digest lists requests waiting.
+- Switch change control off in the policy and these fields can again be edited directly (still audited).
+
 ### Navigation
 
 - The sidebar is grouped into collapsible menus — **Dashboard, Workforce / Personnel, HR Lifecycle,

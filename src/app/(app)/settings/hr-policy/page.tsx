@@ -169,6 +169,19 @@ export default async function HrPolicyPage() {
         />
       </Section>
 
+      <Section title="Change control" description="Bank, tax and pension details are where payroll fraud hides. With approval switched on they can't be edited directly: HR (or the employee, for their own details) requests a change and someone else approves it.">
+        <SmartForm
+          columns={3}
+          submitLabel="Save"
+          resetOnSuccess={false}
+          action={updateHrPolicyAction.bind(null, "changes")}
+          fields={[
+            { name: "sensitiveChangeApproval", label: "Changes need a second person's approval", type: "checkbox", defaultValue: p.sensitiveChangeApproval, span: 2 },
+            { name: "bankChangeWatchDays", label: "Warn in payroll validation for this many days after a bank change", type: "number", min: 0, max: 365, defaultValue: p.bankChangeWatchDays, help: "0 = never." },
+          ]}
+        />
+      </Section>
+
       <Section title="Training compliance" description="Which courses and certifications are required is set under Settings → Training Requirements; HR → Training Compliance shows who is missing or expired.">
         <SmartForm
           columns={3}

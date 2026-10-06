@@ -20,7 +20,7 @@ const zeroIsNone = (n: unknown) => (n === undefined ? undefined : Number(n) === 
 // ───────────────────────────── Policy & templates ─────────────────────────────
 
 /** Each settings form saves its own section; blank numeric fields leave a value unchanged. */
-export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuity" | "severance" | "loans" | "reminders" | "retention" | "records" | "appraisal" | "training", v: V) {
+export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuity" | "severance" | "loans" | "reminders" | "retention" | "records" | "appraisal" | "training" | "changes", v: V) {
   return act(
     "hr.configure",
     async (ctx) => {
@@ -72,6 +72,7 @@ export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuit
         };
       if (section === "retention") patch = { candidateRetentionMonths: v.candidateRetentionMonths };
       if (section === "training") patch = { trainingAlertDays: v.trainingAlertDays };
+      if (section === "changes") patch = { sensitiveChangeApproval: v.sensitiveChangeApproval, bankChangeWatchDays: v.bankChangeWatchDays };
       if (section === "loans")
         patch = {
           loanMaxGrossMultiple: v.loanMaxGrossMultiple,

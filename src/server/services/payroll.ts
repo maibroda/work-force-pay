@@ -16,6 +16,7 @@ import { assertCan, BusinessError, db, toJson } from "./_base";
 import { logAudit } from "./audit";
 import { activeRecurringDeductionRules } from "./deduction-rules";
 import { findDuplicates } from "./employees";
+import { recentBankChanges } from "./change-requests";
 import { CLIENT_MISMATCH, LOCATION_MISMATCH } from "./operations";
 import { loadRateBook } from "./rates";
 import { employerCostRuleFor, payrollRuleFor, pensionRuleFor, taxRuleFor } from "./statutory";
@@ -867,6 +868,21 @@ async function validate(
       "DEDUCTION_PENDING",
       `${pendingDed} deduction(s) awaiting approval are not included.`,
     );
+
+  // BANK DETAILS CHANGED RECENTLY — a changed account is where payroll fraud hides, so ask for a second look
+  const changedBank = await recentBankChanges(ctx.orgId, [...paidIds]);
+  const seenBank = new Set<string>();
+  for (const c of changedBank) {
+    if (seenBank.has(c.employeeId)) continue;
+    seenBank.add(c.employeeId);
+    add(
+      c.employeeId,
+      "BANK",
+      "WARNING",
+      "BANK_RECENTLY_CHANGED",
+      `Bank details changed on ${c.appliedAt!.toISOString().slice(0, 10)} (requested by ${c.requestedBy}, approved by ${c.decidedBy}) — confirm with the employee before paying.`,
+    );
+  }
 
   // DUPLICATES — flag for review, never delete
   const dups = await findDuplicates(ctx, [...paidIds]);

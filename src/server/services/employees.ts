@@ -152,6 +152,13 @@ export async function updateEmployee(ctx: Ctx, id: string, raw: EmployeeInput, r
           String((old as Record<string, unknown>)[k] ?? "") !==
           String((emp as Record<string, unknown>)[k] ?? ""),
       );
+    // With change control on, bank, tax and pension details can't be edited here — they go through a
+    // request that someone else approves (see change-requests.ts). Throwing rolls the edit back.
+    if (changed(SENSITIVE_BANK) || changed(SENSITIVE_PENSION) || changed(SENSITIVE_TAX)) {
+      const policy = await tx.hrPolicy.findUnique({ where: { organizationId: ctx.orgId }, select: { sensitiveChangeApproval: true } });
+      if (policy?.sensitiveChangeApproval ?? true)
+        throw new BusinessError(`Bank, tax and pension details can only be changed through a change request that someone else approves — use "Request a change" on the employee's Bank, tax & pension tab.`);
+    }
     if (changed(SENSITIVE_BANK))
       await logAudit(
         ctx,

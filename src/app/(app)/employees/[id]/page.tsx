@@ -37,6 +37,7 @@ import {
 } from "@/app/actions/hr";
 import { ActionButton } from "@/components/action-button";
 import { PersonalRecordsPanel } from "@/components/personal-records-panel";
+import { ChangeRequestsPanel } from "@/components/change-requests-panel";
 import { employeeCompliance } from "@/server/services/training";
 import { STATE_LABELS, isGap } from "@/lib/training-compliance";
 import { employeeAppraisals } from "@/server/services/appraisals";
@@ -93,7 +94,7 @@ export default async function EmployeePage({
           { key: "assignments", label: "Assignments & movements" },
           { key: "locations", label: "Work locations" },
           { key: "salary", label: "Salary & overrides" },
-          ...(sensitive ? [{ key: "contacts", label: "Contacts & guarantors" }] : []),
+          ...(sensitive ? [{ key: "contacts", label: "Contacts & guarantors" }, { key: "details", label: "Bank, tax & pension" }] : []),
           ...(hrView
             ? [
                 { key: "documents", label: "Documents & training" },
@@ -997,6 +998,8 @@ export default async function EmployeePage({
       )}
 
       {tab === "appraisals" && hrView && can(ctx.role, "appraisal.view") && <AppraisalsTab employeeId={e.id} ctx={ctx} />}
+
+      {tab === "details" && sensitive && <ChangeRequestsPanel ctx={ctx} employeeId={e.id} />}
 
       {tab === "contacts" && sensitive && (
         <PersonalRecordsPanel ctx={ctx} employeeId={e.id} base={`/employees/${e.id}?tab=contacts`} edit={sp.edit} editGuarantor={sp.editg} />
