@@ -601,6 +601,7 @@ model Organization {
   employeeChangeRequests    EmployeeChangeRequest[]
   companyPolicies           CompanyPolicy[]
   dataAccessRequests        DataAccessRequest[]
+  dataBreaches              DataBreach[]
   appraisalCriteria         AppraisalCriterion[]
   appraisalCycles           AppraisalCycle[]
   appraisals                Appraisal[]
@@ -1087,6 +1088,15 @@ model HrPolicy {
 
   // Data retention: months to keep a rejected / withdrawn candidate's personal details (0 = keep for ever)
   candidateRetentionMonths Int @default(24)
+
+  // Privacy: personal-data breaches
+  /// Hours allowed to tell the regulator once the company is aware of a breach likely to put people at risk.
+  breachNotifyHours Int @default(72)
+
+  // Security: roles that must use two-factor sign-in
+  twoFactorRoles       Role[]    @default([])
+  /// From this day the roles above can no longer use the app without two-factor; before it they are only reminded.
+  twoFactorEnforceFrom DateTime? @db.Date
 
   updatedAt DateTime @updatedAt
 }
@@ -3461,4 +3471,73 @@ model DataAccessRequest {
 
   @@unique([organizationId, requestNumber])
   @@index([organizationId, status])
+}
+
+enum BreachStatus {
+  OPEN
+  CLOSED
+}
+
+/// What the controller concluded about the harm a breach could do to the people affected. Until someone has
+/// assessed it the notification clock is treated as running.
+enum BreachAssessment {
+  UNASSESSED
+  NO_RISK
+  RISK
+  HIGH_RISK
+}
+
+/// A personal-data breach: what happened, when it was discovered, the assessment of risk, whether and when the
+/// regulator and the people affected were told, and how it was contained and closed. The regulator must be told
+/// within a set number of hours of the company becoming aware (HR policy: breachNotifyHours) when the breach is
+/// likely to put people at risk.
+model DataBreach {
+  id                    String             @id @default(cuid())
+  organizationId        String
+  organization          Organization       @relation(fields: [organizationId], references: [id])
+  incidentNumber        String
+  title                 String
+  description           String
+  /// When the company became aware — the notification deadline counts from here.
+  discoveredAt          DateTime
+  occurredOn            DateTime?          @db.Date
+  /// Kinds of data involved (identity, bank details, ...).
+  dataCategories        String[]           @default([])
+  individualsAffected   Int?
+  status                BreachStatus       @default(OPEN)
+  assessment            BreachAssessment   @default(UNASSESSED)
+  assessmentNote        String?
+  assessedBy            String?
+  assessedAt            DateTime?
+  containedAt           DateTime?
+  containmentNote       String?
+  rootCause             String?
+  remediation           String?
+  ndpcNotifiedAt        DateTime?
+  ndpcReference         String?
+  /// Why the regulator was told after the deadline.
+  lateReason            String?
+  individualsNotifiedAt DateTime?
+  individualsNote       String?
+  closedAt              DateTime?
+  closedBy              String?
+  reportedBy            String
+  createdAt             DateTime           @default(now())
+  updates               DataBreachUpdate[]
+
+  @@unique([organizationId, incidentNumber])
+  @@index([organizationId, status])
+}
+
+/// Append-only timeline of a breach: every decision and every note, with who and when.
+model DataBreachUpdate {
+  id             String     @id @default(cuid())
+  organizationId String
+  breachId       String
+  breach         DataBreach @relation(fields: [breachId], references: [id], onDelete: Cascade)
+  note           String
+  author         String
+  createdAt      DateTime   @default(now())
+
+  @@index([breachId])
 }

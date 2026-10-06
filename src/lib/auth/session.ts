@@ -5,6 +5,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { db } from "@/lib/db";
 import { can, ForbiddenError, type Permission, type Role } from "./permissions";
 import type { Ctx } from "./context";
+import { TwoFactorRequiredError, twoFactorStateFor } from "./two-factor-gate";
 
 const COOKIE = "wp_session";
 const MAX_AGE = 60 * 60 * 10; // 10 hours
@@ -90,18 +91,25 @@ export async function verifyLoginChallenge(token: string): Promise<string | null
   }
 }
 
-/** For pages: redirect to login when signed out, to /forbidden when not permitted. */
-export async function requirePage(permission?: Permission): Promise<Ctx> {
+/** `allowUnenrolled`: reachable even by someone whose role must use two-factor and hasn't set it up (the page where they do). */
+export interface GateOptions {
+  allowUnenrolled?: boolean;
+}
+
+/** For pages: redirect to login when signed out, to /forbidden when not permitted, to My security when two-factor is compulsory and missing. */
+export async function requirePage(permission?: Permission, opts: GateOptions = {}): Promise<Ctx> {
   const ctx = await getSession();
   if (!ctx) redirect("/login");
   if (permission && !can(ctx.role, permission)) redirect("/forbidden");
+  if (!opts.allowUnenrolled && (await twoFactorStateFor(ctx)).state === "BLOCKED") redirect("/settings/security");
   return ctx;
 }
 
 /** For server actions / route handlers: throws instead of redirecting. */
-export async function requireAction(permission?: Permission): Promise<Ctx> {
+export async function requireAction(permission?: Permission, opts: GateOptions = {}): Promise<Ctx> {
   const ctx = await getSession();
   if (!ctx) throw new ForbiddenError("signed-in");
   if (permission && !can(ctx.role, permission)) throw new ForbiddenError(permission);
+  if (!opts.allowUnenrolled && (await twoFactorStateFor(ctx)).state === "BLOCKED") throw new TwoFactorRequiredError();
   return ctx;
 }

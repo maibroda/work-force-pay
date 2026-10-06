@@ -53,6 +53,7 @@ export const NAV: NavGroup[] = [
       { href: "/hr/training", label: "Training Compliance", perm: "hr.view", section: "Training" },
       { href: "/hr/policies", label: "Policies & Acknowledgements", perm: "hr.view", section: "Policies" },
       { href: "/hr/data-requests", label: "Data Access Requests", perm: "hr.view", section: "Privacy" },
+      { href: "/hr/breaches", label: "Data Breaches", perm: "hr.view" },
       { href: "/hr/appraisals", label: "Appraisals", perm: "appraisal.view", section: "Performance" },
       { href: "/hr/letters", label: "Letters", perm: "hr.view", section: "Letters" },
       { href: "/payroll/settlements", label: "End-of-Service Settlements", perm: "payroll.view" },

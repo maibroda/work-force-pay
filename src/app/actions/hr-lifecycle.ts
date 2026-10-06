@@ -74,7 +74,7 @@ export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuit
         };
       if (section === "retention") patch = { candidateRetentionMonths: v.candidateRetentionMonths };
       if (section === "training") patch = { trainingAlertDays: v.trainingAlertDays };
-      if (section === "privacy") patch = { dsarResponseDays: v.dsarResponseDays };
+      if (section === "privacy") patch = { dsarResponseDays: v.dsarResponseDays, breachNotifyHours: v.breachNotifyHours };
       if (section === "changes") patch = { sensitiveChangeApproval: v.sensitiveChangeApproval, bankChangeWatchDays: v.bankChangeWatchDays };
       if (section === "loans")
         patch = {

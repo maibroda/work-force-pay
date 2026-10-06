@@ -5,8 +5,13 @@ import * as OTPAuth from "otpauth";
 import QRCode from "qrcode";
 import type { Ctx } from "@/lib/auth/context";
 import { sendEmail } from "@/lib/email";
-import { BusinessError, db } from "./_base";
+import { twoFactorStateFor } from "@/lib/auth/two-factor-gate";
+import { ROLE_PERMISSIONS } from "@/lib/auth/permissions";
+import { d, iso } from "@/lib/dates";
+import { twoFactorState } from "@/lib/two-factor-policy";
+import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
+import { todayUtc } from "./hr-policy";
 
 const RESET_TOKEN_TTL_MINUTES = 30;
 const BACKUP_CODE_COUNT = 10;
@@ -155,6 +160,8 @@ export async function confirmTotpEnrollment(ctx: Ctx, code: string): Promise<str
 }
 
 export async function disableTotp(ctx: Ctx, code: string) {
+  if ((await twoFactorStateFor(ctx)).state === "ENROLLED")
+    throw new BusinessError("Your role must sign in with two-factor authentication, so it can't be turned off.");
   const user = await db.user.findUniqueOrThrow({ where: { id: ctx.userId } });
   if (!user.totpEnabled || !user.totpSecret)
     throw new BusinessError("Two-factor authentication is not enabled.");
@@ -186,4 +193,74 @@ export async function verifyTotpLogin(userId: string, code: string): Promise<boo
     }
   }
   return false;
+}
+
+// ─────────────────────────────── Requiring two-factor by role ───────────────────────────────
+
+export const ROLES = Object.keys(ROLE_PERMISSIONS);
+
+/** Which roles must use two-factor and from what day, and who in those roles hasn't set it up yet. */
+export async function getTwoFactorRequirement(ctx: Ctx) {
+  assertCan(ctx, "users.manage");
+  const p = await db.hrPolicy.findUnique({ where: { organizationId: ctx.orgId }, select: { twoFactorRoles: true, twoFactorEnforceFrom: true } });
+  const roles: string[] = p?.twoFactorRoles ?? [];
+  const enforceFrom = p?.twoFactorEnforceFrom ?? null;
+  const users = roles.length
+    ? await db.user.findMany({ where: { organizationId: ctx.orgId, active: true, role: { in: roles as never[] } }, select: { id: true, name: true, email: true, role: true, totpEnabled: true }, orderBy: [{ role: "asc" }, { name: "asc" }] })
+    : [];
+  const today = todayUtc();
+  const rows = users.map((u) => ({ ...u, state: twoFactorState({ roles, enforceFrom, role: u.role, enrolled: u.totpEnabled, today }) }));
+  return { roles, enforceFrom, rows, missing: rows.filter((r) => !r.totpEnabled).length, covered: rows.length };
+}
+
+export const twoFactorRequirementSchema = z.object({
+  roles: z.array(z.string()).max(20),
+  enforceFrom: z.string().optional(),
+});
+
+/** Sets the roles that must use two-factor and the first day it is compulsory. No roles = switched off. */
+export async function setTwoFactorRequirement(ctx: Ctx, raw: z.input<typeof twoFactorRequirementSchema>) {
+  assertCan(ctx, "users.manage");
+  const v = twoFactorRequirementSchema.parse(raw);
+  const roles = [...new Set(v.roles)];
+  const bad = roles.find((r) => !ROLES.includes(r));
+  if (bad) throw new BusinessError(`${bad} isn't a role.`);
+  let enforceFrom: Date | null = null;
+  if (roles.length) {
+    if (!v.enforceFrom) throw new BusinessError("Choose the first day two-factor becomes compulsory (today is fine — nothing is switched off before then).");
+    enforceFrom = d(v.enforceFrom);
+    if (Number.isNaN(enforceFrom.getTime())) throw new BusinessError("That date isn't valid.");
+    // Don't let the person making the change lock themselves (and so possibly everyone) out.
+    if (enforceFrom <= todayUtc() && roles.includes(ctx.role)) {
+      const me = await db.user.findUnique({ where: { id: ctx.userId }, select: { totpEnabled: true } });
+      if (!me?.totpEnabled) throw new BusinessError("Turn on two-factor for your own account first (My security), or this would lock you out as soon as it's saved.");
+    }
+  }
+  const old = await db.hrPolicy.findUnique({ where: { organizationId: ctx.orgId }, select: { twoFactorRoles: true, twoFactorEnforceFrom: true } });
+  await db.hrPolicy.update({ where: { organizationId: ctx.orgId }, data: { twoFactorRoles: roles as never[], twoFactorEnforceFrom: enforceFrom } });
+  await logAudit(ctx, {
+    action: "TWO_FACTOR_REQUIREMENT",
+    entity: "HrPolicy",
+    entityId: ctx.orgId,
+    oldValue: { roles: old?.twoFactorRoles ?? [], enforceFrom: old?.twoFactorEnforceFrom ? iso(old.twoFactorEnforceFrom) : null },
+    newValue: { roles, enforceFrom: enforceFrom ? iso(enforceFrom) : null },
+  });
+}
+
+/**
+ * For someone who has lost their phone and their backup codes: switches their two-factor off so they can sign in
+ * with their password and set it up again. Never your own account, and always with a reason on the record.
+ */
+export async function resetUserTwoFactor(ctx: Ctx, userId: string, reason: string) {
+  assertCan(ctx, "users.manage");
+  if (userId === ctx.userId) throw new BusinessError("You can't reset your own two-factor — use your backup codes, or ask another administrator.");
+  if (!reason || reason.trim().length < 10) throw new BusinessError("Say why (and how you checked it's really them) — this removes a safeguard from their account.");
+  const u = await db.user.findFirst({ where: { id: userId, organizationId: ctx.orgId } });
+  if (!u) throw new BusinessError("User not found.");
+  if (!u.totpEnabled) throw new BusinessError("They don't have two-factor turned on.");
+  await db.user.update({
+    where: { id: userId },
+    data: { totpEnabled: false, totpSecret: null, totpVerifiedAt: null, backupCodes: [], sessionVersion: { increment: 1 } },
+  });
+  await logAudit(ctx, { action: "TWO_FACTOR_RESET", entity: "User", entityId: userId, reason, newValue: { email: u.email } });
 }

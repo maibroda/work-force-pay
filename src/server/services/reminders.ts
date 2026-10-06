@@ -24,6 +24,8 @@ import { complianceFor } from "./training";
 import { pendingChanges } from "./change-requests";
 import { policyAttention } from "./policies";
 import { requestsNeedingAttention } from "./data-requests";
+import { breachesNeedingAttention } from "./breaches";
+import { describeHours } from "@/lib/breaches";
 import { STATE_LABELS } from "@/lib/training-compliance";
 import { appraisalAttention } from "./appraisals";
 
@@ -56,7 +58,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
   const contractHorizon = addDays(today, policy.contractAlertDays);
   const probationHorizon = addDays(today, policy.probationAlertDays);
   const caseHorizon = addDays(today, 3);
-  const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records, training, appraisals, changes, policies, dataRequests] =
+  const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records, training, appraisals, changes, policies, dataRequests, breaches] =
     await Promise.all([
       db.organization.findUniqueOrThrow({ where: { id: orgId }, select: { name: true } }),
       db.jobRequisition.findMany({ where: { organizationId: orgId, status: "PENDING_APPROVAL" }, orderBy: { createdAt: "asc" } }),
@@ -88,6 +90,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
       pendingChanges(orgId),
       policyAttention(orgId, today),
       requestsNeedingAttention(orgId, today),
+      breachesNeedingAttention(orgId, new Date()),
     ]);
 
   const sections: DigestSection[] = [];
@@ -242,6 +245,16 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
       dataRequests.map((r) => ({
         text: `${r.requestNumber} — ${name(r.employee)}: ${r.daysLeft < 0 ? `overdue by ${-r.daysLeft} day(s)` : r.daysLeft === 0 ? "due today" : `due in ${r.daysLeft} day(s)`}`,
         path: "/hr/data-requests",
+      })),
+    ),
+  );
+  add(
+    section(
+      "breaches",
+      "Data breaches needing action",
+      breaches.map((b) => ({
+        text: `${b.incidentNumber} — ${b.title}: ${b.assessment === "UNASSESSED" ? "not assessed yet; " : ""}${b.state === "OVERDUE" ? `regulator notice ${describeHours(b.hoursLeft)} overdue` : b.state === "DUE_SOON" ? `regulator notice due in ${describeHours(b.hoursLeft)}` : "notification clock running"}`,
+        path: `/hr/breaches/${b.id}`,
       })),
     ),
   );

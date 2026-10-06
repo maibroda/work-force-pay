@@ -4,7 +4,7 @@ import * as Sentry from "@sentry/nextjs";
 import { ZodError } from "zod";
 import { Prisma } from "@prisma/client";
 import type { ActionResult } from "@/lib/action-result";
-import { requireAction } from "@/lib/auth/session";
+import { requireAction, type GateOptions } from "@/lib/auth/session";
 import { ForbiddenError, type Permission } from "@/lib/auth/permissions";
 import type { Ctx } from "@/lib/auth/context";
 import { BusinessError } from "@/server/services/_base";
@@ -16,9 +16,10 @@ export async function act(
   permission: Permission | undefined,
   fn: (ctx: Ctx) => Promise<Partial<ActionResult> | void>,
   revalidate: string[] = [],
+  gate: GateOptions = {},
 ): Promise<ActionResult> {
   try {
-    const ctx = await requireAction(permission);
+    const ctx = await requireAction(permission, gate);
     const r = (await fn(ctx)) ?? {};
     for (const p of revalidate) revalidatePath(p, "layout");
     return { ok: true, message: "Saved.", ...r };
