@@ -227,3 +227,40 @@ describe("the notice summary and the HR digest", () => {
     expect(await breachesNeedingAttention(t.org.id, new Date())).toHaveLength(0);
   });
 });
+
+describe("the data protection contact and procedure", () => {
+  it("starts unnamed with the regulator filled in, and the pages are told so", async () => {
+    const { hr, log } = await world();
+    const b = await log();
+    expect((await listBreaches(hr)).contactNamed).toBe(false);
+    const full = await getBreach(hr, b.id);
+    expect(full?.contact.named).toBe(false);
+    expect(full?.regulator.name).toBe("Nigeria Data Protection Commission");
+    expect(full?.runbook).toBeNull();
+    expect(full?.summary).toContain(hr.email); // falls back to whoever is looking at it
+  });
+
+  it("puts the named contact in the notice facts and shows the regulator and procedure", async () => {
+    const { t, hr, log } = await world();
+    const b = await log();
+    await updateHrPolicy(t.ctx("HR_ADMIN"), { dpoName: "Ada Obi, Head of HR", dpoEmail: "Ada.Obi@Example.test", dpoPhone: "0803 000 0000", regulatorName: "Data Regulator", regulatorContact: "breaches@regulator.test", breachRunbook: "1. Call the contact.\n2. Assess within 24 hours." });
+    const full = await getBreach(hr, b.id);
+    expect(full?.contact).toMatchObject({ named: true, name: "Ada Obi, Head of HR", email: "ada.obi@example.test" }); // email is lower-cased
+    expect(full?.regulator).toEqual({ name: "Data Regulator", contact: "breaches@regulator.test" });
+    expect(full?.runbook).toContain("Assess within 24 hours");
+    expect(full?.summary).toContain("Contact for more information: Ada Obi, Head of HR, ada.obi@example.test, 0803 000 0000.");
+    expect(full?.summary).not.toContain(hr.email);
+    expect((await listBreaches(hr)).contactNamed).toBe(true);
+  });
+
+  it("rejects a bad email or a blank regulator, needs configure rights, and can be cleared again", async () => {
+    const { t } = await world();
+    const hr = t.ctx("HR_ADMIN");
+    await expect(updateHrPolicy(hr, { dpoEmail: "not-an-email" })).rejects.toThrow(/valid email/i);
+    await expect(updateHrPolicy(hr, { regulatorName: " " })).rejects.toThrow();
+    await expect(updateHrPolicy(t.ctx("AUDITOR"), { dpoName: "Someone" })).rejects.toThrow(/permission/i);
+    await updateHrPolicy(hr, { dpoName: "Ada Obi" });
+    await updateHrPolicy(hr, { dpoName: null });
+    expect((await listBreaches(hr)).contactNamed).toBe(false);
+  });
+});

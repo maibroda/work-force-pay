@@ -78,6 +78,21 @@ export function describeHours(h: number): string {
   return parts.join(" ");
 }
 
+export interface DpoContact {
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+}
+
+/** Has the company named a real person to contact? A name or an email is enough to act on. */
+export const hasContact = (c: DpoContact) => !!(c.name || c.email);
+
+/** "Ada Obi, ada@x.com, 0803…" from whatever has been filled in; null when nothing has. */
+export function contactLine(c: DpoContact): string | null {
+  const parts = [c.name, c.email, c.phone].filter((p): p is string => !!p);
+  return parts.length ? parts.join(", ") : null;
+}
+
 export interface NotificationFacts {
   incidentNumber: string;
   title: string;

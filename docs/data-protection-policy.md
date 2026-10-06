@@ -127,9 +127,14 @@ The steps the system enforces:
 
 Every step lands in an append-only timeline and the audit trail.
 
-**⚠ Gap — people.** The system keeps the clock and the record; it doesn't decide who is on call. The company
-still needs to name its data protection contact, put the regulator's notification address and procedure in its
-own runbook, and decide who may assess a breach (today: anyone with HR approval rights).
+**Built — who to call.** Settings → HR & Lifecycle Policy → Data protection contact holds the named contact
+(name, email, out-of-hours phone), the regulator and how to reach it, and the company's own breach procedure in
+its own words. They appear on every breach page and the named contact goes into the facts for the regulator's
+notice. Until a name or email is entered, the breach pages carry a warning that nobody is named.
+
+**⚠ Gap — the content.** The system holds these fields but cannot fill them in. Until someone enters the contact,
+the regulator's current notification details and the procedure, the warning stays up. Who may assess a breach is
+still anyone with HR approval rights; the company may want to narrow that in its procedure.
 
 ## 9. Review
 

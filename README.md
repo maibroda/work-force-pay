@@ -744,8 +744,12 @@ register, and it runs that clock.
   read-only.
 - **Everything is on a timeline** (append-only, who and when) and in the audit trail. State — on time, late,
   overdue — is always worked out from the facts, never stored.
-- *Not covered:* the system keeps the clock and the record; naming the data protection contact and writing the
-  regulator procedure is the company's job — see `docs/data-protection-policy.md` §8.
+- **Who to call.** **Settings → HR & Lifecycle Policy → Data protection contact and breach procedure**
+  (`hr.configure`) holds the named contact (name, email, out-of-hours phone), the regulator's name (default
+  Nigeria Data Protection Commission) and how to reach it, and the company's own procedure in its own words.
+  They show on every breach page, and the named contact goes into the notice facts. **Until a name or email is
+  entered, the breach pages show a warning** that nobody is named. The system can't fill these in for you — see
+  `docs/data-protection-policy.md` §8.
 
 ### Route smoke test
 

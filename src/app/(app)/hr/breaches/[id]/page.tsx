@@ -43,6 +43,27 @@ export default async function BreachPage({ params }: { params: Promise<{ id: str
         }
       />
 
+      {!b.contact.named && (
+        <div className="mb-5 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+          <b>Nobody is named as the data protection contact.</b> Set one, the regulator details and your breach procedure under Settings → HR &amp; Lifecycle Policy → Data protection contact, so that whoever picks up a breach out of hours knows who to call.
+        </div>
+      )}
+      <Section title="Who to contact and the procedure">
+        <KV
+          cols={2}
+          items={[
+            ["Data protection contact", b.contact.named ? [b.contact.name, b.contact.email, b.contact.phone].filter(Boolean).join(" · ") : "not named"],
+            ["Regulator", b.regulator.contact ? `${b.regulator.name} — ${b.regulator.contact}` : b.regulator.name],
+          ]}
+        />
+        {b.runbook && (
+          <details className="mt-3 text-sm">
+            <summary className="cursor-pointer text-primary">Our breach procedure</summary>
+            <p className="mt-2 whitespace-pre-line">{b.runbook}</p>
+          </details>
+        )}
+      </Section>
+
       <Section title="What happened">
         <p className="mb-4 whitespace-pre-line text-sm">{b.description}</p>
         <KV

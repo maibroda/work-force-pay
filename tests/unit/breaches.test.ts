@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeHours, hoursLeft, needsIndividuals, needsRegulator, notificationSummary, notifyDeadline, notifyState } from "@/lib/breaches";
+import { contactLine, describeHours, hasContact, hoursLeft, needsIndividuals, needsRegulator, notificationSummary, notifyDeadline, notifyState } from "@/lib/breaches";
 
 const at = (s: string) => new Date(`${s}Z`);
 const found = at("2026-10-01T10:00:00");
@@ -71,5 +71,17 @@ describe("notificationSummary", () => {
     expect(text).toContain("containment is still under way");
     expect(text).toContain("not yet established");
     expect(text).toContain("hr@example.test");
+  });
+});
+
+describe("the named contact", () => {
+  it("is named once there is a person or an email, and reads as one line", () => {
+    expect(hasContact({ name: null, email: null, phone: null })).toBe(false);
+    expect(hasContact({ name: null, email: null, phone: "0803" })).toBe(false); // a number alone doesn't say who
+    expect(hasContact({ name: "Head of HR", email: null, phone: null })).toBe(true);
+    expect(hasContact({ name: null, email: "dpo@x.test", phone: null })).toBe(true);
+    expect(contactLine({ name: "Ada Obi", email: "ada@x.test", phone: "0803 000 0000" })).toBe("Ada Obi, ada@x.test, 0803 000 0000");
+    expect(contactLine({ name: null, email: "ada@x.test", phone: null })).toBe("ada@x.test");
+    expect(contactLine({ name: null, email: null, phone: null })).toBeNull();
   });
 });

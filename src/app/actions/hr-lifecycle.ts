@@ -20,7 +20,7 @@ const zeroIsNone = (n: unknown) => (n === undefined ? undefined : Number(n) === 
 // ───────────────────────────── Policy & templates ─────────────────────────────
 
 /** Each settings form saves its own section; blank numeric fields leave a value unchanged. */
-export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuity" | "severance" | "loans" | "reminders" | "retention" | "records" | "appraisal" | "training" | "changes" | "privacy", v: V) {
+export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuity" | "severance" | "loans" | "reminders" | "retention" | "records" | "appraisal" | "training" | "changes" | "privacy" | "dpo", v: V) {
   return act(
     "hr.configure",
     async (ctx) => {
@@ -75,6 +75,10 @@ export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuit
       if (section === "retention") patch = { candidateRetentionMonths: v.candidateRetentionMonths };
       if (section === "training") patch = { trainingAlertDays: v.trainingAlertDays };
       if (section === "privacy") patch = { dsarResponseDays: v.dsarResponseDays, breachNotifyHours: v.breachNotifyHours };
+      if (section === "dpo") {
+        const text = (x: unknown) => (String(x ?? "").trim() ? String(x).trim() : null);
+        patch = { dpoName: text(v.dpoName), dpoEmail: text(v.dpoEmail), dpoPhone: text(v.dpoPhone), regulatorName: v.regulatorName, regulatorContact: text(v.regulatorContact), breachRunbook: text(v.breachRunbook) };
+      }
       if (section === "changes") patch = { sensitiveChangeApproval: v.sensitiveChangeApproval, bankChangeWatchDays: v.bankChangeWatchDays };
       if (section === "loans")
         patch = {

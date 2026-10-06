@@ -1091,7 +1091,16 @@ model HrPolicy {
 
   // Privacy: personal-data breaches
   /// Hours allowed to tell the regulator once the company is aware of a breach likely to put people at risk.
-  breachNotifyHours Int @default(72)
+  breachNotifyHours Int     @default(72)
+  /// Who the company has named as its data protection contact, shown on the breach pages and in the notice facts.
+  dpoName           String?
+  dpoEmail          String?
+  dpoPhone          String?
+  /// The regulator breaches are reported to, and how (portal, address, email), as the company's own procedure.
+  regulatorName     String  @default("Nigeria Data Protection Commission")
+  regulatorContact  String?
+  /// The company's own breach procedure in its own words: who assesses, who tells whom, who signs off.
+  breachRunbook     String?
 
   // Security: roles that must use two-factor sign-in
   twoFactorRoles       Role[]    @default([])
