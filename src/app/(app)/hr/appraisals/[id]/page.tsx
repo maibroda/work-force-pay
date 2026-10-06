@@ -77,15 +77,17 @@ export default async function AppraisalPage({ params }: { params: Promise<{ id: 
           </span>
         }
       />
-      <KV
-        cols={4}
-        items={[
-          ["Period", `${fmtDate(a.cycle.periodStart)} – ${fmtDate(a.cycle.periodEnd)}`],
-          ["Due", fmtDate(a.cycle.dueDate)],
-          ["Reviewer", a.reviewerName ?? <Badge tone="amber">not assigned</Badge>],
-          ["Self-assessment", a.selfSubmittedAt ? `done ${fmtDate(a.selfSubmittedAt)}` : a.policy.selfAssessment ? "not yet" : "switched off"],
-        ]}
-      />
+      <div className="mb-5">
+        <KV
+          cols={4}
+          items={[
+            ["Period", `${fmtDate(a.cycle.periodStart)} – ${fmtDate(a.cycle.periodEnd)}`],
+            ["Due", fmtDate(a.cycle.dueDate)],
+            ["Reviewer", a.reviewerName ?? <Badge tone="amber">not assigned</Badge>],
+            ["Self-assessment", a.selfSubmittedAt ? `done ${fmtDate(a.selfSubmittedAt)}` : a.policy.selfAssessment ? "not yet" : "switched off"],
+          ]}
+        />
+      </div>
 
       {a.redacted && (
         <p className="my-4 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">

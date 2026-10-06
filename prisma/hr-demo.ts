@@ -263,7 +263,7 @@ export async function seedPersonalRecordsDemo(orgId: string) {
     address: "7 Unity Close, Ikeja, Lagos",
     occupation: "Trader",
     idType: "NIN",
-    idNumber: `NIN${70000000 + i * 10 + k}`,
+    idNumber: String(70000000000 + i * 10 + k),
     formReference: `GF-${2026}-${i}${k}`,
     yearsKnown: 5 + k,
     ...extra,
