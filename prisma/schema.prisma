@@ -1028,6 +1028,9 @@ model HrPolicy {
   reminderExtraEmails   String[]  @default([])
   lastDigestAt          DateTime?
 
+  // Data retention: months to keep a rejected / withdrawn candidate's personal details (0 = keep for ever)
+  candidateRetentionMonths Int @default(24)
+
   updatedAt DateTime @updatedAt
 }
 
@@ -1156,6 +1159,8 @@ model Candidate {
   /// Set once the candidate is converted into an employee.
   employeeId           String?         @unique
   employee             Employee?       @relation("CandidateEmployee", fields: [employeeId], references: [id])
+  /// Set when the candidate's personal details were removed under the retention rule.
+  anonymizedAt         DateTime?
   createdBy            String
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
