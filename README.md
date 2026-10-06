@@ -470,6 +470,23 @@ exists.
 
   The job covers every organization in turn, so one schedule serves all tenants.
 
+### Candidate data retention
+
+Privacy laws (Nigeria's NDPA, GDPR and similar) limit how long you may keep an applicant's personal
+details. **Settings → HR & Lifecycle Policy → Data retention** sets how many months a *rejected or
+withdrawn* candidate is kept (default 24; **0 keeps everything**).
+
+- Past that, the candidate's **name, phone, email, CV reference, notes, rejection reason, interview comments
+  and vetting notes are removed** and the record is marked anonymised. The candidate number, requisition,
+  stage reached, interview scores and offer figures stay, so recruitment funnels and time-to-hire reports
+  keep working.
+- **Never touched:** anyone still in the pipeline (however long they've sat there), and hired candidates
+  (they are employees now — their data follows the employee record).
+- Each run is written to the audit log as *System (data retention)*. Removal is permanent.
+- It runs daily from `GET /api/cron/data-retention` with `Authorization: Bearer <CRON_SECRET>` — same secret,
+  same switched-off-without-it behaviour and scheduler examples as the HR digest above. The settings page
+  shows how many candidates are past the limit and has **Run retention now** (needs `hr.configure`).
+
 ### Staff loans & advances
 
 **Payroll → Staff Loans & Advances.** Interest-free money lent to an employee and repaid from payroll —

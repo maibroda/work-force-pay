@@ -293,6 +293,7 @@ export const hrPolicySchema = z
     advanceMaxGrossPct: z.coerce.number().int().min(0).max(100),
     reminderEmailsEnabled: z.boolean(),
     reminderExtraEmails: z.array(z.string().trim().toLowerCase().email("That isn't a valid email address")).max(20),
+    candidateRetentionMonths: z.coerce.number().int().min(0).max(120),
   })
   .partial();
 

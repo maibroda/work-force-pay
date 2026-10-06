@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { refuseUnlessCronAuthorized } from "@/lib/cron-auth";
-import { runDigestForAllOrgs } from "@/server/services/reminders";
+import { runRetentionForAllOrgs } from "@/server/services/retention";
 
 export const dynamic = "force-dynamic";
 
-/** Scheduled job: sends each organization's HR digest. See refuseUnlessCronAuthorized for the secret. */
+/** Scheduled job: removes personal details that have outlived each organization's retention period. */
 async function handle(req: Request) {
   const refused = refuseUnlessCronAuthorized(req);
   if (refused) return refused;
-  const results = await runDigestForAllOrgs();
+  const results = await runRetentionForAllOrgs();
   return NextResponse.json({ ok: true, results });
 }
 

@@ -3,7 +3,9 @@ import { getHrPolicy } from "@/server/services/hr-policy";
 import { num } from "@/lib/money";
 import { PageHeader, Section } from "@/components/page";
 import { SmartForm, type Field } from "@/components/smart-form";
-import { updateHrPolicyAction } from "@/app/actions/hr-lifecycle";
+import { ActionButton } from "@/components/action-button";
+import { retentionPreview } from "@/server/services/retention";
+import { runRetentionNowAction, updateHrPolicyAction } from "@/app/actions/hr-lifecycle";
 
 const EXIT_TYPES = ["RESIGNATION", "TERMINATION", "END_OF_CONTRACT", "RETIREMENT", "ABSCONDMENT", "DECEASED"];
 const label = (t: string) => `Pays on ${t.replace(/_/g, " ").toLowerCase()}`;
@@ -14,7 +16,7 @@ const basis = [
 
 export default async function HrPolicyPage() {
   const ctx = await requirePage("hr.configure");
-  const p = await getHrPolicy(ctx.orgId);
+  const [p, retention] = await Promise.all([getHrPolicy(ctx.orgId), retentionPreview(ctx)]);
   const exitBoxes = (prefix: string, selected: string[]): Field[] =>
     EXIT_TYPES.map((t) => ({ name: `${prefix}_${t}`, label: label(t), type: "checkbox", defaultValue: selected.includes(t) }));
 
@@ -127,6 +129,30 @@ export default async function HrPolicyPage() {
             { name: "extraEmails", label: "Also send to (separate with commas)", type: "textarea", span: 2, defaultValue: p.reminderExtraEmails.join(", "), help: "Blank = HR admins only." },
           ]}
         />
+      </Section>
+
+      <Section
+        title="Data retention"
+        description={`Privacy laws limit how long you may keep a job applicant's personal details. Once a rejected or withdrawn candidate has been out of the pipeline longer than this, their name, contact details, CV reference, notes and interview comments are removed (the requisition, stage and offer figures stay, for reporting). Hired candidates and anyone still in the pipeline are never touched. Set 0 to keep everything. ${
+          retention.months > 0 ? `${retention.due} candidate(s) are past the limit now.` : "Retention is off."
+        } ${retention.alreadyAnonymized} already anonymised. A scheduler calls /api/cron/data-retention daily (see the README).`}
+      >
+        <SmartForm
+          columns={3}
+          submitLabel="Save"
+          resetOnSuccess={false}
+          action={updateHrPolicyAction.bind(null, "retention")}
+          fields={[
+            { name: "candidateRetentionMonths", label: "Keep rejected / withdrawn candidates for (months)", type: "number", min: 0, max: 120, defaultValue: p.candidateRetentionMonths, help: "24 is a common default. 0 = keep for ever." },
+          ]}
+        />
+        {retention.months > 0 && retention.due > 0 && (
+          <div className="mt-3">
+            <ActionButton action={runRetentionNowAction} confirm={`Permanently remove the personal details of ${retention.due} candidate(s)? This can't be undone.`} variant="outline">
+              Run retention now
+            </ActionButton>
+          </div>
+        )}
       </Section>
 
       <p className="mb-8 text-xs text-muted-foreground">
