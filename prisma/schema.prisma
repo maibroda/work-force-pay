@@ -599,6 +599,7 @@ model Organization {
   employeeGuarantors        EmployeeGuarantor[]
   trainingRequirements      TrainingRequirement[]
   employeeChangeRequests    EmployeeChangeRequest[]
+  companyPolicies           CompanyPolicy[]
   appraisalCriteria         AppraisalCriterion[]
   appraisalCycles           AppraisalCycle[]
   appraisals                Appraisal[]
@@ -745,6 +746,7 @@ model EmployeeCategory {
   checklistItems       ChecklistTemplateItem[]
   kitPacks             KitPack[]
   trainingRequirements TrainingRequirement[]
+  companyPolicies      CompanyPolicy[]
 
   @@unique([organizationId, code])
 }
@@ -818,6 +820,7 @@ model Employee {
   contacts                EmployeeContact[]
   guarantors              EmployeeGuarantor[]
   changeRequests          EmployeeChangeRequest[]
+  policyAcknowledgements  PolicyAcknowledgement[]
   appraisals              Appraisal[]
 
   @@unique([organizationId, employeeNumber])
@@ -3328,4 +3331,78 @@ model EmployeeChangeRequest {
 
   @@index([organizationId, status])
   @@index([organizationId, employeeId, kind])
+}
+
+// ─────────────────────────── COMPANY POLICIES & ACKNOWLEDGEMENTS ───────────────────────────
+
+enum PolicyStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum AckMethod {
+  SELF
+  RECORDED
+}
+
+/// A company policy (code of conduct, data protection, safety…) that employees must read and acknowledge —
+/// everyone, or one category. The wording lives in its versions, which are never edited once published.
+model CompanyPolicy {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  title          String
+  summary        String?
+  /// Null = every employee; otherwise only this category.
+  categoryId     String?
+  category       EmployeeCategory? @relation(fields: [categoryId], references: [id])
+  /// Days an employee has to acknowledge, from the version taking effect or from joining (whichever is later).
+  graceDays      Int               @default(14)
+  status         PolicyStatus      @default(ACTIVE)
+  createdBy      String
+  createdAt      DateTime          @default(now())
+
+  versions PolicyVersion[]
+
+  @@unique([organizationId, title])
+  @@index([organizationId, status])
+}
+
+/// One published wording of a policy. A new version means everyone has to acknowledge again.
+model PolicyVersion {
+  id                String        @id @default(cuid())
+  organizationId    String
+  policyId          String
+  policy            CompanyPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  version           Int
+  /// From this date the version is the current one; a future date schedules it.
+  effectiveDate     DateTime      @db.Date
+  /// The text employees read. A document reference may be given instead, or as well.
+  body              String?
+  /// Reference to the signed-off document (file name / number) — this app has no object storage.
+  documentReference String?
+  changeSummary     String?
+  publishedBy       String
+  publishedAt       DateTime      @default(now())
+
+  acknowledgements PolicyAcknowledgement[]
+
+  @@unique([policyId, version])
+}
+
+model PolicyAcknowledgement {
+  id             String        @id @default(cuid())
+  organizationId String
+  versionId      String
+  version        PolicyVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  acknowledgedAt DateTime      @default(now())
+  method         AckMethod     @default(SELF)
+  /// For a paper sign-off recorded by HR: who recorded it.
+  recordedBy     String?
+  note           String?
+
+  @@unique([versionId, employeeId])
+  @@index([organizationId, employeeId])
 }
