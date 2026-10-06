@@ -30,6 +30,7 @@ import {
 import { raiseCase, setCaseStatus, addCaseNote } from "../src/server/services/relations";
 import { createItem, createPack, issuePack, setPackLine } from "../src/server/services/inventory";
 import { approveLoan, requestLoan } from "../src/server/services/loans";
+import { addContact, addGuarantor, rejectGuarantor, verifyGuarantor } from "../src/server/services/personal-records";
 
 /** One loan being repaid and one advance waiting for approval, for people who already have payroll history. Idempotent. */
 export async function seedLoanDemo(orgId: string) {
@@ -57,6 +58,50 @@ export async function seedLoanDemo(orgId: string) {
   await approveLoan(fin, loan.id, "Within policy");
   await requestLoan(hr, { employeeId: paid[11 % paid.length].employeeId, type: "SALARY_ADVANCE", principal: 20000, reason: "Medical bill" });
   console.log("✔ Loan demo data seeded");
+}
+
+/** Next of kin, emergency contacts, dependants and guarantors in every state, for the first few staff. Idempotent. */
+export async function seedPersonalRecordsDemo(orgId: string) {
+  if (await db.employeeContact.count({ where: { organizationId: orgId } })) {
+    console.log("• Personal records demo data already present — skipped");
+    return;
+  }
+  const hrUser = await db.user.findFirst({ where: { organizationId: orgId, role: "HR_ADMIN" } });
+  if (!hrUser) return;
+  const hr: Ctx = { userId: hrUser.id, orgId, role: "HR_ADMIN", name: hrUser.name, email: hrUser.email, employeeId: hrUser.employeeId };
+  const staff = await db.employee.findMany({ where: { organizationId: orgId, status: "ACTIVE" }, orderBy: { employeeNumber: "asc" }, take: 10 });
+  const surnames = ["Okafor", "Bello", "Adeyemi", "Eze", "Musa", "Nwosu", "Ibrahim", "Obi", "Yusuf", "Balogun"];
+  let phone = 8030000100;
+  const next = () => "0" + String(phone++);
+  for (const [i, e] of staff.entries()) {
+    if (i >= 8) break; // the last two have nothing on file, so the "missing" lists have rows
+    const sn = surnames[i];
+    await addContact(hr, e.id, { kind: "NEXT_OF_KIN", fullName: `${i % 2 ? "Amaka" : "Tunde"} ${sn}`, relationship: i % 2 ? "Spouse" : "Parent", phone: next(), address: "14 Market Road, Lagos", isBeneficiary: i < 3, benefitSharePct: i === 0 ? 60 : i < 3 ? 100 : undefined });
+    if (i !== 5) await addContact(hr, e.id, { kind: "EMERGENCY_CONTACT", fullName: `Ifeanyi ${sn}`, relationship: "Sibling", phone: next() });
+    if (i === 0) await addContact(hr, e.id, { kind: "DEPENDANT", fullName: "Chioma Okafor", relationship: "Child", dateOfBirth: "2016-05-09", isBeneficiary: true, benefitSharePct: 40 });
+    if (i === 1) await addContact(hr, e.id, { kind: "REFEREE", fullName: "Pastor Samuel Adebayo", relationship: "Pastor / Imam", phone: next() });
+  }
+  const g = (i: number, k: number, extra: Record<string, unknown> = {}) => ({
+    fullName: `${["Chief", "Alhaji", "Mrs", "Mr"][k % 4]} ${surnames[(i + k + 3) % 10]}`,
+    relationship: k % 2 ? "Relative" : "Friend",
+    phone: next(),
+    address: "7 Unity Close, Ikeja, Lagos",
+    occupation: "Trader",
+    idType: "NIN",
+    idNumber: `NIN${70000000 + i * 10 + k}`,
+    formReference: `GF-${2026}-${i}${k}`,
+    yearsKnown: 5 + k,
+    ...extra,
+  });
+  for (const [i, e] of staff.entries()) {
+    if (i > 4) break;
+    const first = await addGuarantor(hr, e.id, g(i, 0));
+    const second = await addGuarantor(hr, e.id, g(i, 1, i === 4 ? { idType: undefined, idNumber: undefined } : {}));
+    if (i <= 2) await verifyGuarantor(hr, first.id, "Called and visited the address");
+    if (i <= 1) await verifyGuarantor(hr, second.id, "Called and visited the address");
+    if (i === 4) await rejectGuarantor(hr, first.id, "Number is not in service");
+  }
+  console.log("✔ Personal records demo data seeded");
 }
 
 /** Stock list, a starter kit pack, and a couple of employees already holding it. Idempotent. */
@@ -214,6 +259,7 @@ if (process.argv[1] && /hr-demo\.(ts|js)$/.test(process.argv[1])) {
       await seedHrDemo(o.id);
       await seedInventoryDemo(o.id);
       await seedLoanDemo(o.id);
+      await seedPersonalRecordsDemo(o.id);
     })
     .then(() => db.$disconnect())
     .catch(async (e) => {

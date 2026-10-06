@@ -36,6 +36,7 @@ import {
   revokeTrainingAction,
 } from "@/app/actions/hr";
 import { ActionButton } from "@/components/action-button";
+import { PersonalRecordsPanel } from "@/components/personal-records-panel";
 import { createContractAction } from "@/app/actions/hr-lifecycle";
 import { generateLetterAction } from "@/app/actions/letters";
 import { listLetters } from "@/server/services/letters";
@@ -88,6 +89,7 @@ export default async function EmployeePage({
           { key: "assignments", label: "Assignments & movements" },
           { key: "locations", label: "Work locations" },
           { key: "salary", label: "Salary & overrides" },
+          ...(sensitive ? [{ key: "contacts", label: "Contacts & guarantors" }] : []),
           ...(hrView
             ? [
                 { key: "documents", label: "Documents & training" },
@@ -985,6 +987,10 @@ export default async function EmployeePage({
 
       {tab === "kit" && can(ctx.role, "inventory.view") && (
         <KitTab employeeId={e.id} active={!["EXITED", "TERMINATED", "RESIGNED"].includes(e.status)} ctx={ctx} />
+      )}
+
+      {tab === "contacts" && sensitive && (
+        <PersonalRecordsPanel ctx={ctx} employeeId={e.id} base={`/employees/${e.id}?tab=contacts`} edit={sp.edit} editGuarantor={sp.editg} />
       )}
 
       {tab === "payslips" && <PayslipsTab employeeId={e.id} ctx={ctx} />}

@@ -518,6 +518,31 @@ accessories and equipment, tied to the people who are issued it.
 - Roles: `inventory.view` (HR, operations, payroll, finance, auditor) and `inventory.manage` (operations
   and HR). Stock isn't posted to the GL yet — see next steps.
 
+### Personal records: next of kin, guarantors, dependants
+
+**Employees → Next of Kin & Emergency / Guarantors / Dependants & Beneficiaries**, and an employee's
+**Contacts & guarantors** tab, hold the people connected to each employee. Needs `employee.sensitive` to
+view and `hr.manage` to change.
+
+- **Next of kin, emergency contacts, dependants, referees.** Phone is required for everyone but a
+  dependant (whose date of birth is). The first next of kin / emergency contact becomes the **main** one;
+  there is only ever one main per kind, and removing it promotes the next. Next of kin and dependants can be
+  **beneficiaries** with a percentage — shares can't exceed 100% and the pages flag a split that isn't 100%.
+- **Employees keep their own** under **My Contacts** (self-service). They can never see or touch anyone
+  else's, and guarantors are HR's alone.
+- **Guarantors** are recorded *pending* and then **verified** (an ID type/number and the signed-form
+  reference must be on file, and the verifier says how they checked) or **rejected**; a verified guarantor
+  is **released**, never deleted, when no longer needed. Rules enforced when one is recorded: the
+  guarantor's phone can't be the employee's own, the same person can't be added twice for one employee,
+  and one person can guarantee only so many staff at once (matched by phone *or* ID, however the number is
+  written). **Changing a verified guarantor's name, phone, address, ID or form sends them back to pending.**
+  Guarantors stay on file after the employee leaves (they may be needed to recover what's owed).
+- **Policy** (Settings → HR & Lifecycle Policy → *Personal records*): how many next of kin, emergency
+  contacts and verified guarantors are required (0 = not required), **which categories need guarantors**
+  (none ticked = everyone), the per-person guarantee limit, and whether someone other than the recorder must
+  verify. Each page counts and lists whoever is short; pending guarantors don't satisfy the requirement.
+- Every add, edit, verification and release is in the audit log. Leavers' contact records are frozen.
+
 ### Navigation
 
 - The sidebar is grouped into collapsible menus — **Dashboard, Workforce / Personnel, HR Lifecycle,

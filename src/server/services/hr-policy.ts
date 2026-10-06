@@ -293,6 +293,12 @@ export const hrPolicySchema = z
     advanceMaxGrossPct: z.coerce.number().int().min(0).max(100),
     reminderEmailsEnabled: z.boolean(),
     reminderExtraEmails: z.array(z.string().trim().toLowerCase().email("That isn't a valid email address")).max(20),
+    nextOfKinRequired: z.coerce.number().int().min(0).max(5),
+    emergencyContactsRequired: z.coerce.number().int().min(0).max(5),
+    guarantorsRequired: z.coerce.number().int().min(0).max(5),
+    guarantorCategoryIds: z.array(z.string().min(1)).max(100),
+    guarantorMaxPerPerson: z.coerce.number().int().min(0).max(50),
+    guarantorSeparateVerifier: z.boolean(),
   })
   .partial();
 
@@ -304,6 +310,10 @@ export async function updateHrPolicy(ctx: Ctx, raw: z.input<typeof hrPolicySchem
   const nextDefault = v.defaultProbationMonths ?? old.defaultProbationMonths;
   if (nextDefault > nextMax)
     throw new BusinessError("The default probation can't be longer than the maximum probation.");
+  if (v.guarantorCategoryIds?.length) {
+    const found = await db.employeeCategory.count({ where: { organizationId: ctx.orgId, id: { in: v.guarantorCategoryIds } } });
+    if (found !== new Set(v.guarantorCategoryIds).size) throw new BusinessError("An employee category you chose doesn't exist.");
+  }
   const next = await db.hrPolicy.update({ where: { organizationId: ctx.orgId }, data: v });
   await logAudit(ctx, { action: "HR_POLICY_UPDATE", entity: "HrPolicy", entityId: next.id, oldValue: old, newValue: next });
   return next;
