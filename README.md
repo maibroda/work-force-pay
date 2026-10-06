@@ -109,7 +109,11 @@ exemption. Overtime / arrears / one-off earnings are taxed at the marginal rate.
   it reads the **Work Register** (one row per employee per day, recorded against the beat) for the
   period, splits it into beat × rate segments, prorates each segment, and allocates gross, overtime,
   employer pension, client billing and net pay to every client and beat worked.
-- The payslip shows **every location worked** (dates, client, beat, days).
+- The payslip shows **every location worked** (dates, client, beat, days). It shows only the employee's own
+  earnings and deductions: **what the company pays on top (employer pension, ITF, NSITF, insurance and the other
+  add-ons) is never on a payslip** — it is reported separately under **Reports → Employer Contributions** (one
+  row per employee, a column per head, with totals; filter by client or beat), and each head also keeps its own
+  schedule (Pension, ITF, NSITF, …).
 - Payroll reports roll up **by client and by beat** (`Reports → Client / Beat Report`, register filters).
 
 Demo: **EMP-000025** in September 2026 — ABC Bank Victoria Island (1–10), Marina (11–18),

@@ -27,7 +27,6 @@ export function Payslip({
     totalEarnings: unknown;
     totalDeductions: unknown;
     netPay: unknown;
-    employerPension: unknown;
     taxRuleVersion: string;
     hasOverride: boolean;
     lines: unknown;
@@ -41,11 +40,12 @@ export function Payslip({
   };
   orgName: string;
 }) {
-  const lines = rec.lines as Line[];
+  // Only the employee's own earnings and deductions are shown. What the company pays on top (employer pension, ITF,
+  // NSITF, insurance…) is stored on the record but belongs in the employer reports, never on a payslip.
+  const lines = (rec.lines as Line[]).filter((l) => l.type === "EARNING" || l.type === "DEDUCTION");
   const locs = rec.locations as Loc[];
   const earnings = lines.filter((l) => l.type === "EARNING");
   const deductions = lines.filter((l) => l.type === "DEDUCTION");
-  const employer = lines.filter((l) => l.type === "EMPLOYER");
   const period = rec.run.period;
   // Merge contiguous ranges into a per-client/beat summary for the "Work Locations" table
   const summary = new Map<string, Loc & { ranges: string[] }>();
@@ -148,16 +148,6 @@ export function Payslip({
             <span>Total deductions</span>
             <span className="tabular-nums">{naira(rec.totalDeductions)}</span>
           </p>
-          <h4 className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Employer contributions (not deducted)
-          </h4>
-          <table className="w-full">
-            <tbody>
-              {employer.map((l, i) => (
-                <Row key={i} l={l} />
-              ))}
-            </tbody>
-          </table>
         </div>
       </div>
       <div className="border-t py-3">
@@ -206,8 +196,7 @@ export function Payslip({
         </p>
       </div>
       <p className="mt-3 text-[10px] text-muted-foreground">
-        PAYE computed with rule {rec.taxRuleVersion}. Employer pension is paid by the employer and does not
-        reduce net pay.
+        PAYE computed with rule {rec.taxRuleVersion}.
       </p>
     </div>
   );

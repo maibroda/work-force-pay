@@ -6,6 +6,8 @@ config();
 
 export default defineConfig({
   resolve: { alias: { "@": path.resolve(__dirname, "src") } },
+  // tsconfig keeps JSX as-is for Next to compile; tests that render a component need it compiled.
+  oxc: { jsx: { runtime: "automatic" } },
   test: {
     include: ["tests/**/*.test.ts"],
     globalSetup: ["tests/global-setup.ts"],
