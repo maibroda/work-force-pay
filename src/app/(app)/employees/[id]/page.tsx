@@ -37,6 +37,9 @@ import {
 } from "@/app/actions/hr";
 import { ActionButton } from "@/components/action-button";
 import { createContractAction } from "@/app/actions/hr-lifecycle";
+import { generateLetterAction } from "@/app/actions/letters";
+import { listLetters } from "@/server/services/letters";
+import { LETTER_LABELS } from "@/lib/letters";
 import { issueKitAction, issuePackAction, returnHeldAction } from "@/app/actions/inventory";
 
 type SP = Promise<Record<string, string | undefined>>;
@@ -92,6 +95,7 @@ export default async function EmployeePage({
                 { key: "lifecycle", label: "Onboarding & exit" },
                 { key: "contracts", label: "Contracts" },
                 { key: "timeline", label: "Lifecycle timeline" },
+                { key: "letters", label: "Letters" },
               ]
             : []),
           ...(can(ctx.role, "inventory.view") ? [{ key: "kit", label: "Kit & uniform" }] : []),
@@ -977,6 +981,8 @@ export default async function EmployeePage({
 
       {tab === "timeline" && hrView && <TimelineTab employeeId={e.id} ctx={ctx} />}
 
+      {tab === "letters" && hrView && <LettersTab employee={e} ctx={ctx} />}
+
       {tab === "kit" && can(ctx.role, "inventory.view") && (
         <KitTab employeeId={e.id} active={!["EXITED", "TERMINATED", "RESIGNED"].includes(e.status)} ctx={ctx} />
       )}
@@ -1045,6 +1051,77 @@ async function LocationsTab({
         <Empty>No work register records for this month.</Empty>
       )}
     </Section>
+  );
+}
+
+async function LettersTab({
+  ctx,
+  employee: e,
+}: {
+  ctx: Awaited<ReturnType<typeof requirePage>>;
+  employee: NonNullable<Awaited<ReturnType<typeof getEmployee>>>;
+}) {
+  const manage = can(ctx.role, "hr.manage");
+  const letters = await listLetters(ctx, { employeeId: e.id });
+  const gone = ["EXITED", "TERMINATED", "RESIGNED"].includes(e.status);
+  const gen = (type: string, extra: Record<string, string> = {}) => generateLetterAction.bind(null, { type, employeeId: e.id, ...extra });
+  const buttons: Array<{ label: string; action: ReturnType<typeof gen> }> = [];
+  if (!gone) buttons.push({ label: "Employment confirmation", action: gen("EMPLOYMENT_CONFIRMATION") });
+  if (e.employmentContracts.some((c) => c.probationOutcome === "CONFIRMED")) buttons.push({ label: "Probation confirmation", action: gen("PROBATION_CONFIRMATION") });
+  if (gone && e.exitDate) buttons.push({ label: "Experience letter", action: gen("EXPERIENCE") });
+  for (const x of e.exitRecords.filter((r) => r.status === "APPROVED")) {
+    buttons.push({ label: `Exit letter (${fmtShort(x.lastWorkingDate)})`, action: gen("EXIT_LETTER", { exitRecordId: x.id }) });
+    buttons.push({ label: `Clearance certificate (${fmtShort(x.lastWorkingDate)})`, action: gen("CLEARANCE_CERTIFICATE", { exitRecordId: x.id }) });
+  }
+  for (const r of e.disciplinaryRecords.filter((x) => x.status === "APPROVED" && x.type !== "COMMENDATION"))
+    buttons.push({ label: `Warning letter — ${r.type.replace(/_/g, " ").toLowerCase()} (${fmtShort(r.incidentDate)})`, action: gen("WARNING", { disciplinaryId: r.id }) });
+  return (
+    <>
+      <Section title="Letters issued" description="Stored exactly as issued — later changes to the wording never alter them." flush>
+        <Table>
+          <THead>
+            <TR>
+              <TH>Reference</TH>
+              <TH>Letter</TH>
+              <TH>Subject</TH>
+              <TH>Issued</TH>
+              <TH>By</TH>
+            </TR>
+          </THead>
+          <TBody>
+            {letters.map((l) => (
+              <TR key={l.id}>
+                <TD className="font-mono text-xs">
+                  <Link className="text-primary underline" href={`/hr/letters/${l.id}`}>
+                    {l.referenceNumber}
+                  </Link>
+                </TD>
+                <TD>{LETTER_LABELS[l.type]}</TD>
+                <TD className="max-w-xs truncate text-xs">{l.subject}</TD>
+                <TD className="text-xs">{fmtDate(l.createdAt)}</TD>
+                <TD className="text-xs">{l.generatedBy}</TD>
+              </TR>
+            ))}
+          </TBody>
+        </Table>
+        {!letters.length && <Empty>No letters issued to this employee.</Empty>}
+      </Section>
+      {manage && (
+        <Section title="Generate a letter" description="Only the letters this employee's records support are offered — an experience letter needs a leaver, a clearance certificate needs finished clearance, a warning needs a signed-off record.">
+          {buttons.length ? (
+            <div className="flex flex-wrap gap-2">
+              {buttons.map((b) => (
+                <ActionButton key={b.label} action={b.action} variant="outline">
+                  {b.label}
+                </ActionButton>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No letters are available for this employee yet.</p>
+          )}
+        </Section>
+      )}
+    </>
   );
 }
 

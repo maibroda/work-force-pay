@@ -11,6 +11,7 @@ import { ActionButton } from "@/components/action-button";
 import { SmartForm } from "@/components/smart-form";
 import { StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
+import { generateLetterAction } from "@/app/actions/letters";
 import {
   addCheckAction,
   addStandardChecksAction,
@@ -291,6 +292,11 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
                           Declined
                         </ActionButton>
                       </>
+                    )}
+                    {manage && ["APPROVED", "SENT", "ACCEPTED"].includes(o.status) && (
+                      <ActionButton action={generateLetterAction.bind(null, { type: "OFFER", offerId: o.id })} variant="outline">
+                        Offer letter
+                      </ActionButton>
                     )}
                     {manage && ["PENDING_APPROVAL", "APPROVED", "SENT"].includes(o.status) && (
                       <ActionButton action={withdrawOfferAction.bind(null, o.id)} reason reasonPlaceholder="Why withdraw?" variant="outline">
