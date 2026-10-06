@@ -23,6 +23,9 @@ export const NAV: NavGroup[] = [
       { href: "/employees/bank", label: "Bank Information", perm: "employee.sensitive" },
       { href: "/employees/pension", label: "Pension Information", perm: "employee.sensitive" },
       { href: "/employees/tax", label: "Tax Information", perm: "employee.sensitive" },
+      { href: "/employees/next-of-kin", label: "Next of Kin & Emergency", perm: "employee.sensitive" },
+      { href: "/employees/guarantors", label: "Guarantors", perm: "employee.sensitive" },
+      { href: "/employees/dependants", label: "Dependants & Beneficiaries", perm: "employee.sensitive" },
       { href: "/operations/deployments", label: "Employee Assignments", perm: "operations.view" },
       { href: "/employees/org-chart", label: "Org Chart", perm: "employee.view" },
       {
@@ -241,6 +244,7 @@ export const SELF_NAV: NavGroup[] = [
       { href: "/supervisor", label: "Today's Work Register", perm: "attendance.record" },
       { href: "/me", label: "My Dashboard", perm: "self.view" },
       { href: "/me/leave", label: "My Leave", perm: "leave.apply" },
+      { href: "/me/contacts", label: "My Contacts", perm: "self.view" },
       { href: "/me/grievances", label: "My Grievances", perm: "relations.raise" },
       { href: "/settings/security", label: "My Security", perm: "self.security" },
     ],

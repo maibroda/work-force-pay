@@ -1,4 +1,5 @@
 import { requirePage } from "@/lib/auth/session";
+import { db } from "@/lib/db";
 import { getHrPolicy } from "@/server/services/hr-policy";
 import { num } from "@/lib/money";
 import { PageHeader, Section } from "@/components/page";
@@ -16,7 +17,11 @@ const basis = [
 
 export default async function HrPolicyPage() {
   const ctx = await requirePage("hr.configure");
-  const [p, retention] = await Promise.all([getHrPolicy(ctx.orgId), retentionPreview(ctx)]);
+  const [p, categories, retention] = await Promise.all([
+    getHrPolicy(ctx.orgId),
+    db.employeeCategory.findMany({ where: { organizationId: ctx.orgId }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    retentionPreview(ctx),
+  ]);
   const exitBoxes = (prefix: string, selected: string[]): Field[] =>
     EXIT_TYPES.map((t) => ({ name: `${prefix}_${t}`, label: label(t), type: "checkbox", defaultValue: selected.includes(t) }));
 
@@ -97,6 +102,24 @@ export default async function HrPolicyPage() {
             { name: "noticeRecoveryEnabled", label: "Recover the shortfall when an employee leaves short of notice", type: "checkbox", defaultValue: p.noticeRecoveryEnabled, span: 3 },
           ]}
         />
+      </Section>
+
+      <Section title="Personal records" description="What an employee's file must hold — next of kin, emergency contacts and guarantors — and how guarantors are controlled. Set a requirement to 0 if you don't need it. The Next of Kin, Guarantors and Dependants pages under Employees flag anyone short.">
+        <SmartForm
+          columns={3}
+          submitLabel="Save"
+          resetOnSuccess={false}
+          action={updateHrPolicyAction.bind(null, "records")}
+          fields={[
+            { name: "nextOfKinRequired", label: "Next of kin required", type: "number", min: 0, max: 5, defaultValue: p.nextOfKinRequired },
+            { name: "emergencyContactsRequired", label: "Emergency contacts required", type: "number", min: 0, max: 5, defaultValue: p.emergencyContactsRequired },
+            { name: "guarantorsRequired", label: "Verified guarantors required", type: "number", min: 0, max: 5, defaultValue: p.guarantorsRequired },
+            { name: "guarantorMaxPerPerson", label: "One person may guarantee up to (employees)", type: "number", min: 0, max: 50, defaultValue: p.guarantorMaxPerPerson, help: "0 = no limit." },
+            { name: "guarantorSeparateVerifier", label: "Someone other than the recorder must verify a guarantor", type: "checkbox", defaultValue: p.guarantorSeparateVerifier, span: 2 },
+            ...categories.map((c): Field => ({ name: `gcat_${c.id}`, label: `Guarantors needed for ${c.name}`, type: "checkbox", defaultValue: p.guarantorCategoryIds.includes(c.id) })),
+          ]}
+        />
+        <p className="mt-2 text-xs text-muted-foreground">Tick no categories to require guarantors for everyone.</p>
       </Section>
 
       <Section title="Staff loans & advances" description="Affordability limits checked when a loan or advance is requested. Set a limit to 0 for no limit.">

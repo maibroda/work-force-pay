@@ -20,7 +20,7 @@ const zeroIsNone = (n: unknown) => (n === undefined ? undefined : Number(n) === 
 // ───────────────────────────── Policy & templates ─────────────────────────────
 
 /** Each settings form saves its own section; blank numeric fields leave a value unchanged. */
-export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuity" | "severance" | "loans" | "reminders" | "retention", v: V) {
+export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuity" | "severance" | "loans" | "reminders" | "retention" | "records", v: V) {
   return act(
     "hr.configure",
     async (ctx) => {
@@ -52,6 +52,16 @@ export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuit
           reminderExtraEmails: String(v.extraEmails ?? "")
             .split(/[\s,;]+/)
             .filter(Boolean),
+        };
+      if (section === "records")
+        patch = {
+          nextOfKinRequired: v.nextOfKinRequired,
+          emergencyContactsRequired: v.emergencyContactsRequired,
+          guarantorsRequired: v.guarantorsRequired,
+          guarantorMaxPerPerson: v.guarantorMaxPerPerson,
+          guarantorSeparateVerifier: v.guarantorSeparateVerifier,
+          // one tick box per category; none ticked = guarantors needed for everyone
+          guarantorCategoryIds: Object.keys(v).filter((k) => k.startsWith("gcat_") && v[k] === true).map((k) => k.slice(5)),
         };
       if (section === "retention") patch = { candidateRetentionMonths: v.candidateRetentionMonths };
       if (section === "loans")

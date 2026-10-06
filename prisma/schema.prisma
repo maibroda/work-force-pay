@@ -595,6 +595,8 @@ model Organization {
   loanInstallments          LoanInstallment[]
   letterTemplates           LetterTemplate[]
   generatedLetters          GeneratedLetter[]
+  employeeContacts          EmployeeContact[]
+  employeeGuarantors        EmployeeGuarantor[]
 }
 
 model User {
@@ -807,6 +809,8 @@ model Employee {
   stockMovements          StockMovement[]
   staffLoans              StaffLoan[]
   generatedLetters        GeneratedLetter[]
+  contacts                EmployeeContact[]
+  guarantors              EmployeeGuarantor[]
 
   @@unique([organizationId, employeeNumber])
   @@index([organizationId, status])
@@ -1021,6 +1025,17 @@ model HrPolicy {
   loanMaxGrossMultiple Decimal @default(3) @db.Decimal(4, 2)
   loanMaxDeductionPct  Int     @default(33)
   advanceMaxGrossPct   Int     @default(50)
+
+  // Personal records: contacts & guarantors (0 = not required / no limit)
+  nextOfKinRequired         Int      @default(1)
+  emergencyContactsRequired Int      @default(1)
+  guarantorsRequired        Int      @default(2)
+  /// Categories that must have guarantors; empty = every category.
+  guarantorCategoryIds      String[] @default([])
+  /// The most employees one person may guarantee at the same time.
+  guarantorMaxPerPerson     Int      @default(3)
+  /// Someone other than whoever recorded a guarantor must verify them.
+  guarantorSeparateVerifier Boolean  @default(false)
 
   // Reminder digest email
   reminderEmailsEnabled Boolean   @default(true)
@@ -3003,4 +3018,91 @@ model GeneratedLetter {
   @@unique([organizationId, referenceNumber])
   @@index([organizationId, employeeId])
   @@index([organizationId, type])
+}
+
+// ─────────────────────────── PERSONAL RECORDS: CONTACTS & GUARANTORS ───────────────────────────
+
+enum ContactKind {
+  NEXT_OF_KIN
+  EMERGENCY_CONTACT
+  DEPENDANT
+  REFEREE
+}
+
+enum GuarantorStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  RELEASED
+}
+
+/// A person connected to an employee: next of kin, emergency contact, dependant or referee. Employees
+/// can maintain their own (self-service); HR can maintain anyone's.
+model EmployeeContact {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  employeeId      String
+  employee        Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  kind            ContactKind
+  fullName        String
+  relationship    String
+  phone           String?
+  altPhone        String?
+  email           String?
+  address         String?
+  dateOfBirth     DateTime?    @db.Date
+  occupation      String?
+  /// The main next of kin / emergency contact (one per employee per kind).
+  isPrimary       Boolean      @default(false)
+  /// Receives death-in-service / group-life / final-pay benefits.
+  isBeneficiary   Boolean      @default(false)
+  /// Percentage of the benefit; an employee's shares total 100 when complete.
+  benefitSharePct Int?
+  notes           String?
+  createdBy       String
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([organizationId, employeeId, kind])
+}
+
+/// A guarantor vouching for an employee (common for security and cash-handling staff). Recorded as
+/// PENDING, then verified (identity checked, signed form on file) or rejected; released when no longer needed.
+model EmployeeGuarantor {
+  id               String          @id @default(cuid())
+  organizationId   String
+  organization     Organization    @relation(fields: [organizationId], references: [id])
+  employeeId       String
+  employee         Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  fullName         String
+  relationship     String
+  phone            String
+  altPhone         String?
+  email            String?
+  address          String
+  occupation       String?
+  employer         String?
+  employerAddress  String?
+  idType           String?
+  idNumber         String?
+  yearsKnown       Int?
+  /// The most the guarantor accepts liability for, if the agreement caps it.
+  guaranteeAmount  Decimal?        @db.Decimal(14, 2)
+  /// Reference to the signed guarantee form (filename / file number) — matching EmployeeDocument.
+  formReference    String?
+  status           GuarantorStatus @default(PENDING)
+  recordedBy       String
+  recordedByUserId String
+  verifiedBy       String?
+  verifiedByUserId String?
+  verifiedAt       DateTime?
+  verificationNote String?
+  releasedAt       DateTime?
+  releaseReason    String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([organizationId, status])
+  @@index([organizationId, employeeId])
 }

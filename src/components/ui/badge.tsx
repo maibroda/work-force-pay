@@ -76,6 +76,7 @@ const STATUS_TONE: Record<string, Tone> = {
   HEARING: "violet",
   RESOLVED: "green",
   RELEASED: "violet",
+  VERIFIED: "green",
   CONFIRMED: "green",
   EXTENDED: "amber",
   HIGH: "red",
