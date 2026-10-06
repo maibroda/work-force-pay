@@ -597,6 +597,7 @@ model Organization {
   generatedLetters          GeneratedLetter[]
   employeeContacts          EmployeeContact[]
   employeeGuarantors        EmployeeGuarantor[]
+  trainingRequirements      TrainingRequirement[]
 }
 
 model User {
@@ -726,19 +727,20 @@ model CostCenterBudget {
 }
 
 model EmployeeCategory {
-  id             String                  @id @default(cuid())
-  organizationId String
-  organization   Organization            @relation(fields: [organizationId], references: [id])
-  code           String
-  name           String
-  description    String?
-  employees      Employee[]
-  contractRates  ContractRate[]
-  deployments    Deployment[]
-  workRegister   WorkRegister[]
-  requisitions   JobRequisition[]
-  checklistItems ChecklistTemplateItem[]
-  kitPacks       KitPack[]
+  id                   String                  @id @default(cuid())
+  organizationId       String
+  organization         Organization            @relation(fields: [organizationId], references: [id])
+  code                 String
+  name                 String
+  description          String?
+  employees            Employee[]
+  contractRates        ContractRate[]
+  deployments          Deployment[]
+  workRegister         WorkRegister[]
+  requisitions         JobRequisition[]
+  checklistItems       ChecklistTemplateItem[]
+  kitPacks             KitPack[]
+  trainingRequirements TrainingRequirement[]
 
   @@unique([organizationId, code])
 }
@@ -1036,6 +1038,10 @@ model HrPolicy {
   guarantorMaxPerPerson     Int      @default(3)
   /// Someone other than whoever recorded a guarantor must verify them.
   guarantorSeparateVerifier Boolean  @default(false)
+
+  // Training compliance
+  /// Flag a certificate this many days before it expires.
+  trainingAlertDays Int @default(60)
 
   // Reminder digest email
   reminderEmailsEnabled Boolean   @default(true)
@@ -3105,4 +3111,25 @@ model EmployeeGuarantor {
 
   @@index([organizationId, status])
   @@index([organizationId, employeeId])
+}
+
+// ─────────────────────────── TRAINING COMPLIANCE ───────────────────────────
+
+/// A course or certification employees must hold — for everyone, or for one category. Matched by name
+/// (case-insensitively) against the certificates recorded on each employee (EmployeeTraining).
+model TrainingRequirement {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  courseName     String
+  description    String?
+  /// Null = every employee; otherwise only this category.
+  categoryId     String?
+  category       EmployeeCategory? @relation(fields: [categoryId], references: [id])
+  /// A new joiner has this many days from their employment date before a missing certificate counts.
+  graceDays      Int               @default(30)
+  active         Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+
+  @@index([organizationId, active])
 }

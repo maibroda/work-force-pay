@@ -154,6 +154,18 @@ export default async function HrPolicyPage() {
         />
       </Section>
 
+      <Section title="Training compliance" description="Which courses and certifications are required is set under Settings → Training Requirements; HR → Training Compliance shows who is missing or expired.">
+        <SmartForm
+          columns={3}
+          submitLabel="Save"
+          resetOnSuccess={false}
+          action={updateHrPolicyAction.bind(null, "training")}
+          fields={[
+            { name: "trainingAlertDays", label: "Flag a certificate this many days before it expires", type: "number", min: 0, max: 365, defaultValue: p.trainingAlertDays, help: "0 = only flag once expired." },
+          ]}
+        />
+      </Section>
+
       <Section
         title="Data retention"
         description={`Privacy laws limit how long you may keep a job applicant's personal details. Once a rejected or withdrawn candidate has been out of the pipeline longer than this, their name, contact details, CV reference, notes and interview comments are removed (the requisition, stage and offer figures stay, for reporting). Hired candidates and anyone still in the pipeline are never touched. Set 0 to keep everything. ${

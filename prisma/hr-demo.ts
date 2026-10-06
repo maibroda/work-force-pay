@@ -60,6 +60,46 @@ export async function seedLoanDemo(orgId: string) {
   console.log("✔ Loan demo data seeded");
 }
 
+/** Three required courses and certificates in every state — valid, expiring, expired, missing, new joiner. Idempotent. */
+export async function seedTrainingDemo(orgId: string) {
+  if (await db.trainingRequirement.count({ where: { organizationId: orgId } })) {
+    console.log("• Training demo data already present — skipped");
+    return;
+  }
+  const guard = await db.employeeCategory.findFirst({ where: { organizationId: orgId, code: "GUARD" } });
+  await db.trainingRequirement.createMany({
+    data: [
+      { organizationId: orgId, courseName: "First Aid", description: "Basic first-aid certificate, renewed every two years", graceDays: 30 },
+      { organizationId: orgId, courseName: "Fire Safety Awareness", description: "Fire marshal basics for every post", graceDays: 60 },
+      ...(guard ? [{ organizationId: orgId, courseName: "Basic Security Guard Training", description: "Initial guard-force training", categoryId: guard.id, graceDays: 30 }] : []),
+    ],
+  });
+  const today = todayUtc();
+  const staff = await db.employee.findMany({ where: { organizationId: orgId, status: { in: ["ACTIVE", "ON_LEAVE"] } }, orderBy: { employeeNumber: "asc" }, select: { id: true, categoryId: true } });
+  const rows = staff.flatMap((e, i) => {
+    const cert = (courseName: string, expiresInDays: number | null, provider: string) => ({
+      organizationId: orgId,
+      employeeId: e.id,
+      courseName,
+      provider,
+      certificateNumber: `${courseName.slice(0, 2).toUpperCase()}-${1000 + i}`,
+      issueDate: addDays(today, -300),
+      expiryDate: expiresInDays === null ? null : addDays(today, expiresInDays),
+      status: expiresInDays !== null && expiresInDays < 0 ? ("EXPIRED" as const) : ("VALID" as const),
+      recordedBy: "Seed",
+    });
+    const out = [];
+    if (i % 7 === 0) out.push(cert("First Aid", -40, "Red Cross")); // expired
+    else if (i % 7 === 1) out.push(cert("First Aid", 30, "Red Cross")); // expiring soon
+    else if (i % 7 !== 2) out.push(cert("First Aid", 400, "Red Cross")); // (i % 7 === 2 has none: missing)
+    if (i % 5 !== 3) out.push(cert("fire safety awareness", 500, "State Fire Service")); // different case on purpose
+    if (e.categoryId === guard?.id && i % 9 !== 4) out.push(cert("Basic Security Guard Training", null, "Company academy")); // never expires
+    return out;
+  });
+  await db.employeeTraining.createMany({ data: rows });
+  console.log("✔ Training demo data seeded");
+}
+
 /** Next of kin, emergency contacts, dependants and guarantors in every state, for the first few staff. Idempotent. */
 export async function seedPersonalRecordsDemo(orgId: string) {
   if (await db.employeeContact.count({ where: { organizationId: orgId } })) {
@@ -260,6 +300,7 @@ if (process.argv[1] && /hr-demo\.(ts|js)$/.test(process.argv[1])) {
       await seedInventoryDemo(o.id);
       await seedLoanDemo(o.id);
       await seedPersonalRecordsDemo(o.id);
+      await seedTrainingDemo(o.id);
     })
     .then(() => db.$disconnect())
     .catch(async (e) => {
