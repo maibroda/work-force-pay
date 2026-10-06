@@ -16,6 +16,7 @@ import { db } from "../src/lib/db";
 import { createContract } from "../src/server/services/contracts";
 import { instantiateOnboardingTasks, todayUtc } from "../src/server/services/hr-policy";
 import { nextNumber } from "../src/server/services/numbering";
+import { generateLetter } from "../src/server/services/letters";
 import {
   addCandidate,
   approveOffer,
@@ -156,6 +157,20 @@ export async function seedBreachDemo(orgId: string) {
     ],
   );
   console.log("✔ Data breach demo data seeded");
+}
+
+/** Two employment confirmation letters, so the letters register and a letter's page have something to show. Idempotent. */
+export async function seedLetterDemo(orgId: string) {
+  if (await db.generatedLetter.count({ where: { organizationId: orgId } })) {
+    console.log("• Letter demo data already present — skipped");
+    return;
+  }
+  const hrUser = await db.user.findFirst({ where: { organizationId: orgId, role: "HR_ADMIN" } });
+  const staff = await db.employee.findMany({ where: { organizationId: orgId, status: "ACTIVE" }, orderBy: { employeeNumber: "asc" }, take: 2 });
+  if (!hrUser || staff.length < 2) return;
+  const hr: Ctx = { userId: hrUser.id, orgId, role: "HR_ADMIN", name: hrUser.name, email: hrUser.email, employeeId: hrUser.employeeId };
+  for (const e of staff) await generateLetter(hr, { type: "EMPLOYMENT_CONFIRMATION", employeeId: e.id });
+  console.log("✔ Letter demo data seeded");
 }
 
 /** Three policies, one with a recent second version, and acknowledgements in every state. Idempotent. */
@@ -497,6 +512,7 @@ if (process.argv[1] && /hr-demo\.(ts|js)$/.test(process.argv[1])) {
       await seedPolicyDemo(o.id);
       await seedDataRequestDemo(o.id);
       await seedBreachDemo(o.id);
+      await seedLetterDemo(o.id);
     })
     .then(() => db.$disconnect())
     .catch(async (e) => {
