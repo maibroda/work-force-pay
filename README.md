@@ -795,8 +795,8 @@ it opens every page of the running app as each demo role and fails on anything u
   enrollment with a QR code, 10 single-use hashed backup codes, under **My Workspace → My
   Security**.
 - **Requiring two-factor by role.** **Settings → Users → Two-factor sign-in** (`users.manage`): tick the roles
-  that must use it and the first day it is compulsory. Before that day those users see a reminder on My
-  security. From it, anyone in those roles who hasn't set it up is sent to My security from every page and
+  that must use it and the first day it is compulsory. Before that day those users see an amber banner on
+  every page counting down the days, with a link to My security. From it, anyone in those roles who hasn't set it up is sent to My security from every page and
   refused on every action (so downloads and API routes can't be used to get round it), and can't switch it off
   again. You can't set a requirement that would lock you out of your own account on the day it starts. If
   someone loses their phone *and* their backup codes, an administrator can **Reset 2FA** from the Users list —
