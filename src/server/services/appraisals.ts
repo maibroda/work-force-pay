@@ -275,6 +275,16 @@ export async function getAppraisal(ctx: Ctx, id: string) {
   };
 }
 
+/** Every appraisal (optionally one cycle's), for the results report. Scores are only meaningful once signed off — callers decide what to show. */
+export async function appraisalResults(ctx: Ctx, f: { cycleId?: string } = {}) {
+  assertCan(ctx, "appraisal.view");
+  return db.appraisal.findMany({
+    where: { organizationId: ctx.orgId, ...(f.cycleId ? { cycleId: f.cycleId } : {}) },
+    include: { cycle: true, employee: { select: { id: true, employeeNumber: true, firstName: true, middleName: true, lastName: true, category: { select: { name: true } } } } },
+    orderBy: [{ cycle: { createdAt: "desc" } }, { employee: { employeeNumber: "asc" } }],
+  });
+}
+
 /** What each person has waiting for them. */
 export async function myQueue(ctx: Ctx) {
   const toReview = can(ctx.role, "appraisal.review")

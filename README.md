@@ -666,6 +666,30 @@ protection, safety…) and shows who has acknowledged them; employees do it unde
   and the HR digest lists policies with overdue acknowledgements. Archive a policy and nobody is asked for it.
   Leavers aren't counted. Every publish, acknowledgement and archive is in the audit log.
 
+### HR reports & safe exports
+
+The **Reports hub** has an **HR Lifecycle** group of downloadable reports (each can be printed or downloaded
+as CSV, and every download is audited):
+
+| Report | Shows | Needs |
+| --- | --- | --- |
+| Employee Register | every current employee: category, department, age, service, contract, probation | `hr.view` |
+| Training Compliance | each required course per employee — expired and missing first | `hr.view` |
+| Policy Acknowledgements | who has / hasn't acknowledged each active policy — overdue first | `hr.view` |
+| Appraisal Results | every appraisal; **scores appear only once signed off** (optionally one cycle: `?cycleId=`) | `appraisal.view` |
+| Guarantor Register | every guarantor with verification status (including released) | `employee.sensitive` |
+| Personal Records Completeness | next of kin, emergency contacts and guarantors vs the policy — incomplete first | `employee.sensitive` |
+| Bank, Tax & Pension Change Log | who asked to change what and who decided — **names the fields, never the values** | `employee.sensitive` |
+
+Each report is opened by the permission that guards the underlying records, not just `reports.view`, so a
+download can never reach more than the same person could see on screen (the hub also hides what you can't open).
+
+**CSV exports are safe to open in a spreadsheet.** A cell beginning `=`, `+`, `-` or `@` (or a tab/return) is
+run as a formula by Excel and Sheets, so text someone typed — an account name, a guarantor, a reason — could
+carry a payload to whoever downloads the report. Such text is now written with a leading apostrophe, which
+spreadsheets show as plain text; numbers the app computed (including negative ones) are left alone. This
+applies to **every** report, not just the new ones.
+
 ### Navigation
 
 - The sidebar is grouped into collapsible menus — **Dashboard, Workforce / Personnel, HR Lifecycle,

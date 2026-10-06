@@ -4,6 +4,15 @@ import { d, iso } from "@/lib/dates";
 import { num } from "@/lib/money";
 import { fullName } from "@/lib/utils";
 import { listAudit } from "@/server/services/audit";
+import {
+  appraisalResultRows,
+  detailChangeRows,
+  employeeRegister,
+  guarantorRows,
+  policyAcknowledgementRows,
+  recordsCompletenessRows,
+  trainingComplianceRows,
+} from "@/server/services/hr-reports";
 import { listArrears, listDeductions, listOvertime } from "@/server/services/inputs";
 import { employeeLocationHistory, listMovements, listWorkRegister } from "@/server/services/operations";
 import {
@@ -57,6 +66,13 @@ export const REPORT_TYPES = [
   "location-history",
   "employee-documents",
   "employee-training",
+  "hr-headcount",
+  "training-compliance",
+  "policy-acknowledgements",
+  "appraisal-results",
+  "guarantors",
+  "records-completeness",
+  "detail-changes",
   "audit",
 ] as const;
 export type ReportType = (typeof REPORT_TYPES)[number];
@@ -627,6 +643,176 @@ export async function buildReport(
         title: "Training & certifications",
         description:
           "Every training/certification on file, soonest-expiring first — compliance record for firearms licenses, first aid, tactical training, etc.",
+        usesRun: false,
+        filters: [],
+        columns,
+        rows,
+      };
+    }
+    case "hr-headcount": {
+      const rows = await employeeRegister(ctx);
+      const columns: Col[] = [
+        { key: "employeeNumber", label: "Emp. No." },
+        { key: "employeeName", label: "Name" },
+        { key: "category", label: "Category" },
+        { key: "department", label: "Department" },
+        { key: "status", label: "Status" },
+        { key: "gender", label: "Gender" },
+        { key: "age", label: "Age" },
+        { key: "employmentDate", label: "Employed since" },
+        { key: "serviceYears", label: "Service (years)", num: true },
+        { key: "contractType", label: "Contract" },
+        { key: "contractEnds", label: "Contract ends" },
+        { key: "probation", label: "Probation" },
+      ];
+      return {
+        title: "Employee register",
+        description: "Every current employee with category, department, age, service and contract — the headcount list HR is usually asked for.",
+        usesRun: false,
+        filters: [],
+        columns,
+        rows,
+      };
+    }
+    case "training-compliance": {
+      const rows = await trainingComplianceRows(ctx);
+      const columns: Col[] = [
+        { key: "employeeNumber", label: "Emp. No." },
+        { key: "employeeName", label: "Name" },
+        { key: "category", label: "Category" },
+        { key: "requirement", label: "Required course" },
+        { key: "status", label: "Status" },
+        { key: "validUntil", label: "Valid until" },
+        { key: "daysLeft", label: "Days left" },
+      ];
+      return {
+        title: "Training compliance",
+        description: "Every required course for every current employee — expired and missing first. Requirements are set under Settings → Training Requirements.",
+        usesRun: false,
+        filters: [],
+        columns,
+        rows,
+      };
+    }
+    case "policy-acknowledgements": {
+      const rows = await policyAcknowledgementRows(ctx);
+      const columns: Col[] = [
+        { key: "policy", label: "Policy" },
+        { key: "version", label: "Version" },
+        { key: "employeeNumber", label: "Emp. No." },
+        { key: "employeeName", label: "Name" },
+        { key: "category", label: "Category" },
+        { key: "status", label: "Status" },
+        { key: "due", label: "Due" },
+        { key: "acknowledgedOn", label: "Acknowledged on" },
+        { key: "how", label: "How" },
+        { key: "reference", label: "Paper reference" },
+      ];
+      return {
+        title: "Policy acknowledgements",
+        description: "Who has and hasn't acknowledged the current version of each active policy — overdue first.",
+        usesRun: false,
+        filters: [],
+        columns,
+        rows,
+      };
+    }
+    case "appraisal-results": {
+      const rows = await appraisalResultRows(ctx, p.cycleId);
+      const columns: Col[] = [
+        { key: "cycle", label: "Cycle" },
+        { key: "type", label: "Type" },
+        { key: "employeeNumber", label: "Emp. No." },
+        { key: "employeeName", label: "Name" },
+        { key: "category", label: "Category" },
+        { key: "reviewer", label: "Reviewer" },
+        { key: "status", label: "Status" },
+        { key: "score", label: "Score (1–5)", num: true },
+        { key: "band", label: "Rating" },
+        { key: "recommendation", label: "Recommendation" },
+        { key: "signedOffBy", label: "Signed off by" },
+        { key: "employeeResponse", label: "Employee response" },
+      ];
+      return {
+        title: "Appraisal results",
+        description: "Every appraisal. Scores, ratings and recommendations appear only once an appraisal has been signed off.",
+        usesRun: false,
+        filters: [],
+        columns,
+        rows,
+      };
+    }
+    case "guarantors": {
+      const rows = await guarantorRows(ctx);
+      const columns: Col[] = [
+        { key: "employeeNumber", label: "Emp. No." },
+        { key: "employeeName", label: "Employee" },
+        { key: "guarantor", label: "Guarantor" },
+        { key: "relationship", label: "Relationship" },
+        { key: "phone", label: "Phone" },
+        { key: "address", label: "Address" },
+        { key: "idType", label: "ID type" },
+        { key: "idNumber", label: "ID number" },
+        { key: "formReference", label: "Signed form" },
+        { key: "guaranteeAmount", label: "Guaranteed up to", money: true },
+        { key: "status", label: "Status" },
+        { key: "recordedBy", label: "Recorded by" },
+        { key: "verifiedBy", label: "Verified by" },
+        { key: "verifiedOn", label: "Verified on" },
+      ];
+      return {
+        title: "Guarantor register",
+        description: "Every guarantor on file with verification status — pending, verified, rejected and released.",
+        usesRun: false,
+        filters: [],
+        columns,
+        rows,
+      };
+    }
+    case "records-completeness": {
+      const rows = await recordsCompletenessRows(ctx);
+      const columns: Col[] = [
+        { key: "employeeNumber", label: "Emp. No." },
+        { key: "employeeName", label: "Name" },
+        { key: "category", label: "Category" },
+        { key: "nextOfKin", label: "Next of kin", num: true },
+        { key: "emergencyContacts", label: "Emergency contacts", num: true },
+        { key: "dependants", label: "Dependants", num: true },
+        { key: "guarantorsNeeded", label: "Guarantors needed", num: true },
+        { key: "guarantorsVerified", label: "Verified", num: true },
+        { key: "guarantorsPending", label: "Pending", num: true },
+        { key: "beneficiaryShare", label: "Beneficiary share" },
+        { key: "complete", label: "Complete" },
+        { key: "missing", label: "Missing" },
+      ];
+      return {
+        title: "Personal records completeness",
+        description: "Each current employee's next of kin, emergency contacts and guarantors against the HR policy — incomplete records first.",
+        usesRun: false,
+        filters: [],
+        columns,
+        rows,
+      };
+    }
+    case "detail-changes": {
+      const rows = await detailChangeRows(ctx);
+      const columns: Col[] = [
+        { key: "requestedOn", label: "Requested" },
+        { key: "employeeNumber", label: "Emp. No." },
+        { key: "employeeName", label: "Name" },
+        { key: "kind", label: "Details" },
+        { key: "fieldsChanged", label: "Fields changed" },
+        { key: "reason", label: "Reason" },
+        { key: "requestedBy", label: "Requested by" },
+        { key: "status", label: "Status" },
+        { key: "decidedBy", label: "Decided by" },
+        { key: "decidedOn", label: "Decided on" },
+        { key: "decisionNote", label: "Decision note" },
+        { key: "accountNameMatched", label: "Account name matched" },
+      ];
+      return {
+        title: "Bank, tax & pension change log",
+        description: "Every request to change an employee's bank, tax or pension details, who asked and who decided. It names the fields that changed, never their values.",
         usesRun: false,
         filters: [],
         columns,

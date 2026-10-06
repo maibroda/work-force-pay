@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { buildReport, REPORT_TYPES, type ReportType } from "@/server/report-registry";
+import { reportPermission } from "@/lib/report-access";
 import { options, runOptions } from "@/server/options";
 import { naira } from "@/lib/money";
 import { FilterBar, FilterField, PageHeader, Section, Empty } from "@/components/page";
@@ -20,7 +21,7 @@ export default async function ReportPage({
 }) {
   const { type } = await params;
   if (!REPORT_TYPES.includes(type as ReportType)) notFound();
-  const ctx = await requirePage(type === "audit" ? "audit.view" : "reports.view");
+  const ctx = await requirePage(reportPermission(type));
   const sp = await searchParams;
   const [report, runs, o] = await Promise.all([
     buildReport(ctx, type as ReportType, sp),
