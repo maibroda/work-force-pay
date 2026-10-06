@@ -307,6 +307,8 @@ export const hrPolicySchema = z
     appraisalCommentAtOrBelow: z.coerce.number().int().min(0).max(5),
     appraisalCommentAtOrAbove: z.coerce.number().int().min(0).max(5),
     appraisalMinServiceDays: z.coerce.number().int().min(0).max(1825),
+    probationRequiresAppraisal: z.boolean(),
+    probationMinScore: z.coerce.number().min(0).max(5),
   })
   .partial();
 

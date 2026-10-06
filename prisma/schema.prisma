@@ -1067,6 +1067,12 @@ model HrPolicy {
   /// Employees with less service than this (at the period end) aren't included in a cycle.
   appraisalMinServiceDays   Int     @default(90)
 
+  // Probation reviews
+  /// A probation can only be confirmed after a signed-off probation appraisal.
+  probationRequiresAppraisal Boolean @default(false)
+  /// …scoring at least this (1–5; 0 = any score).
+  probationMinScore          Decimal @default(0) @db.Decimal(3, 2)
+
   // Reminder digest email
   reminderEmailsEnabled Boolean   @default(true)
   /// Addresses that get the digest in addition to every active HR admin.

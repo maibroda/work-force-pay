@@ -12,6 +12,9 @@ export const RATING_LABELS: Record<number, string> = {
 };
 export const RATINGS = [1, 2, 3, 4, 5] as const;
 
+/** How an appraisal that hasn't been signed off is described in a sentence. */
+export const STATUS_PHRASES = { DRAFT: "still being written", SUBMITTED: "awaiting sign-off" } as const;
+
 export const KIND_LABELS = { ANNUAL: "Annual review", PROBATION: "Probation review", AD_HOC: "Ad-hoc review" } as const;
 
 export const RECOMMENDATIONS = ["NONE", "CONFIRM_EMPLOYMENT", "INCREMENT", "PROMOTION", "TRAINING", "PERFORMANCE_PLAN"] as const;

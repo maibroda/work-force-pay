@@ -130,6 +130,8 @@ export default async function HrPolicyPage() {
           action={updateHrPolicyAction.bind(null, "appraisal")}
           fields={[
             { name: "appraisalSelfAssessment", label: "Employees rate themselves first", type: "checkbox", defaultValue: p.appraisalSelfAssessment },
+            { name: "probationRequiresAppraisal", label: "Probation can be confirmed only after a signed-off probation appraisal", type: "checkbox", defaultValue: p.probationRequiresAppraisal, span: 2 },
+            { name: "probationMinScore", label: "…scoring at least (1–5)", type: "number", min: 0, max: 5, defaultValue: num(p.probationMinScore), help: "0 = any score. Extending or failing probation is never blocked." },
             { name: "appraisalMinServiceDays", label: "Minimum service to be included in a cycle (days)", type: "number", min: 0, max: 1825, defaultValue: p.appraisalMinServiceDays, help: "Counted at the period end. Specific employees picked for a cycle are always included." },
             { name: "appraisalCommentAtOrBelow", label: "A comment is required for a rating at or below", type: "number", min: 0, max: 5, defaultValue: p.appraisalCommentAtOrBelow, help: "0 = never." },
             { name: "appraisalCommentAtOrAbove", label: "…and for a rating at or above", type: "number", min: 0, max: 5, defaultValue: p.appraisalCommentAtOrAbove, help: "0 = never. 5 is the top rating." },

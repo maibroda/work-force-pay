@@ -10,6 +10,7 @@ import { addDays, d, iso } from "@/lib/dates";
 import { addMonths } from "@/lib/leave";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
+import { assertProbationAppraisalAllows } from "./appraisals";
 import { getHrPolicy, todayUtc } from "./hr-policy";
 import { nextNumber } from "./numbering";
 
@@ -229,6 +230,7 @@ export async function decideProbation(ctx: Ctx, id: string, raw: z.input<typeof 
   }
 
   // CONFIRMED
+  await assertProbationAppraisalAllows(ctx.orgId, c);
   return db.$transaction(async (tx) => {
     const confirmed = await tx.employmentContract.update({ where: { id }, data: { probationOutcome: "CONFIRMED" } });
     let next = null;

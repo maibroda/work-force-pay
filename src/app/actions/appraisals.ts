@@ -29,6 +29,15 @@ export async function launchCycleAction(v: V) {
     return { message: `Cycle launched — ${r.created} appraisal(s) created${notes.length ? `; ${notes.join("; ")}` : ""}.`, redirectTo: `/hr/appraisals/cycle/${r.cycle.id}` };
   }, PAGES);
 }
+export async function startProbationAppraisalAction(contractId: string) {
+  return act("appraisal.manage", async (ctx) => {
+    const r = await ap.startProbationAppraisal(ctx, contractId);
+    return {
+      message: r.unassigned ? "Probation appraisal started — assign a reviewer on the appraisal." : "Probation appraisal started.",
+      redirectTo: `/hr/appraisals/${r.appraisal.id}`,
+    };
+  }, [...PAGES, "/hr/contracts"]);
+}
 export async function closeCycleAction(id: string) {
   return act("appraisal.manage", async (ctx) => {
     const r = await ap.closeCycle(ctx, id);
