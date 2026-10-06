@@ -299,6 +299,7 @@ export const hrPolicySchema = z
     guarantorCategoryIds: z.array(z.string().min(1)).max(100),
     guarantorMaxPerPerson: z.coerce.number().int().min(0).max(50),
     guarantorSeparateVerifier: z.boolean(),
+    candidateRetentionMonths: z.coerce.number().int().min(0).max(120),
   })
   .partial();
 
