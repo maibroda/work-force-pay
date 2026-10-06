@@ -17,7 +17,8 @@
     "test:e2e": "playwright test",
     "postinstall": "prisma generate",
     "db:setup": "prisma migrate deploy && tsx prisma/seed.ts",
-    "verify": "npm run lint && npm run typecheck && npm test && npm run build"
+    "verify": "npm run lint && npm run typecheck && npm test && npm run build",
+    "smoke": "tsx scripts/smoke.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

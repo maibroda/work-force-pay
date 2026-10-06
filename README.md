@@ -716,6 +716,36 @@ The NDPA and GDPR give people the right to a copy of the personal data a company
 - **My Data.** An employee can download their own data at any time (`/api/me/data-export`) with no request;
   it only ever returns the signed-in employee's record, and every download is audited.
 
+### Route smoke test
+
+Unit and integration tests prove the services; they can't prove a *page* renders. `npm run smoke` does:
+it opens every page of the running app as each demo role and fails on anything unexpected.
+
+- **What it checks.** For each of the eight roles it requests every page (about 140) — and a real record for
+  every detail page, every tab of the employee page, every report in the Reports hub, and every link in the
+  menus (about 1,400 requests). A page the role may open must answer **200** with no error page; a page it may
+  *not* open must **redirect to /forbidden**; signed out, pages must go to **/login**. A menu item that leads a
+  role to a forbidden page fails too.
+- **Nothing to maintain.** The permission each page needs is read from the page's own `requirePage(...)`, so
+  new pages are covered automatically. A new *detail* page needs a one-line sample-record lookup in
+  `scripts/smoke.ts` — the run fails until it has one, so it can't be forgotten.
+- **Run it locally** against a built, seeded app (reads only; it never posts or changes data):
+
+  ```bash
+  npm run build && npm start        # one terminal, database seeded
+  npm run smoke                     # another; BASE_URL defaults to http://localhost:3000
+  ```
+
+  It signs in by minting the same session cookie the app issues (so it needs the app's `AUTH_SECRET` and
+  `DATABASE_URL`). Use `--strict` to fail when a detail page has no sample record in the database (the demo
+  data has none yet for fixed assets, client invoices, payables, purchase orders, exits, letters or
+  settlements, so those pages are noted as skipped rather than opened).
+- **Beside a running dev server.** `next dev` and `next build` share the `.next` folder and corrupt each
+  other. Set `NEXT_DIST_DIR=.next-smoke` for both `next build` and `next start` to keep the test build apart.
+- **In CI** it runs after the build, against a freshly seeded database. A separate fast unit test
+  (`tests/unit/nav-routes.test.ts`) also checks, with no server, that every menu link points at a real page and
+  no role is shown a link its page refuses.
+
 ### Navigation
 
 - The sidebar is grouped into collapsible menus — **Dashboard, Workforce / Personnel, HR Lifecycle,
