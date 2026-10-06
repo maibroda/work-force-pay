@@ -38,7 +38,7 @@ import {
 import { createPaymentBatches, generateRemittances, markBatchPaid } from "../src/server/services/payments";
 import { ensureDefaultChart } from "../src/server/services/accounting";
 import { applyForLeave, decideLeave } from "../src/server/services/leave";
-import { seedHrDemo, seedInventoryDemo, seedLoanDemo, seedPersonalRecordsDemo, seedAppraisalDemo } from "./hr-demo";
+import { seedHrDemo, seedInventoryDemo, seedLoanDemo, seedPersonalRecordsDemo, seedAppraisalDemo, seedTrainingDemo } from "./hr-demo";
 
 export const DEMO_PASSWORD = "Password123!";
 
@@ -1282,6 +1282,7 @@ async function main() {
   await seedInventoryDemo(org.id);
   await seedLoanDemo(org.id);
   await seedPersonalRecordsDemo(org.id);
+  await seedTrainingDemo(org.id);
   await seedAppraisalDemo(org.id);
 
   const counts = {

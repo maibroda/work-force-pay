@@ -37,6 +37,8 @@ import {
 } from "@/app/actions/hr";
 import { ActionButton } from "@/components/action-button";
 import { PersonalRecordsPanel } from "@/components/personal-records-panel";
+import { employeeCompliance } from "@/server/services/training";
+import { STATE_LABELS, isGap } from "@/lib/training-compliance";
 import { employeeAppraisals } from "@/server/services/appraisals";
 import { KIND_LABELS as APPRAISAL_KINDS } from "@/lib/appraisal";
 import { createContractAction } from "@/app/actions/hr-lifecycle";
@@ -520,6 +522,8 @@ export default async function EmployeePage({
               />
             </FormPanel>
           )}
+
+          <TrainingCompliance employeeId={e.id} ctx={ctx} />
 
           <Section
             title="Training & certifications"
@@ -1061,6 +1065,37 @@ async function LocationsTab({
       ) : (
         <Empty>No work register records for this month.</Empty>
       )}
+    </Section>
+  );
+}
+
+/** What this employee must hold, and where each requirement stands. Shown only when requirements apply. */
+async function TrainingCompliance({ ctx, employeeId }: { ctx: Awaited<ReturnType<typeof requirePage>>; employeeId: string }) {
+  const items = await employeeCompliance(ctx, employeeId);
+  if (!items.length) return null;
+  const tone = (s: keyof typeof STATE_LABELS) => (isGap(s) ? "red" : s === "EXPIRING" || s === "GRACE" ? "amber" : "green");
+  return (
+    <Section title="Required training" description="Set under Settings → Training Requirements. A certificate recorded below with the same course name covers a requirement." flush>
+      <Table>
+        <THead>
+          <TR>
+            <TH>Required course</TH>
+            <TH>Status</TH>
+            <TH>Valid until</TH>
+          </TR>
+        </THead>
+        <TBody>
+          {items.map((i) => (
+            <TR key={i.requirement.id}>
+              <TD>{i.requirement.courseName}</TD>
+              <TD>
+                <Badge tone={tone(i.assessment.state)}>{STATE_LABELS[i.assessment.state]}</Badge>
+              </TD>
+              <TD className="text-xs">{i.assessment.expiryDate ? `${fmtDate(i.assessment.expiryDate)} (${i.assessment.daysLeft! < 0 ? `${-i.assessment.daysLeft!} days ago` : `in ${i.assessment.daysLeft} days`})` : i.assessment.state === "VALID" ? "No expiry" : "—"}</TD>
+            </TR>
+          ))}
+        </TBody>
+      </Table>
     </Section>
   );
 }

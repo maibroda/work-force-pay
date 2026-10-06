@@ -20,6 +20,8 @@ import { getHrPolicy, todayUtc } from "./hr-policy";
 import { kitHeldByLeavers } from "./inventory";
 import { loansOwedByLeavers } from "./loans";
 import { recordsOverviewFor } from "./personal-records";
+import { complianceFor } from "./training";
+import { STATE_LABELS } from "@/lib/training-compliance";
 import { appraisalAttention } from "./appraisals";
 
 const OPEN_CASE = ["OPEN", "INVESTIGATING", "HEARING"];
@@ -51,7 +53,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
   const contractHorizon = addDays(today, policy.contractAlertDays);
   const probationHorizon = addDays(today, policy.probationAlertDays);
   const caseHorizon = addDays(today, 3);
-  const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records, appraisals] =
+  const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records, training, appraisals] =
     await Promise.all([
       db.organization.findUniqueOrThrow({ where: { id: orgId }, select: { name: true } }),
       db.jobRequisition.findMany({ where: { organizationId: orgId, status: "PENDING_APPROVAL" }, orderBy: { createdAt: "asc" } }),
@@ -78,6 +80,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
       loansOwedByLeavers(orgId),
       db.employeeDocument.findMany({ where: { organizationId: orgId, expiryDate: { not: null, lte: addDays(today, 30) } }, include: { employee: true }, orderBy: { expiryDate: "asc" } }),
       recordsOverviewFor(orgId),
+      complianceFor(orgId, today),
       appraisalAttention(orgId, today),
     ]);
 
@@ -179,6 +182,32 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
         shortGuarantors ? { text: `${shortGuarantors} employee(s) are short of verified guarantors`, path: "/employees/guarantors" } : null,
       ].filter((x): x is DigestItem => x !== null),
     });
+  add(
+    section(
+      "training",
+      "Required training expired or missing",
+      training.rows
+        .filter((r) => r.gaps > 0)
+        .map((r) => ({
+          text: `${name(r.employee)} — ${r.items
+            .filter((i) => i.assessment.state === "EXPIRED" || i.assessment.state === "MISSING")
+            .map((i) => `${i.requirement.courseName} (${i.assessment.state === "EXPIRED" ? `expired ${fmtDate(i.assessment.expiryDate)}` : STATE_LABELS.MISSING.toLowerCase()})`)
+            .join(", ")}`,
+          path: `/employees/${r.employee.id}?tab=documents`,
+        })),
+    ),
+  );
+  add(
+    section(
+      "training-expiring",
+      "Certificates expiring soon",
+      training.rows.flatMap((r) =>
+        r.items
+          .filter((i) => i.assessment.state === "EXPIRING")
+          .map((i) => ({ text: `${name(r.employee)} — ${i.requirement.courseName} expires ${fmtDate(i.assessment.expiryDate)}`, path: `/employees/${r.employee.id}?tab=documents` })),
+      ),
+    ),
+  );
   add(section("kit", "Leavers still holding uniform & kit", kit.map((k) => ({ text: `${name(k.employee)} — ${k.items} item(s), ${naira(k.value)}`, path: `/employees/${k.employee.id}?tab=kit` }))));
   add(section("loans", "Leavers who still owe a staff loan", owed.map((l) => ({ text: `${name(l.employee)} — ${naira(l.outstanding)} across ${l.loans} loan(s)`, path: `/payroll/loans?q=${l.employee.employeeNumber}` }))));
   add(

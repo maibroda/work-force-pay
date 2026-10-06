@@ -451,7 +451,7 @@ organization: approvals waiting (requisitions, offers, exits, disciplinary recor
 loans), settlements approved but not yet released, contracts ending or past their end date, probation
 reviews due or overdue, staff with no contract, overdue onboarding steps, employee-relations cases
 past (or within three days of) their target, leavers still holding kit or owing a loan, and documents
-expiring within 30 days, guarantors waiting to be verified, and staff whose personal records are incomplete
+expiring within 30 days, required training that is expired or missing and certificates expiring soon, guarantors waiting to be verified, and staff whose personal records are incomplete
 (no next of kin, no emergency contact, short of verified guarantors — new joiners get 30 days first).
 Every item links back into the app; a confidential case shows only that it
 exists.
@@ -565,6 +565,27 @@ view and `hr.manage` to change.
   returned), since that's when a guarantor may be called on. **Release these guarantors** lets them go in one
   step, but only once employment has ended and nothing is owed; otherwise release them one by one with a reason.
 - Every add, edit, verification and release is in the audit log. Leavers' contact records are frozen.
+
+### Training compliance
+
+**Settings → Training Requirements** says which courses and certifications staff must hold; **HR → Training
+Compliance** shows who is missing or expired. Certificates are still recorded on the employee (Documents &
+training tab) — this adds the question "who *should* have what".
+
+- **Requirements** are per course name, for **everyone or one category** (e.g. a firearms licence for armed
+  guards only), each with a **new-joiner grace period** (default 30 days from the employment date) before a
+  missing certificate counts. Switch one off and it stops counting against anyone; the page refuses duplicates
+  and a category requirement for a course already required of everyone.
+- **Nothing is stored as a status** — it is worked out from the certificates and today's date, so it can't go
+  stale. An employee is **Valid**, **Expiring soon** (inside the policy's alert window, default 60 days; 0 =
+  only flag once expired), **Expired**, **Missing**, or **Due (new joiner)** while still in grace. Only expired
+  and missing count against an employee.
+- **Matching:** a certificate covers a requirement when the course name matches (case and extra spaces don't
+  matter), it isn't revoked, and it hasn't lapsed. If several are on file, the longest-lasting decides — so
+  recording a renewal clears an old expired one; a certificate with no expiry date never lapses.
+- **Where it shows:** the compliance page (totals, by-requirement table, and a filterable list of who needs
+  attention), a *Required training* panel on each employee's Documents & training tab, and two HR-digest
+  sections (expired/missing, and expiring soon). Leavers aren't measured.
 
 ### Performance appraisals
 
