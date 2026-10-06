@@ -61,6 +61,54 @@ export async function seedLoanDemo(orgId: string) {
   console.log("✔ Loan demo data seeded");
 }
 
+/** Three policies, one with a recent second version, and acknowledgements in every state. Idempotent. */
+export async function seedPolicyDemo(orgId: string) {
+  if (await db.companyPolicy.count({ where: { organizationId: orgId } })) {
+    console.log("• Policy demo data already present — skipped");
+    return;
+  }
+  const guard = await db.employeeCategory.findFirst({ where: { organizationId: orgId, code: "GUARD" } });
+  const today = todayUtc();
+  const mk = async (title: string, summary: string, categoryId: string | null, graceDays: number, versions: Array<{ ago: number; body: string; changeSummary?: string }>) => {
+    const p = await db.companyPolicy.create({ data: { organizationId: orgId, title, summary, categoryId, graceDays, createdBy: "Seed" } });
+    const out = [];
+    for (const [i, v] of versions.entries())
+      out.push(await db.policyVersion.create({ data: { organizationId: orgId, policyId: p.id, version: i + 1, effectiveDate: addDays(today, -v.ago), body: v.body, changeSummary: v.changeSummary ?? null, publishedBy: "Seed" } }));
+    return { p, versions: out };
+  };
+  const conduct = await mk("Code of Conduct", "How we expect every member of staff to behave on and off duty", null, 14, [
+    { ago: 400, body: `1. Be honest and report fraud or theft.
+2. Treat colleagues, clients and the public with respect.
+3. Report for duty on time, in full uniform, and sober.
+4. Never leave a post without being relieved.` },
+    { ago: 20, body: `1. Be honest and report fraud or theft.
+2. Treat colleagues, clients and the public with respect.
+3. Report for duty on time, in full uniform, and sober.
+4. Never leave a post without being relieved.
+5. Do not post photographs of client premises or colleagues on social media.`, changeSummary: "Added a social-media section (point 5)" },
+  ]);
+  const data = await mk("Data Protection Notice", "How the company collects and protects personal data (NDPA)", null, 14, [
+    { ago: 200, body: `The company collects the personal data needed to employ and pay you. It is kept securely, shared only where the law requires, and removed when it is no longer needed. You may ask to see or correct your data through HR.` },
+  ]);
+  const force = guard
+    ? await mk("Use of Force & Escort Procedures", "Rules for guards on the use of force and on escort duty", guard.id, 30, [
+        { ago: 100, body: `Use the minimum force necessary. Always report any use of force to your supervisor within the hour. Escort duties require two guards unless the client's order says otherwise.` },
+      ])
+    : null;
+  const staff = await db.employee.findMany({ where: { organizationId: orgId, status: { in: ["ACTIVE", "ON_LEAVE"] } }, orderBy: { employeeNumber: "asc" }, select: { id: true, categoryId: true } });
+  const acks: Array<{ organizationId: string; versionId: string; employeeId: string; acknowledgedAt: Date; method: "SELF" | "RECORDED"; recordedBy?: string; note?: string }> = [];
+  const add = (versionId: string, employeeId: string, daysAgo: number, recorded: boolean) =>
+    acks.push({ organizationId: orgId, versionId, employeeId, acknowledgedAt: addDays(today, -daysAgo), method: recorded ? "RECORDED" : "SELF", ...(recorded ? { recordedBy: "Seed HR", note: "Signed sheet, file HR/POL/2026" } : {}) });
+  for (const [i, e] of staff.entries()) {
+    if (i % 4 !== 0) add(conduct.versions[1].id, e.id, 10 + (i % 8), i % 11 === 0); // the new version: a quarter are overdue
+    else if (i % 8 === 0) add(conduct.versions[0].id, e.id, 300, false); // acknowledged the old one only
+    if (i % 3 !== 0) add(data.versions[0].id, e.id, 150 - (i % 30), i % 13 === 0);
+    if (force && e.categoryId === guard!.id && i % 5 !== 2) add(force.versions[0].id, e.id, 60, false);
+  }
+  await db.policyAcknowledgement.createMany({ data: acks });
+  console.log("✔ Policy demo data seeded");
+}
+
 /** Three required courses and certificates in every state — valid, expiring, expired, missing, new joiner. Idempotent. */
 export async function seedTrainingDemo(orgId: string) {
   if (await db.trainingRequirement.count({ where: { organizationId: orgId } })) {
@@ -349,6 +397,7 @@ if (process.argv[1] && /hr-demo\.(ts|js)$/.test(process.argv[1])) {
       await seedPersonalRecordsDemo(o.id);
       await seedTrainingDemo(o.id);
       await seedAppraisalDemo(o.id);
+      await seedPolicyDemo(o.id);
     })
     .then(() => db.$disconnect())
     .catch(async (e) => {
