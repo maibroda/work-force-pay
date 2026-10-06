@@ -62,7 +62,7 @@ actual, current practice, not a documented policy choice.
   (indistinguishable from a wrong password, so it can't be used to enumerate valid accounts);
   optional TOTP two-factor authentication with hashed one-time backup codes.
 - **Two-factor by role**: an administrator (Settings → Users) picks the roles that must use two-factor and the
-  first day it is compulsory. Before that day those users see a reminder on My security; from it, anyone in
+  first day it is compulsory. Before that day those users see a banner on every page counting down the days; from it, anyone in
   those roles who hasn't set it up can reach nothing but My security, and server actions are refused. Those
   users can't switch it off themselves. An administrator can reset a colleague who has lost their phone and
   backup codes (reason required, audited, their sessions end); never their own. It is off until someone sets it.

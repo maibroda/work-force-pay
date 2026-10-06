@@ -1,6 +1,9 @@
 import { Suspense } from "react";
 import { LogOut } from "lucide-react";
+import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
+import { twoFactorStateFor } from "@/lib/auth/two-factor-gate";
+import { twoFactorReminder } from "@/lib/two-factor-policy";
 import { can } from "@/lib/auth/permissions";
 import { NAV, SELF_NAV } from "@/lib/nav";
 import { db } from "@/lib/db";
@@ -11,7 +14,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Every page inside this layout runs its own requirePage (which enforces the two-factor requirement); the
   // layout itself must not, or someone sent to My security would be redirected from it, in a loop.
   const ctx = await requirePage(undefined, { allowUnenrolled: true });
-  const org = await db.organization.findUnique({ where: { id: ctx.orgId } });
+  const [org, gate] = await Promise.all([db.organization.findUnique({ where: { id: ctx.orgId } }), twoFactorStateFor(ctx)]);
+  const reminder = twoFactorReminder(gate.state, gate.enforceFrom, new Date(new Date().toISOString().slice(0, 10)));
   const groups = [
     ...(["SUPERVISOR", "EMPLOYEE"].includes(ctx.role) ? SELF_NAV : []),
     ...NAV,
@@ -45,6 +49,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </button>
           </form>
         </header>
+        {reminder && (
+          <div className="no-print border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+            {reminder}{" "}
+            <Link className="font-medium underline" href="/settings/security">
+              Set it up
+            </Link>
+          </div>
+        )}
         <main className="mx-auto max-w-[1400px] p-4 sm:p-6">{children}</main>
       </div>
     </div>
