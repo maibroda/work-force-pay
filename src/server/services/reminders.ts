@@ -25,6 +25,7 @@ import { pendingChanges } from "./change-requests";
 import { policyAttention } from "./policies";
 import { requestsNeedingAttention } from "./data-requests";
 import { breachesNeedingAttention } from "./breaches";
+import { retentionAttention } from "./employee-retention";
 import { describeHours } from "@/lib/breaches";
 import { STATE_LABELS } from "@/lib/training-compliance";
 import { appraisalAttention } from "./appraisals";
@@ -58,7 +59,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
   const contractHorizon = addDays(today, policy.contractAlertDays);
   const probationHorizon = addDays(today, policy.probationAlertDays);
   const caseHorizon = addDays(today, 3);
-  const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records, training, appraisals, changes, policies, dataRequests, breaches] =
+  const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records, training, appraisals, changes, policies, dataRequests, breaches, retention] =
     await Promise.all([
       db.organization.findUniqueOrThrow({ where: { id: orgId }, select: { name: true } }),
       db.jobRequisition.findMany({ where: { organizationId: orgId, status: "PENDING_APPROVAL" }, orderBy: { createdAt: "asc" } }),
@@ -91,6 +92,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
       policyAttention(orgId, today),
       requestsNeedingAttention(orgId, today),
       breachesNeedingAttention(orgId, new Date()),
+      retentionAttention(orgId, today),
     ]);
 
   const sections: DigestSection[] = [];
@@ -256,6 +258,16 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
         text: `${b.incidentNumber} — ${b.title}: ${b.assessment === "UNASSESSED" ? "not assessed yet; " : ""}${b.state === "OVERDUE" ? `regulator notice ${describeHours(b.hoursLeft)} overdue` : b.state === "DUE_SOON" ? `regulator notice due in ${describeHours(b.hoursLeft)}` : "notification clock running"}`,
         path: `/hr/breaches/${b.id}`,
       })),
+    ),
+  );
+  add(
+    section(
+      "retention",
+      "Former employees' records",
+      [
+        ...(retention.pending ? [{ text: `${retention.pending} erasure request(s) waiting for a second person to approve`, path: "/hr/retention" }] : []),
+        ...(retention.ready ? [{ text: `${retention.ready} former employee(s) are past the retention period with nothing in the way`, path: "/hr/retention" }] : []),
+      ],
     ),
   );
   add(section("kit", "Leavers still holding uniform & kit", kit.map((k) => ({ text: `${name(k.employee)} — ${k.items} item(s), ${naira(k.value)}`, path: `/employees/${k.employee.id}?tab=kit` }))));

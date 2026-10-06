@@ -45,11 +45,15 @@ scheduled call to `/api/cron/data-retention` runs it daily and the same button c
 candidates and anyone still in the pipeline are never touched. The requisition, stage and offer figures stay
 for reporting.
 
-**⚠ Gap — employees.** Nothing purges an exited employee's records. Bank details, tax ID, pension PIN and
-full history stay in the database indefinitely. Nigerian practice commonly references 6 years for
-tax-relevant records (FIRS) and longer for pension records (PENCOM); no such schedule is implemented for
-employee data. Until one is decided and built, treat "indefinite retention" of employee records as the
-actual, current practice, not a documented policy choice.
+**Built — former employees (off until the company sets a period).** Settings → HR & Lifecycle Policy → Data
+retention takes the number of years after leaving that records must be kept. Nigerian practice commonly
+references 6 years for tax-relevant records (FIRS) and longer for pension records (PENCOM); the system does not
+choose for the company, and the default is 0 = off, so until someone sets it **nothing is erased and records are
+kept indefinitely**. Once set, HR → Records Retention lists leavers past the period, with anything standing in the
+way, and erasure needs a second person to approve (see §7).
+
+**⚠ Gap — pension records.** One period applies to everyone. If pension records must be kept longer than tax
+records, set the period to the longer one.
 
 ## 5. Security measures in place
 
@@ -100,9 +104,22 @@ logs.
 **Built — correction.** Employees see their details under My Details and can ask for a change to bank, tax or
 pension details, which a second person approves. Contacts and dependants they maintain themselves.
 
-**⚠ Gap — erasure.** There is no tool for an erasure request outside the candidate retention job. Deleting an
-employee's records is a manual database task and has to be weighed against the tax and pension retention
-duties above, which usually override it for payroll data.
+**Built — erasure.** HR → Records Retention handles both a leaver whose retention period is over and a former
+employee who asks for erasure. Neither can happen before the retention period has passed, whoever asks, and
+neither while a staff loan is owed, a settlement is unreleased, a case is open or a data access request is open.
+One person asks (with a reason), a different person approves, and approving carries it out in one transaction;
+the request records how many records of each kind were changed, never the data. It cannot be undone.
+
+What is removed: name, date of birth, contact details, bank, tax and pension details, next of kin and guarantors,
+the text of documents, letters, disciplinary and exit records, case notes, appraisal comments, any job
+application, and their login. What stays: the employee number, dates, category and every pay and leave figure,
+which the business and the tax authority still need and which identify no one without a name. **The audit
+trail is deliberately kept as it is**; it can contain earlier values (for example a name in a changed field), so
+if that matters to the company, decide how long audit entries are held.
+
+**⚠ Gap — other places a name can sit.** The removal covers the records listed above. Free text typed into
+fields not listed (for example a note on a movement or a deployment) is not scrubbed; the erasure summary on the
+request shows exactly what was touched so the company can check.
 
 ## 8. Breach notification
 

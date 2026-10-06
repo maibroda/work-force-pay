@@ -239,6 +239,7 @@ export default async function HrPolicyPage() {
           action={updateHrPolicyAction.bind(null, "retention")}
           fields={[
             { name: "candidateRetentionMonths", label: "Keep rejected / withdrawn candidates for (months)", type: "number", min: 0, max: 120, defaultValue: p.candidateRetentionMonths, help: "24 is a common default. 0 = keep for ever." },
+            { name: "employeeRetentionYears", label: "Keep former employees' records for (years after they leave)", type: "number", min: 0, max: 50, defaultValue: p.employeeRetentionYears, help: "Tax and pension rules usually require several years (6 is commonly cited) — confirm yours. Nothing is erased before this, whoever asks; after it, a request needs a second person's approval (HR → Records Retention). 0 = off." },
           ]}
         />
         {retention.months > 0 && retention.due > 0 && (
