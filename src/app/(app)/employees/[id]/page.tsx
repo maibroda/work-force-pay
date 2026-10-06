@@ -39,6 +39,8 @@ import { ActionButton } from "@/components/action-button";
 import { PersonalRecordsPanel } from "@/components/personal-records-panel";
 import { ChangeRequestsPanel } from "@/components/change-requests-panel";
 import { employeeCompliance } from "@/server/services/training";
+import { employeePolicies } from "@/server/services/policies";
+import { ACK_LABELS } from "@/lib/policies";
 import { STATE_LABELS, isGap } from "@/lib/training-compliance";
 import { employeeAppraisals } from "@/server/services/appraisals";
 import { KIND_LABELS as APPRAISAL_KINDS } from "@/lib/appraisal";
@@ -525,6 +527,8 @@ export default async function EmployeePage({
           )}
 
           <TrainingCompliance employeeId={e.id} ctx={ctx} />
+
+          <PolicyAcknowledgements employeeId={e.id} ctx={ctx} />
 
           <Section
             title="Training & certifications"
@@ -1068,6 +1072,42 @@ async function LocationsTab({
       ) : (
         <Empty>No work register records for this month.</Empty>
       )}
+    </Section>
+  );
+}
+
+/** The company policies that apply to this employee and whether they've acknowledged the current version. */
+async function PolicyAcknowledgements({ ctx, employeeId }: { ctx: Awaited<ReturnType<typeof requirePage>>; employeeId: string }) {
+  const items = await employeePolicies(ctx, employeeId);
+  if (!items.length) return null;
+  return (
+    <Section title="Policy acknowledgements" description="The current version of each policy that applies to this employee. Manage policies under HR → Policies." flush>
+      <Table>
+        <THead>
+          <TR>
+            <TH>Policy</TH>
+            <TH>Version</TH>
+            <TH>Status</TH>
+            <TH>Acknowledged / due</TH>
+          </TR>
+        </THead>
+        <TBody>
+          {items.map((i) => (
+            <TR key={i.policy.id}>
+              <TD>
+                <Link className="text-primary underline" href={`/hr/policies/${i.policy.id}`}>
+                  {i.policy.title}
+                </Link>
+              </TD>
+              <TD className="text-xs">v{i.version.version}</TD>
+              <TD>
+                <Badge tone={i.state === "ACKNOWLEDGED" ? "green" : i.state === "OVERDUE" ? "red" : "amber"}>{ACK_LABELS[i.state]}</Badge>
+              </TD>
+              <TD className="text-xs">{i.acknowledgedAt ? `${fmtDate(i.acknowledgedAt)}${i.method === "RECORDED" ? " (paper, recorded by HR)" : ""}` : `due ${fmtDate(i.due)}`}</TD>
+            </TR>
+          ))}
+        </TBody>
+      </Table>
     </Section>
   );
 }

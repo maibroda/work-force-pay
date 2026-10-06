@@ -22,6 +22,7 @@ import { loansOwedByLeavers } from "./loans";
 import { recordsOverviewFor } from "./personal-records";
 import { complianceFor } from "./training";
 import { pendingChanges } from "./change-requests";
+import { policyAttention } from "./policies";
 import { STATE_LABELS } from "@/lib/training-compliance";
 import { appraisalAttention } from "./appraisals";
 
@@ -54,7 +55,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
   const contractHorizon = addDays(today, policy.contractAlertDays);
   const probationHorizon = addDays(today, policy.probationAlertDays);
   const caseHorizon = addDays(today, 3);
-  const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records, training, appraisals, changes] =
+  const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records, training, appraisals, changes, policies] =
     await Promise.all([
       db.organization.findUniqueOrThrow({ where: { id: orgId }, select: { name: true } }),
       db.jobRequisition.findMany({ where: { organizationId: orgId, status: "PENDING_APPROVAL" }, orderBy: { createdAt: "asc" } }),
@@ -84,6 +85,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
       complianceFor(orgId, today),
       appraisalAttention(orgId, today),
       pendingChanges(orgId),
+      policyAttention(orgId, today),
     ]);
 
   const sections: DigestSection[] = [];
@@ -222,6 +224,13 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
           .filter((i) => i.assessment.state === "EXPIRING")
           .map((i) => ({ text: `${name(r.employee)} — ${i.requirement.courseName} expires ${fmtDate(i.assessment.expiryDate)}`, path: `/employees/${r.employee.id}?tab=documents` })),
       ),
+    ),
+  );
+  add(
+    section(
+      "policies",
+      "Policies awaiting acknowledgement",
+      policies.map((p) => ({ text: `${p.policy.title} — ${p.overdue} of ${p.applicable} overdue`, path: `/hr/policies/${p.policy.id}` })),
     ),
   );
   add(section("kit", "Leavers still holding uniform & kit", kit.map((k) => ({ text: `${name(k.employee)} — ${k.items} item(s), ${naira(k.value)}`, path: `/employees/${k.employee.id}?tab=kit` }))));

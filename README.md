@@ -645,6 +645,27 @@ the employee form refuses, and a change is *requested* and takes effect only whe
   the long-standing `BANK_/TAX_/PENSION_INFORMATION_CHANGE` actions. The HR digest lists requests waiting.
 - Switch change control off in the policy and these fields can again be edited directly (still audited).
 
+### Company policies & acknowledgements
+
+**HR Lifecycle → Policies & Acknowledgements** publishes the policies staff must read (code of conduct, data
+protection, safety…) and shows who has acknowledged them; employees do it under **My Policies**.
+
+- **Publish** a policy to everyone or one category, with its text, a document reference, or both, an effective
+  date (a future date schedules it) and a grace period for acknowledging (default 14 days). Needs `hr.configure`.
+- **Versions are never edited.** A change is a new version with a note of what changed, and **everyone it
+  applies to is asked again**. A scheduled version waits for its date; until then the previous version stays
+  current and nobody is chased early. Old acknowledgements are kept.
+- **Acknowledging.** The employee reads the current text and confirms. Where staff sign on paper instead, HR
+  records it against the employee with a reference to the signed sheet (shown as a paper sign-off) — and can
+  never record one for themselves. An employee can acknowledge only a policy that applies to their category.
+- **Due and overdue.** The grace period runs from the *later* of the version taking effect and the employee
+  joining, so a new hire isn't chased for a policy that started years ago and nobody is chased the day a new
+  version appears. The due day itself still counts as pending.
+- **Seeing it.** The policy page lists who still has to (overdue first) with a button for the paper sign-off;
+  the list shows acknowledged x/y and overdue per policy; each employee's Documents & training tab shows theirs;
+  and the HR digest lists policies with overdue acknowledgements. Archive a policy and nobody is asked for it.
+  Leavers aren't counted. Every publish, acknowledgement and archive is in the audit log.
+
 ### Navigation
 
 - The sidebar is grouped into collapsible menus — **Dashboard, Workforce / Personnel, HR Lifecycle,
