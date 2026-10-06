@@ -45,6 +45,7 @@ export interface Report {
 export const REPORT_TYPES = [
   "payroll-register",
   "payslips",
+  "employer-contributions",
   "work-register",
   "staff-movement",
   "overtime",
@@ -155,6 +156,55 @@ export async function buildReport(
         title: "Payroll register",
         description:
           "Filter by client and beat — employees who worked at the selected client/beat during the period are included.",
+        usesRun: true,
+        filters: ["client", "beat"],
+        columns,
+        rows,
+        totals: sumCols(rows, columns),
+        runLabel,
+      };
+    }
+    case "employer-contributions": {
+      // What the company pays on top of each employee's pay and does not deduct from them. It used to sit on the
+      // payslip; it belongs here, with the company's own reports.
+      const recs = run ? await payrollRegister(ctx, run.id, { clientId: p.clientId, beatId: p.beatId }) : [];
+      const columns: Col[] = [
+        { key: "employeeNumber", label: "Emp. No." },
+        { key: "employeeName", label: "Name" },
+        { key: "category", label: "Category" },
+        { key: "employerPension", label: "Employer pension", money: true },
+        { key: "itf", label: "ITF", money: true },
+        { key: "nsitf", label: "NSITF-ECA", money: true },
+        { key: "nhfMedical", label: "NHF / Medical", money: true },
+        { key: "insurance", label: "Insurance", money: true },
+        { key: "uniformKits", label: "Uniform & kits", money: true },
+        { key: "recruitmentTraining", label: "Recruitment, training & vetting", money: true },
+        { key: "leaveReliever", label: "Leave reliever", money: true },
+        { key: "outsourcingLeaveAllowance", label: "Outsourcing leave allowance", money: true },
+        { key: "total", label: "Total employer contributions", money: true },
+      ];
+      const rows = recs.map((r) => {
+        const row = {
+          employeeNumber: r.employeeNumber,
+          employeeName: r.employeeName,
+          category: r.categoryName,
+          employerPension: num(r.employerPension),
+          itf: num(r.itfAmount),
+          nsitf: num(r.nsitfAmount),
+          nhfMedical: num(r.nhfMedicalAmount),
+          insurance: num(r.insuranceAmount),
+          uniformKits: num(r.uniformKitsAmount),
+          recruitmentTraining: num(r.recruitmentTrainingAmount),
+          leaveReliever: num(r.leaveRelieverAmount),
+          outsourcingLeaveAllowance: num(r.outsourcingLeaveAllowanceAmount),
+        };
+        const total = Math.round(Object.entries(row).filter(([k]) => !["employeeNumber", "employeeName", "category"].includes(k)).reduce((a, [, v]) => a + (v as number), 0) * 100) / 100;
+        return { ...row, total };
+      });
+      return {
+        title: "Employer contributions",
+        description:
+          "What the company pays on top of each employee's pay — employer pension and the employer add-on costs. None of this is deducted from the employee, and none of it appears on their payslip. Each head also has its own remittance schedule.",
         usesRun: true,
         filters: ["client", "beat"],
         columns,
