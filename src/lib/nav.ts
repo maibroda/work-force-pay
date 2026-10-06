@@ -262,6 +262,13 @@ export const SELF_NAV: NavGroup[] = [
 
 /** Every downloadable/report-registry report, grouped for the Reports hub page. */
 export const REPORT_LINKS: Array<{ href: string; label: string; group: string }> = [
+  { href: "/reports/hr-headcount", label: "Employee Register", group: "HR Lifecycle" },
+  { href: "/reports/training-compliance", label: "Training Compliance", group: "HR Lifecycle" },
+  { href: "/reports/policy-acknowledgements", label: "Policy Acknowledgements", group: "HR Lifecycle" },
+  { href: "/reports/appraisal-results", label: "Appraisal Results", group: "HR Lifecycle" },
+  { href: "/reports/guarantors", label: "Guarantor Register", group: "HR Lifecycle" },
+  { href: "/reports/records-completeness", label: "Personal Records Completeness", group: "HR Lifecycle" },
+  { href: "/reports/detail-changes", label: "Bank, Tax & Pension Change Log", group: "HR Lifecycle" },
   { href: "/reports/location-history", label: "Employee Location History", group: "Workforce / Personnel" },
   { href: "/reports/employee-documents", label: "Employee Documents", group: "Workforce / Personnel" },
   {

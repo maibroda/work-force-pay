@@ -641,6 +641,18 @@ export async function contractProfitability(ctx: Ctx, runId: string, contractId?
 
 // ─────────────────────────── CSV ───────────────────────────
 
+/**
+ * A spreadsheet runs a cell that starts with = + - @ (or a tab / carriage return) as a formula, so text
+ * someone typed — an account name, a guarantor, a reason — could carry a payload to whoever opens the
+ * export. Such text is given a leading apostrophe, which spreadsheets show as plain text. Plain numbers
+ * (including negative ones) are left alone.
+ */
+export function neutralizeFormula(s: string): string {
+  if (!/^[=+\-@\t\r]/.test(s)) return s;
+  if (/^-?\d+(\.\d+)?$/.test(s)) return s;
+  return `'${s}`;
+}
+
 export function toCsv(
   rows: Array<Record<string, unknown>>,
   columns?: Array<{ key: string; label: string }>,
@@ -649,13 +661,15 @@ export function toCsv(
   const cols = columns ?? Object.keys(rows[0]).map((k) => ({ key: k, label: k }));
   const esc = (v: unknown) => {
     if (v === null || v === undefined) return "";
-    const s =
+    const raw =
       v instanceof Date
         ? v.toISOString().slice(0, 10)
         : typeof v === "object" && "toNumber" in (v as object)
           ? String(num(v))
           : String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    // numbers the app computed stay numbers; only text can carry a formula
+    const s = typeof v === "number" || (typeof v === "object" && "toNumber" in (v as object)) ? raw : neutralizeFormula(raw);
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   return [
     cols.map((c) => c.label).join(","),

@@ -2,20 +2,14 @@ import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { REPORT_LINKS } from "@/lib/nav";
+import { reportPermission } from "@/lib/report-access";
 import { PageHeader, Section } from "@/components/page";
 import { Card } from "@/components/ui/card";
 
 export default async function ReportsHub() {
   const ctx = await requirePage("reports.view");
   const items = REPORT_LINKS.filter((i) =>
-    can(
-      ctx.role,
-      i.href === "/reports/audit"
-        ? "audit.view"
-        : i.href === "/finance/invoices"
-          ? "client.view"
-          : "reports.view",
-    ),
+    can(ctx.role, i.href === "/finance/invoices" ? "client.view" : reportPermission(i.href.replace("/reports/", ""))),
   );
   const groups = [...new Set(items.map((i) => i.group))];
   return (
