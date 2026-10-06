@@ -184,6 +184,18 @@ export default async function HrPolicyPage() {
         />
       </Section>
 
+      <Section title="Data access requests" description="Employees and former employees can ask for a copy of the personal data held on them. Log each request under HR → Data Access Requests; the deadline is counted from the day it was received.">
+        <SmartForm
+          columns={3}
+          submitLabel="Save"
+          resetOnSuccess={false}
+          action={updateHrPolicyAction.bind(null, "privacy")}
+          fields={[
+            { name: "dsarResponseDays", label: "Days to answer a request", type: "number", min: 1, max: 90, defaultValue: p.dsarResponseDays, help: "30 matches a month, the usual legal limit." },
+          ]}
+        />
+      </Section>
+
       <Section title="Training compliance" description="Which courses and certifications are required is set under Settings → Training Requirements; HR → Training Compliance shows who is missing or expired.">
         <SmartForm
           columns={3}

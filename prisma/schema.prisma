@@ -600,6 +600,7 @@ model Organization {
   trainingRequirements      TrainingRequirement[]
   employeeChangeRequests    EmployeeChangeRequest[]
   companyPolicies           CompanyPolicy[]
+  dataAccessRequests        DataAccessRequest[]
   appraisalCriteria         AppraisalCriterion[]
   appraisalCycles           AppraisalCycle[]
   appraisals                Appraisal[]
@@ -821,6 +822,7 @@ model Employee {
   guarantors              EmployeeGuarantor[]
   changeRequests          EmployeeChangeRequest[]
   policyAcknowledgements  PolicyAcknowledgement[]
+  dataAccessRequests      DataAccessRequest[]
   appraisals              Appraisal[]
 
   @@unique([organizationId, employeeNumber])
@@ -1072,6 +1074,10 @@ model HrPolicy {
   probationRequiresAppraisal Boolean @default(false)
   /// …scoring at least this (1–5; 0 = any score).
   probationMinScore          Decimal @default(0) @db.Decimal(3, 2)
+
+  // Privacy: data subject access requests
+  /// Days allowed to answer a request for a copy of someone's data, from the day it was received.
+  dsarResponseDays Int @default(30)
 
   // Reminder digest email
   reminderEmailsEnabled Boolean   @default(true)
@@ -3411,4 +3417,48 @@ model PolicyAcknowledgement {
 
   @@unique([versionId, employeeId])
   @@index([organizationId, employeeId])
+}
+
+// ─────────────────────────── DATA SUBJECT ACCESS REQUESTS ───────────────────────────
+
+enum DataRequestStatus {
+  OPEN
+  FULFILLED
+  REFUSED
+}
+
+/// A request from an employee (or former employee) for a copy of the personal data held on them, with the
+/// deadline to answer it. The export itself is generated on demand and never stored; the register keeps
+/// who asked, when, how identity was checked, who answered, and a checksum and section counts of what was
+/// handed over.
+model DataAccessRequest {
+  id               String            @id @default(cuid())
+  organizationId   String
+  organization     Organization      @relation(fields: [organizationId], references: [id])
+  requestNumber    String
+  employeeId       String
+  employee         Employee          @relation(fields: [employeeId], references: [id])
+  /// Who made the request — the employee, or someone acting for them.
+  requesterName    String
+  /// How it arrived: email, letter, in person…
+  channel          String?
+  receivedOn       DateTime          @db.Date
+  dueOn            DateTime          @db.Date
+  status           DataRequestStatus @default(OPEN)
+  identityVerified Boolean           @default(false)
+  identityNote     String?
+  verifiedBy       String?
+  exportedAt       DateTime?
+  /// SHA-256 of the file generated, and how many records each section held.
+  exportChecksum   String?
+  exportSections   Json?
+  handledBy        String?
+  completedOn      DateTime?
+  completionNote   String?
+  refusalReason    String?
+  createdBy        String
+  createdAt        DateTime          @default(now())
+
+  @@unique([organizationId, requestNumber])
+  @@index([organizationId, status])
 }

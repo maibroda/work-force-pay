@@ -61,6 +61,46 @@ export async function seedLoanDemo(orgId: string) {
   console.log("✔ Loan demo data seeded");
 }
 
+/** Three data access requests: one overdue, one due soon with identity checked, one completed. Idempotent. */
+export async function seedDataRequestDemo(orgId: string) {
+  if (await db.dataAccessRequest.count({ where: { organizationId: orgId } })) {
+    console.log("• Data access request demo data already present — skipped");
+    return;
+  }
+  const staff = await db.employee.findMany({ where: { organizationId: orgId, status: "ACTIVE" }, orderBy: { employeeNumber: "asc" }, take: 3 });
+  if (staff.length < 3) return;
+  const today = todayUtc();
+  const mk = async (i: number, over: { receivedAgo: number; verified?: boolean; done?: boolean; requester?: string; channel: string }) =>
+    db.dataAccessRequest.create({
+      data: {
+        organizationId: orgId,
+        requestNumber: await db.$transaction((tx) => nextNumber(tx, orgId, "DATA_REQUEST")),
+        employeeId: staff[i].id,
+        requesterName: over.requester ?? `${staff[i].firstName} ${staff[i].lastName}`,
+        channel: over.channel,
+        receivedOn: addDays(today, -over.receivedAgo),
+        dueOn: addDays(today, 30 - over.receivedAgo),
+        createdBy: "Seed",
+        ...(over.verified || over.done ? { identityVerified: true, identityNote: "Shown staff ID card at the HR office", verifiedBy: "Seed HR" } : {}),
+        ...(over.done
+          ? {
+              exportedAt: addDays(today, -over.receivedAgo + 6),
+              exportChecksum: "0".repeat(64),
+              exportSections: { profile: 1, pay: 6 },
+              status: "FULFILLED" as const,
+              handledBy: "Seed HR",
+              completedOn: addDays(today, -over.receivedAgo + 6),
+              completionNote: "Copy handed over in person",
+            }
+          : {}),
+      },
+    });
+  await mk(0, { receivedAgo: 40, channel: "Email" }); // overdue, identity not yet checked
+  await mk(1, { receivedAgo: 25, verified: true, channel: "In person" }); // due in 5 days
+  await mk(2, { receivedAgo: 60, done: true, channel: "Letter" }); // answered
+  console.log("✔ Data access request demo data seeded");
+}
+
 /** Three policies, one with a recent second version, and acknowledgements in every state. Idempotent. */
 export async function seedPolicyDemo(orgId: string) {
   if (await db.companyPolicy.count({ where: { organizationId: orgId } })) {
@@ -398,6 +438,7 @@ if (process.argv[1] && /hr-demo\.(ts|js)$/.test(process.argv[1])) {
       await seedTrainingDemo(o.id);
       await seedAppraisalDemo(o.id);
       await seedPolicyDemo(o.id);
+      await seedDataRequestDemo(o.id);
     })
     .then(() => db.$disconnect())
     .catch(async (e) => {
