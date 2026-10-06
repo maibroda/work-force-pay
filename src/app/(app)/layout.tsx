@@ -8,7 +8,9 @@ import { Sidebar } from "@/components/sidebar";
 import { logoutAction } from "@/app/actions/auth";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const ctx = await requirePage();
+  // Every page inside this layout runs its own requirePage (which enforces the two-factor requirement); the
+  // layout itself must not, or someone sent to My security would be redirected from it, in a loop.
+  const ctx = await requirePage(undefined, { allowUnenrolled: true });
   const org = await db.organization.findUnique({ where: { id: ctx.orgId } });
   const groups = [
     ...(["SUPERVISOR", "EMPLOYEE"].includes(ctx.role) ? SELF_NAV : []),

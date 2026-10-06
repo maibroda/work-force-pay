@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
+import { twoFactorStateFor } from "@/lib/auth/two-factor-gate";
 import { can } from "@/lib/auth/permissions";
 import { buildReport, REPORT_TYPES, type ReportType } from "@/server/report-registry";
 import { toCsv } from "@/server/services/reports";
@@ -10,6 +11,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ type: st
   const { type } = await params;
   const ctx = await getSession();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if ((await twoFactorStateFor(ctx)).state === "BLOCKED") return NextResponse.json({ error: "Two-factor authentication is required for your role. Turn it on under My security." }, { status: 403 });
   if (!can(ctx.role, reportPermission(type)))
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!REPORT_TYPES.includes(type as ReportType))
