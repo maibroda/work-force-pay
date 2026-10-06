@@ -751,6 +751,31 @@ register, and it runs that clock.
   entered, the breach pages show a warning** that nobody is named. The system can't fill these in for you — see
   `docs/data-protection-policy.md` §8.
 
+### Records retention (former employees)
+
+A former employee's records have to be kept for a legal minimum (tax and pension rules) and no longer than
+needed. **HR Lifecycle → Records Retention** handles the end of that.
+
+- **Off until you set it.** **Settings → HR & Lifecycle Policy → Data retention → Keep former employees'
+  records for (years)**. The default is **0 = off**: nothing can be erased and the page says so. The system
+  doesn't choose the period — confirm yours (6 years is commonly cited for tax records; pension records can be
+  longer, so use the longer).
+- **Before the period is over, nothing can be erased** — not at the person's request either. After it, a person is
+  eligible when they have left, have an exit date, and **nothing is outstanding**: no staff loan owed, no
+  settlement not yet released, no open employee-relations case, no open data access request, and no other erasure
+  request waiting. The page lists leavers past the period with whatever blocks each one.
+- **Two people.** HR asks (`hr.manage`, with a reason of 15+ characters) — either from the "past the period"
+  list or for a former employee who has asked. A **different** person with `hr.approve` approves or turns it down
+  (a reason is needed to turn down). Approving re-checks everything and carries the removal out in one
+  transaction. The person who asked can't approve it.
+- **What goes:** name, date of birth, phone, email, address, bank, tax and pension details; next of kin and
+  guarantors; the text of documents, letters, disciplinary and exit records, case notes and appraisal comments;
+  change-request details; any job application; their login (closed, renamed, password unusable).
+  **What stays:** employee number, dates, category, and every pay and leave figure. The **audit trail is kept** as
+  it is. The request keeps a count of what was removed, never the data. It can't be undone.
+- The HR digest lists erasure requests waiting for approval and leavers who are past the period with nothing in
+  the way. Nothing runs automatically.
+
 ### Route smoke test
 
 Unit and integration tests prove the services; they can't prove a *page* renders. `npm run smoke` does:

@@ -602,6 +602,7 @@ model Organization {
   companyPolicies           CompanyPolicy[]
   dataAccessRequests        DataAccessRequest[]
   dataBreaches              DataBreach[]
+  employeeErasures          EmployeeErasure[]
   appraisalCriteria         AppraisalCriterion[]
   appraisalCycles           AppraisalCycle[]
   appraisals                Appraisal[]
@@ -768,6 +769,8 @@ model Employee {
   address            String?
   employmentDate     DateTime         @db.Date
   exitDate           DateTime?        @db.Date
+  /// Set when the personal details were removed after the retention period (the record, employee number and pay figures stay).
+  anonymizedAt       DateTime?
   status             EmployeeStatus   @default(ACTIVE)
   categoryId         String
   category           EmployeeCategory @relation(fields: [categoryId], references: [id])
@@ -825,6 +828,7 @@ model Employee {
   policyAcknowledgements  PolicyAcknowledgement[]
   dataAccessRequests      DataAccessRequest[]
   appraisals              Appraisal[]
+  erasures                EmployeeErasure[]
 
   @@unique([organizationId, employeeNumber])
   @@index([organizationId, status])
@@ -1101,6 +1105,10 @@ model HrPolicy {
   regulatorContact  String?
   /// The company's own breach procedure in its own words: who assesses, who tells whom, who signs off.
   breachRunbook     String?
+
+  // Retention of former employees' personal details
+  /// Years after leaving that records must be kept for tax and pension duties; after that they can be erased. 0 = off.
+  employeeRetentionYears Int @default(0)
 
   // Security: roles that must use two-factor sign-in
   twoFactorRoles       Role[]    @default([])
@@ -3549,4 +3557,42 @@ model DataBreachUpdate {
   createdAt      DateTime   @default(now())
 
   @@index([breachId])
+}
+
+enum ErasureKind {
+  /// The retention period has run out.
+  RETENTION
+  /// The person asked for their data to be erased.
+  REQUEST
+}
+
+enum ErasureStatus {
+  PENDING
+  EXECUTED
+  REJECTED
+}
+
+/// A request to remove a former employee's personal details once the retention period has passed. One person asks,
+/// a different person approves; approving carries it out. What was removed is recorded as counts, never as the data.
+model EmployeeErasure {
+  id                String        @id @default(cuid())
+  organizationId    String
+  organization      Organization  @relation(fields: [organizationId], references: [id])
+  employeeId        String
+  employee          Employee      @relation(fields: [employeeId], references: [id])
+  kind              ErasureKind
+  reason            String
+  status            ErasureStatus @default(PENDING)
+  requestedBy       String
+  requestedByUserId String
+  decidedBy         String?
+  decidedByUserId   String?
+  decisionNote      String?
+  decidedAt         DateTime?
+  /// How many records of each kind were changed or removed.
+  summary           Json?
+  createdAt         DateTime      @default(now())
+
+  @@index([organizationId, status])
+  @@index([employeeId])
 }

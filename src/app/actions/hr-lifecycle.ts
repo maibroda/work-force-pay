@@ -72,7 +72,7 @@ export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuit
           // one tick box per category; none ticked = guarantors needed for everyone
           guarantorCategoryIds: Object.keys(v).filter((k) => k.startsWith("gcat_") && v[k] === true).map((k) => k.slice(5)),
         };
-      if (section === "retention") patch = { candidateRetentionMonths: v.candidateRetentionMonths };
+      if (section === "retention") patch = { candidateRetentionMonths: v.candidateRetentionMonths, employeeRetentionYears: v.employeeRetentionYears };
       if (section === "training") patch = { trainingAlertDays: v.trainingAlertDays };
       if (section === "privacy") patch = { dsarResponseDays: v.dsarResponseDays, breachNotifyHours: v.breachNotifyHours };
       if (section === "dpo") {
