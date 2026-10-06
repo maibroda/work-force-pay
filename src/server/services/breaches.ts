@@ -10,7 +10,7 @@
 import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { d } from "@/lib/dates";
-import { hoursLeft, needsIndividuals, needsRegulator, notificationSummary, notifyDeadline, notifyState, type Assessment } from "@/lib/breaches";
+import { contactLine, hasContact, hoursLeft, needsIndividuals, needsRegulator, notificationSummary, notifyDeadline, notifyState, type Assessment } from "@/lib/breaches";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
 import { getHrPolicy } from "./hr-policy";
@@ -216,7 +216,7 @@ export async function listBreaches(ctx: Ctx) {
   assertCan(ctx, "hr.view");
   const [rows, policy] = await Promise.all([db.dataBreach.findMany({ where: { organizationId: ctx.orgId }, orderBy: [{ status: "asc" }, { discoveredAt: "desc" }] }), getHrPolicy(ctx.orgId)]);
   const now = new Date();
-  return { hours: policy.breachNotifyHours, rows: rows.map((b) => withState(b, policy.breachNotifyHours, now)) };
+  return { hours: policy.breachNotifyHours, contactNamed: hasContact({ name: policy.dpoName, email: policy.dpoEmail, phone: policy.dpoPhone }), rows: rows.map((b) => withState(b, policy.breachNotifyHours, now)) };
 }
 
 export async function getBreach(ctx: Ctx, id: string) {
@@ -228,11 +228,15 @@ export async function getBreach(ctx: Ctx, id: string) {
   ]);
   if (!b) return null;
   const s = withState(b, policy.breachNotifyHours, new Date());
+  const dpo = { name: policy.dpoName, email: policy.dpoEmail, phone: policy.dpoPhone };
   return {
     ...s,
     hours: policy.breachNotifyHours,
+    contact: { ...dpo, named: hasContact(dpo) },
+    regulator: { name: policy.regulatorName, contact: policy.regulatorContact },
+    runbook: policy.breachRunbook,
     summary: notificationSummary(
-      { incidentNumber: b.incidentNumber, title: b.title, description: b.description, discoveredAt: b.discoveredAt, occurredOn: b.occurredOn, dataCategories: b.dataCategories, individualsAffected: b.individualsAffected, containmentNote: b.containmentNote, remediation: b.remediation, contact: `${ctx.name}, ${ctx.email}`, organization: org.name },
+      { incidentNumber: b.incidentNumber, title: b.title, description: b.description, discoveredAt: b.discoveredAt, occurredOn: b.occurredOn, dataCategories: b.dataCategories, individualsAffected: b.individualsAffected, containmentNote: b.containmentNote, remediation: b.remediation, contact: contactLine(dpo) ?? `${ctx.name}, ${ctx.email}`, organization: org.name },
       b.assessment,
       b.assessmentNote,
     ),

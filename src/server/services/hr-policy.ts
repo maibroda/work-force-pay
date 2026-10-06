@@ -311,6 +311,12 @@ export const hrPolicySchema = z
     probationMinScore: z.coerce.number().min(0).max(5),
     dsarResponseDays: z.coerce.number().int().min(1).max(90),
     breachNotifyHours: z.coerce.number().int().min(1).max(720),
+    dpoName: z.string().trim().max(120).nullable(),
+    dpoEmail: z.string().trim().toLowerCase().email("That isn't a valid email address").max(200).nullable(),
+    dpoPhone: z.string().trim().max(40).nullable(),
+    regulatorName: z.string().trim().min(2, "Name the regulator").max(200),
+    regulatorContact: z.string().trim().max(500).nullable(),
+    breachRunbook: z.string().trim().max(4000).nullable(),
   })
   .partial();
 

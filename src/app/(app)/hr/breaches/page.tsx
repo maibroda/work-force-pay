@@ -15,7 +15,7 @@ const tone = { OVERDUE: "red", DUE_SOON: "amber", RUNNING: "amber", LATE: "red",
 export default async function BreachesPage() {
   const ctx = await requirePage("hr.view");
   const manage = can(ctx.role, "hr.manage");
-  const { rows, hours } = await listBreaches(ctx);
+  const { rows, hours, contactNamed } = await listBreaches(ctx);
   const open = rows.filter((r) => r.status === "OPEN");
   const now = new Date();
   return (
@@ -24,6 +24,11 @@ export default async function BreachesPage() {
         title="Data breaches"
         description={`Log every personal-data breach — lost laptops, a payroll file emailed to the wrong person, someone looking at records they shouldn't. When a breach is likely to put people at risk the regulator must be told within ${hours} hours of the company becoming aware, so the clock starts at discovery, not at assessment (Settings → HR & Lifecycle Policy). Breaches with no risk are still recorded here.`}
       />
+      {!contactNamed && (
+        <div className="mb-5 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+          <b>Nobody is named as the data protection contact.</b> Set one, the regulator details and your breach procedure under Settings → HR &amp; Lifecycle Policy → Data protection contact, so that whoever picks up a breach out of hours knows who to call.
+        </div>
+      )}
       <StatGrid cols={4}>
         <Stat label="Open breaches" value={open.length} tone={open.length ? "amber" : "green"} />
         <Stat label="Not assessed yet" value={open.filter((r) => r.assessment === "UNASSESSED").length} tone={open.some((r) => r.assessment === "UNASSESSED") ? "amber" : "green"} />

@@ -197,6 +197,23 @@ export default async function HrPolicyPage() {
         />
       </Section>
 
+      <Section title="Data protection contact and breach procedure" description="Who the company has named as its data protection contact, and its own procedure for a breach. They appear on HR → Data Breaches and in the facts for the regulator's notice. Until a name or email is set, the breach pages warn that nobody is named.">
+        <SmartForm
+          columns={2}
+          submitLabel="Save"
+          resetOnSuccess={false}
+          action={updateHrPolicyAction.bind(null, "dpo")}
+          fields={[
+            { name: "dpoName", label: "Data protection contact", defaultValue: p.dpoName ?? undefined, help: "A person or a role, e.g. Head of HR." },
+            { name: "dpoEmail", label: "Their email", type: "email", defaultValue: p.dpoEmail ?? undefined },
+            { name: "dpoPhone", label: "Their phone (for out of hours)", defaultValue: p.dpoPhone ?? undefined },
+            { name: "regulatorName", label: "Regulator breaches are reported to", required: true, defaultValue: p.regulatorName },
+            { name: "regulatorContact", label: "How to reach the regulator", type: "textarea", span: 2, defaultValue: p.regulatorContact ?? undefined, help: "Portal address, email or postal address — copy it from the regulator's current guidance." },
+            { name: "breachRunbook", label: "Your breach procedure", type: "textarea", span: 2, defaultValue: p.breachRunbook ?? undefined, help: "In your own words: who decides whether it is a breach, who tells the regulator, who tells staff, who signs off, who is covering out of hours." },
+          ]}
+        />
+      </Section>
+
       <Section title="Training compliance" description="Which courses and certifications are required is set under Settings → Training Requirements; HR → Training Compliance shows who is missing or expired.">
         <SmartForm
           columns={3}
