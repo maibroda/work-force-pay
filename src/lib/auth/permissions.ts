@@ -55,6 +55,10 @@ export const PERMISSIONS = [
   "inventory.manage", // receive, adjust, issue and take back stock; maintain kit packs
   "loan.manage", // request staff loans & advances, schedule repayments, record cash repayments
   "loan.approve", // approve / reject loans and write off bad debt (never the requester)
+  "appraisal.view", // see every appraisal and cycle
+  "appraisal.manage", // launch and close cycles, assign reviewers, edit the criteria
+  "appraisal.review", // rate the staff you're assigned to review
+  "appraisal.approve", // sign off a submitted appraisal (never its reviewer)
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -74,6 +78,7 @@ const READ_ALL: Permission[] = [
   "leave.view",
   "gl.view",
   "inventory.view",
+  "appraisal.view",
   "self.security",
 ];
 
@@ -93,6 +98,10 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "inventory.view",
     "inventory.manage",
     "loan.manage",
+    "appraisal.view",
+    "appraisal.manage",
+    "appraisal.review",
+    "appraisal.approve",
     "client.view",
     "structure.view",
     "override.manage",
@@ -169,6 +178,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "leave.approve",
     "leave.apply",
     "relations.raise",
+    "appraisal.review",
   ],
   EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise"],
 };
