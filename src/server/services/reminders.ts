@@ -22,6 +22,7 @@ import { loansOwedByLeavers } from "./loans";
 import { recordsOverviewFor } from "./personal-records";
 import { complianceFor } from "./training";
 import { STATE_LABELS } from "@/lib/training-compliance";
+import { appraisalAttention } from "./appraisals";
 
 const OPEN_CASE = ["OPEN", "INVESTIGATING", "HEARING"];
 const SHOWN = 10;
@@ -52,7 +53,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
   const contractHorizon = addDays(today, policy.contractAlertDays);
   const probationHorizon = addDays(today, policy.probationAlertDays);
   const caseHorizon = addDays(today, 3);
-  const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records, training] =
+  const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records, training, appraisals] =
     await Promise.all([
       db.organization.findUniqueOrThrow({ where: { id: orgId }, select: { name: true } }),
       db.jobRequisition.findMany({ where: { organizationId: orgId, status: "PENDING_APPROVAL" }, orderBy: { createdAt: "asc" } }),
@@ -80,6 +81,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
       db.employeeDocument.findMany({ where: { organizationId: orgId, expiryDate: { not: null, lte: addDays(today, 30) } }, include: { employee: true }, orderBy: { expiryDate: "asc" } }),
       recordsOverviewFor(orgId),
       complianceFor(orgId, today),
+      appraisalAttention(orgId, today),
     ]);
 
   const sections: DigestSection[] = [];
@@ -92,6 +94,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
       ...exits.map((x) => ({ text: `Exit — ${name(x.employee)} (${x.exitType.replace(/_/g, " ").toLowerCase()}, last day ${fmtDate(x.lastWorkingDate)})`, path: `/hr/exits/${x.id}` })),
       ...discipline.map((x) => ({ text: `Disciplinary record — ${name(x.employee)} (${x.type.replace(/_/g, " ").toLowerCase()})`, path: `/employees/${x.employeeId}?tab=conduct` })),
       ...settlements.map((s) => ({ text: `End-of-service settlement ${s.settlementNumber} — ${name(s.employee)}, net ${naira(s.netSettlement)}`, path: `/payroll/settlements/${s.id}` })),
+      ...appraisals.awaiting.map((a) => ({ text: `Appraisal — ${name(a.employee)} (${a.cycle.name}), reviewed by ${a.reviewerName ?? "—"}`, path: `/hr/appraisals/${a.id}` })),
       ...loans.map((l) => ({ text: `${l.type === "SALARY_ADVANCE" ? "Salary advance" : "Staff loan"} ${l.loanNumber} — ${name(l.employee)}, ${naira(l.principal)}`, path: `/payroll/loans/${l.id}` })),
     ]),
   );
@@ -141,6 +144,16 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
       cases.map((c) => ({
         text: `${c.caseNumber} — ${c.confidential ? "Confidential case" : c.summary}: ${c.dueDate! < today ? "past its target" : "target"} ${fmtDate(c.dueDate)}`,
         path: `/hr/relations/${c.id}`,
+      })),
+    ),
+  );
+  add(
+    section(
+      "appraisals",
+      "Overdue appraisal reviews",
+      appraisals.overdue.map((a) => ({
+        text: `${name(a.employee)} — ${a.cycle.name}, was due ${fmtDate(a.cycle.dueDate)}${a.reviewerName ? ` (reviewer ${a.reviewerName})` : " — no reviewer assigned"}`,
+        path: `/hr/appraisals/${a.id}`,
       })),
     ),
   );

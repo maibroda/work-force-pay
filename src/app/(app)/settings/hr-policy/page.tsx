@@ -122,6 +122,21 @@ export default async function HrPolicyPage() {
         <p className="mt-2 text-xs text-muted-foreground">Tick no categories to require guarantors for everyone.</p>
       </Section>
 
+      <Section title="Performance appraisals" description="How appraisals run. The criteria and their weights are edited under Settings → Appraisal Criteria; cycles are launched from HR Lifecycle → Appraisals.">
+        <SmartForm
+          columns={3}
+          submitLabel="Save"
+          resetOnSuccess={false}
+          action={updateHrPolicyAction.bind(null, "appraisal")}
+          fields={[
+            { name: "appraisalSelfAssessment", label: "Employees rate themselves first", type: "checkbox", defaultValue: p.appraisalSelfAssessment },
+            { name: "appraisalMinServiceDays", label: "Minimum service to be included in a cycle (days)", type: "number", min: 0, max: 1825, defaultValue: p.appraisalMinServiceDays, help: "Counted at the period end. Specific employees picked for a cycle are always included." },
+            { name: "appraisalCommentAtOrBelow", label: "A comment is required for a rating at or below", type: "number", min: 0, max: 5, defaultValue: p.appraisalCommentAtOrBelow, help: "0 = never." },
+            { name: "appraisalCommentAtOrAbove", label: "…and for a rating at or above", type: "number", min: 0, max: 5, defaultValue: p.appraisalCommentAtOrAbove, help: "0 = never. 5 is the top rating." },
+          ]}
+        />
+      </Section>
+
       <Section title="Staff loans & advances" description="Affordability limits checked when a loan or advance is requested. Set a limit to 0 for no limit.">
         <SmartForm
           columns={3}

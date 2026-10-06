@@ -598,6 +598,9 @@ model Organization {
   employeeContacts          EmployeeContact[]
   employeeGuarantors        EmployeeGuarantor[]
   trainingRequirements      TrainingRequirement[]
+  appraisalCriteria         AppraisalCriterion[]
+  appraisalCycles           AppraisalCycle[]
+  appraisals                Appraisal[]
 }
 
 model User {
@@ -813,6 +816,7 @@ model Employee {
   generatedLetters        GeneratedLetter[]
   contacts                EmployeeContact[]
   guarantors              EmployeeGuarantor[]
+  appraisals              Appraisal[]
 
   @@unique([organizationId, employeeNumber])
   @@index([organizationId, status])
@@ -1042,6 +1046,15 @@ model HrPolicy {
   // Training compliance
   /// Flag a certificate this many days before it expires.
   trainingAlertDays Int @default(60)
+  // Performance appraisals
+  /// Employees rate themselves before their manager does.
+  appraisalSelfAssessment   Boolean @default(true)
+  /// A written comment is required for a rating at or below this (0 = never)…
+  appraisalCommentAtOrBelow Int     @default(2)
+  /// …or at or above this (0 = never).
+  appraisalCommentAtOrAbove Int     @default(5)
+  /// Employees with less service than this (at the period end) aren't included in a cycle.
+  appraisalMinServiceDays   Int     @default(90)
 
   // Reminder digest email
   reminderEmailsEnabled Boolean   @default(true)
@@ -3132,4 +3145,135 @@ model TrainingRequirement {
   createdAt      DateTime          @default(now())
 
   @@index([organizationId, active])
+}
+
+// ─────────────────────────── PERFORMANCE APPRAISALS ───────────────────────────
+
+enum AppraisalKind {
+  ANNUAL
+  PROBATION
+  AD_HOC
+}
+
+enum AppraisalCycleStatus {
+  OPEN
+  CLOSED
+}
+
+enum AppraisalStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  ACKNOWLEDGED
+}
+
+enum AppraisalRecommendation {
+  NONE
+  CONFIRM_EMPLOYMENT
+  INCREMENT
+  PROMOTION
+  TRAINING
+  PERFORMANCE_PLAN
+}
+
+/// One thing employees are rated on, with its weight. Edited in Settings; a cycle snapshots the active
+/// criteria when it is launched, so later edits never change an appraisal already under way.
+model AppraisalCriterion {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  description    String?
+  weight         Int          @default(10)
+  active         Boolean      @default(true)
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+
+  ratings AppraisalRating[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, active])
+}
+
+model AppraisalCycle {
+  id             String               @id @default(cuid())
+  organizationId String
+  organization   Organization         @relation(fields: [organizationId], references: [id])
+  name           String
+  kind           AppraisalKind        @default(ANNUAL)
+  periodStart    DateTime             @db.Date
+  periodEnd      DateTime             @db.Date
+  /// Reviews should be submitted by this date.
+  dueDate        DateTime             @db.Date
+  status         AppraisalCycleStatus @default(OPEN)
+  createdBy      String
+  closedAt       DateTime?
+  createdAt      DateTime             @default(now())
+
+  appraisals Appraisal[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, status])
+}
+
+/// One employee's review in a cycle: self-assessment, then the reviewer's ratings, then sign-off by
+/// someone other than the reviewer, then the employee acknowledges (or disputes) the result.
+model Appraisal {
+  id                  String                  @id @default(cuid())
+  organizationId      String
+  organization        Organization            @relation(fields: [organizationId], references: [id])
+  cycleId             String
+  cycle               AppraisalCycle          @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  employeeId          String
+  employee            Employee                @relation(fields: [employeeId], references: [id])
+  reviewerUserId      String?
+  reviewerName        String?
+  status              AppraisalStatus         @default(DRAFT)
+  selfSubmittedAt     DateTime?
+  employeeSelfComment String?
+  /// Weighted average of the reviewer's ratings (1–5), fixed when the review is submitted.
+  overallScore        Decimal?                @db.Decimal(4, 2)
+  overallBand         String?
+  strengths           String?
+  improvements        String?
+  goals               String?
+  reviewerComment     String?
+  recommendation      AppraisalRecommendation @default(NONE)
+  submittedAt         DateTime?
+  returnNote          String?
+  approvedBy          String?
+  approvedByUserId    String?
+  approvedAt          DateTime?
+  approvalNote        String?
+  acknowledgedAt      DateTime?
+  employeeAgreed      Boolean?
+  employeeResponse    String?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  ratings AppraisalRating[]
+
+  @@unique([cycleId, employeeId])
+  @@index([organizationId, status])
+  @@index([organizationId, employeeId])
+  @@index([reviewerUserId])
+}
+
+model AppraisalRating {
+  id             String             @id @default(cuid())
+  organizationId String
+  appraisalId    String
+  appraisal      Appraisal          @relation(fields: [appraisalId], references: [id], onDelete: Cascade)
+  criterionId    String
+  criterion      AppraisalCriterion @relation(fields: [criterionId], references: [id])
+  /// Snapshots, so renaming or re-weighting a criterion doesn't rewrite a review in progress.
+  criterionName  String
+  weight         Int
+  sortOrder      Int                @default(0)
+  selfRating     Int?
+  selfComment    String?
+  rating         Int?
+  comment        String?
+
+  @@unique([appraisalId, criterionId])
 }

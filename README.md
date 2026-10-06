@@ -587,6 +587,33 @@ training tab) — this adds the question "who *should* have what".
   attention), a *Required training* panel on each employee's Documents & training tab, and two HR-digest
   sections (expired/missing, and expiring soon). Leavers aren't measured.
 
+### Performance appraisals
+
+**HR Lifecycle → Appraisals** runs review cycles; **My Appraisals** is where employees, reviewers and
+approvers do their part.
+
+- **Cycles.** Launch an annual, probation or ad-hoc cycle for everyone, one category, or specific people
+  (specific people are included whatever their service). One appraisal is created per eligible employee, with
+  the criteria and weights *copied at launch* — changing them later never alters a review in progress. The
+  reviewer defaults to the employee's reporting manager if that person has a login that can review; otherwise
+  HR assigns one. Staff under the policy's minimum service at the period end are skipped and listed.
+- **Criteria** (Settings → Appraisal Criteria): add, reweight, describe or switch off what people are rated on.
+  Weights are relative. Starter criteria: job knowledge, quality of work, attendance, discipline & integrity,
+  teamwork, initiative. The 1–5 scale (Unsatisfactory … Outstanding) is fixed; the overall score is the
+  weighted average, with the band it falls in.
+- **The flow.** The employee rates themselves (optional — a policy switch) → the assigned reviewer rates every
+  criterion, saving drafts, then submits → **someone other than the reviewer signs it off** (or returns it with
+  a note) → the employee reads the result and **agrees, or disagrees with a reason**, which is kept on the
+  record. A very low or very high rating needs a comment (thresholds are in the policy; 0 switches a side off).
+- **Confidentiality.** Until sign-off the employee sees only their own self-assessment — not the reviewer's
+  ratings, comments or score — and that holds even for an HR admin looking at their *own* appraisal. Nobody can
+  review, approve or return their own. Only the reviewer sees a draft; HR and auditors see everything.
+- **Visibility for HR.** Cycle pages show progress, average score, the spread across bands, unassigned
+  reviewers and disputes; each employee has an **Appraisals** tab with their history. The HR digest lists
+  overdue reviews and appraisals awaiting sign-off. Every step is in the audit log.
+- Permissions: `appraisal.view`, `appraisal.manage` (cycles, criteria, assignments), `appraisal.review`
+  (supervisors and HR), `appraisal.approve` (HR, company admin).
+
 ### Navigation
 
 - The sidebar is grouped into collapsible menus — **Dashboard, Workforce / Personnel, HR Lifecycle,

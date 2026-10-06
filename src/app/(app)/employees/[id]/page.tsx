@@ -39,6 +39,8 @@ import { ActionButton } from "@/components/action-button";
 import { PersonalRecordsPanel } from "@/components/personal-records-panel";
 import { employeeCompliance } from "@/server/services/training";
 import { STATE_LABELS, isGap } from "@/lib/training-compliance";
+import { employeeAppraisals } from "@/server/services/appraisals";
+import { KIND_LABELS as APPRAISAL_KINDS } from "@/lib/appraisal";
 import { createContractAction } from "@/app/actions/hr-lifecycle";
 import { generateLetterAction } from "@/app/actions/letters";
 import { listLetters } from "@/server/services/letters";
@@ -100,6 +102,7 @@ export default async function EmployeePage({
                 { key: "contracts", label: "Contracts" },
                 { key: "timeline", label: "Lifecycle timeline" },
                 { key: "letters", label: "Letters" },
+                ...(can(ctx.role, "appraisal.view") ? [{ key: "appraisals", label: "Appraisals" }] : []),
               ]
             : []),
           ...(can(ctx.role, "inventory.view") ? [{ key: "kit", label: "Kit & uniform" }] : []),
@@ -993,6 +996,8 @@ export default async function EmployeePage({
         <KitTab employeeId={e.id} active={!["EXITED", "TERMINATED", "RESIGNED"].includes(e.status)} ctx={ctx} />
       )}
 
+      {tab === "appraisals" && hrView && can(ctx.role, "appraisal.view") && <AppraisalsTab employeeId={e.id} ctx={ctx} />}
+
       {tab === "contacts" && sensitive && (
         <PersonalRecordsPanel ctx={ctx} employeeId={e.id} base={`/employees/${e.id}?tab=contacts`} edit={sp.edit} editGuarantor={sp.editg} />
       )}
@@ -1091,6 +1096,45 @@ async function TrainingCompliance({ ctx, employeeId }: { ctx: Awaited<ReturnType
           ))}
         </TBody>
       </Table>
+    </Section>
+  );
+}
+
+async function AppraisalsTab({ ctx, employeeId }: { ctx: Awaited<ReturnType<typeof requirePage>>; employeeId: string }) {
+  const rows = await employeeAppraisals(ctx, employeeId);
+  return (
+    <Section title="Appraisal history" description="Every review this employee has been part of, newest first." flush>
+      <Table>
+        <THead>
+          <TR>
+            <TH>Cycle</TH>
+            <TH>Type</TH>
+            <TH>Period</TH>
+            <TH>Status</TH>
+            <TH>Result</TH>
+          </TR>
+        </THead>
+        <TBody>
+          {rows.map((a) => (
+            <TR key={a.id}>
+              <TD>
+                <Link className="text-primary underline" href={`/hr/appraisals/${a.id}`}>
+                  {a.cycle.name}
+                </Link>
+              </TD>
+              <TD className="text-xs">{APPRAISAL_KINDS[a.cycle.kind]}</TD>
+              <TD className="text-xs">
+                {fmtDate(a.cycle.periodStart)} – {fmtDate(a.cycle.periodEnd)}
+              </TD>
+              <TD>
+                <StatusBadge status={a.status} />
+              </TD>
+              <TD className="text-xs">{a.overallScore != null ? `${num(a.overallScore).toFixed(2)} — ${a.overallBand}` : "—"}</TD>
+            </TR>
+          ))}
+        </TBody>
+      </Table>
+      {!rows.length && <Empty>No appraisals yet.</Empty>}
     </Section>
   );
 }
