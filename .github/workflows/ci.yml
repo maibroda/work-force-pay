@@ -52,3 +52,12 @@ jobs:
         run: npm test
 
       - run: npm run build
+
+      # Opens every page as every demo role against the freshly built app and a seeded database: permitted
+      # pages must render (no 500s), forbidden ones must redirect, signed-out requests must go to /login.
+      - name: Smoke test (every page, every role)
+        run: |
+          npx tsx prisma/seed.ts
+          npx next start -p 3100 > server.log 2>&1 &
+          for i in $(seq 1 60); do curl -fs -o /dev/null http://localhost:3100/login && break; sleep 2; done
+          BASE_URL=http://localhost:3100 npm run smoke || { echo "--- server log (tail) ---"; tail -60 server.log; exit 1; }
