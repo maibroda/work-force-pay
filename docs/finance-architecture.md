@@ -227,7 +227,11 @@ the posting engine"):
 the approval engine (Phase 7), so for now closing is strictly two-person. D3 (sequencing): finance first, the
 multi-industry layer and CRM as phase 8.
 
-**Still to do in Phase 1:** the hierarchical chart of accounts; dimensions on journal lines (client, contract, beat, cost
+**Chart of accounts — built.** Class → group → category → account → sub-account, an installable standard chart that only
+adds and classifies, header accounts that can't be posted to, effective dates enforced by the posting engine, and
+statement-line and tax-mapping fields (recorded, not yet read by the statements; see the README).
+
+**Still to do in Phase 1:** dimensions on journal lines (client, contract, beat, cost
 centre, department, employee, asset, region, branch, project); general reversals with approval; manual, recurring and
 reversing journals; the backfill of historic unposted documents (D5).
 

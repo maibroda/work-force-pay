@@ -6,7 +6,8 @@
  * It refuses a journal that:
  *   - has fewer than two lines, a negative amount, or a line that is both debit and credit;
  *   - does not balance (debits must equal credits);
- *   - posts to an account that doesn't exist, belongs to another organization, or is inactive;
+ *   - posts to an account that doesn't exist, belongs to another organization, is inactive, is a header that only
+ *     groups other accounts, or is used outside the dates it is effective for;
  *   - falls in an accounting period that is closed or locked (or soft closed, for anyone without the close permission).
  * and otherwise writes the journal with its period, its source document and its audit entry, in the caller's
  * transaction, so a business record and its journal commit or fail together.
@@ -14,6 +15,7 @@
  * A posted journal is never edited or deleted, which the database also enforces; a correction is a new journal.
  */
 import { round2 } from "@/lib/money";
+import { iso } from "@/lib/dates";
 import { postingAllowed, type PeriodStatus } from "@/lib/fiscal";
 import type { Ctx } from "@/lib/auth/context";
 import { BusinessError, type Tx } from "./_base";
@@ -74,6 +76,9 @@ export async function postJournal(ctx: Ctx, tx: Tx, input: PostingInput) {
     const a = l.accountId ? byId.get(l.accountId) : byCode.get(l.accountCode!);
     if (!a) throw new BusinessError(`GL account ${l.accountId ? "(by id)" : l.accountCode} is missing from the chart of accounts.`);
     if (!a.active) throw new BusinessError(`GL account ${a.code} ${a.name} is inactive and cannot be posted to.`);
+    if (!a.postable) throw new BusinessError(`GL account ${a.code} ${a.name} is a header that groups other accounts; post to one of its sub-accounts.`);
+    if (a.effectiveFrom && input.postingDate < a.effectiveFrom) throw new BusinessError(`GL account ${a.code} ${a.name} isn't effective until ${iso(a.effectiveFrom)}.`);
+    if (a.effectiveTo && input.postingDate > a.effectiveTo) throw new BusinessError(`GL account ${a.code} ${a.name} stopped being effective on ${iso(a.effectiveTo)}.`);
     return { l, a };
   });
 

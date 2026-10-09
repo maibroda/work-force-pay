@@ -16,6 +16,8 @@
 import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { round2, num } from "@/lib/money";
+import { d } from "@/lib/dates";
+import { CLASS_NAMES, CLASS_TYPES, STANDARD_CHART, STATEMENT_LINES, validateChart } from "@/lib/standard-chart";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
 import { postJournal } from "./posting";
@@ -25,7 +27,7 @@ const ACCOUNT_TYPES = ["ASSET", "LIABILITY", "EQUITY", "INCOME", "EXPENSE"] as c
 
 // ───────────────────────────── Default chart & mapping ─────────────────────────────
 
-const DEFAULT_ACCOUNTS: Array<{ code: string; name: string; type: (typeof ACCOUNT_TYPES)[number] }> = [
+export const DEFAULT_ACCOUNTS: Array<{ code: string; name: string; type: (typeof ACCOUNT_TYPES)[number] }> = [
   { code: "1210", name: "Staff Loans & Salary Advances", type: "ASSET" },
   { code: "2100", name: "Net Salaries Payable", type: "LIABILITY" },
   { code: "2110", name: "PAYE Tax Payable", type: "LIABILITY" },
@@ -172,22 +174,121 @@ export async function listAccounts(ctx: Ctx) {
   return db.glAccount.findMany({ where: { organizationId: ctx.orgId }, orderBy: { code: "asc" } });
 }
 
+const optDate = z
+  .string()
+  .trim()
+  .optional()
+  .transform((v) => (v ? v : undefined));
+
 export const accountSchema = z.object({
   code: z.string().trim().min(2).max(20),
   name: z.string().trim().min(2).max(120),
   type: z.enum(ACCOUNT_TYPES),
+  categoryId: z.string().optional().transform((v) => v || undefined),
+  parentId: z.string().optional().transform((v) => v || undefined),
+  description: z.string().trim().max(500).optional().transform((v) => v || undefined),
+  effectiveFrom: optDate,
+  effectiveTo: optDate,
+  statementLine: z.string().optional().transform((v) => v || undefined),
+  taxMapping: z.string().trim().max(40).optional().transform((v) => v || undefined),
 });
+
+function dateOrUndefined(label: string, v?: string | null): Date | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null || v === "") return null;
+  const x = d(v);
+  if (Number.isNaN(x.getTime())) throw new BusinessError(`${label} isn't a valid date.`);
+  return x;
+}
+
+/** The category must exist in this organization and its class must be able to hold the account's type. */
+async function checkCategory(tx: Tx, orgId: string, categoryId: string, type: (typeof ACCOUNT_TYPES)[number]) {
+  const cat = await tx.accountCategory.findFirst({ where: { id: categoryId, organizationId: orgId }, include: { group: true } });
+  if (!cat) throw new BusinessError("That category doesn't exist.");
+  if (!(CLASS_TYPES[cat.group.classNumber] ?? []).includes(type))
+    throw new BusinessError(`A ${type.toLowerCase()} account can't sit in ${cat.name}, which is in class ${cat.group.classNumber} (${CLASS_NAMES[cat.group.classNumber]}).`);
+  return cat;
+}
+
+/**
+ * A sub-account hangs under a parent of the same type. The parent becomes a non-posting header, which is only allowed
+ * while it has no postings of its own (moving postings would rewrite the ledger). Walks up to refuse a loop.
+ */
+async function attachToParent(tx: Tx, orgId: string, childId: string | null, parentId: string, type: (typeof ACCOUNT_TYPES)[number]) {
+  const parent = await tx.glAccount.findFirst({ where: { id: parentId, organizationId: orgId } });
+  if (!parent) throw new BusinessError("That parent account doesn't exist.");
+  if (parent.type !== type) throw new BusinessError(`A sub-account must be the same type as its parent (${parent.type.toLowerCase()}).`);
+  if (childId) {
+    let cursor: string | null = parent.id;
+    for (let i = 0; cursor && i < 20; i++) {
+      if (cursor === childId) throw new BusinessError("An account can't be placed under itself or one of its own sub-accounts.");
+      cursor = (await tx.glAccount.findUnique({ where: { id: cursor }, select: { parentId: true } }))?.parentId ?? null;
+    }
+  }
+  if (parent.postable) {
+    const posted = await tx.journalLine.count({ where: { accountId: parent.id } });
+    if (posted) throw new BusinessError(`${parent.code} ${parent.name} already has postings, so it can't become a header. Create the sub-account under a header account instead.`);
+    const mapped = await tx.payrollGlMapping.count({ where: { organizationId: orgId, OR: [{ debitAccountId: parent.id }, { creditAccountId: parent.id }] } });
+    if (mapped) throw new BusinessError(`${parent.code} is used by a payroll-head mapping, so it can't become a header.`);
+    await tx.glAccount.update({ where: { id: parent.id }, data: { postable: false } });
+  }
+}
+
+function checkDates(from?: Date | null, to?: Date | null) {
+  if (from && to && to < from) throw new BusinessError("The account can't end before it starts.");
+}
+
+function checkStatementLine(line?: string) {
+  if (line && !STATEMENT_LINES[line]) throw new BusinessError(`${line} isn't a financial-statement line.`);
+}
 
 export async function createAccount(ctx: Ctx, raw: z.input<typeof accountSchema>) {
   assertCan(ctx, "gl.manage");
   const v = accountSchema.parse(raw);
+  const from = dateOrUndefined("The start date", v.effectiveFrom);
+  const to = dateOrUndefined("The end date", v.effectiveTo);
+  checkDates(from, to);
+  checkStatementLine(v.statementLine);
   await ensureDefaultChart(db, ctx.orgId);
-  const a = await db.glAccount.create({ data: { organizationId: ctx.orgId, ...v } });
-  await logAudit(ctx, { action: "GL_ACCOUNT_CREATE", entity: "GlAccount", entityId: a.id, newValue: a });
-  return a;
+  return db.$transaction(async (tx) => {
+    if (v.categoryId) await checkCategory(tx, ctx.orgId, v.categoryId, v.type);
+    if (v.parentId) await attachToParent(tx, ctx.orgId, null, v.parentId, v.type);
+    const a = await tx.glAccount.create({
+      data: {
+        organizationId: ctx.orgId,
+        code: v.code,
+        name: v.name,
+        type: v.type,
+        categoryId: v.categoryId,
+        parentId: v.parentId,
+        description: v.description,
+        effectiveFrom: from ?? null,
+        effectiveTo: to ?? null,
+        statementLine: v.statementLine,
+        taxMapping: v.taxMapping,
+      },
+    });
+    await logAudit(ctx, { action: "GL_ACCOUNT_CREATE", entity: "GlAccount", entityId: a.id, newValue: a }, tx);
+    return a;
+  });
 }
 
-export async function updateAccount(ctx: Ctx, id: string, raw: { name?: string; active?: boolean }) {
+export interface AccountUpdate {
+  name?: string;
+  active?: boolean;
+  description?: string | null;
+  /** null removes the account from its category. */
+  categoryId?: string | null;
+  /** null makes it a top-level account again. */
+  parentId?: string | null;
+  effectiveFrom?: string | null;
+  effectiveTo?: string | null;
+  statementLine?: string | null;
+  taxMapping?: string | null;
+}
+
+/** The code and type of an account never change: they are on posted journals. Everything else about its place in the chart can. */
+export async function updateAccount(ctx: Ctx, id: string, raw: AccountUpdate) {
   assertCan(ctx, "gl.manage");
   const old = await db.glAccount.findFirst({ where: { id, organizationId: ctx.orgId } });
   if (!old) throw new BusinessError("Account not found.");
@@ -198,21 +299,138 @@ export async function updateAccount(ctx: Ctx, id: string, raw: { name?: string; 
     if (inUse)
       throw new BusinessError("This account is used by a payroll-head mapping — remap those heads first.");
   }
-  const a = await db.glAccount.update({
-    where: { id },
-    data: {
-      ...(raw.name ? { name: raw.name.trim() } : {}),
-      ...(raw.active === undefined ? {} : { active: raw.active }),
+  const from = dateOrUndefined("The start date", raw.effectiveFrom);
+  const to = dateOrUndefined("The end date", raw.effectiveTo);
+  checkDates(from === undefined ? old.effectiveFrom : from, to === undefined ? old.effectiveTo : to);
+  if (raw.statementLine) checkStatementLine(raw.statementLine);
+  return db.$transaction(async (tx) => {
+    if (raw.categoryId) await checkCategory(tx, ctx.orgId, raw.categoryId, old.type);
+    if (raw.parentId) await attachToParent(tx, ctx.orgId, id, raw.parentId, old.type);
+    if (raw.parentId === null && old.parentId) {
+      // taking the last sub-account out of a header makes it postable again
+      const siblings = await tx.glAccount.count({ where: { parentId: old.parentId, NOT: { id } } });
+      if (!siblings) await tx.glAccount.update({ where: { id: old.parentId }, data: { postable: true } });
+    }
+    const a = await tx.glAccount.update({
+      where: { id },
+      data: {
+        ...(raw.name ? { name: raw.name.trim() } : {}),
+        ...(raw.active === undefined ? {} : { active: raw.active }),
+        ...(raw.description === undefined ? {} : { description: raw.description?.trim() || null }),
+        ...(raw.categoryId === undefined ? {} : { categoryId: raw.categoryId }),
+        ...(raw.parentId === undefined ? {} : { parentId: raw.parentId }),
+        ...(from === undefined ? {} : { effectiveFrom: from }),
+        ...(to === undefined ? {} : { effectiveTo: to }),
+        ...(raw.statementLine === undefined ? {} : { statementLine: raw.statementLine || null }),
+        ...(raw.taxMapping === undefined ? {} : { taxMapping: raw.taxMapping?.trim() || null }),
+      },
+    });
+    await logAudit(ctx, { action: "GL_ACCOUNT_UPDATE", entity: "GlAccount", entityId: id, oldValue: old, newValue: a }, tx);
+    return a;
+  });
+}
+
+// ───────────────────────────── Hierarchy: groups, categories, standard chart ─────────────────────────────
+
+export const groupSchema = z.object({
+  classNumber: z.coerce.number().int().min(1).max(7),
+  code: z.string().trim().min(2).max(20),
+  name: z.string().trim().min(2).max(120),
+});
+
+export async function createGroup(ctx: Ctx, raw: z.input<typeof groupSchema>) {
+  assertCan(ctx, "gl.manage");
+  const v = groupSchema.parse(raw);
+  const g = await db.accountGroup.create({ data: { organizationId: ctx.orgId, ...v } });
+  await logAudit(ctx, { action: "GL_GROUP_CREATE", entity: "AccountGroup", entityId: g.id, newValue: g });
+  return g;
+}
+
+export const categorySchema = z.object({
+  groupId: z.string().min(1, "Choose the group"),
+  code: z.string().trim().min(2).max(20),
+  name: z.string().trim().min(2).max(120),
+  statementLine: z.string().optional().transform((v) => v || undefined),
+});
+
+export async function createCategory(ctx: Ctx, raw: z.input<typeof categorySchema>) {
+  assertCan(ctx, "gl.manage");
+  const v = categorySchema.parse(raw);
+  checkStatementLine(v.statementLine);
+  const group = await db.accountGroup.findFirst({ where: { id: v.groupId, organizationId: ctx.orgId } });
+  if (!group) throw new BusinessError("That group doesn't exist.");
+  const c = await db.accountCategory.create({ data: { organizationId: ctx.orgId, ...v } });
+  await logAudit(ctx, { action: "GL_CATEGORY_CREATE", entity: "AccountCategory", entityId: c.id, newValue: c });
+  return c;
+}
+
+/**
+ * Installs the standard chart: groups and categories, every missing account, and the category of every account that
+ * already exists and hasn't been classified. An existing account is never renamed, retyped, recoded or reclassified,
+ * so it can be run again at any time and changes nothing that was already set up.
+ */
+export async function installStandardChart(ctx: Ctx) {
+  assertCan(ctx, "gl.manage");
+  const problems = validateChart();
+  if (problems.length) throw new BusinessError(`The standard chart is inconsistent: ${problems[0]}`);
+  return db.$transaction(
+    async (tx) => {
+      await ensureDefaultChart(tx, ctx.orgId);
+      let groups = 0;
+      let categories = 0;
+      let created = 0;
+      let classified = 0;
+      let skipped = 0;
+      const existing = new Map((await tx.glAccount.findMany({ where: { organizationId: ctx.orgId } })).map((a) => [a.code, a]));
+      for (const [gi, g] of STANDARD_CHART.entries()) {
+        let group = await tx.accountGroup.findUnique({ where: { organizationId_code: { organizationId: ctx.orgId, code: g.code } } });
+        if (!group) {
+          group = await tx.accountGroup.create({ data: { organizationId: ctx.orgId, classNumber: g.classNumber, code: g.code, name: g.name, sortOrder: gi } });
+          groups++;
+        }
+        for (const [ci, c] of g.categories.entries()) {
+          let cat = await tx.accountCategory.findUnique({ where: { organizationId_code: { organizationId: ctx.orgId, code: c.code } } });
+          if (!cat) {
+            cat = await tx.accountCategory.create({ data: { organizationId: ctx.orgId, groupId: group.id, code: c.code, name: c.name, statementLine: c.statementLine, sortOrder: ci } });
+            categories++;
+          }
+          for (const a of c.accounts) {
+            const have = existing.get(a.code);
+            if (!have) {
+              await tx.glAccount.create({ data: { organizationId: ctx.orgId, code: a.code, name: a.name, type: a.type, categoryId: cat.id, taxMapping: a.taxMapping } });
+              created++;
+            } else if (!have.categoryId && !(CLASS_TYPES[g.classNumber] ?? []).includes(have.type)) {
+              skipped++; // an existing account using a standard code for something else: left exactly as it is
+            } else if (!have.categoryId) {
+              await tx.glAccount.update({ where: { id: have.id }, data: { categoryId: cat.id, ...(have.taxMapping || !a.taxMapping ? {} : { taxMapping: a.taxMapping }) } });
+              classified++;
+            }
+          }
+        }
+      }
+      await logAudit(ctx, { action: "GL_STANDARD_CHART_INSTALL", entity: "GlAccount", newValue: { groups, categories, created, classified, skipped } }, tx);
+      return { groups, categories, created, classified, skipped };
     },
-  });
-  await logAudit(ctx, {
-    action: "GL_ACCOUNT_UPDATE",
-    entity: "GlAccount",
-    entityId: id,
-    oldValue: old,
-    newValue: a,
-  });
-  return a;
+    { timeout: 60_000 },
+  );
+}
+
+/** The chart as a tree for the page: classes → groups → categories → accounts (with their sub-accounts), plus whatever isn't classified yet. */
+export async function chartTree(ctx: Ctx) {
+  assertCan(ctx, "gl.view");
+  await ensureDefaultChart(db, ctx.orgId);
+  const [groups, accounts] = await Promise.all([
+    db.accountGroup.findMany({ where: { organizationId: ctx.orgId }, orderBy: [{ classNumber: "asc" }, { sortOrder: "asc" }, { code: "asc" }], include: { categories: { orderBy: [{ sortOrder: "asc" }, { code: "asc" }] } } }),
+    db.glAccount.findMany({ where: { organizationId: ctx.orgId }, orderBy: { code: "asc" } }),
+  ]);
+  const byParent = new Map<string | null, typeof accounts>();
+  for (const a of accounts) byParent.set(a.parentId, [...(byParent.get(a.parentId) ?? []), a]);
+  type Node = (typeof accounts)[number] & { depth: number };
+  const flatten = (list: typeof accounts, depth: number): Node[] => list.flatMap((a) => [{ ...a, depth }, ...flatten(byParent.get(a.id) ?? [], depth + 1)]);
+  const inCategory = (categoryId: string) => flatten((byParent.get(null) ?? []).filter((a) => a.categoryId === categoryId), 0);
+  const tree = groups.map((g) => ({ ...g, categories: g.categories.map((c) => ({ ...c, accounts: inCategory(c.id) })) }));
+  const unclassified = flatten((byParent.get(null) ?? []).filter((a) => !a.categoryId), 0);
+  return { tree, unclassified, total: accounts.length };
 }
 
 export async function listMappings(ctx: Ctx) {

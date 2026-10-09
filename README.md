@@ -832,6 +832,38 @@ depends on.
   lines, general reversals with approval, manual and recurring journals, and the backfill of invoices and bills that
   were never posted.
 
+### Chart of accounts: classes, groups, categories, sub-accounts
+
+The chart is a hierarchy, not a flat list (Finance / Accounting → **Chart of Accounts**).
+
+- **Class → group → category → account → sub-account.** The seven classes are Assets, Liabilities, Equity, Revenue, Cost
+  of services, Operating expenses, and Finance and other income / expense. Each class holds the account types that make
+  sense for it (class 7 holds both finance income and finance costs). Groups and categories can be added.
+- **Install the standard chart** adds about 110 accounts across 28 groups and 43 categories (cash and bank, receivables,
+  tax recoverable, inventory, property by kind with its accumulated depreciation, intangibles, payables, payroll and
+  statutory liabilities, tax liabilities, client deposits, borrowings, leases, provisions, equity, guarding and other
+  service revenue, direct labour and employer costs, operating expenses, finance income and costs). **It only adds and
+  classifies.** An account that already exists is never renamed, retyped, recoded or reclassified; the 53 accounts the
+  system posts to keep their codes and are simply placed in a category. An existing account that uses a standard code for
+  a different kind of account is left exactly as it is. It is safe to run again.
+- **Codes follow the group, not the other way round.** The codes the system already posts to predate this scheme (for
+  example 5410 Depreciation Expense, which belongs under operating expenses), and changing a code on a posted account
+  would rewrite history, so they stay.
+- **Sub-accounts.** An account can hang under a parent of the same type. The parent becomes a **header**: it groups its
+  sub-accounts and **cannot be posted to**. A parent that already has postings, or that a payroll head posts to, can't
+  become a header. Taking the last sub-account out makes the parent postable again. A loop is refused.
+- **What changes and what doesn't.** An account's **code and type never change**, because they are on posted journals.
+  Its name, category, parent, description, usable-from and usable-until dates, financial-statement line and tax mapping
+  can. The posting engine refuses an account used **before its start date or after its end date** (the first and last
+  day are allowed), as well as header accounts.
+- **Financial-statement line and tax mapping.** Each category reports under a statement line (trade receivables,
+  property plant and equipment, payroll liabilities, revenue, and so on) which an account can override, and accounts that
+  feed a tax carry a mapping (`VAT_OUTPUT`, `VAT_INPUT`, `WHT_RECEIVABLE`, `WHT_PAYABLE`, `PAYE`, `PENSION`, `NHF`,
+  `ITF`, `NSITF`, `CIT`). **These are recorded and shown but not yet read by the financial statements or tax
+  reports**, which still work from the account types; wiring them in belongs to the statements and tax phases.
+- The page can be searched by code or name and filtered by class and status, and shows accounts not yet in a category
+  separately. Only people with `gl.manage` see the edit controls; everyone with `gl.view` can read the chart.
+
 ### Route smoke test
 
 Unit and integration tests prove the services; they can't prove a *page* renders. `npm run smoke` does:

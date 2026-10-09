@@ -602,6 +602,8 @@ model Organization {
   companyPolicies           CompanyPolicy[]
   dataAccessRequests        DataAccessRequest[]
   dataBreaches              DataBreach[]
+  accountGroups             AccountGroup[]
+  accountCategories         AccountCategory[]
   fiscalYears               FiscalYear[]
   accountingPeriods         AccountingPeriod[]
   /// First month of the financial year (1 = January). Periods are calendar months within it.
@@ -2767,14 +2769,31 @@ model LeaveRequest {
 // ─────────────────────────── GENERAL LEDGER ───────────────────────────
 
 model GlAccount {
-  id             String        @id @default(cuid())
+  id             String           @id @default(cuid())
   organizationId String
-  organization   Organization  @relation(fields: [organizationId], references: [id])
+  organization   Organization     @relation(fields: [organizationId], references: [id])
   code           String
   name           String
   type           GlAccountType
-  active         Boolean       @default(true)
-  createdAt      DateTime      @default(now())
+  active         Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  /// Where the account sits in the hierarchy: class → group → category → account. Null until classified.
+  categoryId     String?
+  category       AccountCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  /// A sub-account hangs under a parent account; the parent then becomes a non-posting header.
+  parentId       String?
+  parent         GlAccount?       @relation("SubAccounts", fields: [parentId], references: [id], onDelete: Restrict)
+  children       GlAccount[]      @relation("SubAccounts")
+  /// Header accounts group others and can't be posted to.
+  postable       Boolean          @default(true)
+  description    String?
+  /// The account can only be posted to on or after / on or before these dates.
+  effectiveFrom  DateTime?        @db.Date
+  effectiveTo    DateTime?        @db.Date
+  /// Which financial-statement line this account reports under, overriding its category's line.
+  statementLine  String?
+  /// Which tax return or tax ledger this account feeds (VAT_OUTPUT, WHT_RECEIVABLE, PAYE …).
+  taxMapping     String?
 
   debitMappings  PayrollGlMapping[] @relation("MappingDebit")
   creditMappings PayrollGlMapping[] @relation("MappingCredit")
@@ -3670,4 +3689,40 @@ model AccountingPeriodEvent {
   createdAt      DateTime               @default(now())
 
   @@index([periodId])
+}
+
+/// A group of accounts within one of the seven account classes (1 Assets … 7 Finance and other).
+model AccountGroup {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  /// 1 Assets, 2 Liabilities, 3 Equity, 4 Revenue, 5 Cost of services, 6 Operating expenses, 7 Finance and other.
+  classNumber    Int
+  code           String
+  name           String
+  sortOrder      Int               @default(0)
+  createdAt      DateTime          @default(now())
+  categories     AccountCategory[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, classNumber])
+}
+
+/// A category within a group. Carries the financial-statement line its accounts report under.
+model AccountCategory {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  groupId        String
+  group          AccountGroup @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  code           String
+  name           String
+  /// The statement line accounts in this category report under (e.g. TRADE_RECEIVABLES), unless an account overrides it.
+  statementLine  String?
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  accounts       GlAccount[]
+
+  @@unique([organizationId, code])
+  @@index([groupId])
 }
