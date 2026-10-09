@@ -17,6 +17,7 @@ import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { round2, num } from "@/lib/money";
 import { d } from "@/lib/dates";
+import { invalidRequired } from "@/lib/dimensions";
 import { CLASS_NAMES, CLASS_TYPES, STANDARD_CHART, STATEMENT_LINES, validateChart } from "@/lib/standard-chart";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
@@ -191,7 +192,14 @@ export const accountSchema = z.object({
   effectiveTo: optDate,
   statementLine: z.string().optional().transform((v) => v || undefined),
   taxMapping: z.string().trim().max(40).optional().transform((v) => v || undefined),
+  /** Dimensions every posting to this account must carry (CLIENT, CONTRACT, COST_CENTER …). */
+  requiredDimensions: z.array(z.string()).optional(),
 });
+
+function checkRequiredDimensions(keys?: string[]) {
+  const bad = invalidRequired(keys ?? []);
+  if (bad.length) throw new BusinessError(bad[0]);
+}
 
 function dateOrUndefined(label: string, v?: string | null): Date | null | undefined {
   if (v === undefined) return undefined;
@@ -249,6 +257,7 @@ export async function createAccount(ctx: Ctx, raw: z.input<typeof accountSchema>
   const to = dateOrUndefined("The end date", v.effectiveTo);
   checkDates(from, to);
   checkStatementLine(v.statementLine);
+  checkRequiredDimensions(v.requiredDimensions);
   await ensureDefaultChart(db, ctx.orgId);
   return db.$transaction(async (tx) => {
     if (v.categoryId) await checkCategory(tx, ctx.orgId, v.categoryId, v.type);
@@ -266,6 +275,7 @@ export async function createAccount(ctx: Ctx, raw: z.input<typeof accountSchema>
         effectiveTo: to ?? null,
         statementLine: v.statementLine,
         taxMapping: v.taxMapping,
+        requiredDimensions: [...new Set(v.requiredDimensions ?? [])],
       },
     });
     await logAudit(ctx, { action: "GL_ACCOUNT_CREATE", entity: "GlAccount", entityId: a.id, newValue: a }, tx);
@@ -285,6 +295,8 @@ export interface AccountUpdate {
   effectiveTo?: string | null;
   statementLine?: string | null;
   taxMapping?: string | null;
+  /** The dimensions every posting to this account must carry. Replaces the list. */
+  requiredDimensions?: string[];
 }
 
 /** The code and type of an account never change: they are on posted journals. Everything else about its place in the chart can. */
@@ -303,6 +315,7 @@ export async function updateAccount(ctx: Ctx, id: string, raw: AccountUpdate) {
   const to = dateOrUndefined("The end date", raw.effectiveTo);
   checkDates(from === undefined ? old.effectiveFrom : from, to === undefined ? old.effectiveTo : to);
   if (raw.statementLine) checkStatementLine(raw.statementLine);
+  checkRequiredDimensions(raw.requiredDimensions);
   return db.$transaction(async (tx) => {
     if (raw.categoryId) await checkCategory(tx, ctx.orgId, raw.categoryId, old.type);
     if (raw.parentId) await attachToParent(tx, ctx.orgId, id, raw.parentId, old.type);
@@ -323,6 +336,7 @@ export async function updateAccount(ctx: Ctx, id: string, raw: AccountUpdate) {
         ...(to === undefined ? {} : { effectiveTo: to }),
         ...(raw.statementLine === undefined ? {} : { statementLine: raw.statementLine || null }),
         ...(raw.taxMapping === undefined ? {} : { taxMapping: raw.taxMapping?.trim() || null }),
+        ...(raw.requiredDimensions === undefined ? {} : { requiredDimensions: [...new Set(raw.requiredDimensions)] }),
       },
     });
     await logAudit(ctx, { action: "GL_ACCOUNT_UPDATE", entity: "GlAccount", entityId: id, oldValue: old, newValue: a }, tx);
@@ -737,7 +751,26 @@ export async function getJournal(ctx: Ctx, id: string) {
   assertCan(ctx, "gl.view");
   return db.journalEntry.findFirst({
     where: { id, organizationId: ctx.orgId },
-    include: { lines: { orderBy: { sortOrder: "asc" } }, run: { include: { period: true } } },
+    include: {
+      lines: {
+        orderBy: { sortOrder: "asc" },
+        include: {
+          client: { select: { code: true, name: true } },
+          contract: { select: { contractNumber: true, name: true } },
+          beat: { select: { code: true, name: true } },
+          costCenter: { select: { code: true, name: true } },
+          department: { select: { code: true, name: true } },
+          employee: { select: { employeeNumber: true, firstName: true, lastName: true } },
+          fixedAsset: { select: { assetNumber: true, name: true } },
+          region: { select: { code: true, name: true } },
+          branch: { select: { code: true, name: true } },
+          profitCentre: { select: { code: true, name: true } },
+          project: { select: { code: true, name: true } },
+        },
+      },
+      run: { include: { period: true } },
+      period: { select: { name: true } },
+    },
   });
 }
 

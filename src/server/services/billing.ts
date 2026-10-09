@@ -124,6 +124,7 @@ export async function generateInvoices(ctx: Ctx, runId: string, opts: GenerateIn
           createdBy: ctx.name,
           lines: { create: lineData },
         },
+        include: { lines: true },
       });
       await postArInvoice(ctx, tx, inv);
       invoices.push(inv);

@@ -121,7 +121,7 @@ export async function disposeFixedAsset(ctx: Ctx, id: string, raw: z.input<typeo
     await postFixedAssetDisposal(
       ctx,
       tx,
-      { assetNumber: asset.assetNumber, disposalDate, cost: asset.cost, disposalProceeds: v.disposalProceeds },
+      { id: asset.id, costCenterId: asset.costCenterId, assignedToEmployeeId: asset.assignedToEmployeeId, assetNumber: asset.assetNumber, disposalDate, cost: asset.cost, disposalProceeds: v.disposalProceeds },
       accumDepAtDisposal,
     );
     await logAudit(
@@ -268,6 +268,9 @@ export async function postDepreciationForMonth(ctx: Ctx, year: number, month: nu
     (a) => !(a.status === "DISPOSED" && a.disposalDate && a.disposalDate < monthStart(year, month)),
   );
   const perAssetAmounts = inService.map((a) => ({
+    assetId: a.id,
+    costCenterId: a.costCenterId,
+    employeeId: a.assignedToEmployeeId,
     assetNumber: a.assetNumber,
     amount: round2(accumulatedDepreciation(a, periodEnd) - accumulatedDepreciation(a, dayBeforePeriod)),
   }));

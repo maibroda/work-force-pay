@@ -8,6 +8,9 @@
  *   - does not balance (debits must equal credits);
  *   - posts to an account that doesn't exist, belongs to another organization, is inactive, is a header that only
  *     groups other accounts, or is used outside the dates it is effective for;
+ *   - carries a dimension (client, contract, cost centre …) that doesn't exist in this organization, is an inactive
+ *     region / branch / profit centre / project, or is a contract that doesn't belong to the line's client;
+ *   - leaves out a dimension that the account requires;
  *   - falls in an accounting period that is closed or locked (or soft closed, for anyone without the close permission).
  * and otherwise writes the journal with its period, its source document and its audit entry, in the caller's
  * transaction, so a business record and its journal commit or fail together.
@@ -15,6 +18,7 @@
  * A posted journal is never edited or deleted, which the database also enforces; a correction is a new journal.
  */
 import { round2 } from "@/lib/money";
+import { cleanDimensions, DIMENSIONS, dimensionByColumn, missingRequired, type DimensionColumn, type LineDimensions } from "@/lib/dimensions";
 import { iso } from "@/lib/dates";
 import { postingAllowed, type PeriodStatus } from "@/lib/fiscal";
 import type { Ctx } from "@/lib/auth/context";
@@ -32,6 +36,8 @@ export interface PostingLine {
   description: string;
   debit: number;
   credit: number;
+  /** Who and what the line is for. Checked, then stored with the line; never changed afterwards. */
+  dimensions?: LineDimensions;
 }
 
 export interface PostingInput {
@@ -82,6 +88,8 @@ export async function postJournal(ctx: Ctx, tx: Tx, input: PostingInput) {
     return { l, a };
   });
 
+  await checkDimensions(ctx, tx, input.description, resolved);
+
   // The accounting period must accept postings.
   const period = await periodFor(tx, ctx.orgId, input.postingDate);
   const check = postingAllowed(period.status as PeriodStatus, period.name, canPostWhenSoftClosed(ctx));
@@ -114,6 +122,7 @@ export async function postJournal(ctx: Ctx, tx: Tx, input: PostingInput) {
           debit: l.debit,
           credit: l.credit,
           sortOrder: i,
+          ...cleanDimensions(l.dimensions),
         })),
       },
     },
@@ -131,3 +140,86 @@ export async function postJournal(ctx: Ctx, tx: Tx, input: PostingInput) {
   return journal;
 }
 
+
+// ───────────────────────────── Dimensions ─────────────────────────────
+
+interface ResolvedLine {
+  l: PostingLine;
+  a: { code: string; name: string; requiredDimensions: string[] };
+}
+
+/** The organization-scoped lookup for each dimension: which ids exist, and (for the new masters) whether they are active. */
+async function lookup(tx: Tx, orgId: string, column: DimensionColumn, ids: string[]): Promise<Array<{ id: string; active: boolean; clientId?: string | null }>> {
+  const where = { organizationId: orgId, id: { in: ids } };
+  switch (column) {
+    case "clientId":
+      return (await tx.client.findMany({ where, select: { id: true } })).map((r) => ({ ...r, active: true }));
+    case "contractId":
+      return (await tx.contract.findMany({ where, select: { id: true, clientId: true } })).map((r) => ({ ...r, active: true }));
+    case "beatId":
+      return (await tx.beat.findMany({ where, select: { id: true } })).map((r) => ({ ...r, active: true }));
+    case "costCenterId":
+      return (await tx.costCenter.findMany({ where, select: { id: true } })).map((r) => ({ ...r, active: true }));
+    case "departmentId":
+      return (await tx.department.findMany({ where, select: { id: true } })).map((r) => ({ ...r, active: true }));
+    case "employeeId":
+      return (await tx.employee.findMany({ where, select: { id: true } })).map((r) => ({ ...r, active: true }));
+    case "fixedAssetId":
+      return (await tx.fixedAsset.findMany({ where, select: { id: true } })).map((r) => ({ ...r, active: true }));
+    case "regionId":
+      return tx.region.findMany({ where, select: { id: true, active: true } });
+    case "branchId":
+      return tx.branch.findMany({ where, select: { id: true, active: true } });
+    case "profitCentreId":
+      return tx.profitCentre.findMany({ where, select: { id: true, active: true } });
+    case "projectId":
+      return tx.project.findMany({ where, select: { id: true, active: true } });
+  }
+}
+
+/** Refuses a dimension that isn't this organization's, an inactive new-master dimension, a contract that isn't the client's, or a missing required one. */
+async function checkDimensions(ctx: Ctx, tx: Tx, description: string, resolved: ResolvedLine[]) {
+  const wanted = new Map<DimensionColumn, Set<string>>();
+  for (const { l } of resolved)
+    for (const [col, id] of Object.entries(cleanDimensions(l.dimensions)) as Array<[DimensionColumn, string]>) wanted.set(col, (wanted.get(col) ?? new Set()).add(id));
+
+  const found = new Map<DimensionColumn, Map<string, { active: boolean; clientId?: string | null }>>();
+  for (const [col, ids] of wanted) {
+    const rows = await lookup(tx, ctx.orgId, col, [...ids]);
+    found.set(col, new Map(rows.map((r) => [r.id, r])));
+    const label = dimensionByColumn(col)!.label.toLowerCase();
+    for (const id of ids) {
+      const row = found.get(col)!.get(id);
+      if (!row) throw new BusinessError(`A line of "${description}" names a ${label} that doesn't exist in this organization.`);
+      if (!row.active) throw new BusinessError(`A line of "${description}" names a ${label} that is inactive.`);
+    }
+  }
+
+  for (const { l, a } of resolved) {
+    const dims = cleanDimensions(l.dimensions);
+    if (dims.contractId && dims.clientId) {
+      const contract = found.get("contractId")!.get(dims.contractId)!;
+      if (contract.clientId !== dims.clientId) throw new BusinessError(`A line of "${description}" names a contract that doesn't belong to its client.`);
+    }
+    const missing = missingRequired(a.requiredDimensions, dims);
+    if (missing.length)
+      throw new BusinessError(`${a.code} ${a.name} needs a ${missing.map((k) => DIMENSIONS.find((d) => d.key === k)!.label.toLowerCase()).join(" and a ")} on every posting (a line of "${description}" has none).`);
+  }
+}
+
+/**
+ * The lines that undo a journal: each one with debit and credit swapped, carrying the same dimensions, so the reversal
+ * lands in the same client, contract, cost centre and so on as the original and cancels it exactly.
+ */
+export function mirrorLines(
+  lines: Array<{ accountId: string; headCode: string; description: string; debit: unknown; credit: unknown } & LineDimensions>,
+): PostingLine[] {
+  return lines.map((l) => ({
+    accountId: l.accountId,
+    headCode: l.headCode,
+    description: l.description,
+    debit: Number(l.credit),
+    credit: Number(l.debit),
+    dimensions: Object.fromEntries(DIMENSIONS.map((d) => [d.column, (l as LineDimensions)[d.column] ?? null])) as LineDimensions,
+  }));
+}

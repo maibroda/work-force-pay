@@ -2,6 +2,7 @@ import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { chartTree } from "@/server/services/accounting";
 import { CLASS_NAMES, STATEMENT_LINES } from "@/lib/standard-chart";
+import { DIMENSIONS } from "@/lib/dimensions";
 import { fmtDate } from "@/lib/dates";
 import { enumOptions } from "@/server/options";
 import { Empty, FilterBar, FilterField, FormPanel, PageHeader, Section } from "@/components/page";
@@ -77,6 +78,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
                       { name: "effectiveFrom", label: "Usable from", type: "date", defaultValue: a.effectiveFrom ? a.effectiveFrom.toISOString().slice(0, 10) : undefined },
                       { name: "effectiveTo", label: "Usable until", type: "date", defaultValue: a.effectiveTo ? a.effectiveTo.toISOString().slice(0, 10) : undefined },
                       { name: "description", label: "Description", defaultValue: a.description ?? undefined },
+                      ...DIMENSIONS.map((dm) => ({ name: `dim_${dm.key}`, label: `Posting needs a ${dm.label.toLowerCase()}`, type: "checkbox" as const, defaultValue: a.requiredDimensions.includes(dm.key) })),
                     ]}
                   />
                 </div>
@@ -171,6 +173,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
               { name: "taxMapping", label: "Tax mapping (optional)" },
               { name: "effectiveFrom", label: "Usable from (optional)", type: "date" },
               { name: "effectiveTo", label: "Usable until (optional)", type: "date" },
+              ...DIMENSIONS.map((dm) => ({ name: `dim_${dm.key}`, label: `Posting needs a ${dm.label.toLowerCase()}`, type: "checkbox" as const, defaultValue: false })),
             ]}
           />
         </FormPanel>
