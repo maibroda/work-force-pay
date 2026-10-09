@@ -1,16 +1,20 @@
 "use server";
 import { act } from "./_run";
 import * as gl from "@/server/services/accounting";
+import { DIMENSION_KEYS } from "@/lib/dimensions";
 
 type V = Record<string, unknown>;
 
 const PATHS = ["/accounting", "/payroll"];
 
+/** The form has one tick box per dimension (dim_CLIENT …); the ticked ones are the required list. Undefined when the form had none. */
+const requiredFrom = (v: V) => (DIMENSION_KEYS.some((k) => `dim_${k}` in v) ? DIMENSION_KEYS.filter((k) => v[`dim_${k}`] === true) : undefined);
+
 export async function createAccountAction(v: V) {
   return act(
     "gl.manage",
     async (ctx) => {
-      const a = await gl.createAccount(ctx, v as never);
+      const a = await gl.createAccount(ctx, { ...v, requiredDimensions: requiredFrom(v) } as never);
       return { message: `Account ${a.code} — ${a.name} created.` };
     },
     PATHS,
@@ -43,6 +47,7 @@ export async function updateAccountAction(id: string, v: V) {
         effectiveTo: v.effectiveTo === undefined ? undefined : blank(v.effectiveTo),
         statementLine: v.statementLine === undefined ? undefined : blank(v.statementLine),
         taxMapping: v.taxMapping === undefined ? undefined : blank(v.taxMapping),
+        requiredDimensions: requiredFrom(v),
       });
       return { message: `Account ${a.code} updated.` };
     },

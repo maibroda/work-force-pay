@@ -193,6 +193,8 @@ export const NAV: NavGroup[] = [
       { href: "/accounting/periods", label: "Accounting Periods", perm: "gl.view" },
       { href: "/accounting/mapping", label: "Payroll GL Mapping", perm: "gl.view" },
       { href: "/accounting/accounts", label: "Chart of Accounts", perm: "gl.view" },
+      { href: "/accounting/dimensions", label: "Accounting Dimensions", perm: "gl.view" },
+      { href: "/accounting/ledger-by-dimension", label: "Ledger by Dimension", perm: "gl.view" },
       {
         href: "/accounting/trial-balance",
         label: "Trial Balance",

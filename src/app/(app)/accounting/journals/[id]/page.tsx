@@ -4,6 +4,7 @@ import { requirePage } from "@/lib/auth/session";
 import { getJournal } from "@/server/services/accounting";
 import { fmtDate } from "@/lib/dates";
 import { naira } from "@/lib/money";
+import { DIMENSIONS } from "@/lib/dimensions";
 import { KV, PageHeader, Section } from "@/components/page";
 import { PrintButton } from "@/components/print-button";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +40,8 @@ export default async function JournalPage({ params }: { params: Promise<{ id: st
                 "—"
               ),
             ],
+            ["Accounting period", j.period?.name ?? "not stamped"],
+            ["Source document", j.sourceType ? `${j.sourceType.replace(/_/g, " ").toLowerCase()} ${j.sourceId ?? ""}` : "—"],
             ["Posted by", `${j.postedBy} · ${fmtDate(j.postedAt)}`],
             ["Trigger", j.source.replace(/_/g, " ").toLowerCase()],
             [
@@ -58,6 +61,7 @@ export default async function JournalPage({ params }: { params: Promise<{ id: st
               <TH>Account</TH>
               <TH>Payroll head</TH>
               <TH>Narration</TH>
+              <TH>Dimensions</TH>
               <TH className="text-right">Debit</TH>
               <TH className="text-right">Credit</TH>
             </TR>
@@ -70,6 +74,25 @@ export default async function JournalPage({ params }: { params: Promise<{ id: st
                 </TD>
                 <TD className="font-mono text-xs">{l.headCode}</TD>
                 <TD className="text-xs">{l.description}</TD>
+                <TD className="max-w-[18rem] whitespace-normal text-xs text-muted-foreground">
+                  {(() => {
+                    const v: Record<string, string | null> = {
+                      clientId: l.client ? `${l.client.code} ${l.client.name}` : null,
+                      contractId: l.contract ? l.contract.contractNumber : null,
+                      beatId: l.beat ? `${l.beat.code} ${l.beat.name}` : null,
+                      costCenterId: l.costCenter ? `${l.costCenter.code} ${l.costCenter.name}` : null,
+                      departmentId: l.department ? `${l.department.code} ${l.department.name}` : null,
+                      employeeId: l.employee ? `${l.employee.employeeNumber} ${l.employee.firstName} ${l.employee.lastName}` : null,
+                      fixedAssetId: l.fixedAsset ? `${l.fixedAsset.assetNumber} ${l.fixedAsset.name}` : null,
+                      regionId: l.region ? `${l.region.code} ${l.region.name}` : null,
+                      branchId: l.branch ? `${l.branch.code} ${l.branch.name}` : null,
+                      profitCentreId: l.profitCentre ? `${l.profitCentre.code} ${l.profitCentre.name}` : null,
+                      projectId: l.project ? `${l.project.code} ${l.project.name}` : null,
+                    };
+                    const shown = DIMENSIONS.filter((d) => v[d.column]).map((d) => `${d.label}: ${v[d.column]}`);
+                    return shown.length ? shown.join(" · ") : "—";
+                  })()}
+                </TD>
                 <TD className="text-right">{Number(l.debit) ? naira(l.debit) : ""}</TD>
                 <TD className="text-right">{Number(l.credit) ? naira(l.credit) : ""}</TD>
               </TR>
@@ -77,7 +100,7 @@ export default async function JournalPage({ params }: { params: Promise<{ id: st
           </TBody>
           <TFoot>
             <TR>
-              <TD colSpan={3}>Total</TD>
+              <TD colSpan={4}>Total</TD>
               <TD className="text-right">{naira(j.totalDebit)}</TD>
               <TD className="text-right">{naira(j.totalCredit)}</TD>
             </TR>

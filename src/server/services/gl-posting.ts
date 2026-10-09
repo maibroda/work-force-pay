@@ -19,7 +19,8 @@ import { num, round2 } from "@/lib/money";
 import type { Ctx } from "@/lib/auth/context";
 import { type Tx } from "./_base";
 import { ensureDefaultChart } from "./accounting";
-import { postJournal as enginePost } from "./posting";
+import { mirrorLines, postJournal as enginePost } from "./posting";
+import type { LineDimensions } from "@/lib/dimensions";
 
 const ACCOUNTS = {
   AR: "1200",
@@ -45,6 +46,8 @@ interface DraftLine {
   description: string;
   debit: number;
   credit: number;
+  /** Who and what this line is for (client, contract, cost centre, asset …). */
+  dimensions?: LineDimensions;
 }
 
 /** The document a journal came from, so the ledger line can be traced back to it. */
@@ -70,8 +73,27 @@ async function postJournal(
     sourceId: input.ref?.id,
     postingDate: input.postingDate,
     description: input.description,
-    lines: input.lines.map((l) => ({ accountCode: l.accountCode, description: l.description, debit: l.debit, credit: l.credit })),
+    lines: input.lines.map((l) => ({ accountCode: l.accountCode, description: l.description, debit: l.debit, credit: l.credit, dimensions: l.dimensions })),
   });
+}
+
+/** Revenue split by contract and beat, so the ledger itself can answer "what did this contract or beat earn". Always sums to the subtotal. */
+export function splitRevenue(
+  lines: Array<{ contractId?: string | null; beatId?: string | null; amount: unknown }> | undefined,
+  subtotal: number,
+): Array<{ contractId: string | null; beatId: string | null; amount: number }> {
+  const groups = new Map<string, { contractId: string | null; beatId: string | null; amount: number }>();
+  for (const l of lines ?? []) {
+    const key = `${l.contractId ?? ""}|${l.beatId ?? ""}`;
+    const g = groups.get(key) ?? { contractId: l.contractId ?? null, beatId: l.beatId ?? null, amount: 0 };
+    g.amount = round2(g.amount + num(l.amount));
+    groups.set(key, g);
+  }
+  const out = [...groups.values()].filter((g) => g.amount !== 0);
+  if (!out.length) return [{ contractId: null, beatId: null, amount: round2(subtotal) }];
+  const drift = round2(subtotal - out.reduce((a, g) => a + g.amount, 0));
+  if (drift) out[0].amount = round2(out[0].amount + drift); // rounding lands on the first group; the total is always exact
+  return out;
 }
 
 // ─────────────────────────────── Accounts receivable ───────────────────────────────
@@ -79,20 +101,36 @@ async function postJournal(
 export async function postArInvoice(
   ctx: Ctx,
   tx: Tx,
-  invoice: { id: string; invoiceNumber: string; invoiceDate: Date; subtotal: unknown; vatAmount: unknown; totalAmount: unknown },
+  invoice: {
+    id: string;
+    clientId: string;
+    invoiceNumber: string;
+    invoiceDate: Date;
+    subtotal: unknown;
+    vatAmount: unknown;
+    totalAmount: unknown;
+    lines?: Array<{ contractId?: string | null; beatId?: string | null; amount: unknown }>;
+  },
 ) {
   const subtotal = num(invoice.subtotal);
   const vat = num(invoice.vatAmount);
+  const client = { clientId: invoice.clientId };
   return postJournal(ctx, tx, {
     source: "AR_INVOICE",
     ref: { type: "CLIENT_INVOICE", id: invoice.id },
     postingDate: invoice.invoiceDate,
     description: `Client invoice ${invoice.invoiceNumber}`,
     lines: [
-      { accountCode: ACCOUNTS.AR, description: invoice.invoiceNumber, debit: num(invoice.totalAmount), credit: 0 },
-      { accountCode: ACCOUNTS.REVENUE, description: invoice.invoiceNumber, debit: 0, credit: subtotal },
+      { accountCode: ACCOUNTS.AR, description: invoice.invoiceNumber, debit: num(invoice.totalAmount), credit: 0, dimensions: client },
+      ...splitRevenue(invoice.lines, subtotal).map((r) => ({
+        accountCode: ACCOUNTS.REVENUE,
+        description: invoice.invoiceNumber,
+        debit: 0,
+        credit: r.amount,
+        dimensions: { ...client, contractId: r.contractId, beatId: r.beatId },
+      })),
       ...(vat > 0
-        ? [{ accountCode: ACCOUNTS.VAT_PAYABLE, description: invoice.invoiceNumber, debit: 0, credit: vat }]
+        ? [{ accountCode: ACCOUNTS.VAT_PAYABLE, description: invoice.invoiceNumber, debit: 0, credit: vat, dimensions: client }]
         : []),
     ],
   });
@@ -105,20 +143,30 @@ export async function postArInvoice(
 export async function postArInvoiceCancellation(
   ctx: Ctx,
   tx: Tx,
-  invoice: { id: string; invoiceNumber: string; subtotal: unknown; vatAmount: unknown; totalAmount: unknown },
+  invoice: { id: string; clientId: string; invoiceNumber: string; subtotal: unknown; vatAmount: unknown; totalAmount: unknown },
   on: Date,
 ) {
+  const description = `Reversal of client invoice ${invoice.invoiceNumber} (cancelled)`;
+  // Mirror the journal the invoice actually posted, line for line with the same dimensions, so it cancels exactly.
+  const original = await tx.journalEntry.findFirst({
+    where: { organizationId: ctx.orgId, source: "AR_INVOICE", sourceType: "CLIENT_INVOICE", sourceId: invoice.id },
+    include: { lines: { orderBy: { sortOrder: "asc" } } },
+  });
+  if (original)
+    return enginePost(ctx, tx, { source: "AR_INVOICE_CANCEL", sourceType: "CLIENT_INVOICE", sourceId: invoice.id, postingDate: on, description, lines: mirrorLines(original.lines) });
+  // An invoice posted before journals recorded their source: rebuild the reversal from its totals.
   const subtotal = num(invoice.subtotal);
   const vat = num(invoice.vatAmount);
+  const client = { clientId: invoice.clientId };
   return postJournal(ctx, tx, {
     source: "AR_INVOICE_CANCEL",
     ref: { type: "CLIENT_INVOICE", id: invoice.id },
     postingDate: on,
-    description: `Reversal of client invoice ${invoice.invoiceNumber} (cancelled)`,
+    description,
     lines: [
-      { accountCode: ACCOUNTS.REVENUE, description: invoice.invoiceNumber, debit: subtotal, credit: 0 },
-      ...(vat > 0 ? [{ accountCode: ACCOUNTS.VAT_PAYABLE, description: invoice.invoiceNumber, debit: vat, credit: 0 }] : []),
-      { accountCode: ACCOUNTS.AR, description: invoice.invoiceNumber, debit: 0, credit: num(invoice.totalAmount) },
+      { accountCode: ACCOUNTS.REVENUE, description: invoice.invoiceNumber, debit: subtotal, credit: 0, dimensions: client },
+      ...(vat > 0 ? [{ accountCode: ACCOUNTS.VAT_PAYABLE, description: invoice.invoiceNumber, debit: vat, credit: 0, dimensions: client }] : []),
+      { accountCode: ACCOUNTS.AR, description: invoice.invoiceNumber, debit: 0, credit: num(invoice.totalAmount), dimensions: client },
     ],
   });
 }
@@ -126,7 +174,7 @@ export async function postArInvoiceCancellation(
 export async function postArReceipt(
   ctx: Ctx,
   tx: Tx,
-  receipt: { id?: string; amount: unknown; receivedDate: Date },
+  receipt: { id?: string; clientId?: string; amount: unknown; receivedDate: Date },
   invoiceNumber: string,
 ) {
   const amount = num(receipt.amount);
@@ -136,8 +184,8 @@ export async function postArReceipt(
     postingDate: receipt.receivedDate,
     description: `Receipt against ${invoiceNumber}`,
     lines: [
-      { accountCode: ACCOUNTS.CASH, description: invoiceNumber, debit: amount, credit: 0 },
-      { accountCode: ACCOUNTS.AR, description: invoiceNumber, debit: 0, credit: amount },
+      { accountCode: ACCOUNTS.CASH, description: invoiceNumber, debit: amount, credit: 0, dimensions: { clientId: receipt.clientId } },
+      { accountCode: ACCOUNTS.AR, description: invoiceNumber, debit: 0, credit: amount, dimensions: { clientId: receipt.clientId } },
     ],
   });
 }
@@ -145,7 +193,7 @@ export async function postArReceipt(
 export async function postArDeduction(
   ctx: Ctx,
   tx: Tx,
-  deduction: { id?: string; type: string; amount: unknown; createdAt?: Date },
+  deduction: { id?: string; clientId?: string; type: string; amount: unknown; createdAt?: Date },
   invoiceNumber: string,
 ) {
   const amount = num(deduction.amount);
@@ -156,8 +204,8 @@ export async function postArDeduction(
     postingDate: deduction.createdAt ?? new Date(),
     description: `Deduction against ${invoiceNumber} (${deduction.type})`,
     lines: [
-      { accountCode: debitAccount, description: invoiceNumber, debit: amount, credit: 0 },
-      { accountCode: ACCOUNTS.AR, description: invoiceNumber, debit: 0, credit: amount },
+      { accountCode: debitAccount, description: invoiceNumber, debit: amount, credit: 0, dimensions: { clientId: deduction.clientId } },
+      { accountCode: ACCOUNTS.AR, description: invoiceNumber, debit: 0, credit: amount, dimensions: { clientId: deduction.clientId } },
     ],
   });
 }
@@ -167,7 +215,7 @@ export async function postArDeduction(
 export async function postApInvoice(
   ctx: Ctx,
   tx: Tx,
-  invoice: { id?: string; invoiceNumber: string; invoiceDate: Date; totalAmount: unknown },
+  invoice: { id?: string; costCenterId?: string | null; invoiceNumber: string; invoiceDate: Date; totalAmount: unknown },
 ) {
   const total = num(invoice.totalAmount);
   return postJournal(ctx, tx, {
@@ -176,7 +224,7 @@ export async function postApInvoice(
     postingDate: invoice.invoiceDate,
     description: `Vendor bill ${invoice.invoiceNumber}`,
     lines: [
-      { accountCode: ACCOUNTS.VENDOR_EXPENSE, description: invoice.invoiceNumber, debit: total, credit: 0 },
+      { accountCode: ACCOUNTS.VENDOR_EXPENSE, description: invoice.invoiceNumber, debit: total, credit: 0, dimensions: { costCenterId: invoice.costCenterId } },
       { accountCode: ACCOUNTS.AP, description: invoice.invoiceNumber, debit: 0, credit: total },
     ],
   });
@@ -190,14 +238,23 @@ export async function postApInvoiceCancellation(
   on: Date,
 ) {
   const total = num(invoice.totalAmount);
+  const description = `Reversal of vendor bill ${invoice.invoiceNumber} (cancelled)`;
+  const original = invoice.id
+    ? await tx.journalEntry.findFirst({
+        where: { organizationId: ctx.orgId, source: "AP_INVOICE", sourceType: "PURCHASE_INVOICE", sourceId: invoice.id },
+        include: { lines: { orderBy: { sortOrder: "asc" } } },
+      })
+    : null;
+  if (original)
+    return enginePost(ctx, tx, { source: "AP_INVOICE_CANCEL", sourceType: "PURCHASE_INVOICE", sourceId: invoice.id, postingDate: on, description, lines: mirrorLines(original.lines) });
   return postJournal(ctx, tx, {
     source: "AP_INVOICE_CANCEL",
     ref: { type: "PURCHASE_INVOICE", id: invoice.id },
     postingDate: on,
-    description: `Reversal of vendor bill ${invoice.invoiceNumber} (cancelled)`,
+    description,
     lines: [
       { accountCode: ACCOUNTS.AP, description: invoice.invoiceNumber, debit: total, credit: 0 },
-      { accountCode: ACCOUNTS.VENDOR_EXPENSE, description: invoice.invoiceNumber, debit: 0, credit: total },
+      { accountCode: ACCOUNTS.VENDOR_EXPENSE, description: invoice.invoiceNumber, debit: 0, credit: total, dimensions: { costCenterId: (invoice as { costCenterId?: string | null }).costCenterId } },
     ],
   });
 }
@@ -276,16 +333,17 @@ export async function postBankAccountOpening(
 export async function postFixedAssetAcquisition(
   ctx: Ctx,
   tx: Tx,
-  asset: { id?: string; assetNumber: string; acquisitionDate: Date; cost: unknown },
+  asset: { id?: string; costCenterId?: string | null; assignedToEmployeeId?: string | null; assetNumber: string; acquisitionDate: Date; cost: unknown },
 ) {
   const cost = num(asset.cost);
+  const dims = { fixedAssetId: asset.id, costCenterId: asset.costCenterId, employeeId: asset.assignedToEmployeeId };
   return postJournal(ctx, tx, {
     source: "FIXED_ASSET_ACQUISITION",
     ref: { type: "FIXED_ASSET", id: asset.id },
     postingDate: asset.acquisitionDate,
     description: `Fixed asset acquired — ${asset.assetNumber}`,
     lines: [
-      { accountCode: ACCOUNTS.FIXED_ASSETS_COST, description: asset.assetNumber, debit: cost, credit: 0 },
+      { accountCode: ACCOUNTS.FIXED_ASSETS_COST, description: asset.assetNumber, debit: cost, credit: 0, dimensions: dims },
       { accountCode: ACCOUNTS.CASH, description: asset.assetNumber, debit: 0, credit: cost },
     ],
   });
@@ -296,22 +354,23 @@ export async function postFixedAssetAcquisition(
 export async function postFixedAssetDisposal(
   ctx: Ctx,
   tx: Tx,
-  asset: { id?: string; assetNumber: string; disposalDate: Date; cost: unknown; disposalProceeds: unknown },
+  asset: { id?: string; costCenterId?: string | null; assignedToEmployeeId?: string | null; assetNumber: string; disposalDate: Date; cost: unknown; disposalProceeds: unknown },
   accumulatedDepreciationAtDisposal: number,
 ) {
   const cost = num(asset.cost);
   const proceeds = num(asset.disposalProceeds);
   const netBookValue = round2(cost - accumulatedDepreciationAtDisposal);
   const gainOrLoss = round2(proceeds - netBookValue);
+  const dims = { fixedAssetId: asset.id, costCenterId: asset.costCenterId, employeeId: asset.assignedToEmployeeId };
   const lines: DraftLine[] = [
-    { accountCode: ACCOUNTS.ACCUM_DEPRECIATION, description: asset.assetNumber, debit: accumulatedDepreciationAtDisposal, credit: 0 },
+    { accountCode: ACCOUNTS.ACCUM_DEPRECIATION, description: asset.assetNumber, debit: accumulatedDepreciationAtDisposal, credit: 0, dimensions: dims },
     { accountCode: ACCOUNTS.CASH, description: asset.assetNumber, debit: proceeds, credit: 0 },
-    { accountCode: ACCOUNTS.FIXED_ASSETS_COST, description: asset.assetNumber, debit: 0, credit: cost },
+    { accountCode: ACCOUNTS.FIXED_ASSETS_COST, description: asset.assetNumber, debit: 0, credit: cost, dimensions: dims },
   ];
   if (gainOrLoss > 0)
-    lines.push({ accountCode: ACCOUNTS.GAIN_LOSS_ON_DISPOSAL, description: asset.assetNumber, debit: 0, credit: gainOrLoss });
+    lines.push({ accountCode: ACCOUNTS.GAIN_LOSS_ON_DISPOSAL, description: asset.assetNumber, debit: 0, credit: gainOrLoss, dimensions: dims });
   else if (gainOrLoss < 0)
-    lines.push({ accountCode: ACCOUNTS.GAIN_LOSS_ON_DISPOSAL, description: asset.assetNumber, debit: -gainOrLoss, credit: 0 });
+    lines.push({ accountCode: ACCOUNTS.GAIN_LOSS_ON_DISPOSAL, description: asset.assetNumber, debit: -gainOrLoss, credit: 0, dimensions: dims });
   return postJournal(ctx, tx, {
     source: "FIXED_ASSET_DISPOSAL",
     ref: { type: "FIXED_ASSET", id: asset.id },
@@ -328,7 +387,7 @@ export async function postDepreciation(
   tx: Tx,
   postingDate: Date,
   periodLabel: string,
-  perAssetAmounts: { assetNumber: string; amount: number }[],
+  perAssetAmounts: { assetId?: string; costCenterId?: string | null; employeeId?: string | null; assetNumber: string; amount: number }[],
 ) {
   const lines = perAssetAmounts.filter((a) => round2(a.amount) > 0);
   const total = round2(lines.reduce((a, l) => a + l.amount, 0));
@@ -344,8 +403,16 @@ export async function postDepreciation(
         description: l.assetNumber,
         debit: l.amount,
         credit: 0,
+        dimensions: { fixedAssetId: l.assetId, costCenterId: l.costCenterId, employeeId: l.employeeId },
       })),
-      { accountCode: ACCOUNTS.ACCUM_DEPRECIATION, description: periodLabel, debit: 0, credit: total },
+      // accumulated depreciation per asset too, so each asset's net book value can be read from the ledger
+      ...lines.map((l) => ({
+        accountCode: ACCOUNTS.ACCUM_DEPRECIATION,
+        description: l.assetNumber,
+        debit: 0,
+        credit: l.amount,
+        dimensions: { fixedAssetId: l.assetId, costCenterId: l.costCenterId, employeeId: l.employeeId },
+      })),
     ],
   });
 }
@@ -363,7 +430,7 @@ const loanLabel = (l: { type: string; loanNumber: string }) =>
 export async function postLoanDisbursement(
   ctx: Ctx,
   tx: Tx,
-  loan: { id?: string; loanNumber: string; type: string; principal: unknown; disbursedOn: Date },
+  loan: { id?: string; employeeId?: string; loanNumber: string; type: string; principal: unknown; disbursedOn: Date },
 ) {
   const amount = num(loan.principal);
   return postJournal(ctx, tx, {
@@ -372,7 +439,7 @@ export async function postLoanDisbursement(
     postingDate: loan.disbursedOn,
     description: `${loanLabel(loan)} paid out`,
     lines: [
-      { accountCode: ACCOUNTS.STAFF_LOANS, description: loan.loanNumber, debit: amount, credit: 0 },
+      { accountCode: ACCOUNTS.STAFF_LOANS, description: loan.loanNumber, debit: amount, credit: 0, dimensions: { employeeId: loan.employeeId } },
       { accountCode: ACCOUNTS.CASH, description: loan.loanNumber, debit: 0, credit: amount },
     ],
   });
@@ -382,7 +449,7 @@ export async function postLoanDisbursement(
 export async function postLoanCashRepayment(
   ctx: Ctx,
   tx: Tx,
-  loan: { id?: string; loanNumber: string; type: string },
+  loan: { id?: string; employeeId?: string; loanNumber: string; type: string },
   amount: number,
   date: Date,
 ) {
@@ -393,7 +460,7 @@ export async function postLoanCashRepayment(
     description: `${loanLabel(loan)} repaid in cash`,
     lines: [
       { accountCode: ACCOUNTS.CASH, description: loan.loanNumber, debit: amount, credit: 0 },
-      { accountCode: ACCOUNTS.STAFF_LOANS, description: loan.loanNumber, debit: 0, credit: amount },
+      { accountCode: ACCOUNTS.STAFF_LOANS, description: loan.loanNumber, debit: 0, credit: amount, dimensions: { employeeId: loan.employeeId } },
     ],
   });
 }
@@ -402,7 +469,7 @@ export async function postLoanCashRepayment(
 export async function postLoanWriteOff(
   ctx: Ctx,
   tx: Tx,
-  loan: { id?: string; loanNumber: string; type: string },
+  loan: { id?: string; employeeId?: string; loanNumber: string; type: string },
   amount: number,
   date: Date,
 ) {
@@ -412,8 +479,8 @@ export async function postLoanWriteOff(
     postingDate: date,
     description: `${loanLabel(loan)} written off`,
     lines: [
-      { accountCode: ACCOUNTS.LOAN_WRITE_OFF, description: loan.loanNumber, debit: amount, credit: 0 },
-      { accountCode: ACCOUNTS.STAFF_LOANS, description: loan.loanNumber, debit: 0, credit: amount },
+      { accountCode: ACCOUNTS.LOAN_WRITE_OFF, description: loan.loanNumber, debit: amount, credit: 0, dimensions: { employeeId: loan.employeeId } },
+      { accountCode: ACCOUNTS.STAFF_LOANS, description: loan.loanNumber, debit: 0, credit: amount, dimensions: { employeeId: loan.employeeId } },
     ],
   });
 }

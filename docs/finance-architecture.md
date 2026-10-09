@@ -231,9 +231,14 @@ multi-industry layer and CRM as phase 8.
 adds and classifies, header accounts that can't be posted to, effective dates enforced by the posting engine, and
 statement-line and tax-mapping fields (recorded, not yet read by the statements; see the README).
 
-**Still to do in Phase 1:** dimensions on journal lines (client, contract, beat, cost
-centre, department, employee, asset, region, branch, project); general reversals with approval; manual, recurring and
-reversing journals; the backfill of historic unposted documents (D5).
+**Dimensions on journal lines — built.** Eleven dimensions (client, contract, beat, cost centre, department, employee,
+asset, region, branch, profit centre, project), four new masters, required-dimension rules per account, checks in the
+engine and the integrity check, the same database immutability, invoices split by contract and beat, mirrored
+reversals, and a Ledger by Dimension report that reconciles to the trial balance. Payroll does not carry dimensions
+yet (Phase 7).
+
+**Still to do in Phase 1:** general reversals with approval; manual, recurring and reversing journals; the backfill of
+historic unposted documents (D5).
 
 ## 6. Safety rules for every migration
 

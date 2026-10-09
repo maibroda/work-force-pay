@@ -864,6 +864,36 @@ The chart is a hierarchy, not a flat list (Finance / Accounting → **Chart of A
 - The page can be searched by code or name and filtered by class and status, and shows accounts not yet in a category
   separately. Only people with `gl.manage` see the edit controls; everyone with `gl.view` can read the chart.
 
+### Accounting dimensions
+
+An account says what kind of thing happened; **dimensions** say for whom and where. Every ledger line can carry up to
+eleven: client, contract, beat / location, cost centre, department, employee, asset, region, branch, profit centre and
+project (the company is the organization itself; revenue type and expense type are the account's category).
+
+- **Where they come from.** The first seven are the records you already keep. **Region** (which can sit inside a
+  larger region, so a zone is a region of regions), **branch**, **profit centre** and **project** (optionally for one
+  client or contract) are new, under Finance / Accounting → **Accounting Dimensions**.
+- **Fixed when posted, and checked.** The posting engine refuses a dimension that doesn't exist in the organization,
+  an inactive region / branch / profit centre / project, and a contract that doesn't belong to the line's client. The
+  dimension columns are covered by the same database triggers as the rest of a posted line, so they can't be changed
+  afterwards, even through SQL. Retiring a region, branch, profit centre or project stops new postings using it and
+  leaves what was posted alone.
+- **Accounts can insist.** Under Chart of Accounts → Edit, an account can require dimensions ("posting needs a
+  client"). The engine then refuses a posting to it that lacks one. Nothing requires any by default.
+- **What carries dimensions today.** Client invoices split their revenue by **contract and beat** from the invoice
+  lines, and carry the client on the receivable and the VAT; receipts and client deductions carry the client; vendor
+  bills carry their cost centre; fixed assets carry the asset, its cost centre and its custodian through acquisition,
+  depreciation (now one expense line and one accumulated-depreciation line per asset) and disposal; staff loans carry
+  the employee. **Cancelling an invoice or bill mirrors the original journal line for line, dimensions included**, so a
+  reversal cancels in every dimension. **Payroll does not carry dimensions yet** (client, contract, beat and employee
+  cost from payroll is Phase 7 of the finance plan), so labour cost does not yet appear by client in the ledger.
+- **Ledger by Dimension** (Finance / Accounting) shows income, expense and net result straight from the ledger split by
+  any dimension and any date range. Only income and expense lines count. Lines that don't carry the dimension are one
+  "not analysed" row, so the rows always add up to the whole ledger's result and the totals equal the trial balance's
+  income and expense. A card shows what share of income is analysed.
+- The journal page now shows each line's dimensions, its accounting period and its source document, and the integrity
+  check reports a line pointing at another organization's record or a contract that isn't its client's.
+
 ### Route smoke test
 
 Unit and integration tests prove the services; they can't prove a *page* renders. `npm run smoke` does:

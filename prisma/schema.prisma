@@ -612,6 +612,10 @@ model Organization {
   appraisalCriteria         AppraisalCriterion[]
   appraisalCycles           AppraisalCycle[]
   appraisals                Appraisal[]
+  regions                   Region[]
+  branches                  Branch[]
+  profitCentres             ProfitCentre[]
+  projects                  Project[]
 }
 
 model User {
@@ -691,6 +695,7 @@ model Department {
   costCenterId   String?
   costCenter     CostCenter?      @relation(fields: [costCenterId], references: [id])
   requisitions   JobRequisition[]
+  journalLines   JournalLine[]
 
   @@unique([organizationId, code])
 }
@@ -717,6 +722,7 @@ model CostCenter {
   purchaseInvoices PurchaseInvoice[]
   fixedAssets      FixedAsset[]
   jobRequisitions  JobRequisition[]
+  journalLines     JournalLine[]
 
   @@unique([organizationId, code])
 }
@@ -835,6 +841,7 @@ model Employee {
   dataAccessRequests      DataAccessRequest[]
   appraisals              Appraisal[]
   erasures                EmployeeErasure[]
+  journalLines            JournalLine[]
 
   @@unique([organizationId, employeeNumber])
   @@index([organizationId, status])
@@ -1503,6 +1510,7 @@ model Client {
   invoices          ClientInvoice[]
   receipts          ClientReceipt[]
   invoiceDeductions ClientInvoiceDeduction[]
+  journalLines      JournalLine[]
 
   @@unique([organizationId, code])
 }
@@ -1539,6 +1547,7 @@ model Contract {
   invoiceLines  ClientInvoiceLine[]
   movementsFrom StaffMovement[]     @relation("MoveFromContract")
   movementsTo   StaffMovement[]     @relation("MoveToContract")
+  journalLines  JournalLine[]
 
   @@unique([organizationId, contractNumber])
 }
@@ -1599,6 +1608,7 @@ model Beat {
   movementsTo             StaffMovement[]          @relation("MoveToBeat")
   invoiceLines            ClientInvoiceLine[]
   recurringDeductionRules RecurringDeductionRule[]
+  journalLines            JournalLine[]
 
   @@unique([organizationId, code])
   @@index([organizationId, clientId])
@@ -2641,6 +2651,7 @@ model FixedAsset {
   createdBy            String
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
+  journalLines         JournalLine[]
 
   @@unique([organizationId, assetNumber])
   @@index([organizationId, category])
@@ -2795,10 +2806,12 @@ model GlAccount {
   /// Which tax return or tax ledger this account feeds (VAT_OUTPUT, WHT_RECEIVABLE, PAYE …).
   taxMapping     String?
 
-  debitMappings  PayrollGlMapping[] @relation("MappingDebit")
-  creditMappings PayrollGlMapping[] @relation("MappingCredit")
-  lines          JournalLine[]
-  bankAccounts   BankAccount[]
+  debitMappings      PayrollGlMapping[] @relation("MappingDebit")
+  creditMappings     PayrollGlMapping[] @relation("MappingCredit")
+  lines              JournalLine[]
+  bankAccounts       BankAccount[]
+  /// Dimensions every posting to this account must carry (CLIENT, CONTRACT, COST_CENTER …). Empty = none required.
+  requiredDimensions String[]           @default([])
 
   @@unique([organizationId, code])
 }
@@ -2857,19 +2870,53 @@ model JournalEntry {
 }
 
 model JournalLine {
-  id          String       @id @default(cuid())
-  journalId   String
-  journal     JournalEntry @relation(fields: [journalId], references: [id], onDelete: Cascade)
-  accountId   String
-  account     GlAccount    @relation(fields: [accountId], references: [id])
-  accountCode String
-  accountName String
-  headCode    String
-  description String
-  debit       Decimal      @default(0) @db.Decimal(16, 2)
-  credit      Decimal      @default(0) @db.Decimal(16, 2)
-  sortOrder   Int          @default(0)
+  id             String        @id @default(cuid())
+  journalId      String
+  journal        JournalEntry  @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  accountId      String
+  account        GlAccount     @relation(fields: [accountId], references: [id])
+  accountCode    String
+  accountName    String
+  headCode       String
+  description    String
+  debit          Decimal       @default(0) @db.Decimal(16, 2)
+  credit         Decimal       @default(0) @db.Decimal(16, 2)
+  sortOrder      Int           @default(0)
+  /// Accounting dimensions: who and what the posting is for. Set when the line is posted and never changed.
+  clientId       String?
+  client         Client?       @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  contractId     String?
+  contract       Contract?     @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  beatId         String?
+  beat           Beat?         @relation(fields: [beatId], references: [id], onDelete: Restrict)
+  costCenterId   String?
+  costCenter     CostCenter?   @relation(fields: [costCenterId], references: [id], onDelete: Restrict)
+  departmentId   String?
+  department     Department?   @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  employeeId     String?
+  employee       Employee?     @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  fixedAssetId   String?
+  fixedAsset     FixedAsset?   @relation(fields: [fixedAssetId], references: [id], onDelete: Restrict)
+  regionId       String?
+  region         Region?       @relation(fields: [regionId], references: [id], onDelete: Restrict)
+  branchId       String?
+  branch         Branch?       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  profitCentreId String?
+  profitCentre   ProfitCentre? @relation(fields: [profitCentreId], references: [id], onDelete: Restrict)
+  projectId      String?
+  project        Project?      @relation(fields: [projectId], references: [id], onDelete: Restrict)
 
+  @@index([clientId])
+  @@index([contractId])
+  @@index([beatId])
+  @@index([costCenterId])
+  @@index([departmentId])
+  @@index([employeeId])
+  @@index([fixedAssetId])
+  @@index([regionId])
+  @@index([branchId])
+  @@index([profitCentreId])
+  @@index([projectId])
   @@index([journalId])
 }
 
@@ -3725,4 +3772,70 @@ model AccountCategory {
 
   @@unique([organizationId, code])
   @@index([groupId])
+}
+
+/// A region of the business (a state, a zone, a territory). A region can sit inside a larger one, so a zone is a region of regions.
+model Region {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  code           String
+  name           String
+  parentId       String?
+  parent         Region?       @relation("RegionZone", fields: [parentId], references: [id], onDelete: Restrict)
+  children       Region[]      @relation("RegionZone")
+  active         Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  branches       Branch[]
+  journalLines   JournalLine[]
+
+  @@unique([organizationId, code])
+}
+
+/// A branch or office, optionally within a region.
+model Branch {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  code           String
+  name           String
+  regionId       String?
+  region         Region?       @relation(fields: [regionId], references: [id], onDelete: Restrict)
+  active         Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  journalLines   JournalLine[]
+
+  @@unique([organizationId, code])
+}
+
+/// A part of the business whose profit is judged separately (a division, a service line).
+model ProfitCentre {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  code           String
+  name           String
+  active         Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  journalLines   JournalLine[]
+
+  @@unique([organizationId, code])
+}
+
+/// A project or job that income and cost can be charged to, optionally for one client or contract.
+model Project {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  code           String
+  name           String
+  clientId       String?
+  contractId     String?
+  startDate      DateTime?     @db.Date
+  endDate        DateTime?     @db.Date
+  active         Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  journalLines   JournalLine[]
+
+  @@unique([organizationId, code])
 }

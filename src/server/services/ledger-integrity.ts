@@ -9,6 +9,9 @@
  * both-sided; every journal has at least two lines; every line's account belongs to the same organization; the
  * whole ledger's debits equal its credits; every locked payroll run has its journal.
  *
+ * Dimension checks (ERROR): a line's client, contract, cost centre and other dimensions must belong to the same
+ * organization, and a contract on a line must belong to that line's client.
+ *
  * Control checks (ERROR): the receivables subledger (invoices − receipts − deductions) equals the receivables control
  * account, and the payables subledger likewise. A cancelled document counts as nil only if its posting was reversed,
  * so every cancelled document must have its reversing journal.
@@ -21,6 +24,7 @@
  * disagree with itself.
  */
 import { round2, num } from "@/lib/money";
+import { DIMENSIONS } from "@/lib/dimensions";
 import { db } from "./_base";
 
 export type Severity = "ERROR" | "WARN";
@@ -75,7 +79,24 @@ export async function checkLedgerIntegrity(orgId: string): Promise<IntegrityRepo
 
       const journals = await tx.journalEntry.findMany({
         where: { organizationId: orgId },
-        include: { lines: { include: { account: { select: { organizationId: true, code: true } } } } },
+        include: {
+          lines: {
+            include: {
+              account: { select: { organizationId: true, code: true } },
+              client: { select: { organizationId: true } },
+              contract: { select: { organizationId: true, clientId: true } },
+              beat: { select: { organizationId: true } },
+              costCenter: { select: { organizationId: true } },
+              department: { select: { organizationId: true } },
+              employee: { select: { organizationId: true } },
+              fixedAsset: { select: { organizationId: true } },
+              region: { select: { organizationId: true } },
+              branch: { select: { organizationId: true } },
+              profitCentre: { select: { organizationId: true } },
+              project: { select: { organizationId: true } },
+            },
+          },
+        },
         orderBy: { entryNumber: "asc" },
       });
 
@@ -93,6 +114,11 @@ export async function checkLedgerIntegrity(orgId: string): Promise<IntegrityRepo
         for (const l of j.lines) {
           if (num(l.debit) < 0 || num(l.credit) < 0) add("LINE_NEGATIVE", "ERROR", `A line has a negative amount on ${l.accountCode}.`, j.entryNumber);
           if (num(l.debit) > 0 && num(l.credit) > 0) add("LINE_BOTH_SIDES", "ERROR", `A line is both debit and credit on ${l.accountCode}.`, j.entryNumber);
+          for (const dim of DIMENSIONS) {
+            const target = l[dim.relation] as { organizationId: string } | null;
+            if (target && target.organizationId !== orgId) add("LINE_DIMENSION_ORG", "ERROR", `A line's ${dim.label.toLowerCase()} belongs to another organization.`, j.entryNumber);
+          }
+          if (l.clientId && l.contract && l.contract.clientId !== l.clientId) add("LINE_DIMENSION_MISMATCH", "ERROR", `A line's contract doesn't belong to its client.`, j.entryNumber);
           if (l.account.organizationId !== orgId) add("LINE_ACCOUNT_ORG", "ERROR", `A line posts to an account of another organization (${l.accountCode}).`, j.entryNumber);
           else if (l.account.code !== l.accountCode) add("LINE_ACCOUNT_CODE", "WARN", `Line says ${l.accountCode} but the account is ${l.account.code}.`, j.entryNumber);
         }
