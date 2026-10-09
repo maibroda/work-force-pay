@@ -60,6 +60,9 @@ export const PERMISSIONS = [
   "appraisal.review", // rate the staff you're assigned to review
   "appraisal.approve", // sign off a submitted appraisal (never its reviewer)
   "employee.approve", // approve a change to an employee's bank, tax or pension details (never the requester)
+  "period.close", // soft-close an accounting period, and still post into a soft-closed one
+  "period.approve", // close a soft-closed period (never the person who soft-closed it) and lock a closed one
+  "period.reopen", // reopen a soft-closed or closed period, with a reason
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -169,6 +172,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "loan.approve",
     "employee.approve",
     "gl.manage",
+    "period.close",
   ],
   AUDITOR: READ_ALL,
   SUPERVISOR: [

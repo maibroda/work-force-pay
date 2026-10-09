@@ -61,3 +61,15 @@ jobs:
           npx next start -p 3100 > server.log 2>&1 &
           for i in $(seq 1 60); do curl -fs -o /dev/null http://localhost:3100/login && break; sleep 2; done
           BASE_URL=http://localhost:3100 npm run smoke || { echo "--- server log (tail) ---"; tail -60 server.log; exit 1; }
+
+      # The books must be internally consistent on the seeded database: every journal balances, every locked payroll
+      # run has its journal, receivables and payables subledgers equal their ledger control accounts.
+      - name: Ledger integrity check
+        run: npm run ledger:check
+
+      # A backup that has never been restored is a hope. Dump the seeded database, load it into a scratch database,
+      # run the integrity check there and compare it with the live one.
+      - name: Backup and restore rehearsal
+        run: |
+          npm run db:backup
+          npm run db:restore-check -- "$(ls -t backups/*.dump | head -1)"

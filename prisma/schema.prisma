@@ -602,6 +602,10 @@ model Organization {
   companyPolicies           CompanyPolicy[]
   dataAccessRequests        DataAccessRequest[]
   dataBreaches              DataBreach[]
+  fiscalYears               FiscalYear[]
+  accountingPeriods         AccountingPeriod[]
+  /// First month of the financial year (1 = January). Periods are calendar months within it.
+  fiscalYearStartMonth      Int                        @default(1)
   employeeErasures          EmployeeErasure[]
   appraisalCriteria         AppraisalCriterion[]
   appraisalCycles           AppraisalCycle[]
@@ -2802,20 +2806,26 @@ model PayrollGlMapping {
 /// Postgres treats each NULL as distinct, so the unique constraint still guarantees at most one
 /// journal per payroll run without blocking any number of non-payroll entries.
 model JournalEntry {
-  id             String       @id @default(cuid())
+  id             String            @id @default(cuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  organization   Organization      @relation(fields: [organizationId], references: [id])
   entryNumber    String
-  runId          String?      @unique
-  run            PayrollRun?  @relation(fields: [runId], references: [id])
+  runId          String?           @unique
+  run            PayrollRun?       @relation(fields: [runId], references: [id])
+  /// The accounting period the posting date falls in. Set when posted; older journals are stamped once by a backfill.
+  periodId       String?
+  period         AccountingPeriod? @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  /// The document that produced this journal (CLIENT_INVOICE, CLIENT_RECEIPT, PAYROLL_RUN …) and its id, so a ledger line can be traced back and a document with no journal can be named.
+  sourceType     String?
+  sourceId       String?
   periodName     String?
-  postingDate    DateTime     @db.Date
+  postingDate    DateTime          @db.Date
   description    String
   source         String // PAYROLL_LOCK | PAYROLL_CLOSE | MANUAL_POST | AR_INVOICE | AR_RECEIPT | AR_DEDUCTION | AP_INVOICE | AP_PAYMENT | AP_DEDUCTION | DEPRECIATION
-  totalDebit     Decimal      @db.Decimal(16, 2)
-  totalCredit    Decimal      @db.Decimal(16, 2)
+  totalDebit     Decimal           @db.Decimal(16, 2)
+  totalCredit    Decimal           @db.Decimal(16, 2)
   postedBy       String
-  postedAt       DateTime     @default(now())
+  postedAt       DateTime          @default(now())
   remarks        String?
 
   lines JournalLine[]
@@ -2823,6 +2833,8 @@ model JournalEntry {
   @@unique([organizationId, entryNumber])
   @@index([organizationId, postingDate])
   @@index([organizationId, source])
+  @@index([organizationId, sourceType, sourceId])
+  @@index([periodId])
 }
 
 model JournalLine {
@@ -3595,4 +3607,67 @@ model EmployeeErasure {
 
   @@index([organizationId, status])
   @@index([employeeId])
+}
+
+enum AccountingPeriodStatus {
+  /// Anyone allowed to post can post.
+  OPEN
+  /// Only finance staff with the close permission can still post (adjustments while the books are being finished).
+  SOFT_CLOSED
+  /// Nothing can be posted. Reopening needs a reason and the reopen permission.
+  CLOSED
+  /// Final. Nothing can be posted and it cannot be reopened.
+  LOCKED
+}
+
+/// A financial year: twelve monthly accounting periods starting in the organization's first fiscal month.
+model FiscalYear {
+  id             String             @id @default(cuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  name           String
+  startDate      DateTime           @db.Date
+  endDate        DateTime           @db.Date
+  createdAt      DateTime           @default(now())
+  periods        AccountingPeriod[]
+
+  @@unique([organizationId, startDate])
+}
+
+/// One month of a financial year. Every journal belongs to one; its status decides whether it can be posted to.
+model AccountingPeriod {
+  id             String                  @id @default(cuid())
+  organizationId String
+  organization   Organization            @relation(fields: [organizationId], references: [id])
+  fiscalYearId   String
+  fiscalYear     FiscalYear              @relation(fields: [fiscalYearId], references: [id])
+  number         Int
+  name           String
+  startDate      DateTime                @db.Date
+  endDate        DateTime                @db.Date
+  status         AccountingPeriodStatus  @default(OPEN)
+  createdAt      DateTime                @default(now())
+  journals       JournalEntry[]
+  events         AccountingPeriodEvent[]
+
+  @@unique([organizationId, startDate])
+  @@index([organizationId, status])
+  @@index([fiscalYearId])
+}
+
+/// Append-only trail of everything done to a period: who closed, approved, locked or reopened it, and why.
+model AccountingPeriodEvent {
+  id             String                 @id @default(cuid())
+  organizationId String
+  periodId       String
+  period         AccountingPeriod       @relation(fields: [periodId], references: [id])
+  action         String
+  fromStatus     AccountingPeriodStatus
+  toStatus       AccountingPeriodStatus
+  actor          String
+  actorUserId    String
+  reason         String?
+  createdAt      DateTime               @default(now())
+
+  @@index([periodId])
 }

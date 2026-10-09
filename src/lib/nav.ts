@@ -190,6 +190,7 @@ export const NAV: NavGroup[] = [
       },
       { href: "/finance/bank-reconciliation", label: "Bank Reconciliation", perm: "gl.view" },
       { href: "/accounting/journals", label: "Journal Entries", perm: "gl.view", section: "Accounting" },
+      { href: "/accounting/periods", label: "Accounting Periods", perm: "gl.view" },
       { href: "/accounting/mapping", label: "Payroll GL Mapping", perm: "gl.view" },
       { href: "/accounting/accounts", label: "Chart of Accounts", perm: "gl.view" },
       {
