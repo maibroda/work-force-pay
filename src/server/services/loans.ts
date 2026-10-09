@@ -168,7 +168,7 @@ export async function approveLoan(ctx: Ctx, id: string, note?: string) {
       where: { id },
       data: { status: "ACTIVE", approvedBy: ctx.name, approvedAt: new Date(), decisionNote: note?.trim() || null, disbursedOn },
     });
-    await postLoanDisbursement(ctx, tx, { loanNumber: u.loanNumber, type: u.type, principal: u.principal, disbursedOn });
+    await postLoanDisbursement(ctx, tx, { id: u.id, loanNumber: u.loanNumber, type: u.type, principal: u.principal, disbursedOn });
     await logAudit(ctx, { action: "LOAN_APPROVE", entity: "Employee", entityId: loan.employeeId, newValue: { loanNumber: u.loanNumber, principal: num(u.principal) } }, tx);
     return u;
   });

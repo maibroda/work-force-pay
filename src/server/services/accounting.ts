@@ -18,7 +18,7 @@ import type { Ctx } from "@/lib/auth/context";
 import { round2, num } from "@/lib/money";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
-import { nextNumber } from "./numbering";
+import { postJournal } from "./posting";
 
 type Head = "EARNING" | "DEDUCTION" | "EMPLOYER" | "NET_PAY";
 const ACCOUNT_TYPES = ["ASSET", "LIABILITY", "EQUITY", "INCOME", "EXPENSE"] as const;
@@ -438,40 +438,23 @@ export async function postRunToGl(
   }
   if (!lines.length) throw new BusinessError("There is nothing to post — the payroll has no amounts.");
 
-  const totalDebit = sum("debit");
-  const totalCredit = sum("credit");
-  const entryNumber = await nextNumber(tx, ctx.orgId, "JOURNAL");
   const remarks = unmapped.length
     ? `Heads without their own mapping were posted to the default account: ${[...new Set(unmapped)].join(", ")}.`
     : null;
-  const journal = await tx.journalEntry.create({
-    data: {
-      organizationId: ctx.orgId,
-      entryNumber,
-      runId,
-      periodName: run.period.name,
-      postingDate: run.period.endDate,
-      description: `Payroll ${run.type === "SUPPLEMENTARY" ? `supplementary #${run.runNumber}` : "regular run"} — ${run.period.name}`,
-      source,
-      totalDebit,
-      totalCredit,
-      postedBy: ctx.name,
-      remarks,
-      lines: {
-        create: lines.map((l, i) => ({ ...l, sortOrder: i })),
-      },
-    },
+  // The posting engine writes it: it checks the balance, the accounts, and that the accounting period is open.
+  const journal = await postJournal(ctx, tx, {
+    source,
+    sourceType: "PAYROLL_RUN",
+    sourceId: runId,
+    runId,
+    periodName: run.period.name,
+    postingDate: run.period.endDate,
+    description: `Payroll ${run.type === "SUPPLEMENTARY" ? `supplementary #${run.runNumber}` : "regular run"} — ${run.period.name}`,
+    lines: lines.map((l) => ({ accountId: l.accountId, headCode: l.headCode, description: l.description, debit: l.debit, credit: l.credit })),
+    remarks,
+    audit: { payrollPeriod: run.period.name },
   });
-  await logAudit(
-    ctx,
-    {
-      action: "GL_POSTING",
-      entity: "JournalEntry",
-      entityId: journal.id,
-      newValue: { entryNumber, period: run.period.name, source, totalDebit, lines: lines.length },
-    },
-    tx,
-  );
+  if (!journal) throw new BusinessError("There is nothing to post — the payroll has no amounts.");
   return journal;
 }
 

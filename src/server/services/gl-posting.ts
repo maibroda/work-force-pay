@@ -17,10 +17,9 @@
  */
 import { num, round2 } from "@/lib/money";
 import type { Ctx } from "@/lib/auth/context";
-import { BusinessError, type Tx } from "./_base";
-import { logAudit } from "./audit";
-import { nextNumber } from "./numbering";
+import { type Tx } from "./_base";
 import { ensureDefaultChart } from "./accounting";
+import { postJournal as enginePost } from "./posting";
 
 const ACCOUNTS = {
   AR: "1200",
@@ -48,75 +47,31 @@ interface DraftLine {
   credit: number;
 }
 
-async function accountsByCode(tx: Tx, orgId: string, codes: string[]) {
-  const accounts = await tx.glAccount.findMany({ where: { organizationId: orgId, code: { in: codes } } });
-  const byCode = new Map(accounts.map((a) => [a.code, a]));
-  for (const code of codes)
-    if (!byCode.has(code))
-      throw new BusinessError(`GL account ${code} is missing from the chart of accounts.`);
-  return byCode;
+/** The document a journal came from, so the ledger line can be traced back to it. */
+interface SourceRef {
+  type: string;
+  id?: string;
 }
 
-/** Posts a balanced journal (debits must equal credits) with `runId` left null. */
+/**
+ * Adapts the account-code drafts used in this file to the posting engine, which owns every rule: balance, active
+ * accounts, open accounting period, numbering, source reference and audit. Nothing here writes a journal itself.
+ */
 async function postJournal(
   ctx: Ctx,
   tx: Tx,
-  input: { source: string; postingDate: Date; description: string; lines: DraftLine[] },
+  input: { source: string; ref?: SourceRef; postingDate: Date; description: string; lines: DraftLine[] },
 ) {
-  const lines = input.lines.filter((l) => round2(l.debit) !== 0 || round2(l.credit) !== 0);
-  if (!lines.length) return null;
-  const totalDebit = round2(lines.reduce((a, l) => a + l.debit, 0));
-  const totalCredit = round2(lines.reduce((a, l) => a + l.credit, 0));
-  if (Math.abs(round2(totalDebit - totalCredit)) >= 0.01)
-    throw new BusinessError(
-      `Journal for "${input.description}" does not balance (debit ₦${totalDebit} vs credit ₦${totalCredit}).`,
-    );
-
+  if (!input.lines.some((l) => round2(l.debit) !== 0 || round2(l.credit) !== 0)) return null;
   await ensureDefaultChart(tx, ctx.orgId);
-  const accountsMap = await accountsByCode(
-    tx,
-    ctx.orgId,
-    [...new Set(lines.map((l) => l.accountCode))],
-  );
-  const entryNumber = await nextNumber(tx, ctx.orgId, "JOURNAL");
-  const journal = await tx.journalEntry.create({
-    data: {
-      organizationId: ctx.orgId,
-      entryNumber,
-      postingDate: input.postingDate,
-      description: input.description,
-      source: input.source,
-      totalDebit,
-      totalCredit,
-      postedBy: ctx.name,
-      lines: {
-        create: lines.map((l, i) => {
-          const acct = accountsMap.get(l.accountCode)!;
-          return {
-            accountId: acct.id,
-            accountCode: acct.code,
-            accountName: acct.name,
-            headCode: input.source,
-            description: l.description,
-            debit: l.debit,
-            credit: l.credit,
-            sortOrder: i,
-          };
-        }),
-      },
-    },
+  return enginePost(ctx, tx, {
+    source: input.source,
+    sourceType: input.ref?.type,
+    sourceId: input.ref?.id,
+    postingDate: input.postingDate,
+    description: input.description,
+    lines: input.lines.map((l) => ({ accountCode: l.accountCode, description: l.description, debit: l.debit, credit: l.credit })),
   });
-  await logAudit(
-    ctx,
-    {
-      action: "GL_POSTING",
-      entity: "JournalEntry",
-      entityId: journal.id,
-      newValue: { entryNumber, source: input.source, totalDebit, lines: lines.length },
-    },
-    tx,
-  );
-  return journal;
 }
 
 // ─────────────────────────────── Accounts receivable ───────────────────────────────
@@ -130,6 +85,7 @@ export async function postArInvoice(
   const vat = num(invoice.vatAmount);
   return postJournal(ctx, tx, {
     source: "AR_INVOICE",
+    ref: { type: "CLIENT_INVOICE", id: invoice.id },
     postingDate: invoice.invoiceDate,
     description: `Client invoice ${invoice.invoiceNumber}`,
     lines: [
@@ -142,15 +98,41 @@ export async function postArInvoice(
   });
 }
 
+/**
+ * Cancelling an invoice reverses its posting: the mirror image of postArInvoice, dated the day it is cancelled. The
+ * original journal stays in the ledger untouched; the reversal sits beside it, so the trail shows both.
+ */
+export async function postArInvoiceCancellation(
+  ctx: Ctx,
+  tx: Tx,
+  invoice: { id: string; invoiceNumber: string; subtotal: unknown; vatAmount: unknown; totalAmount: unknown },
+  on: Date,
+) {
+  const subtotal = num(invoice.subtotal);
+  const vat = num(invoice.vatAmount);
+  return postJournal(ctx, tx, {
+    source: "AR_INVOICE_CANCEL",
+    ref: { type: "CLIENT_INVOICE", id: invoice.id },
+    postingDate: on,
+    description: `Reversal of client invoice ${invoice.invoiceNumber} (cancelled)`,
+    lines: [
+      { accountCode: ACCOUNTS.REVENUE, description: invoice.invoiceNumber, debit: subtotal, credit: 0 },
+      ...(vat > 0 ? [{ accountCode: ACCOUNTS.VAT_PAYABLE, description: invoice.invoiceNumber, debit: vat, credit: 0 }] : []),
+      { accountCode: ACCOUNTS.AR, description: invoice.invoiceNumber, debit: 0, credit: num(invoice.totalAmount) },
+    ],
+  });
+}
+
 export async function postArReceipt(
   ctx: Ctx,
   tx: Tx,
-  receipt: { amount: unknown; receivedDate: Date },
+  receipt: { id?: string; amount: unknown; receivedDate: Date },
   invoiceNumber: string,
 ) {
   const amount = num(receipt.amount);
   return postJournal(ctx, tx, {
     source: "AR_RECEIPT",
+    ref: { type: "CLIENT_RECEIPT", id: receipt.id },
     postingDate: receipt.receivedDate,
     description: `Receipt against ${invoiceNumber}`,
     lines: [
@@ -163,13 +145,14 @@ export async function postArReceipt(
 export async function postArDeduction(
   ctx: Ctx,
   tx: Tx,
-  deduction: { type: string; amount: unknown; createdAt?: Date },
+  deduction: { id?: string; type: string; amount: unknown; createdAt?: Date },
   invoiceNumber: string,
 ) {
   const amount = num(deduction.amount);
   const debitAccount = deduction.type === "WITHHOLDING_TAX" ? ACCOUNTS.WHT_RECEIVABLE : ACCOUNTS.CLIENT_DEDUCTIONS;
   return postJournal(ctx, tx, {
     source: "AR_DEDUCTION",
+    ref: { type: "CLIENT_INVOICE_DEDUCTION", id: deduction.id },
     postingDate: deduction.createdAt ?? new Date(),
     description: `Deduction against ${invoiceNumber} (${deduction.type})`,
     lines: [
@@ -184,11 +167,12 @@ export async function postArDeduction(
 export async function postApInvoice(
   ctx: Ctx,
   tx: Tx,
-  invoice: { invoiceNumber: string; invoiceDate: Date; totalAmount: unknown },
+  invoice: { id?: string; invoiceNumber: string; invoiceDate: Date; totalAmount: unknown },
 ) {
   const total = num(invoice.totalAmount);
   return postJournal(ctx, tx, {
     source: "AP_INVOICE",
+    ref: { type: "PURCHASE_INVOICE", id: invoice.id },
     postingDate: invoice.invoiceDate,
     description: `Vendor bill ${invoice.invoiceNumber}`,
     lines: [
@@ -198,15 +182,36 @@ export async function postApInvoice(
   });
 }
 
+/** Cancelling a vendor bill reverses its posting, dated the day it is cancelled; the original journal stays. */
+export async function postApInvoiceCancellation(
+  ctx: Ctx,
+  tx: Tx,
+  invoice: { id?: string; invoiceNumber: string; totalAmount: unknown },
+  on: Date,
+) {
+  const total = num(invoice.totalAmount);
+  return postJournal(ctx, tx, {
+    source: "AP_INVOICE_CANCEL",
+    ref: { type: "PURCHASE_INVOICE", id: invoice.id },
+    postingDate: on,
+    description: `Reversal of vendor bill ${invoice.invoiceNumber} (cancelled)`,
+    lines: [
+      { accountCode: ACCOUNTS.AP, description: invoice.invoiceNumber, debit: total, credit: 0 },
+      { accountCode: ACCOUNTS.VENDOR_EXPENSE, description: invoice.invoiceNumber, debit: 0, credit: total },
+    ],
+  });
+}
+
 export async function postApPayment(
   ctx: Ctx,
   tx: Tx,
-  payment: { amount: unknown; paidDate: Date },
+  payment: { id?: string; amount: unknown; paidDate: Date },
   invoiceNumber: string,
 ) {
   const amount = num(payment.amount);
   return postJournal(ctx, tx, {
     source: "AP_PAYMENT",
+    ref: { type: "VENDOR_PAYMENT", id: payment.id },
     postingDate: payment.paidDate,
     description: `Payment against ${invoiceNumber}`,
     lines: [
@@ -219,13 +224,14 @@ export async function postApPayment(
 export async function postApDeduction(
   ctx: Ctx,
   tx: Tx,
-  deduction: { type: string; amount: unknown; createdAt?: Date },
+  deduction: { id?: string; type: string; amount: unknown; createdAt?: Date },
   invoiceNumber: string,
 ) {
   const amount = num(deduction.amount);
   const creditAccount = deduction.type === "WITHHOLDING_TAX" ? ACCOUNTS.WHT_PAYABLE : ACCOUNTS.VENDOR_EXPENSE;
   return postJournal(ctx, tx, {
     source: "AP_DEDUCTION",
+    ref: { type: "PURCHASE_INVOICE_DEDUCTION", id: deduction.id },
     postingDate: deduction.createdAt ?? new Date(),
     description: `Deduction against ${invoiceNumber} (${deduction.type})`,
     lines: [
@@ -241,12 +247,13 @@ export async function postApDeduction(
 export async function postBankAccountOpening(
   ctx: Ctx,
   tx: Tx,
-  account: { name: string; openingBalance: unknown; openingDate: Date },
+  account: { id?: string; name: string; openingBalance: unknown; openingDate: Date },
 ) {
   const amount = num(account.openingBalance);
   if (amount === 0) return null;
   return postJournal(ctx, tx, {
     source: "BANK_ACCOUNT_OPENING",
+    ref: { type: "BANK_ACCOUNT", id: account.id },
     postingDate: account.openingDate,
     description: `Opening balance — ${account.name}`,
     lines:
@@ -269,11 +276,12 @@ export async function postBankAccountOpening(
 export async function postFixedAssetAcquisition(
   ctx: Ctx,
   tx: Tx,
-  asset: { assetNumber: string; acquisitionDate: Date; cost: unknown },
+  asset: { id?: string; assetNumber: string; acquisitionDate: Date; cost: unknown },
 ) {
   const cost = num(asset.cost);
   return postJournal(ctx, tx, {
     source: "FIXED_ASSET_ACQUISITION",
+    ref: { type: "FIXED_ASSET", id: asset.id },
     postingDate: asset.acquisitionDate,
     description: `Fixed asset acquired — ${asset.assetNumber}`,
     lines: [
@@ -288,7 +296,7 @@ export async function postFixedAssetAcquisition(
 export async function postFixedAssetDisposal(
   ctx: Ctx,
   tx: Tx,
-  asset: { assetNumber: string; disposalDate: Date; cost: unknown; disposalProceeds: unknown },
+  asset: { id?: string; assetNumber: string; disposalDate: Date; cost: unknown; disposalProceeds: unknown },
   accumulatedDepreciationAtDisposal: number,
 ) {
   const cost = num(asset.cost);
@@ -306,6 +314,7 @@ export async function postFixedAssetDisposal(
     lines.push({ accountCode: ACCOUNTS.GAIN_LOSS_ON_DISPOSAL, description: asset.assetNumber, debit: -gainOrLoss, credit: 0 });
   return postJournal(ctx, tx, {
     source: "FIXED_ASSET_DISPOSAL",
+    ref: { type: "FIXED_ASSET", id: asset.id },
     postingDate: asset.disposalDate,
     description: `Fixed asset disposed — ${asset.assetNumber}`,
     lines,
@@ -326,6 +335,7 @@ export async function postDepreciation(
   if (!lines.length || total <= 0) return null;
   return postJournal(ctx, tx, {
     source: "DEPRECIATION",
+    ref: { type: "DEPRECIATION_MONTH", id: postingDate.toISOString().slice(0, 7) },
     postingDate,
     description: `Depreciation — ${periodLabel}`,
     lines: [
@@ -353,11 +363,12 @@ const loanLabel = (l: { type: string; loanNumber: string }) =>
 export async function postLoanDisbursement(
   ctx: Ctx,
   tx: Tx,
-  loan: { loanNumber: string; type: string; principal: unknown; disbursedOn: Date },
+  loan: { id?: string; loanNumber: string; type: string; principal: unknown; disbursedOn: Date },
 ) {
   const amount = num(loan.principal);
   return postJournal(ctx, tx, {
     source: "LOAN_DISBURSEMENT",
+    ref: { type: "STAFF_LOAN", id: loan.id },
     postingDate: loan.disbursedOn,
     description: `${loanLabel(loan)} paid out`,
     lines: [
@@ -371,12 +382,13 @@ export async function postLoanDisbursement(
 export async function postLoanCashRepayment(
   ctx: Ctx,
   tx: Tx,
-  loan: { loanNumber: string; type: string },
+  loan: { id?: string; loanNumber: string; type: string },
   amount: number,
   date: Date,
 ) {
   return postJournal(ctx, tx, {
     source: "LOAN_REPAYMENT",
+    ref: { type: "STAFF_LOAN", id: loan.id },
     postingDate: date,
     description: `${loanLabel(loan)} repaid in cash`,
     lines: [
@@ -390,12 +402,13 @@ export async function postLoanCashRepayment(
 export async function postLoanWriteOff(
   ctx: Ctx,
   tx: Tx,
-  loan: { loanNumber: string; type: string },
+  loan: { id?: string; loanNumber: string; type: string },
   amount: number,
   date: Date,
 ) {
   return postJournal(ctx, tx, {
     source: "LOAN_WRITE_OFF",
+    ref: { type: "STAFF_LOAN", id: loan.id },
     postingDate: date,
     description: `${loanLabel(loan)} written off`,
     lines: [

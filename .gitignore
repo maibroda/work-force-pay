@@ -12,3 +12,6 @@ coverage
 .DS_Store
 .vercel
 .next-smoke
+
+# database backups (hold personal and payroll data)
+backups/

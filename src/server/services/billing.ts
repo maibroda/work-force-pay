@@ -22,7 +22,7 @@ import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { nextNumber } from "./numbering";
 import { payrollByContractAndCategory } from "./reports";
-import { postArDeduction, postArInvoice, postArReceipt } from "./gl-posting";
+import { postArDeduction, postArInvoice, postArInvoiceCancellation, postArReceipt } from "./gl-posting";
 
 const DEFAULT_PAYMENT_TERMS_DAYS = 30;
 
@@ -373,11 +373,10 @@ export async function cancelInvoice(ctx: Ctx, id: string, reason: string) {
   if (num(inv.amountPaid) > 0 || num(inv.totalDeductions) > 0)
     throw new BusinessError("An invoice with payments or deductions against it cannot be cancelled.");
   if (inv.status === "CANCELLED") throw new BusinessError("This invoice is already cancelled.");
-  await db.clientInvoice.update({ where: { id }, data: { status: "CANCELLED", notes: reason } });
-  await logAudit(ctx, {
-    action: "CLIENT_INVOICE_CANCEL",
-    entity: "ClientInvoice",
-    entityId: id,
-    reason,
+  // The status change and the reversing journal commit together, so a cancelled invoice never stays in the ledger.
+  await db.$transaction(async (tx) => {
+    await tx.clientInvoice.update({ where: { id }, data: { status: "CANCELLED", notes: reason } });
+    await postArInvoiceCancellation(ctx, tx, inv, new Date(new Date().toISOString().slice(0, 10)));
+    await logAudit(ctx, { action: "CLIENT_INVOICE_CANCEL", entity: "ClientInvoice", entityId: id, reason }, tx);
   });
 }

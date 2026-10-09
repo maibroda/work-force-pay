@@ -200,7 +200,7 @@ Ikoyi (19–25), XYZ Manufacturing Lekki (26–30).
   quantity × rate = amount, prefixed with the contract name when a client has more than one contract on
   the invoice. Invoices are numbered (`INV-######`), dated to the period end with a 30-day due date, and
   never edited once issued — corrections go through the next run.
-- **VAT and withholding tax.** Each run's invoices can carry a VAT % (added on top of the subtotal) and an
+- **VAT and withholding tax.** Each run's invoices can carry a VAT % (calculated on the indirect / management charge — the 10% of the default 90/10 split — and added to the total, not charged on the whole subtotal) and an
   expected withholding-tax % (informational — WHT doesn't reduce the amount invoiced; it estimates what
   the client is expected to withhold and remit to the tax authority on your behalf when they pay).
 - **Deductions, not just payments.** A client rarely pays the full invoice in cash. Besides recording a
@@ -775,6 +775,62 @@ needed. **HR Lifecycle → Records Retention** handles the end of that.
   it is. The request keeps a count of what was removed, never the data. It can't be undone.
 - The HR digest lists erasure requests waiting for approval and leavers who are past the period with nothing in
   the way. Nothing runs automatically.
+
+### Ledger integrity, backups and restore rehearsal
+
+Before the finance module is extended, there is a safety net under the books (see `docs/finance-architecture.md`).
+
+- **`npm run ledger:check`** reads every organization and reports, without changing anything: every journal
+  balances and its header equals its lines; no line is negative or both-sided; every journal has at least two
+  lines; every line's account belongs to the same organization; the whole ledger's debits equal its credits;
+  every locked payroll run has its journal; and the **receivables and payables subledgers equal their ledger
+  control accounts** (1200 and 2180). Journal-number gaps are warnings (a ledger that never deletes has none).
+  It exits 1 on any error, runs in CI on the seeded database, and should be run before and after every finance
+  migration. It reads in one consistent snapshot, so a posting that commits while it runs can't make it disagree
+  with itself.
+- **`npm run db:backup`** writes `backups/<database>-<timestamp>.dump` (PostgreSQL custom format) using the local
+  `pg_dump` or, if that isn't installed, the one inside the database's Docker container (`WFP_DB_CONTAINER`,
+  default `workforcepay-db`). The folder is git-ignored: a dump holds personal and payroll data, so keep it
+  somewhere access-controlled.
+- **`npm run db:restore-check -- <file>`** proves a backup works: it restores into a scratch database, runs the
+  integrity check there, compares row counts and findings with the live database, and drops the scratch database.
+  It never writes to the live database. CI does a backup-and-restore rehearsal on every run. Restoring for real is
+  a deliberate act into an empty database (`createdb <name> && pg_restore --no-owner -d <name> <file>`).
+- **Cancelling a client invoice or a vendor bill now reverses its ledger posting** (a journal dated the day of the
+  cancellation, beside the untouched original). Before, only the status changed, so a cancelled invoice's
+  receivable and revenue stayed in the ledger and the receivables subledger no longer matched it. Documents
+  cancelled before this change still carry that error; the check reports them.
+
+### Accounting periods and the posting engine
+
+Phase 1 of the finance plan (`docs/finance-architecture.md`) starts with the control points every later feature
+depends on.
+
+- **One posting function.** Every journal — payroll, client and vendor billing, receipts, deductions, cancellations,
+  depreciation, loans, bank openings — is written by `src/server/services/posting.ts`. It refuses a journal with
+  fewer than two lines, a negative or two-sided line, an unbalanced total, an account that doesn't exist, belongs to
+  another organization or is inactive, or a date in a period that is closed. It numbers the journal, records the
+  period and **the document it came from** (`sourceType` / `sourceId`, e.g. `CLIENT_INVOICE` and the invoice's id)
+  and writes the audit entry, all in the caller's transaction, so a document and its journal commit or fail together.
+- **Accounting periods** (Finance / Accounting → **Accounting Periods**). Each financial year has twelve monthly
+  periods, created when the first journal is posted into the year or ahead of time. The year starts in the
+  organization's first fiscal month (default January). A period is **Open** (anyone who may post can), **Soft
+  closed** (only finance staff with `period.close`, for final adjustments), **Closed** (nothing can be posted; reopen
+  with a reason of 15+ characters and `period.reopen`) or **Locked** (final, never reopened).
+- **Closing takes two people.** `period.close` (Finance) soft closes; `period.approve` (company administrator) closes
+  and locks; whoever soft closed a period can't also close it. A period can only be closed once every earlier period
+  *that has postings* is closed, and locked once those are locked; empty earlier months don't hold it up, so a company
+  that starts mid-year isn't made to close months it never used. Every step is kept in the period's own trail and in
+  the audit log.
+- **Posted journals are immutable in the database itself.** Triggers reject any update or delete of a journal or its
+  lines, even through SQL; the only change allowed is to stamp the period and source on an older journal that doesn't
+  have them yet, once. A correction is a new, reversing journal. (`TRUNCATE`, used by the seed's reset, is not
+  intercepted; a disposable database can set `wfp.allow_ledger_reset = 'on'` for a deliberate reset.)
+- **Older databases:** `npm run ledger:backfill-periods` stamps each journal posted before periods existed with its
+  period. It is idempotent and additive; back up first.
+- **Not yet in this step** (the rest of Phase 1): the hierarchical chart of accounts, accounting dimensions on journal
+  lines, general reversals with approval, manual and recurring journals, and the backfill of invoices and bills that
+  were never posted.
 
 ### Route smoke test
 

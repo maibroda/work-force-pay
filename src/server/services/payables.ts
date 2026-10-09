@@ -15,7 +15,7 @@ import { num, round2 } from "@/lib/money";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { nextNumber } from "./numbering";
-import { postApDeduction, postApInvoice, postApPayment } from "./gl-posting";
+import { postApDeduction, postApInvoice, postApInvoiceCancellation, postApPayment } from "./gl-posting";
 
 const opt = z
   .string()
@@ -374,11 +374,10 @@ export async function cancelPurchaseInvoice(ctx: Ctx, id: string, reason: string
   if (num(inv.amountPaid) > 0 || num(inv.totalDeductions) > 0)
     throw new BusinessError("An invoice with payments or deductions against it cannot be cancelled.");
   if (inv.status === "CANCELLED") throw new BusinessError("This invoice is already cancelled.");
-  await db.purchaseInvoice.update({ where: { id }, data: { status: "CANCELLED", notes: reason } });
-  await logAudit(ctx, {
-    action: "PURCHASE_INVOICE_CANCEL",
-    entity: "PurchaseInvoice",
-    entityId: id,
-    reason,
+  // The status change and the reversing journal commit together, so a cancelled bill never stays in the ledger.
+  await db.$transaction(async (tx) => {
+    await tx.purchaseInvoice.update({ where: { id }, data: { status: "CANCELLED", notes: reason } });
+    await postApInvoiceCancellation(ctx, tx, inv, new Date(new Date().toISOString().slice(0, 10)));
+    await logAudit(ctx, { action: "PURCHASE_INVOICE_CANCEL", entity: "PurchaseInvoice", entityId: id, reason }, tx);
   });
 }

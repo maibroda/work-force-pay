@@ -18,7 +18,11 @@
     "postinstall": "prisma generate",
     "db:setup": "prisma migrate deploy && tsx prisma/seed.ts",
     "verify": "npm run lint && npm run typecheck && npm test && npm run build",
-    "smoke": "tsx scripts/smoke.ts"
+    "smoke": "tsx scripts/smoke.ts",
+    "ledger:check": "tsx scripts/ledger-check.ts",
+    "ledger:backfill-periods": "tsx scripts/ledger-backfill-periods.ts",
+    "db:backup": "tsx scripts/db-backup.ts",
+    "db:restore-check": "tsx scripts/db-restore-check.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
