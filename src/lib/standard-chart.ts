@@ -172,7 +172,7 @@ export const STANDARD_CHART: StdGroup[] = [
     code: "G2300", classNumber: 2, name: "Staff and client balances",
     categories: [
       { code: "C2310", name: "Staff payables", statementLine: "OTHER_CURRENT_LIABILITIES", accounts: [A("2301", "Staff Payables", "LIABILITY")] },
-      { code: "C2320", name: "Client deposits and deferred revenue", statementLine: "CLIENT_LIABILITIES", accounts: [A("2311", "Client Deposits", "LIABILITY"), A("2312", "Deferred Revenue", "LIABILITY")] },
+      { code: "C2320", name: "Client deposits and deferred revenue", statementLine: "CLIENT_LIABILITIES", accounts: [A("2192", "Client Advances & Unapplied Receipts", "LIABILITY"), A("2311", "Client Deposits", "LIABILITY"), A("2312", "Deferred Revenue", "LIABILITY")] },
     ],
   },
   {

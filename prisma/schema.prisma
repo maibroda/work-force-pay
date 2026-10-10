@@ -620,6 +620,8 @@ model Organization {
   recurringJournals         RecurringJournal[]
   taxCodes                  TaxCode[]
   serviceTypes              ServiceType[]
+  receiptAllocations        ReceiptAllocation[]
+  clientRefunds             ClientRefund[]
   billingRules              BillingRule[]
   taxTransactions           TaxTransaction[]
   journalReversals          JournalReversal[]
@@ -1520,6 +1522,7 @@ model Client {
   receipts          ClientReceipt[]
   invoiceDeductions ClientInvoiceDeduction[]
   journalLines      JournalLine[]
+  receiptRefunds    ClientRefund[]
 
   @@unique([organizationId, code])
 }
@@ -2354,12 +2357,13 @@ model ClientInvoice {
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 
-  lines           ClientInvoiceLine[]
-  receipts        ClientReceipt[]
-  deductions      ClientInvoiceDeduction[]
+  lines              ClientInvoiceLine[]
+  receipts           ClientReceipt[]
+  deductions         ClientInvoiceDeduction[]
+  receiptAllocations ReceiptAllocation[]
   /// The billing rule, tax codes and rates each contract on this invoice was calculated with, and where each came from.
-  taxBasis        Json?
-  taxTransactions TaxTransaction[]
+  taxBasis           Json?
+  taxTransactions    TaxTransaction[]
 
   @@unique([organizationId, invoiceNumber])
   @@unique([clientId, runId])
@@ -2425,22 +2429,33 @@ model ClientInvoiceDeduction {
 /// A payment received from a client against an invoice. Never deleted — cancel/reverse with a
 /// documented reason instead if one is recorded in error.
 model ClientReceipt {
-  id             String        @id @default(cuid())
+  id             String              @id @default(cuid())
   organizationId String
-  organization   Organization  @relation(fields: [organizationId], references: [id])
-  invoiceId      String
-  invoice        ClientInvoice @relation(fields: [invoiceId], references: [id])
+  organization   Organization        @relation(fields: [organizationId], references: [id])
+  /// The one invoice a single-invoice receipt settles. Null for a client receipt that is allocated across invoices (or
+  /// held as an advance): its settlements are the allocations.
+  invoiceId      String?
+  invoice        ClientInvoice?      @relation(fields: [invoiceId], references: [id])
+  /// RCT-nnnnnn for a client receipt; null for the older single-invoice receipts.
+  receiptNumber  String?
+  /// Tax the client withheld on paying (a credit with the tax authority): not cash, but settles invoices. Must all be allocated.
+  whtWithheld    Decimal             @default(0) @db.Decimal(16, 2)
+  whtReference   String?
+  notes          String?
+  allocations    ReceiptAllocation[]
+  refunds        ClientRefund[]
   clientId       String
-  client         Client        @relation(fields: [clientId], references: [id])
-  amount         Decimal       @db.Decimal(16, 2)
-  receivedDate   DateTime      @db.Date
+  client         Client              @relation(fields: [clientId], references: [id])
+  amount         Decimal             @db.Decimal(16, 2)
+  receivedDate   DateTime            @db.Date
   method         String?
   reference      String?
   recordedBy     String
-  createdAt      DateTime      @default(now())
+  createdAt      DateTime            @default(now())
 
   matchedByLines BankStatementLine[]
 
+  @@unique([organizationId, receiptNumber])
   @@index([organizationId, invoiceId])
   @@index([organizationId, clientId])
 }
@@ -4000,6 +4015,65 @@ model RecurringJournalLine {
 }
 
 /// What a tax is charged on, of a charge-out amount that is split into a direct and an indirect charge.
+/// Part of a client receipt applied to one invoice: cash, and tax the client withheld. Never edited or deleted; if it was applied
+/// to the wrong invoice it is reversed, with a reason, and the amount goes back to the receipt to be applied again.
+model ReceiptAllocation {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  receiptId      String
+  receipt        ClientReceipt @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  invoiceId      String
+  invoice        ClientInvoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  cashAmount     Decimal       @db.Decimal(16, 2)
+  whtAmount      Decimal       @default(0) @db.Decimal(16, 2)
+  /// The date it takes effect (the receipt date, or the day an advance was applied).
+  appliedOn      DateTime      @db.Date
+  createdBy      String
+  createdAt      DateTime      @default(now())
+  reversedAt     DateTime?
+  reversedOn     DateTime?     @db.Date
+  reversedBy     String?
+  reversalReason String?
+
+  @@index([organizationId, invoiceId])
+  @@index([receiptId])
+}
+
+enum RefundStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// Money returned to a client out of an advance. Asked for by one person and approved by another; approving it posts the payment.
+model ClientRefund {
+  id                String        @id @default(cuid())
+  organizationId    String
+  organization      Organization  @relation(fields: [organizationId], references: [id])
+  refundNumber      String
+  receiptId         String
+  receipt           ClientReceipt @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  clientId          String
+  client            Client        @relation(fields: [clientId], references: [id])
+  amount            Decimal       @db.Decimal(16, 2)
+  refundDate        DateTime      @db.Date
+  method            String?
+  reference         String?
+  reason            String
+  status            RefundStatus  @default(PENDING)
+  requestedBy       String
+  requestedByUserId String
+  createdAt         DateTime      @default(now())
+  decidedBy         String?
+  decidedByUserId   String?
+  decidedAt         DateTime?
+  decisionNote      String?
+
+  @@unique([organizationId, refundNumber])
+  @@index([receiptId])
+}
+
 enum BillingBase {
   /// The indirect (management) charge only. The security-and-guarding default for VAT.
   INDIRECT

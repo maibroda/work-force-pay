@@ -274,6 +274,19 @@ kobo (tested). Typed splits and rates for a run still work and are recorded as t
 
 Certificates (withholding) and input VAT follow in Phases 3 and 5.
 
+## 5e. Phase 3, first step — receipts, advances and statements (built)
+
+`ClientReceipt` becomes the customer-level receipt (its invoice is now optional; the single-invoice receipts are untouched), with
+`ReceiptAllocation` (cash and tax withheld applied to an invoice; immutable, reversed with a reason), `ClientRefund` (maker/checker) and
+account 2192 for advances. Recording a receipt, its allocations and the journal are one transaction; the invoice's settled amounts and status
+move with a guarded update so concurrent receipts can't overfill an invoice. Statements and ageing are built from the invoices and what settled
+them, as at any date, and tie to the client's balance in the receivables account; the integrity check reconciles advances to 2192 and flags a
+client whose ledger balance differs from their invoices. (The brief called these `Receipt` / `ReceiptAllocation`; extending `ClientReceipt`
+kept bank matching and every existing figure intact.)
+
+**Phase 3, still to do:** credit and debit notes (allocatable like invoices), the invoice lifecycle (draft, approve, post, sent) with proforma
+invoices and immutability once posted, withholding certificates, PDF / Excel statements.
+
 ## 6. Safety rules for every migration
 
 All migrations are additive. Before each one: dump the database, run it on a copy, run the ledger integrity check

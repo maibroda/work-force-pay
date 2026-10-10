@@ -78,6 +78,7 @@ export const DEFAULT_ACCOUNTS: Array<{ code: string; name: string; type: (typeof
   { code: "1250", name: "Accumulated Depreciation", type: "ASSET" },
   { code: "2180", name: "Accounts Payable", type: "LIABILITY" },
   { code: "2190", name: "VAT Payable", type: "LIABILITY" },
+  { code: "2192", name: "Client Advances & Unapplied Receipts", type: "LIABILITY" },
   { code: "2195", name: "Withholding Tax Payable", type: "LIABILITY" },
   { code: "3100", name: "Opening Balance Equity", type: "EQUITY" },
   { code: "4100", name: "Client Billing Revenue", type: "INCOME" },

@@ -30,6 +30,8 @@ const DEFAULTS: Record<string, { prefix: string; digits: number }> = {
   DATA_REQUEST: { prefix: "DSR", digits: 5 },
   DATA_BREACH: { prefix: "BRC", digits: 5 },
   MANUAL_JOURNAL: { prefix: "MJ", digits: 6 },
+  CLIENT_RECEIPT: { prefix: "RCT", digits: 6 },
+  CLIENT_REFUND: { prefix: "RFD", digits: 6 },
 };
 
 /**

@@ -69,6 +69,7 @@ export const PERMISSIONS = [
   "tax.approve", // approve or turn down a proposed tax rate, never the person who proposed it
   "billing.rule.manage", // set up service types and propose billing rules and contract overrides
   "billing.rule.approve", // approve or turn down a billing rule, never the person who proposed it; assign a contract's service type
+  "receipt.approve", // approve a refund of a client advance, never the person who asked for it
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
