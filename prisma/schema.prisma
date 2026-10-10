@@ -622,6 +622,7 @@ model Organization {
   serviceTypes              ServiceType[]
   receiptAllocations        ReceiptAllocation[]
   clientRefunds             ClientRefund[]
+  clientNotes               ClientNote[]
   billingRules              BillingRule[]
   taxTransactions           TaxTransaction[]
   journalReversals          JournalReversal[]
@@ -1523,6 +1524,7 @@ model Client {
   invoiceDeductions ClientInvoiceDeduction[]
   journalLines      JournalLine[]
   receiptRefunds    ClientRefund[]
+  notes             ClientNote[]
 
   @@unique([organizationId, code])
 }
@@ -2361,6 +2363,10 @@ model ClientInvoice {
   receipts           ClientReceipt[]
   deductions         ClientInvoiceDeduction[]
   receiptAllocations ReceiptAllocation[]
+  /// Credit notes approved against this invoice reduce what is owed on it; debit notes increase it. The invoice itself is never changed.
+  totalCredits       Decimal                  @default(0) @db.Decimal(16, 2)
+  totalDebits        Decimal                  @default(0) @db.Decimal(16, 2)
+  adjustmentNotes    ClientNote[]
   /// The billing rule, tax codes and rates each contract on this invoice was calculated with, and where each came from.
   taxBasis           Json?
   taxTransactions    TaxTransaction[]
@@ -4038,6 +4044,59 @@ model ReceiptAllocation {
 
   @@index([organizationId, invoiceId])
   @@index([receiptId])
+}
+
+enum ClientNoteType {
+  CREDIT
+  DEBIT
+}
+
+enum ClientNoteReason {
+  BILLING_ERROR
+  SERVICE_CREDIT
+  DISCOUNT
+  PRICE_ADJUSTMENT
+  PENALTY_OR_FEE
+  OTHER
+}
+
+enum NoteStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// A credit note (reduces what a client owes on an invoice) or a debit note (increases it), raised by one person and approved
+/// by another. Approving posts it to the ledger and moves the invoice's balance; the invoice itself is never edited. Once decided
+/// a note is never changed: a mistaken credit note is put right with a debit note, and the other way round.
+model ClientNote {
+  id                String           @id @default(cuid())
+  organizationId    String
+  organization      Organization     @relation(fields: [organizationId], references: [id])
+  noteNumber        String
+  type              ClientNoteType
+  invoiceId         String
+  invoice           ClientInvoice    @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  clientId          String
+  client            Client           @relation(fields: [clientId], references: [id])
+  noteDate          DateTime         @db.Date
+  reasonCode        ClientNoteReason
+  reason            String
+  netAmount         Decimal          @db.Decimal(16, 2)
+  vatAmount         Decimal          @default(0) @db.Decimal(16, 2)
+  totalAmount       Decimal          @db.Decimal(16, 2)
+  status            NoteStatus       @default(PENDING)
+  requestedBy       String
+  requestedByUserId String
+  createdAt         DateTime         @default(now())
+  decidedBy         String?
+  decidedByUserId   String?
+  decidedAt         DateTime?
+  decisionNote      String?
+
+  @@unique([organizationId, noteNumber])
+  @@index([organizationId, status])
+  @@index([invoiceId])
 }
 
 enum RefundStatus {

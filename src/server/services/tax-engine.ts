@@ -281,7 +281,7 @@ export async function taxReport(ctx: Ctx, range: { from: Date; to: Date }) {
   // all-time tie-out: VAT on live invoices against the VAT payable the invoice journals booked, net of cancellations
   const [liveVat, booked] = await Promise.all([
     db.taxTransaction.aggregate({ where: { organizationId: ctx.orgId, kind: "OUTPUT_VAT", reversed: false }, _sum: { taxAmount: true } }),
-    db.journalLine.aggregate({ where: { journal: { organizationId: ctx.orgId, source: { in: ["AR_INVOICE", "AR_INVOICE_CANCEL"] } }, account: { organizationId: ctx.orgId, code: "2190" } }, _sum: { credit: true, debit: true } }),
+    db.journalLine.aggregate({ where: { journal: { organizationId: ctx.orgId, source: { in: ["AR_INVOICE", "AR_INVOICE_CANCEL", "AR_CREDIT_NOTE", "AR_DEBIT_NOTE"] } }, account: { organizationId: ctx.orgId, code: "2190" } }, _sum: { credit: true, debit: true } }),
   ]);
   const taxRecords = num(liveVat._sum.taxAmount);
   const ledger = num(booked._sum.credit) - num(booked._sum.debit);

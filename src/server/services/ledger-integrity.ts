@@ -16,6 +16,8 @@
  * receipt holds unapplied (less refunds) agrees with the client advances account. (WARN) A client's own balance in the
  * receivables account agrees with what they owe on their invoices.
  *
+ * Credit and debit notes (ERROR): an invoice's credits and debits equal its approved notes, and the receivables subledger counts them.
+ *
  * Tax checks (ERROR): the tax records of every live invoice add up to the VAT and withholding stored on it, and a cancelled
  * invoice has none left live.
  *
@@ -173,7 +175,7 @@ export async function checkLedgerIntegrity(orgId: string): Promise<IntegrityRepo
       // Tax records: what the VAT and withholding reports read must agree with the invoices.
       const taxed = await tx.clientInvoice.findMany({
         where: { organizationId: orgId },
-        select: { invoiceNumber: true, status: true, vatAmount: true, whtAmount: true, taxTransactions: { where: { reversed: false }, select: { kind: true, taxAmount: true } } },
+        select: { invoiceNumber: true, status: true, vatAmount: true, whtAmount: true, taxTransactions: { where: { reversed: false, sourceType: "CLIENT_INVOICE" }, select: { kind: true, taxAmount: true } } },
       });
       for (const inv of taxed) {
         const live = (kind: string) => round2(inv.taxTransactions.filter((t) => t.kind === kind).reduce((s, t) => s + num(t.taxAmount), 0));
@@ -195,8 +197,8 @@ export async function checkLedgerIntegrity(orgId: string): Promise<IntegrityRepo
         if (Math.abs(difference) >= TOLERANCE) add("SUBLEDGER", "ERROR", `${name}: subledger ${subledger} vs ledger ${control} (difference ${difference}).`);
       };
 
-      const [invoices, receipts, deductions, bills, payments, billDeductions, allocated, advanceReceipts, refunded] = await Promise.all([
-        tx.clientInvoice.findMany({ where: { organizationId: orgId }, select: { id: true, clientId: true, totalAmount: true, status: true, invoiceNumber: true } }),
+      const [invoices, receipts, deductions, bills, payments, billDeductions, allocated, advanceReceipts, refunded, approvedNotes] = await Promise.all([
+        tx.clientInvoice.findMany({ where: { organizationId: orgId }, select: { id: true, clientId: true, totalAmount: true, totalCredits: true, totalDebits: true, status: true, invoiceNumber: true } }),
         tx.clientReceipt.aggregate({ where: { organizationId: orgId, invoiceId: { not: null } }, _sum: { amount: true } }), // single-invoice receipts; the others settle through allocations
         tx.clientInvoiceDeduction.aggregate({ where: { organizationId: orgId }, _sum: { amount: true } }),
         tx.purchaseInvoice.findMany({ where: { organizationId: orgId }, select: { totalAmount: true, status: true, invoiceNumber: true } }),
@@ -205,7 +207,14 @@ export async function checkLedgerIntegrity(orgId: string): Promise<IntegrityRepo
         tx.receiptAllocation.findMany({ where: { organizationId: orgId, reversedAt: null }, select: { cashAmount: true, whtAmount: true, invoice: { select: { clientId: true } } } }),
         tx.clientReceipt.aggregate({ where: { organizationId: orgId, invoiceId: null }, _sum: { amount: true, whtWithheld: true } }),
         tx.clientRefund.aggregate({ where: { organizationId: orgId, status: "APPROVED" }, _sum: { amount: true } }),
+        tx.clientNote.findMany({ where: { organizationId: orgId, status: "APPROVED" }, select: { type: true, totalAmount: true, invoiceId: true, clientId: true } }),
       ]);
+      const noteTotal = (type: "CREDIT" | "DEBIT") => round2(approvedNotes.filter((n) => n.type === type).reduce((s, n) => s + num(n.totalAmount), 0));
+      for (const i of invoices) {
+        const mine = (type: "CREDIT" | "DEBIT") => round2(approvedNotes.filter((n) => n.invoiceId === i.id && n.type === type).reduce((s, n) => s + num(n.totalAmount), 0));
+        if (Math.abs(mine("CREDIT") - num(i.totalCredits)) >= TOLERANCE || Math.abs(mine("DEBIT") - num(i.totalDebits)) >= TOLERANCE)
+          add("NOTE_TOTALS", "ERROR", `The invoice's credits (${num(i.totalCredits)}) and debits (${num(i.totalDebits)}) differ from its approved notes (${mine("CREDIT")} / ${mine("DEBIT")}).`, i.invoiceNumber);
+      }
       const allocatedGross = round2(allocated.reduce((s, a) => s + num(a.cashAmount) + num(a.whtAmount), 0));
       // Documents that no journal points at (posted before journals recorded their source, or never posted).
       const sourced = new Set(journals.filter((j) => j.sourceType && j.sourceId).map((j) => `${j.sourceType}:${j.sourceId}`));
@@ -222,7 +231,7 @@ export async function checkLedgerIntegrity(orgId: string): Promise<IntegrityRepo
       const cancelledAp = bills.filter((i) => i.status === "CANCELLED");
       reconcile(
         "Receivables (client subledger vs account 1200)",
-        subledgerBalance({ documents: invoices.map((i) => ({ total: num(i.totalAmount), status: i.status })), settled: num(receipts._sum.amount) + num(deductions._sum.amount) + allocatedGross }),
+        subledgerBalance({ documents: invoices.map((i) => ({ total: num(i.totalAmount), status: i.status })), settled: num(receipts._sum.amount) + num(deductions._sum.amount) + allocatedGross + noteTotal("CREDIT") - noteTotal("DEBIT") }),
         await balanceOf(AR_CODE),
         1,
       );
@@ -244,6 +253,7 @@ export async function checkLedgerIntegrity(orgId: string): Promise<IntegrityRepo
         for (const r of legacy) bump(r.clientId, -num(r._sum.amount));
         for (const r of ded) bump(r.clientId, -num(r._sum.amount));
         for (const a of allocated) bump(a.invoice.clientId, -(num(a.cashAmount) + num(a.whtAmount)));
+        for (const n of approvedNotes) bump(n.clientId, n.type === "CREDIT" ? -num(n.totalAmount) : num(n.totalAmount));
         const byClient = await tx.journalLine.groupBy({ by: ["clientId"], where: { journal: { organizationId: orgId }, account: { organizationId: orgId, code: AR_CODE }, clientId: { not: null } }, _sum: { debit: true, credit: true } });
         const ledgerOf = new Map(byClient.map((r) => [r.clientId as string, round2(num(r._sum.debit) - num(r._sum.credit))]));
         const off = [...new Set([...owed.keys(), ...ledgerOf.keys()])].filter((c) => Math.abs((owed.get(c) ?? 0) - (ledgerOf.get(c) ?? 0)) >= TOLERANCE);

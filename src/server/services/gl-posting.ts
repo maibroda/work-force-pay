@@ -97,6 +97,27 @@ export function splitRevenue(
   return out;
 }
 
+/** Spreads an amount over the contracts and beats an invoice was billed for, in proportion to what each was billed. Always sums to the amount. */
+export function splitProportionally(
+  lines: Array<{ contractId?: string | null; beatId?: string | null; amount: unknown }> | undefined,
+  amount: number,
+): Array<{ contractId: string | null; beatId: string | null; amount: number }> {
+  const groups = new Map<string, { contractId: string | null; beatId: string | null; weight: number }>();
+  for (const l of lines ?? []) {
+    const key = `${l.contractId ?? ""}|${l.beatId ?? ""}`;
+    const g = groups.get(key) ?? { contractId: l.contractId ?? null, beatId: l.beatId ?? null, weight: 0 };
+    g.weight += num(l.amount);
+    groups.set(key, g);
+  }
+  const list = [...groups.values()].filter((g) => g.weight > 0);
+  const total = list.reduce((a, g) => a + g.weight, 0);
+  if (!list.length || total <= 0) return [{ contractId: null, beatId: null, amount: round2(amount) }];
+  const out = list.map((g) => ({ contractId: g.contractId, beatId: g.beatId, amount: round2((amount * g.weight) / total) }));
+  const drift = round2(amount - out.reduce((a, g) => a + g.amount, 0));
+  if (drift) out[0].amount = round2(out[0].amount + drift);
+  return out.filter((g) => g.amount !== 0);
+}
+
 // ─────────────────────────────── Accounts receivable ───────────────────────────────
 
 export async function postArInvoice(
@@ -168,6 +189,41 @@ export async function postArInvoiceCancellation(
       { accountCode: ACCOUNTS.REVENUE, description: invoice.invoiceNumber, debit: subtotal, credit: 0, dimensions: client },
       ...(vat > 0 ? [{ accountCode: ACCOUNTS.VAT_PAYABLE, description: invoice.invoiceNumber, debit: vat, credit: 0, dimensions: client }] : []),
       { accountCode: ACCOUNTS.AR, description: invoice.invoiceNumber, debit: 0, credit: num(invoice.totalAmount), dimensions: client },
+    ],
+  });
+}
+
+/**
+ * A credit note takes revenue and VAT back and reduces receivables; a debit note does the opposite. The revenue goes to the same
+ * contracts and beats the invoice was billed for, in proportion, so the ledger still answers what each of them earned.
+ */
+export async function postClientNote(
+  ctx: Ctx,
+  tx: Tx,
+  note: { id: string; clientId: string; type: string; noteNumber: string; noteDate: Date; netAmount: unknown; vatAmount: unknown; totalAmount: unknown },
+  invoice: { invoiceNumber: string; lines?: Array<{ contractId?: string | null; beatId?: string | null; amount: unknown }> },
+) {
+  const credit = note.type === "CREDIT";
+  const net = num(note.netAmount);
+  const vat = num(note.vatAmount);
+  const client = { clientId: note.clientId };
+  const description = `${credit ? "Credit" : "Debit"} note ${note.noteNumber} on ${invoice.invoiceNumber}`;
+  const revenue = splitProportionally(invoice.lines, net).map((r) => ({
+    accountCode: ACCOUNTS.REVENUE,
+    description,
+    debit: credit ? r.amount : 0,
+    credit: credit ? 0 : r.amount,
+    dimensions: { ...client, contractId: r.contractId, beatId: r.beatId },
+  }));
+  return postJournal(ctx, tx, {
+    source: credit ? "AR_CREDIT_NOTE" : "AR_DEBIT_NOTE",
+    ref: { type: "CLIENT_NOTE", id: note.id },
+    postingDate: note.noteDate,
+    description,
+    lines: [
+      { accountCode: ACCOUNTS.AR, description, debit: credit ? 0 : num(note.totalAmount), credit: credit ? num(note.totalAmount) : 0, dimensions: client },
+      ...revenue,
+      ...(vat > 0 ? [{ accountCode: ACCOUNTS.VAT_PAYABLE, description, debit: credit ? vat : 0, credit: credit ? 0 : vat, dimensions: client }] : []),
     ],
   });
 }

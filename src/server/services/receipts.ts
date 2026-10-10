@@ -20,6 +20,7 @@ import type { Ctx } from "@/lib/auth/context";
 import { d } from "@/lib/dates";
 import { num, round2 } from "@/lib/money";
 import { allocationProblems, invoiceStatus, receiptPosition, type AllocationInput } from "@/lib/receipts";
+import { amountDue, effectiveTotal } from "@/lib/notes";
 import { buildStatement, type Statement, type StatementInvoice, type StatementSettlement } from "@/lib/statements";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
@@ -50,7 +51,9 @@ export type ClientReceiptInput = z.input<typeof clientReceiptSchema>;
 
 // ───────────────────────────── Invoices a receipt can settle ─────────────────────────────
 
-const balanceOf = (inv: { totalAmount: unknown; amountPaid: unknown; totalDeductions: unknown }) => round2(num(inv.totalAmount) - num(inv.amountPaid) - num(inv.totalDeductions));
+type Money = { totalAmount: unknown; totalDebits: unknown; totalCredits: unknown; amountPaid: unknown; totalDeductions: unknown };
+const figures = (inv: Money) => ({ totalAmount: num(inv.totalAmount), totalDebits: num(inv.totalDebits), totalCredits: num(inv.totalCredits), amountPaid: num(inv.amountPaid), totalDeductions: num(inv.totalDeductions) });
+const balanceOf = (inv: Money) => round2(amountDue(figures(inv)));
 
 /** A client's invoices that still owe something, oldest due first. */
 export async function openInvoicesFor(ctx: Ctx, clientId: string, tx: Tx = db) {
@@ -72,10 +75,11 @@ async function applyToInvoice(tx: Tx, orgId: string, invoiceId: string, cash: nu
   const amountPaid = round2(num(inv.amountPaid) + cash);
   const totalDeductions = round2(num(inv.totalDeductions) + wht);
   if (amountPaid < 0 || totalDeductions < 0) throw new BusinessError(`${inv.invoiceNumber} would be left with a negative settlement.`);
-  if (round2(amountPaid + totalDeductions) > num(inv.totalAmount) + 0.005) throw new BusinessError(`${inv.invoiceNumber}: that is more than is owed on it.`);
+  const due = effectiveTotal(figures(inv)); // the invoice's total once its credit and debit notes are counted
+  if (round2(amountPaid + totalDeductions) > due + 0.005) throw new BusinessError(`${inv.invoiceNumber}: that is more than is owed on it.`);
   const moved = await tx.clientInvoice.updateMany({
-    where: { id: invoiceId, amountPaid: inv.amountPaid, totalDeductions: inv.totalDeductions },
-    data: { amountPaid, totalDeductions, status: invoiceStatus(num(inv.totalAmount), amountPaid, totalDeductions) },
+    where: { id: invoiceId, amountPaid: inv.amountPaid, totalDeductions: inv.totalDeductions, totalCredits: inv.totalCredits, totalDebits: inv.totalDebits },
+    data: { amountPaid, totalDeductions, status: invoiceStatus(due, amountPaid, totalDeductions) },
   });
   if (!moved.count) throw new BusinessError(`${inv.invoiceNumber} changed while this was being saved. Try again.`);
   return inv;
@@ -291,7 +295,7 @@ export async function clientStatement(ctx: Ctx, clientId: string, asOfRaw?: stri
   const client = await db.client.findFirst({ where: { id: clientId, organizationId: ctx.orgId }, select: { id: true, name: true } });
   if (!client) throw new BusinessError("Client not found.");
 
-  const [invoices, legacy, deductions, allocations, newReceipts, refunds, ledgerLines] = await Promise.all([
+  const [invoices, legacy, deductions, allocations, newReceipts, refunds, ledgerLines, notes] = await Promise.all([
     db.clientInvoice.findMany({ where: { organizationId: ctx.orgId, clientId, status: { not: "CANCELLED" } } }),
     db.clientReceipt.findMany({ where: { organizationId: ctx.orgId, clientId, invoiceId: { not: null } } }),
     db.clientInvoiceDeduction.findMany({ where: { organizationId: ctx.orgId, clientId } }),
@@ -299,11 +303,13 @@ export async function clientStatement(ctx: Ctx, clientId: string, asOfRaw?: stri
     db.clientReceipt.findMany({ where: { organizationId: ctx.orgId, clientId, invoiceId: null, receivedDate: { lte: asOf } } }),
     db.clientRefund.findMany({ where: { organizationId: ctx.orgId, clientId, status: "APPROVED", refundDate: { lte: asOf } } }),
     db.journalLine.aggregate({ where: { journal: { organizationId: ctx.orgId, postingDate: { lte: asOf } }, account: { organizationId: ctx.orgId, code: "1200" }, clientId }, _sum: { debit: true, credit: true } }),
+    db.clientNote.findMany({ where: { organizationId: ctx.orgId, clientId, status: "APPROVED", noteDate: { lte: asOf } } }),
   ]);
 
   const stInvoices: StatementInvoice[] = invoices.map((i) => ({ id: i.id, invoiceNumber: i.invoiceNumber, invoiceDate: i.invoiceDate, dueDate: i.dueDate, total: num(i.totalAmount) }));
   const settlements: StatementSettlement[] = [
     ...legacy.map((r) => ({ id: r.id, invoiceId: r.invoiceId!, date: r.receivedDate, kind: "RECEIPT" as const, reference: r.reference ?? "Receipt", amount: num(r.amount) })),
+    ...notes.filter((n) => n.type === "CREDIT").map((n) => ({ id: n.id, invoiceId: n.invoiceId, date: n.noteDate, kind: "CREDIT_NOTE" as const, reference: n.noteNumber, amount: num(n.totalAmount) })),
     ...deductions.map((x) => ({ id: x.id, invoiceId: x.invoiceId, date: d(iso(x.createdAt)), kind: (x.type === "WITHHOLDING_TAX" ? "TAX_WITHHELD" : "DEDUCTION") as "TAX_WITHHELD" | "DEDUCTION", reference: x.supportingDocument, amount: num(x.amount) })),
     ...allocations.flatMap((a) => [
       ...(num(a.cashAmount) > 0 ? [{ id: `${a.id}:c`, invoiceId: a.invoiceId, date: a.appliedOn, reversedOn: a.reversedOn, kind: "RECEIPT" as const, reference: a.receipt.receiptNumber ?? "Receipt", amount: num(a.cashAmount) }] : []),
@@ -314,7 +320,8 @@ export async function clientStatement(ctx: Ctx, clientId: string, asOfRaw?: stri
   const applied = (a: (typeof allocations)[number]) => a.appliedOn <= asOf && (!a.reversedOn || a.reversedOn > asOf);
   const brought = newReceipts.reduce((s, r) => s + num(r.amount) + num(r.whtWithheld), 0);
   const advances = round2(brought - allocations.filter(applied).reduce((s, a) => s + num(a.cashAmount) + num(a.whtAmount), 0) - refunds.reduce((s, r) => s + num(r.amount), 0));
-  const statement = buildStatement(stInvoices, settlements, advances, asOf);
+  const charges = notes.filter((n) => n.type === "DEBIT").map((n) => ({ id: n.id, invoiceId: n.invoiceId, date: n.noteDate, reference: n.noteNumber, amount: num(n.totalAmount) }));
+  const statement = buildStatement(stInvoices, settlements, advances, asOf, charges);
   return { ...statement, client, asOf, ledger: round2(num(ledgerLines._sum.debit) - num(ledgerLines._sum.credit)) };
 }
 

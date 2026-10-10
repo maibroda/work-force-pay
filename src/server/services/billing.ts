@@ -25,6 +25,7 @@ import { payrollByContractAndCategory } from "./reports";
 import { postArDeduction, postArInvoice, postArInvoiceCancellation, postArReceipt } from "./gl-posting";
 import { recordInvoiceTax, resolveTax, reverseInvoiceTax, type ResolvedTax, type TaxGroup } from "./tax-engine";
 import { resolveBilling } from "./billing-rules";
+import { amountDue, effectiveTotal } from "@/lib/notes";
 import { splitCharge, taxableOf, type BillingBase, type RuleSource } from "@/lib/billing-rules";
 
 const DEFAULT_PAYMENT_TERMS_DAYS = 30;
@@ -263,6 +264,7 @@ export async function getInvoice(ctx: Ctx, id: string) {
       receipts: { orderBy: { receivedDate: "desc" } },
       deductions: { orderBy: { createdAt: "desc" } },
       receiptAllocations: { orderBy: { createdAt: "desc" }, include: { receipt: { select: { id: true, receiptNumber: true, reference: true, method: true } } } },
+      adjustmentNotes: { orderBy: { createdAt: "desc" } },
     },
   });
 }
@@ -306,8 +308,8 @@ export async function receivablesSummary(ctx: Ctx, filter: { from?: string; to?:
       overdue: 0,
       invoices: 0,
     };
-    const balance = round2(num(inv.totalAmount) - num(inv.amountPaid) - num(inv.totalDeductions));
-    row.billed = round2(row.billed + num(inv.totalAmount));
+    const balance = amountDue(figures(inv));
+    row.billed = round2(row.billed + effectiveTotal(figures(inv))); // what was billed, once credit and debit notes are counted
     row.received = round2(row.received + num(inv.amountPaid));
     row.deducted = round2(row.deducted + num(inv.totalDeductions));
     row.outstanding = round2(row.outstanding + balance);
@@ -329,8 +331,16 @@ export async function receivablesSummary(ctx: Ctx, filter: { from?: string; to?:
   };
 }
 
-const balanceOf = (inv: { totalAmount: unknown; amountPaid: unknown; totalDeductions: unknown }) =>
-  round2(num(inv.totalAmount) - num(inv.amountPaid) - num(inv.totalDeductions));
+/** An invoice's money fields as numbers, for the note-aware balance rules. */
+const figures = (inv: { totalAmount: unknown; totalDebits: unknown; totalCredits: unknown; amountPaid: unknown; totalDeductions: unknown }) => ({
+  totalAmount: num(inv.totalAmount),
+  totalDebits: num(inv.totalDebits),
+  totalCredits: num(inv.totalCredits),
+  amountPaid: num(inv.amountPaid),
+  totalDeductions: num(inv.totalDeductions),
+});
+
+const balanceOf = (inv: { totalAmount: unknown; totalDebits: unknown; totalCredits: unknown; amountPaid: unknown; totalDeductions: unknown }) => round2(amountDue(figures(inv)));
 
 export const receiptSchema = z.object({
   invoiceId: z.string().min(1),
@@ -367,7 +377,7 @@ export async function recordReceipt(ctx: Ctx, raw: z.input<typeof receiptSchema>
       where: { id: inv.id },
       data: {
         amountPaid,
-        status: amountPaid + num(inv.totalDeductions) >= num(inv.totalAmount) ? "PAID" : "PARTIALLY_PAID",
+        status: amountPaid + num(inv.totalDeductions) >= effectiveTotal(figures(inv)) ? "PAID" : "PARTIALLY_PAID",
       },
     });
     await postArReceipt(ctx, tx, receipt, inv.invoiceNumber);
@@ -425,7 +435,7 @@ export async function recordDeduction(ctx: Ctx, raw: z.input<typeof deductionSch
       where: { id: inv.id },
       data: {
         totalDeductions,
-        status: num(inv.amountPaid) + totalDeductions >= num(inv.totalAmount) ? "PAID" : "PARTIALLY_PAID",
+        status: num(inv.amountPaid) + totalDeductions >= effectiveTotal(figures(inv)) ? "PAID" : "PARTIALLY_PAID",
       },
     });
     await postArDeduction(ctx, tx, deduction, inv.invoiceNumber);
@@ -452,6 +462,8 @@ export async function cancelInvoice(ctx: Ctx, id: string, reason: string) {
   if (!inv) throw new BusinessError("Invoice not found.");
   if (num(inv.amountPaid) > 0 || num(inv.totalDeductions) > 0)
     throw new BusinessError("An invoice with payments or deductions against it cannot be cancelled.");
+  if (num(inv.totalCredits) > 0 || num(inv.totalDebits) > 0)
+    throw new BusinessError("An invoice with credit or debit notes against it cannot be cancelled.");
   if (inv.status === "CANCELLED") throw new BusinessError("This invoice is already cancelled.");
   // The status change and the reversing journal commit together, so a cancelled invoice never stays in the ledger.
   await db.$transaction(async (tx) => {
