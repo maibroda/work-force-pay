@@ -980,6 +980,21 @@ Finance / Accounting → **Tax Codes & Rates** and **Tax Reports**.
   were given records from their stored figures when it was installed.
 - Not yet: withholding certificates, input VAT on purchases.
 
+### Withholding tax certificates
+
+Finance / Accounting → **WHT Certificates**.
+
+- **Evidence of tax withheld.** When a client withholds tax on paying us they owe us a credit note or certificate, and the tax authority credits the tax
+  only on production of it. The register holds the certificates actually received (client, the number as printed, dates, amount certified, where the
+  original is kept). `tax.manage` registers and voids them.
+- **Matched to what was withheld.** Receipts (the tax withheld and the certificate number the client quoted) and withholding deductions carry the
+  references. The page matches them to the register on client and number (case, spaces and punctuation ignored) and says, for each number: **matched**, **no
+  certificate received** (chase the client), **certificate for less than was withheld**, **for more than was recorded**, or **received with no withholding
+  recorded**. It totals the tax still to chase, and shows that withholding tax receivable in the ledger agrees with the tax recorded as withheld.
+- **A certificate is evidence, so it is never edited or deleted** (the database refuses, even by SQL). A wrong one is voided once, with a reason, and entered
+  again; a voided certificate counts as not received. A repeat of the same number for a client is refused.
+- Not yet: certificates issued by us to suppliers we withhold from (with payables), and using certificates against a tax payment.
+
 ### Billing rules
 
 Finance / Accounting → **Billing Rules** (under Billing).
@@ -1067,6 +1082,22 @@ Finance / Accounting → **Billing & Receivables** and **Proforma Invoices**.
 - **Proforma** (Proforma Invoices): choose a payroll run, even one not yet locked, and see what each client would be invoiced, worked out exactly as the
   invoice will be (each contract under its billing rule, tax at the rates in force). Nothing is saved, numbered or posted, and it is printable, marked
   "Not a tax invoice".
+
+### Quick payslip
+
+Payroll → **Quick Payslip** (`payroll.view`). A calculator for offers, budgets and what-ifs; **nothing is saved** and it creates no payroll record.
+
+- **Enter a monthly gross salary and say how it splits.** Set the percentages of **Basic**, **Housing** and **Transport**; **other allowances** take whatever is left
+  (shown live, and refused if the three go over 100%). Optionally pick a **salary structure** to fill the percentages and to split the other allowances
+  (entertainment, meal, utility, leave, medical, clothing …) the way that structure does; only active structures that are plain percentage splits of the gross
+  are offered.
+- **The payslip is worked out as the payroll engine does it:** the PAYE tax rule and the pension rule in force on the **pay date** you choose (so a 2026 slip
+  uses the 2026 bands), the pensionable base being the allowances the pension rule names (Basic, Housing and Transport by default), employee pension at the
+  rule's rate, PAYE on the taxable earnings after the rule's reliefs (rent relief if you give annual rent), and an optional named deduction such as a staff loan.
+  The earnings always add back to the gross to the kobo.
+- **It shows** the earnings with their percentages, the deductions, net pay (and what share of gross it is), the employer's pension cost, and how the PAYE was
+  worked out (annual taxable earnings, reliefs, chargeable income, annual and monthly tax), with the rule versions used. Print or save as PDF from the page.
+- The same inputs go in the address, so a quick payslip can be shared as a link. Tax rules must be verified against current law before a figure is relied on.
 
 ### Route smoke test
 
