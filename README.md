@@ -1026,8 +1026,26 @@ Finance / Accounting → **Client Receipts** and **Receivables Ageing** (under B
   page says so or by how much it differs. Download as CSV (audited) or print.
 - The ledger integrity check now includes allocations in the receivables subledger, reconciles the advances held to account 2192, and warns when a
   client's receivables balance differs from what their invoices say they owe.
-- Not yet: credit and debit notes, invoice draft/approve/post, proforma invoices, PDF/Excel statements, and matching a refund to a bank line
-  (record the bank line as a manual item for now).
+- Not yet: invoice draft/approve/post, proforma invoices, PDF/Excel statements, and matching a refund to a bank line (record the bank line as a
+  manual item for now).
+
+### Credit and debit notes
+
+Finance / Accounting → **Credit & Debit Notes** (under Billing); raise one from an invoice ("Raise a credit note" / "Raise a debit note").
+
+- **A credit note reduces what a client owes on an invoice** (a billing error, a service credit, a discount); **a debit note increases it** (an
+  under-billing, a price adjustment, a fee). Each has a net amount, VAT, a reason code and an explanation, and a number (`CN-nnnnnn`, `DN-nnnnnn`).
+- **Raised by one person, approved by another** (`note.manage` raises, `note.approve` decides, never the person who raised it). Until approved nothing
+  is posted and the invoice is unchanged; the raiser can withdraw it. **Approving posts it and moves the invoice's balance in one transaction.**
+  Credit: `Dr Revenue (spread over the invoice's contracts and beats in proportion), Dr VAT payable, Cr Receivables`. Debit: the reverse.
+- **The invoice is never edited.** Its credits and debits are kept beside it; what is owed is the total plus debits less credits, payments and
+  deductions. A decided note never changes (the database refuses, even by SQL): a mistaken credit note is put right with a debit note.
+- **A credit can't take off more than is owed**, nor more of the invoice's net charge or VAT than was charged (less earlier credits). Approval
+  checks again against the invoice as it then is, so two credits that each fit alone can't both be approved. A client who has paid more than the
+  corrected amount has overpaid: record it as an advance and refund it.
+- **Receipts and statements follow:** a receipt can settle what remains (and a debit note reopens a paid invoice), the statement shows the notes
+  in date order, and the VAT and integrity checks count them. An invoice with notes can't be cancelled.
+- A debit note is raised against an invoice and shares its due date; a standalone charge with no invoice is not supported yet.
 
 ### Route smoke test
 

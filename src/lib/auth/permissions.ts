@@ -70,6 +70,8 @@ export const PERMISSIONS = [
   "billing.rule.manage", // set up service types and propose billing rules and contract overrides
   "billing.rule.approve", // approve or turn down a billing rule, never the person who proposed it; assign a contract's service type
   "receipt.approve", // approve a refund of a client advance, never the person who asked for it
+  "note.manage", // raise credit and debit notes against client invoices
+  "note.approve", // approve or turn down a credit or debit note, never the person who raised it
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -183,6 +185,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "journal.manage",
     "tax.manage",
     "billing.rule.manage",
+    "note.manage",
   ],
   AUDITOR: READ_ALL,
   SUPERVISOR: [

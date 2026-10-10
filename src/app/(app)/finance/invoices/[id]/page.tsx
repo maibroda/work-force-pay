@@ -9,6 +9,7 @@ import { naira, num } from "@/lib/money";
 import { enumOptions } from "@/server/options";
 import { KV, PageHeader, Section } from "@/components/page";
 import { BASE_LABELS, SOURCE_LABELS, type BillingBase, type RuleSource } from "@/lib/billing-rules";
+import { amountDue } from "@/lib/notes";
 import { ActionButton } from "@/components/action-button";
 import { PrintButton } from "@/components/print-button";
 import { SmartForm } from "@/components/smart-form";
@@ -25,7 +26,8 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
   if (!inv) notFound();
   const org = await db.organization.findUnique({ where: { id: ctx.orgId } });
   const manage = can(ctx.role, "payment.manage");
-  const balance = num(inv.totalAmount) - num(inv.amountPaid) - num(inv.totalDeductions);
+  const balance = amountDue({ totalAmount: num(inv.totalAmount), totalDebits: num(inv.totalDebits), totalCredits: num(inv.totalCredits), amountPaid: num(inv.amountPaid), totalDeductions: num(inv.totalDeductions) });
+  const noteManage = can(ctx.role, "note.manage");
   // how each contract on the invoice was billed (invoices from before billing rules have none recorded)
   type Treatment = { contract: string; source: string; directPct: number; indirectPct: number; vatBase: string; whtBase: string; vat: { code: string | null; ratePct: number; source: string }; wht: { code: string | null; ratePct: number; source: string } };
   const treatments = ((inv.taxBasis ?? {}) as { contracts?: Treatment[] }).contracts ?? [];
@@ -44,7 +46,9 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
               balance <= 0.01 &&
               inv.status !== "CANCELLED" &&
               num(inv.amountPaid) === 0 &&
-              num(inv.totalDeductions) === 0 && (
+              num(inv.totalDeductions) === 0 &&
+              num(inv.totalCredits) === 0 &&
+              num(inv.totalDebits) === 0 && (
                 <ActionButton
                   action={cancelInvoiceAction.bind(null, inv.id)}
                   reason
@@ -133,6 +137,18 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
               <TD colSpan={5}>Total due</TD>
               <TD className="text-right">{naira(inv.totalAmount)}</TD>
             </TR>
+            {num(inv.totalDebits) > 0 && (
+              <TR>
+                <TD colSpan={5}>Debit notes (see below)</TD>
+                <TD className="text-right">{naira(inv.totalDebits)}</TD>
+              </TR>
+            )}
+            {num(inv.totalCredits) > 0 && (
+              <TR>
+                <TD colSpan={5}>Credit notes (see below)</TD>
+                <TD className="text-right">− {naira(inv.totalCredits)}</TD>
+              </TR>
+            )}
             <TR>
               <TD colSpan={5}>Paid to date</TD>
               <TD className="text-right">{naira(inv.amountPaid)}</TD>
@@ -178,6 +194,54 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
           {inv.run.runNumber} for {inv.period.name}. Payment due within 30 days of the invoice date.
         </p>
       </div>
+
+      <Section
+        title="Credit & debit notes"
+        flush
+        description="Changes to what is owed on this invoice. The invoice itself is not edited: a credit note reduces the balance, a debit note increases it, each approved by someone other than whoever raised it."
+      >
+        {noteManage && inv.status !== "CANCELLED" && (
+          <div className="flex gap-3 px-4 pt-3 text-sm">
+            <Link className="text-primary underline" href={`/finance/notes/new?invoiceId=${inv.id}&type=CREDIT`}>
+              Raise a credit note
+            </Link>
+            <Link className="text-primary underline" href={`/finance/notes/new?invoiceId=${inv.id}&type=DEBIT`}>
+              Raise a debit note
+            </Link>
+          </div>
+        )}
+        {inv.adjustmentNotes.length > 0 ? (
+          <Table>
+            <THead>
+              <TR>
+                <TH>Note</TH>
+                <TH>Date</TH>
+                <TH>Why</TH>
+                <TH className="text-right">Total</TH>
+                <TH>Status</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {inv.adjustmentNotes.map((n) => (
+                <TR key={n.id}>
+                  <TD className="font-mono text-xs">
+                    <Link className="text-primary underline" href={`/finance/notes/${n.id}`}>
+                      {n.noteNumber}
+                    </Link>
+                    <div className="text-muted-foreground">{n.type === "CREDIT" ? "Credit" : "Debit"}</div>
+                  </TD>
+                  <TD className="text-xs">{fmtDate(n.noteDate)}</TD>
+                  <TD className="max-w-[24rem] whitespace-normal text-xs">{n.reason}</TD>
+                  <TD className="text-right">{n.type === "CREDIT" ? "− " : ""}{naira(n.totalAmount)}</TD>
+                  <TD className="text-xs">{n.status === "APPROVED" ? "Approved" : n.status === "PENDING" ? "Waiting for approval" : "Turned down"}</TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        ) : (
+          <p className="px-4 py-3 text-sm text-muted-foreground">None.</p>
+        )}
+      </Section>
 
       <Section title="Payments received" flush>
         <Table>

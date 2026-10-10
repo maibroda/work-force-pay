@@ -41,14 +41,23 @@ export interface StatementSettlement {
   date: Date;
   /** When it was reversed, if it was: it counts until then. */
   reversedOn?: Date | null;
-  kind: "RECEIPT" | "TAX_WITHHELD" | "DEDUCTION";
+  kind: "RECEIPT" | "TAX_WITHHELD" | "DEDUCTION" | "CREDIT_NOTE";
+  reference: string;
+  amount: number;
+}
+
+/** An extra charge on an invoice: a debit note. */
+export interface StatementCharge {
+  id: string;
+  invoiceId: string;
+  date: Date;
   reference: string;
   amount: number;
 }
 
 export interface StatementLine {
   date: Date;
-  type: "INVOICE" | "RECEIPT" | "TAX_WITHHELD" | "DEDUCTION";
+  type: "INVOICE" | "DEBIT_NOTE" | "RECEIPT" | "TAX_WITHHELD" | "DEDUCTION" | "CREDIT_NOTE";
   reference: string;
   description: string;
   debit: number;
@@ -69,13 +78,14 @@ export interface Statement {
 }
 
 /** Builds a statement as at a date from a client's invoices and what settled them. */
-export function buildStatement(invoices: StatementInvoice[], settlements: StatementSettlement[], advances: number, asOf: Date): Statement {
+export function buildStatement(invoices: StatementInvoice[], settlements: StatementSettlement[], advances: number, asOf: Date, charges: StatementCharge[] = []): Statement {
   const live = (s: StatementSettlement) => s.date <= asOf && (!s.reversedOn || s.reversedOn > asOf);
   const items: Array<Omit<StatementLine, "balance"> & { order: number }> = [];
   for (const inv of invoices.filter((i) => i.invoiceDate <= asOf))
     items.push({ date: inv.invoiceDate, type: "INVOICE", reference: inv.invoiceNumber, description: `Invoice ${inv.invoiceNumber}, due ${inv.dueDate.toISOString().slice(0, 10)}`, debit: inv.total, credit: 0, order: 0 });
   const numberOf = new Map(invoices.map((i) => [i.id, i.invoiceNumber]));
-  const label = { RECEIPT: "Payment received", TAX_WITHHELD: "Tax withheld by client", DEDUCTION: "Deduction applied" } as const;
+  const label = { RECEIPT: "Payment received", TAX_WITHHELD: "Tax withheld by client", DEDUCTION: "Deduction applied", CREDIT_NOTE: "Credit note" } as const;
+  for (const c of charges.filter((x) => x.date <= asOf)) items.push({ date: c.date, type: "DEBIT_NOTE", reference: c.reference, description: `Debit note against ${numberOf.get(c.invoiceId) ?? "an invoice"}`, debit: c.amount, credit: 0, order: 0 });
   for (const s of settlements.filter(live)) items.push({ date: s.date, type: s.kind, reference: s.reference, description: `${label[s.kind]} against ${numberOf.get(s.invoiceId) ?? "an invoice"}`, debit: 0, credit: s.amount, order: 1 });
   items.sort((a, b) => a.date.getTime() - b.date.getTime() || a.order - b.order || a.reference.localeCompare(b.reference) || a.description.localeCompare(b.description));
   let running = 0;
@@ -88,7 +98,8 @@ export function buildStatement(invoices: StatementInvoice[], settlements: Statem
   const outstanding: Statement["outstanding"] = [];
   for (const inv of invoices.filter((i) => i.invoiceDate <= asOf)) {
     const settled = settlements.filter((s) => s.invoiceId === inv.id && live(s)).reduce((a, s) => a + cents(s.amount), 0);
-    const left = cents(inv.total) - settled;
+    const extra = charges.filter((c) => c.invoiceId === inv.id && c.date <= asOf).reduce((a, c) => a + cents(c.amount), 0);
+    const left = cents(inv.total) + extra - settled;
     if (left === 0) continue;
     const bucket = bucketFor(inv.dueDate, asOf);
     ageing[bucket] = (cents(ageing[bucket]) + left) / 100;

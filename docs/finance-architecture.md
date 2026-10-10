@@ -284,8 +284,16 @@ them, as at any date, and tie to the client's balance in the receivables account
 client whose ledger balance differs from their invoices. (The brief called these `Receipt` / `ReceiptAllocation`; extending `ClientReceipt`
 kept bank matching and every existing figure intact.)
 
-**Phase 3, still to do:** credit and debit notes (allocatable like invoices), the invoice lifecycle (draft, approve, post, sent) with proforma
-invoices and immutability once posted, withholding certificates, PDF / Excel statements.
+## 5f. Phase 3, second step — credit and debit notes (built)
+
+`ClientNote` (credit or debit, maker/checker, immutable once decided) raised against an invoice. Approving it posts to the ledger, writes a
+signed VAT record and moves the invoice's `totalCredits` / `totalDebits` in a guarded update; the invoice is never edited. What is owed is
+computed from the total, the notes, payments and deductions in one place (`lib/notes.ts`) and used by billing, receipts, statements and the
+integrity check (which verifies the stored credits and debits against the approved notes). Deliberately simpler than the brief's
+"allocatable like invoices": a debit note adjusts a specific invoice and shares its due date, so receipts and ageing work unchanged.
+
+**Phase 3, still to do:** the invoice lifecycle (draft, approve, post, sent) with proforma invoices and immutability once posted, standalone
+debit notes, withholding certificates, PDF / Excel statements.
 
 ## 6. Safety rules for every migration
 

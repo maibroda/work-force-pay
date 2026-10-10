@@ -32,6 +32,8 @@ const DEFAULTS: Record<string, { prefix: string; digits: number }> = {
   MANUAL_JOURNAL: { prefix: "MJ", digits: 6 },
   CLIENT_RECEIPT: { prefix: "RCT", digits: 6 },
   CLIENT_REFUND: { prefix: "RFD", digits: 6 },
+  CREDIT_NOTE: { prefix: "CN", digits: 6 },
+  DEBIT_NOTE: { prefix: "DN", digits: 6 },
 };
 
 /**

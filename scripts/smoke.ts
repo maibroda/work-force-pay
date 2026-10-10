@@ -78,6 +78,7 @@ function resolvers(orgId: string): Record<string, () => Promise<string | undefin
     "/clients/[id]": () => first(db.client.findFirst({ where, select: { id: true } })),
     "/employees/[id]": () => first(db.employee.findFirst({ where, orderBy: { employeeNumber: "asc" }, select: { id: true } })),
     "/finance/fixed-assets/[id]": () => first(db.fixedAsset.findFirst({ where, select: { id: true } })),
+    "/finance/notes/[id]": () => first(db.clientNote.findFirst({ where, select: { id: true } })),
     "/finance/receipts/[id]": () => first(db.clientReceipt.findFirst({ where: { ...where, invoiceId: null }, select: { id: true } })),
     "/finance/statements/[clientId]": () => first(db.client.findFirst({ where, select: { id: true } })),
     "/finance/invoices/[id]": () => first(db.clientInvoice.findFirst({ where, select: { id: true } })),

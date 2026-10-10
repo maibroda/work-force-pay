@@ -3,6 +3,7 @@ import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { receivablesSummary, unbilledRuns } from "@/server/services/billing";
 import { defaultsOn } from "@/server/services/tax-engine";
+import { amountDue } from "@/lib/notes";
 import { options } from "@/server/options";
 import { fmtDate, iso } from "@/lib/dates";
 import { naira, num } from "@/lib/money";
@@ -190,7 +191,7 @@ export default async function InvoicesPage({
           </THead>
           <TBody>
             {invoices.map((inv) => {
-              const balance = num(inv.totalAmount) - num(inv.amountPaid) - num(inv.totalDeductions);
+              const balance = amountDue({ totalAmount: num(inv.totalAmount), totalDebits: num(inv.totalDebits), totalCredits: num(inv.totalCredits), amountPaid: num(inv.amountPaid), totalDeductions: num(inv.totalDeductions) });
               const overdue = balance > 0 && iso(inv.dueDate) < today && inv.status !== "CANCELLED";
               return (
                 <TR key={inv.id} className={overdue ? "bg-red-50/60" : ""}>
