@@ -302,7 +302,15 @@ and forbids deleting one. Drafts are excluded from receivables, statements, the 
 `ProformaInvoice` table and an explicit APPROVED-then-POSTED state were not needed: a proforma is computed on demand, and approval posts, as for
 notes and refunds.)
 
-**Phase 3, still to do:** standalone debit notes, withholding certificates, PDF / Excel statements. Then Phase 4 (period close and AR snapshots).
+## 5h. Phase 3, last step — withholding certificates (built)
+
+`TaxCertificate` is a register of certificates received from clients (append-only; voided once with a reason; a trigger refuses edits and deletes).
+Rather than a link table, certificates are matched to what was withheld by client and normalised number, because receipts and deductions already carry
+the number the client quoted; the reconciliation reports matched, missing, short, over and unrecorded certificates and the amount still to chase.
+
+**Phase 3 is complete**, with these deliberate gaps against the brief: a debit note adjusts an existing invoice rather than standing alone; statements are
+CSV plus the browser's print/save-as-PDF (there is no PDF or Excel library in the project, and CSV opens in Excel); certificates *issued* by us belong
+with payables. Next is Phase 4 (period close, AR snapshots and the reconciliation checklist).
 
 ## 6. Safety rules for every migration
 

@@ -628,6 +628,7 @@ model Organization {
   receiptAllocations        ReceiptAllocation[]
   clientRefunds             ClientRefund[]
   clientNotes               ClientNote[]
+  taxCertificates           TaxCertificate[]
   billingRules              BillingRule[]
   taxTransactions           TaxTransaction[]
   journalReversals          JournalReversal[]
@@ -1532,6 +1533,7 @@ model Client {
   journalLines      JournalLine[]
   receiptRefunds    ClientRefund[]
   notes             ClientNote[]
+  taxCertificates   TaxCertificate[]
 
   @@unique([organizationId, code])
 }
@@ -4064,6 +4066,33 @@ model ReceiptAllocation {
 
   @@index([organizationId, invoiceId])
   @@index([receiptId])
+}
+
+/// A withholding tax credit note or certificate received from a client: the evidence that tax was withheld on what they paid, which
+/// is what the tax authority credits. Never edited or deleted: a wrong one is voided, with a reason, and entered again.
+model TaxCertificate {
+  id                String       @id @default(cuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  clientId          String
+  client            Client       @relation(fields: [clientId], references: [id])
+  /// As printed on the certificate.
+  certificateNumber String
+  /// The number with spaces and punctuation removed and upper-cased, which is what receipts and deductions are matched on.
+  numberKey         String
+  issueDate         DateTime     @db.Date
+  receivedDate      DateTime     @db.Date
+  amount            Decimal      @db.Decimal(16, 2)
+  /// Where the original is kept (a file reference, a folder, a scan name).
+  document          String?
+  notes             String?
+  recordedBy        String
+  createdAt         DateTime     @default(now())
+  voidedAt          DateTime?
+  voidedBy          String?
+  voidReason        String?
+
+  @@index([organizationId, clientId, numberKey])
 }
 
 enum ClientNoteType {
