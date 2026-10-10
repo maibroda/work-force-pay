@@ -616,6 +616,10 @@ model Organization {
   branches                  Branch[]
   profitCentres             ProfitCentre[]
   projects                  Project[]
+  journalDocuments          JournalDocument[]
+  journalReversals          JournalReversal[]
+  /// Whether a manual journal needs a second person's approval before it posts.
+  journalApprovalRequired   Boolean                    @default(true)
 }
 
 model User {
@@ -2806,12 +2810,13 @@ model GlAccount {
   /// Which tax return or tax ledger this account feeds (VAT_OUTPUT, WHT_RECEIVABLE, PAYE …).
   taxMapping     String?
 
-  debitMappings      PayrollGlMapping[] @relation("MappingDebit")
-  creditMappings     PayrollGlMapping[] @relation("MappingCredit")
+  debitMappings      PayrollGlMapping[]    @relation("MappingDebit")
+  creditMappings     PayrollGlMapping[]    @relation("MappingCredit")
   lines              JournalLine[]
   bankAccounts       BankAccount[]
   /// Dimensions every posting to this account must carry (CLIENT, CONTRACT, COST_CENTER …). Empty = none required.
-  requiredDimensions String[]           @default([])
+  requiredDimensions String[]              @default([])
+  documentLines      JournalDocumentLine[]
 
   @@unique([organizationId, code])
 }
@@ -2860,7 +2865,13 @@ model JournalEntry {
   postedAt       DateTime          @default(now())
   remarks        String?
 
-  lines JournalLine[]
+  lines            JournalLine[]
+  /// Set when this journal reverses another: the original, which stays untouched. At most one reversal per journal.
+  reversalOfId     String?           @unique
+  reversalOf       JournalEntry?     @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversedBy       JournalEntry?     @relation("JournalReversal")
+  document         JournalDocument?
+  reversalRequests JournalReversal[]
 
   @@unique([organizationId, entryNumber])
   @@index([organizationId, postingDate])
@@ -3838,4 +3849,103 @@ model Project {
   journalLines   JournalLine[]
 
   @@unique([organizationId, code])
+}
+
+enum JournalDocumentKind {
+  MANUAL
+  ADJUSTMENT
+  /// Posts now and reverses itself on a set date.
+  ACCRUAL
+  /// Moves a balance from one account or dimension to another.
+  RECLASSIFICATION
+}
+
+enum JournalDocumentStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  POSTED
+  REJECTED
+  CANCELLED
+}
+
+/// A manual journal as a document: drafted, submitted, approved by someone else, then posted through the posting
+/// engine. Only a posted document has a journal; until then nothing touches the ledger. Once submitted its lines can no
+/// longer be changed (the database enforces it) until it is rejected back to draft.
+model JournalDocument {
+  id                String                @id @default(cuid())
+  organizationId    String
+  organization      Organization          @relation(fields: [organizationId], references: [id])
+  documentNumber    String
+  kind              JournalDocumentKind   @default(MANUAL)
+  description       String
+  postingDate       DateTime              @db.Date
+  /// For an accrual: the date its automatic reversal is posted.
+  reverseOn         DateTime?             @db.Date
+  status            JournalDocumentStatus @default(DRAFT)
+  createdBy         String
+  createdByUserId   String
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  submittedBy       String?
+  submittedByUserId String?
+  submittedAt       DateTime?
+  decidedBy         String?
+  decidedByUserId   String?
+  decidedAt         DateTime?
+  decisionNote      String?
+  postedBy          String?
+  postedAt          DateTime?
+  journalId         String?               @unique
+  journal           JournalEntry?         @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  lines             JournalDocumentLine[]
+
+  @@unique([organizationId, documentNumber])
+  @@index([organizationId, status])
+}
+
+model JournalDocumentLine {
+  id          String          @id @default(cuid())
+  documentId  String
+  document    JournalDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  accountId   String
+  account     GlAccount       @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  description String
+  debit       Decimal         @default(0) @db.Decimal(16, 2)
+  credit      Decimal         @default(0) @db.Decimal(16, 2)
+  sortOrder   Int             @default(0)
+  /// Dimension ids by column name (clientId, contractId, costCenterId …), checked by the posting engine when it posts.
+  dimensions  Json?
+
+  @@index([documentId])
+}
+
+enum JournalReversalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// A request to reverse a posted manual journal. Someone else approves; approving posts a mirror journal and links it
+/// to the original, which stays in the ledger untouched.
+model JournalReversal {
+  id                String                @id @default(cuid())
+  organizationId    String
+  organization      Organization          @relation(fields: [organizationId], references: [id])
+  journalId         String
+  journal           JournalEntry          @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  reason            String
+  /// The date the reversal posts on (must be in a period that accepts postings).
+  reverseDate       DateTime              @db.Date
+  status            JournalReversalStatus @default(PENDING)
+  requestedBy       String
+  requestedByUserId String
+  createdAt         DateTime              @default(now())
+  decidedBy         String?
+  decidedByUserId   String?
+  decidedAt         DateTime?
+  decisionNote      String?
+
+  @@index([organizationId, status])
+  @@index([journalId])
 }

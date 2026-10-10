@@ -9,6 +9,9 @@
  * both-sided; every journal has at least two lines; every line's account belongs to the same organization; the
  * whole ledger's debits equal its credits; every locked payroll run has its journal.
  *
+ * Reversal checks (ERROR): a journal that reverses another must negate it exactly, account by account, and the
+ * original must be in the same organization.
+ *
  * Dimension checks (ERROR): a line's client, contract, cost centre and other dimensions must belong to the same
  * organization, and a contract on a line must belong to that line's client.
  *
@@ -125,6 +128,27 @@ export async function checkLedgerIntegrity(orgId: string): Promise<IntegrityRepo
       }
       if (Math.abs(round2(ledgerDebit) - round2(ledgerCredit)) >= TOLERANCE)
         add("TRIAL_BALANCE", "ERROR", `Whole ledger: debits ${round2(ledgerDebit)} vs credits ${round2(ledgerCredit)}.`);
+
+      // A reversal must cancel its original exactly, account by account.
+      const byId = new Map(journals.map((j) => [j.id, j]));
+      const net = (j: (typeof journals)[number]) => {
+        const m = new Map<string, number>();
+        for (const l of j.lines) m.set(l.accountId, round2((m.get(l.accountId) ?? 0) + num(l.debit) - num(l.credit)));
+        return m;
+      };
+      for (const j of journals) {
+        if (!j.reversalOfId) continue;
+        const original = byId.get(j.reversalOfId);
+        if (!original) {
+          add("REVERSAL_ORIGINAL", "ERROR", "Reverses a journal that isn't in this organization.", j.entryNumber);
+          continue;
+        }
+        const a = net(original);
+        const b = net(j);
+        const accounts = new Set([...a.keys(), ...b.keys()]);
+        const off = [...accounts].filter((id) => Math.abs(round2((a.get(id) ?? 0) + (b.get(id) ?? 0))) >= TOLERANCE);
+        if (off.length) add("REVERSAL_MISMATCH", "ERROR", `Doesn't cancel ${original.entryNumber} exactly: ${off.length} account(s) don't net to nil.`, j.entryNumber);
+      }
 
       // Numbering: a ledger that never deletes has no gaps.
       const seq = journals.map((j) => Number(j.entryNumber.replace(/\D/g, ""))).filter((n) => Number.isFinite(n)).sort((a, b) => a - b);

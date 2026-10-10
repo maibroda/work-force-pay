@@ -52,13 +52,16 @@ export interface PostingInput {
   runId?: string;
   periodName?: string | null;
   remarks?: string | null;
+  /** Set when this journal reverses another; the original must be in this organization. */
+  reversalOfId?: string;
   /** Extra facts for the audit entry. */
   audit?: Record<string, unknown>;
 }
 
 const TOLERANCE = 0.01;
 
-export async function postJournal(ctx: Ctx, tx: Tx, input: PostingInput) {
+/** Every check, in order, without writing anything. Returns what the write needs, or null when there are no amounts. */
+async function prepare(ctx: Ctx, tx: Tx, input: PostingInput) {
   const lines = input.lines.filter((l) => round2(l.debit) !== 0 || round2(l.credit) !== 0);
   if (!lines.length) return null;
   if (lines.length < 2) throw new BusinessError(`Journal for "${input.description}" needs at least two lines.`);
@@ -94,7 +97,25 @@ export async function postJournal(ctx: Ctx, tx: Tx, input: PostingInput) {
   const period = await periodFor(tx, ctx.orgId, input.postingDate);
   const check = postingAllowed(period.status as PeriodStatus, period.name, canPostWhenSoftClosed(ctx));
   if (!check.ok) throw new BusinessError(check.reason!);
+  if (input.reversalOfId && !(await tx.journalEntry.findFirst({ where: { id: input.reversalOfId, organizationId: ctx.orgId }, select: { id: true } })))
+    throw new BusinessError("The journal being reversed doesn't exist in this organization.");
+  return { lines, resolved, totalDebit, totalCredit, period };
+}
 
+/**
+ * Runs every check the posting engine would run, writing nothing. For a draft that must be known to post before it is
+ * submitted: it refuses for the same reasons, with the same words. Posting later can still be refused if something
+ * changes in between (a period closing), because the engine checks again.
+ */
+export async function validateJournal(ctx: Ctx, tx: Tx, input: PostingInput) {
+  const p = await prepare(ctx, tx, input);
+  if (!p) throw new BusinessError(`Journal for "${input.description}" has no amounts.`);
+}
+
+export async function postJournal(ctx: Ctx, tx: Tx, input: PostingInput) {
+  const p = await prepare(ctx, tx, input);
+  if (!p) return null;
+  const { lines, resolved, totalDebit, totalCredit, period } = p;
   const entryNumber = await nextNumber(tx, ctx.orgId, "JOURNAL");
   const journal = await tx.journalEntry.create({
     data: {
@@ -102,6 +123,7 @@ export async function postJournal(ctx: Ctx, tx: Tx, input: PostingInput) {
       entryNumber,
       runId: input.runId,
       periodId: period.id,
+      reversalOfId: input.reversalOfId,
       periodName: input.periodName ?? period.name,
       postingDate: input.postingDate,
       description: input.description,

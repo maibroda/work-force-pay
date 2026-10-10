@@ -63,6 +63,8 @@ export const PERMISSIONS = [
   "period.close", // soft-close an accounting period, and still post into a soft-closed one
   "period.approve", // close a soft-closed period (never the person who soft-closed it) and lock a closed one
   "period.reopen", // reopen a soft-closed or closed period, with a reason
+  "journal.manage", // draft, edit and submit manual journals, and request a reversal
+  "journal.approve", // approve and post manual journals, approve a reversal, never the person who prepared it
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -173,6 +175,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "employee.approve",
     "gl.manage",
     "period.close",
+    "journal.manage",
   ],
   AUDITOR: READ_ALL,
   SUPERVISOR: [

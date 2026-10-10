@@ -894,6 +894,44 @@ project (the company is the organization itself; revenue type and expense type a
 - The journal page now shows each line's dimensions, its accounting period and its source document, and the integrity
   check reports a line pointing at another organization's record or a contract that isn't its client's.
 
+### Manual journals and reversals
+
+For entries no other part of the system posts (Finance / Accounting → **Manual Journals**), and for putting a wrong one right.
+
+- **A journal is a document, and nothing reaches the ledger until it is posted.** It is drafted (kind, date,
+  description, any number of lines, each with an account, narration, debit or credit, and optional dimensions),
+  **submitted**, **approved by someone other than whoever prepared or submitted it**, then **posted** through the posting
+  engine. Submitting runs every check the engine would run (balance, active accounts, dimensions, an open accounting
+  period), so a journal that can't post is refused when it is submitted, with the same words. It is checked again at
+  posting, because a period may have closed in between; the journal then stays approved and nothing is half-done.
+  Journals can be **returned** with a reason (from submitted or approved) and corrected, or **cancelled** (a draft or a
+  returned one; it stays on record). Permissions: `journal.manage` to prepare and submit (Finance), `journal.approve`
+  to approve and post (company administrator).
+- **After submission the lines can't change, enforced by the database.** Triggers refuse any change to a submitted,
+  approved, posted or cancelled document's lines, and to its description, date or kind; a posted or cancelled document
+  can't change at all; and anything that has been submitted can't be deleted. A draft that was never submitted can.
+- **Kinds.** Manual, Adjustment, Reclassification (moves an amount from one account or dimension to another), and
+  **Accrual**, which names the date it reverses on and **reverses itself** then. The reversal was approved along with
+  the accrual, so it posts with no further approval: scheduled through `/api/cron/journal-reversals` (same
+  `CRON_SECRET` bearer as the other jobs), or by the "Post due accrual reversals" button. An accrual that is already
+  reversed is never reversed twice; one whose reversal date falls in a closed period is reported and left, and the others
+  carry on.
+- **Receivables and payables are control accounts.** A manual journal can't post to account 1200 or 2180, at submit or at
+  post: they move only through invoices, receipts, credit notes, payments and deductions, so the client and supplier
+  records always agree with them. (The first version of this let it through, and the integrity check showed payables
+  disagreeing with the ledger.)
+- **Reversing a posted manual journal** (Finance / Accounting → **Journal Reversals**, requested from the journal's own
+  page). A request needs a reason and a date, is checked against the books at once (is the period open?), and is approved
+  by someone other than the requester. Approving posts a **mirror journal**: same accounts and dimensions, debit and
+  credit swapped, linked to the original, which stays in the ledger untouched. A journal reverses once; a reversal can't
+  itself be reversed (post a new journal instead). **Journals made by invoicing, payroll, payables, depreciation and the
+  like can't be reversed here**, because that would leave their document and the ledger disagreeing; they are corrected
+  through the document (cancel the invoice or bill, and so on). The page says so.
+- **Approval can be switched off** (an organization setting, administrator only, on by default; Manual Journals page). With
+  it off, the person who submits a journal posts it in the same step; the waiver and the setting change are both in the
+  audit trail. Break-glass approval for a one-person finance team arrives with the approval engine.
+- The integrity check now verifies that every reversal exactly negates its original, account by account.
+
 ### Route smoke test
 
 Unit and integration tests prove the services; they can't prove a *page* renders. `npm run smoke` does:
