@@ -12,6 +12,10 @@
  * Reversal checks (ERROR): a journal that reverses another must negate it exactly, account by account, and the
  * original must be in the same organization.
  *
+ * Client receipts (ERROR): receivables settled by receipts include what was applied to invoices by allocation, and what a
+ * receipt holds unapplied (less refunds) agrees with the client advances account. (WARN) A client's own balance in the
+ * receivables account agrees with what they owe on their invoices.
+ *
  * Tax checks (ERROR): the tax records of every live invoice add up to the VAT and withholding stored on it, and a cancelled
  * invoice has none left live.
  *
@@ -191,14 +195,18 @@ export async function checkLedgerIntegrity(orgId: string): Promise<IntegrityRepo
         if (Math.abs(difference) >= TOLERANCE) add("SUBLEDGER", "ERROR", `${name}: subledger ${subledger} vs ledger ${control} (difference ${difference}).`);
       };
 
-      const [invoices, receipts, deductions, bills, payments, billDeductions] = await Promise.all([
-        tx.clientInvoice.findMany({ where: { organizationId: orgId }, select: { totalAmount: true, status: true, invoiceNumber: true } }),
-        tx.clientReceipt.aggregate({ where: { organizationId: orgId }, _sum: { amount: true } }),
+      const [invoices, receipts, deductions, bills, payments, billDeductions, allocated, advanceReceipts, refunded] = await Promise.all([
+        tx.clientInvoice.findMany({ where: { organizationId: orgId }, select: { id: true, clientId: true, totalAmount: true, status: true, invoiceNumber: true } }),
+        tx.clientReceipt.aggregate({ where: { organizationId: orgId, invoiceId: { not: null } }, _sum: { amount: true } }), // single-invoice receipts; the others settle through allocations
         tx.clientInvoiceDeduction.aggregate({ where: { organizationId: orgId }, _sum: { amount: true } }),
         tx.purchaseInvoice.findMany({ where: { organizationId: orgId }, select: { totalAmount: true, status: true, invoiceNumber: true } }),
         tx.vendorPayment.aggregate({ where: { organizationId: orgId }, _sum: { amount: true } }),
         tx.purchaseInvoiceDeduction.aggregate({ where: { organizationId: orgId }, _sum: { amount: true } }),
+        tx.receiptAllocation.findMany({ where: { organizationId: orgId, reversedAt: null }, select: { cashAmount: true, whtAmount: true, invoice: { select: { clientId: true } } } }),
+        tx.clientReceipt.aggregate({ where: { organizationId: orgId, invoiceId: null }, _sum: { amount: true, whtWithheld: true } }),
+        tx.clientRefund.aggregate({ where: { organizationId: orgId, status: "APPROVED" }, _sum: { amount: true } }),
       ]);
+      const allocatedGross = round2(allocated.reduce((s, a) => s + num(a.cashAmount) + num(a.whtAmount), 0));
       // Documents that no journal points at (posted before journals recorded their source, or never posted).
       const sourced = new Set(journals.filter((j) => j.sourceType && j.sourceId).map((j) => `${j.sourceType}:${j.sourceId}`));
       const unlinked = async (label: string, type: string, rows: Promise<Array<{ id: string }>>) => {
@@ -214,10 +222,33 @@ export async function checkLedgerIntegrity(orgId: string): Promise<IntegrityRepo
       const cancelledAp = bills.filter((i) => i.status === "CANCELLED");
       reconcile(
         "Receivables (client subledger vs account 1200)",
-        subledgerBalance({ documents: invoices.map((i) => ({ total: num(i.totalAmount), status: i.status })), settled: num(receipts._sum.amount) + num(deductions._sum.amount) }),
+        subledgerBalance({ documents: invoices.map((i) => ({ total: num(i.totalAmount), status: i.status })), settled: num(receipts._sum.amount) + num(deductions._sum.amount) + allocatedGross }),
         await balanceOf(AR_CODE),
         1,
       );
+      reconcile(
+        "Client advances (receipts held vs account 2192)",
+        round2(num(advanceReceipts._sum.amount) + num(advanceReceipts._sum.whtWithheld) - allocatedGross - num(refunded._sum.amount)),
+        await balanceOf("2192"),
+        -1,
+      );
+      // Each client's own balance: invoices less what settled them, against the client's lines in the receivables account.
+      {
+        const owed = new Map<string, number>();
+        const bump = (clientId: string | null | undefined, n: number) => clientId && owed.set(clientId, round2((owed.get(clientId) ?? 0) + n));
+        for (const i of invoices) if (i.status !== "CANCELLED") bump(i.clientId, num(i.totalAmount));
+        const [legacy, ded] = await Promise.all([
+          tx.clientReceipt.groupBy({ by: ["clientId"], where: { organizationId: orgId, invoiceId: { not: null } }, _sum: { amount: true } }),
+          tx.clientInvoiceDeduction.groupBy({ by: ["clientId"], where: { organizationId: orgId }, _sum: { amount: true } }),
+        ]);
+        for (const r of legacy) bump(r.clientId, -num(r._sum.amount));
+        for (const r of ded) bump(r.clientId, -num(r._sum.amount));
+        for (const a of allocated) bump(a.invoice.clientId, -(num(a.cashAmount) + num(a.whtAmount)));
+        const byClient = await tx.journalLine.groupBy({ by: ["clientId"], where: { journal: { organizationId: orgId }, account: { organizationId: orgId, code: AR_CODE }, clientId: { not: null } }, _sum: { debit: true, credit: true } });
+        const ledgerOf = new Map(byClient.map((r) => [r.clientId as string, round2(num(r._sum.debit) - num(r._sum.credit))]));
+        const off = [...new Set([...owed.keys(), ...ledgerOf.keys()])].filter((c) => Math.abs((owed.get(c) ?? 0) - (ledgerOf.get(c) ?? 0)) >= TOLERANCE);
+        if (off.length) add("AR_CLIENT_BALANCE", "WARN", `${off.length} client(s) have a balance in the receivables account that differs from what their invoices say is owed (lines without a client, or older postings).`);
+      }
       reconcile(
         "Payables (vendor subledger vs account 2180)",
         subledgerBalance({ documents: bills.map((i) => ({ total: num(i.totalAmount), status: i.status })), settled: num(payments._sum.amount) + num(billDeductions._sum.amount) }),

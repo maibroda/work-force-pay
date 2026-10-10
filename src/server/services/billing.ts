@@ -262,6 +262,7 @@ export async function getInvoice(ctx: Ctx, id: string) {
       lines: { include: { beat: true, contract: true }, orderBy: { sortOrder: "asc" } },
       receipts: { orderBy: { receivedDate: "desc" } },
       deductions: { orderBy: { createdAt: "desc" } },
+      receiptAllocations: { orderBy: { createdAt: "desc" }, include: { receipt: { select: { id: true, receiptNumber: true, reference: true, method: true } } } },
     },
   });
 }

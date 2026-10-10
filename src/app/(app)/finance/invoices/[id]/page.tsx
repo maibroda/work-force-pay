@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -201,8 +202,39 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             ))}
           </TBody>
         </Table>
-        {!inv.receipts.length && (
+        {!inv.receipts.length && !inv.receiptAllocations.length && (
           <p className="px-4 py-4 text-sm text-muted-foreground">No payments recorded yet.</p>
+        )}
+        {inv.receiptAllocations.length > 0 && (
+          <div className="border-t">
+            <p className="px-4 pt-3 text-xs font-medium text-muted-foreground">Applied from client receipts</p>
+            <Table>
+              <THead>
+                <TR>
+                  <TH>Receipt</TH>
+                  <TH>Applied on</TH>
+                  <TH className="text-right">Cash</TH>
+                  <TH className="text-right">Tax withheld</TH>
+                  <TH>Status</TH>
+                </TR>
+              </THead>
+              <TBody>
+                {inv.receiptAllocations.map((a) => (
+                  <TR key={a.id}>
+                    <TD className="font-mono text-xs">
+                      <Link className="text-primary underline" href={`/finance/receipts/${a.receipt.id}`}>
+                        {a.receipt.receiptNumber}
+                      </Link>
+                    </TD>
+                    <TD className="text-xs">{fmtDate(a.appliedOn)}</TD>
+                    <TD className="text-right">{naira(a.cashAmount)}</TD>
+                    <TD className="text-right">{num(a.whtAmount) ? naira(a.whtAmount) : "—"}</TD>
+                    <TD className="text-xs">{a.reversedAt ? `Taken back ${fmtDate(a.reversedOn)}` : "Applied"}</TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+          </div>
         )}
       </Section>
 

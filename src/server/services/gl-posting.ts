@@ -30,6 +30,7 @@ const ACCOUNTS = {
   ACCUM_DEPRECIATION: "1250",
   AP: "2180",
   VAT_PAYABLE: "2190",
+  CLIENT_ADVANCES: "2192",
   WHT_PAYABLE: "2195",
   OPENING_BALANCE_EQUITY: "3100",
   REVENUE: "4100",
@@ -186,6 +187,70 @@ export async function postArReceipt(
     lines: [
       { accountCode: ACCOUNTS.CASH, description: invoiceNumber, debit: amount, credit: 0, dimensions: { clientId: receipt.clientId } },
       { accountCode: ACCOUNTS.AR, description: invoiceNumber, debit: 0, credit: amount, dimensions: { clientId: receipt.clientId } },
+    ],
+  });
+}
+
+/**
+ * A client receipt that may settle several invoices: cash in, tax the client withheld, the invoices it settles (receivables, at
+ * the gross of cash and withholding), and whatever is left held as a client advance until it is applied or refunded.
+ */
+export async function postClientReceipt(
+  ctx: Ctx,
+  tx: Tx,
+  receipt: { id: string; clientId: string; receiptNumber: string; receivedDate: Date; amount: unknown; whtWithheld: unknown },
+  allocatedGross: number,
+) {
+  const cash = num(receipt.amount);
+  const wht = num(receipt.whtWithheld);
+  const client = { clientId: receipt.clientId };
+  const held = Math.round((cash + wht - allocatedGross) * 100) / 100;
+  return postJournal(ctx, tx, {
+    source: "AR_RECEIPT",
+    ref: { type: "CLIENT_RECEIPT", id: receipt.id },
+    postingDate: receipt.receivedDate,
+    description: `Receipt ${receipt.receiptNumber}`,
+    lines: [
+      { accountCode: ACCOUNTS.CASH, description: receipt.receiptNumber, debit: cash, credit: 0, dimensions: client },
+      ...(wht > 0 ? [{ accountCode: ACCOUNTS.WHT_RECEIVABLE, description: `${receipt.receiptNumber} tax withheld`, debit: wht, credit: 0, dimensions: client }] : []),
+      ...(allocatedGross > 0 ? [{ accountCode: ACCOUNTS.AR, description: receipt.receiptNumber, debit: 0, credit: allocatedGross, dimensions: client }] : []),
+      ...(held > 0 ? [{ accountCode: ACCOUNTS.CLIENT_ADVANCES, description: `${receipt.receiptNumber} held as an advance`, debit: 0, credit: held, dimensions: client }] : []),
+    ],
+  });
+}
+
+/** Applies part of an advance to invoices (the advance account is debited, receivables credited), or takes it back. */
+export async function postAdvanceMovement(
+  ctx: Ctx,
+  tx: Tx,
+  move: { source: "AR_ALLOCATION" | "AR_ALLOCATION_REVERSAL"; sourceType: string; sourceId: string; clientId: string; amount: number; on: Date; description: string },
+) {
+  const client = { clientId: move.clientId };
+  const apply = move.source === "AR_ALLOCATION";
+  return postJournal(ctx, tx, {
+    source: move.source,
+    ref: { type: move.sourceType, id: move.sourceId },
+    postingDate: move.on,
+    description: move.description,
+    lines: [
+      { accountCode: apply ? ACCOUNTS.CLIENT_ADVANCES : ACCOUNTS.AR, description: move.description, debit: move.amount, credit: 0, dimensions: client },
+      { accountCode: apply ? ACCOUNTS.AR : ACCOUNTS.CLIENT_ADVANCES, description: move.description, debit: 0, credit: move.amount, dimensions: client },
+    ],
+  });
+}
+
+/** Money returned to a client out of an advance. */
+export async function postClientRefund(ctx: Ctx, tx: Tx, refund: { id: string; clientId: string; refundNumber: string; refundDate: Date; amount: unknown }) {
+  const amount = num(refund.amount);
+  const client = { clientId: refund.clientId };
+  return postJournal(ctx, tx, {
+    source: "AR_REFUND",
+    ref: { type: "CLIENT_REFUND", id: refund.id },
+    postingDate: refund.refundDate,
+    description: `Refund ${refund.refundNumber}`,
+    lines: [
+      { accountCode: ACCOUNTS.CLIENT_ADVANCES, description: refund.refundNumber, debit: amount, credit: 0, dimensions: client },
+      { accountCode: ACCOUNTS.CASH, description: refund.refundNumber, debit: 0, credit: amount, dimensions: client },
     ],
   });
 }

@@ -1004,6 +1004,31 @@ Finance / Accounting → **Billing Rules** (under Billing).
   the original treatment as an approved rule, with all contracts under it; a new organization gets the same from "Set up the standard
   treatment", and a contract with no rule is billed on the same built-in default. The same inputs give the same invoice to the kobo.
 
+### Client receipts, advances and statements
+
+Finance / Accounting → **Client Receipts** and **Receivables Ageing** (under Billing).
+
+- **One receipt, many invoices.** A client receipt (`RCT-nnnnnn`) is cash in from a client, recorded once and applied across as many of
+  their open invoices as it settles ("Oldest first" fills the earliest due first). The recording, the allocations and the journal are one
+  transaction. A receipt of 10,000,000 against three invoices of 4,000,000 settles two and part-settles the third:
+  `Dr Cash 10,000,000, Cr Receivables 10,000,000`. The receipts that settle a single invoice, recorded from the invoice's own page, work as before.
+- **Tax the client withheld** is recorded on the receipt with its credit note or certificate number and must be applied to invoices in full: it
+  is not cash but it settles them. `Dr Cash 9,500,000, Dr Withholding tax receivable 500,000, Cr Receivables 10,000,000`.
+- **Whatever isn't applied is held as a client advance** (account 2192, a liability) and can be applied to invoices later
+  (`Dr Client advances, Cr Receivables`), or **refunded**: a refund is asked for by one person (`payment.manage`) and approved by another
+  (`receipt.approve`), and only then posts (`Dr Client advances, Cr Cash`). Pending refunds reserve the cash, so it can't be promised twice.
+- **An allocation is never edited or deleted** (the database refuses, even by SQL). If it went to the wrong invoice it is **taken back**, with a
+  reason: the invoice owes it again, the amount returns to the receipt, and it can be applied correctly. The reversed allocation stays on record.
+  A repeated bank reference for the same client and amount is refused as a duplicate. A receipt can't be dated in the future.
+- **Statement of account** (Receivables Ageing → a client): every invoice and every payment, tax withheld or deduction in date order with a
+  running balance, as at any date, with the invoices still owing, their days past due and ageing (not yet due, 1–30, 31–60, 61–90, over 90),
+  advances held, and the net owed. **The closing balance agrees with the client's own balance in the receivables control account**, and the
+  page says so or by how much it differs. Download as CSV (audited) or print.
+- The ledger integrity check now includes allocations in the receivables subledger, reconciles the advances held to account 2192, and warns when a
+  client's receivables balance differs from what their invoices say they owe.
+- Not yet: credit and debit notes, invoice draft/approve/post, proforma invoices, PDF/Excel statements, and matching a refund to a bank line
+  (record the bank line as a manual item for now).
+
 ### Route smoke test
 
 Unit and integration tests prove the services; they can't prove a *page* renders. `npm run smoke` does:

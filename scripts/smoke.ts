@@ -78,6 +78,8 @@ function resolvers(orgId: string): Record<string, () => Promise<string | undefin
     "/clients/[id]": () => first(db.client.findFirst({ where, select: { id: true } })),
     "/employees/[id]": () => first(db.employee.findFirst({ where, orderBy: { employeeNumber: "asc" }, select: { id: true } })),
     "/finance/fixed-assets/[id]": () => first(db.fixedAsset.findFirst({ where, select: { id: true } })),
+    "/finance/receipts/[id]": () => first(db.clientReceipt.findFirst({ where: { ...where, invoiceId: null }, select: { id: true } })),
+    "/finance/statements/[clientId]": () => first(db.client.findFirst({ where, select: { id: true } })),
     "/finance/invoices/[id]": () => first(db.clientInvoice.findFirst({ where, select: { id: true } })),
     "/finance/payables/[id]": () => first(db.purchaseInvoice.findFirst({ where, select: { id: true } })),
     "/finance/purchase-orders/[id]": () => first(db.purchaseOrder.findFirst({ where, select: { id: true } })),
@@ -185,7 +187,7 @@ async function main() {
       else notes.push(`no sample record for ${p.route} — skipped`);
       continue;
     }
-    const paths = p.route === "/employees/[id]" ? [`/employees/${id}`, ...tabs.map((t) => `/employees/${id}?tab=${t}`)] : [p.route.replace("[id]", id)];
+    const paths = p.route === "/employees/[id]" ? [`/employees/${id}`, ...tabs.map((t) => `/employees/${id}?tab=${t}`)] : [p.route.replace(/\[[^\]]+\]/, id)]; // whatever the dynamic segment is called ([id], [clientId] …)
     for (const role of ROLES) for (const path of paths) probes.push({ role, path, expect: expectFor(role, p.perm, true) });
   }
 

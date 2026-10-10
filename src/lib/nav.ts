@@ -169,6 +169,8 @@ export const NAV: NavGroup[] = [
         section: "Billing",
       },
       { href: "/finance/billing-rules", label: "Billing Rules", perm: "gl.view", section: "Billing" },
+      { href: "/finance/receipts", label: "Client Receipts", perm: "gl.view", section: "Billing" },
+      { href: "/finance/statements", label: "Receivables Ageing", perm: "gl.view", section: "Billing" },
       {
         href: "/finance/vendors",
         label: "Vendors",
