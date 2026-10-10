@@ -51,6 +51,7 @@ const STATUS_TONE: Record<string, Tone> = {
   SUPERSEDED: "gray",
   EXPIRED: "gray",
   ISSUED: "blue",
+  SUBMITTED: "amber",
   PARTIALLY_PAID: "amber",
   OVERDUE: "red",
   DONE: "green",

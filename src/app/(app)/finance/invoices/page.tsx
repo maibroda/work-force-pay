@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
-import { receivablesSummary, unbilledRuns } from "@/server/services/billing";
+import { invoiceApprovalRequired, receivablesSummary, unbilledRuns } from "@/server/services/billing";
+import { db } from "@/lib/db";
 import { defaultsOn } from "@/server/services/tax-engine";
 import { amountDue } from "@/lib/notes";
 import { options } from "@/server/options";
@@ -12,7 +13,8 @@ import { SmartForm } from "@/components/smart-form";
 import { Input, Select } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { generateInvoicesAction } from "@/app/actions/billing";
+import { generateInvoicesAction, setInvoiceApprovalRequiredAction } from "@/app/actions/billing";
+import { ActionButton } from "@/components/action-button";
 
 export default async function InvoicesPage({
   searchParams,
@@ -28,6 +30,8 @@ export default async function InvoicesPage({
     options(ctx),
   ]);
   const today = iso(new Date());
+  const approvalRequired = await invoiceApprovalRequired(db, ctx.orgId);
+  const waiting = summary.invoices.filter((i) => i.status === "DRAFT" || i.status === "SUBMITTED");
   // the rates each run's invoices would use, so the form says what a blank field means
   const rates = await Promise.all(ready.map((r) => defaultsOn(ctx, r.period.endDate)));
   const rateText = (x: Awaited<ReturnType<typeof defaultsOn>>["VAT"]) => ("error" in x ? x.error : x.source === "NONE" ? "no tax code is set up, so 0%" : `${x.ratePct}% (${x.code})`);
@@ -41,11 +45,33 @@ export default async function InvoicesPage({
         title="Billing & receivables"
         description="One invoice per client per payroll run, generated from that run's client billing. Record client payments and deductions here to track what's outstanding."
         actions={
-          <Link className="text-sm text-primary underline" href="/analytics/contract-profitability">
-            Contract profitability →
-          </Link>
+          <span className="flex flex-wrap items-center gap-3">
+            <Link className="text-sm text-primary underline" href="/finance/proforma">
+              Proforma →
+            </Link>
+            <Link className="text-sm text-primary underline" href="/analytics/contract-profitability">
+              Contract profitability →
+            </Link>
+          </span>
         }
       />
+      <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
+        <span className="text-muted-foreground">
+          {approvalRequired
+            ? "Invoices are generated as drafts under provisional numbers. A second person approves each one, which numbers and posts it."
+            : "Invoices are numbered and posted as soon as they are generated."}
+        </span>
+        {can(ctx.role, "period.approve") && (
+          <ActionButton
+            action={setInvoiceApprovalRequiredAction.bind(null, !approvalRequired)}
+            confirm={approvalRequired ? "Post invoices as soon as they are generated, without a second person's approval? This is recorded." : "Generate invoices as drafts that a second person approves before they post?"}
+            variant="outline"
+          >
+            {approvalRequired ? "Switch approval off" : "Require approval"}
+          </ActionButton>
+        )}
+        {waiting.length > 0 && <StatusBadge status={`${waiting.length} draft${waiting.length === 1 ? "" : "s"} waiting`} />}
+      </div>
       <StatGrid cols={5}>
         <Stat label="Total billed" value={naira(summary.totals.billed)} />
         <Stat label="Received" value={naira(summary.totals.received)} tone="green" />
@@ -192,7 +218,7 @@ export default async function InvoicesPage({
           <TBody>
             {invoices.map((inv) => {
               const balance = amountDue({ totalAmount: num(inv.totalAmount), totalDebits: num(inv.totalDebits), totalCredits: num(inv.totalCredits), amountPaid: num(inv.amountPaid), totalDeductions: num(inv.totalDeductions) });
-              const overdue = balance > 0 && iso(inv.dueDate) < today && inv.status !== "CANCELLED";
+              const overdue = balance > 0 && iso(inv.dueDate) < today && !["CANCELLED", "DRAFT", "SUBMITTED"].includes(inv.status);
               return (
                 <TR key={inv.id} className={overdue ? "bg-red-50/60" : ""}>
                   <TD className="font-mono text-xs">

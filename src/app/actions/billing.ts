@@ -6,6 +6,48 @@ type V = Record<string, unknown>;
 
 const PATHS = ["/finance/invoices"];
 
+export async function submitInvoiceAction(id: string) {
+  return act("payment.manage", async (ctx) => {
+    await billing.submitInvoice(ctx, id);
+    return { message: "Submitted. Someone else has to approve it before it is posted." };
+  }, PATHS);
+}
+
+export async function approveInvoiceAction(id: string) {
+  return act("invoice.approve", async (ctx) => {
+    const inv = await billing.approveInvoice(ctx, id);
+    return { message: `Approved and posted as ${inv.invoiceNumber}.`, redirectTo: `/finance/invoices/${id}` };
+  }, PATHS);
+}
+
+export async function rejectInvoiceAction(id: string, note?: string) {
+  return act("invoice.approve", async (ctx) => {
+    await billing.rejectInvoice(ctx, id, note ?? "");
+    return { message: "Sent back to the preparer." };
+  }, PATHS);
+}
+
+export async function discardDraftAction(id: string, reason?: string) {
+  return act("payment.manage", async (ctx) => {
+    await billing.discardDraft(ctx, id, reason ?? "");
+    return { message: "Draft discarded. The payroll run can be invoiced again.", redirectTo: "/finance/invoices" };
+  }, PATHS);
+}
+
+export async function markInvoiceSentAction(id: string, via?: string) {
+  return act("payment.manage", async (ctx) => {
+    await billing.markInvoiceSent(ctx, id, via ?? "");
+    return { message: "Recorded as sent." };
+  }, PATHS);
+}
+
+export async function setInvoiceApprovalRequiredAction(required: boolean) {
+  return act("period.approve", async (ctx) => {
+    await billing.setInvoiceApprovalRequired(ctx, required);
+    return { message: required ? "Invoices are now generated as drafts that a second person approves." : "Invoices post as soon as they are generated." };
+  }, PATHS);
+}
+
 export async function generateInvoicesAction(v: V) {
   return act(
     "payment.manage",

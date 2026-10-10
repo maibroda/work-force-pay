@@ -16,6 +16,8 @@
  * receipt holds unapplied (less refunds) agrees with the client advances account. (WARN) A client's own balance in the
  * receivables account agrees with what they owe on their invoices.
  *
+ * Invoice drafts (generated, awaiting approval) are not in the ledger or the subledger and have no tax records until approved.
+ *
  * Credit and debit notes (ERROR): an invoice's credits and debits equal its approved notes, and the receivables subledger counts them.
  *
  * Tax checks (ERROR): the tax records of every live invoice add up to the VAT and withholding stored on it, and a cancelled
@@ -179,7 +181,7 @@ export async function checkLedgerIntegrity(orgId: string): Promise<IntegrityRepo
       });
       for (const inv of taxed) {
         const live = (kind: string) => round2(inv.taxTransactions.filter((t) => t.kind === kind).reduce((s, t) => s + num(t.taxAmount), 0));
-        const [vat, wht] = inv.status === "CANCELLED" ? [0, 0] : [num(inv.vatAmount), num(inv.whtAmount)];
+        const [vat, wht] = ["CANCELLED", "DRAFT", "SUBMITTED"].includes(inv.status) ? [0, 0] : [num(inv.vatAmount), num(inv.whtAmount)]; // a draft has no tax records yet
         if (Math.abs(live("OUTPUT_VAT") - round2(vat)) >= TOLERANCE) add("TAX_VAT_RECORDS", "ERROR", `VAT records total ${live("OUTPUT_VAT")} but the invoice says ${round2(vat)}.`, inv.invoiceNumber);
         if (Math.abs(live("EXPECTED_WHT") - round2(wht)) >= TOLERANCE) add("TAX_WHT_RECORDS", "ERROR", `Withholding records total ${live("EXPECTED_WHT")} but the invoice says ${round2(wht)}.`, inv.invoiceNumber);
       }
@@ -222,16 +224,17 @@ export async function checkLedgerIntegrity(orgId: string): Promise<IntegrityRepo
         const missing = (await rows).filter((r) => !sourced.has(`${type}:${r.id}`));
         if (missing.length) add("DOCUMENT_NO_JOURNAL", "WARN", `${missing.length} ${label} have no journal pointing at them: never posted, or posted before journals recorded their source.`);
       };
-      await unlinked("client invoice(s)", "CLIENT_INVOICE", tx.clientInvoice.findMany({ where: { organizationId: orgId }, select: { id: true } }));
+      await unlinked("client invoice(s)", "CLIENT_INVOICE", tx.clientInvoice.findMany({ where: { organizationId: orgId, status: { notIn: ["DRAFT", "SUBMITTED"] } }, select: { id: true } }));
       await unlinked("client receipt(s)", "CLIENT_RECEIPT", tx.clientReceipt.findMany({ where: { organizationId: orgId }, select: { id: true } }));
       await unlinked("vendor bill(s)", "PURCHASE_INVOICE", tx.purchaseInvoice.findMany({ where: { organizationId: orgId }, select: { id: true } }));
       await unlinked("vendor payment(s)", "VENDOR_PAYMENT", tx.vendorPayment.findMany({ where: { organizationId: orgId }, select: { id: true } }));
 
       const cancelledAr = invoices.filter((i) => i.status === "CANCELLED");
+      const postedInvoices = invoices.filter((i) => i.status !== "DRAFT" && i.status !== "SUBMITTED"); // a draft is not in the ledger or the subledger
       const cancelledAp = bills.filter((i) => i.status === "CANCELLED");
       reconcile(
         "Receivables (client subledger vs account 1200)",
-        subledgerBalance({ documents: invoices.map((i) => ({ total: num(i.totalAmount), status: i.status })), settled: num(receipts._sum.amount) + num(deductions._sum.amount) + allocatedGross + noteTotal("CREDIT") - noteTotal("DEBIT") }),
+        subledgerBalance({ documents: postedInvoices.map((i) => ({ total: num(i.totalAmount), status: i.status })), settled: num(receipts._sum.amount) + num(deductions._sum.amount) + allocatedGross + noteTotal("CREDIT") - noteTotal("DEBIT") }),
         await balanceOf(AR_CODE),
         1,
       );
@@ -245,7 +248,7 @@ export async function checkLedgerIntegrity(orgId: string): Promise<IntegrityRepo
       {
         const owed = new Map<string, number>();
         const bump = (clientId: string | null | undefined, n: number) => clientId && owed.set(clientId, round2((owed.get(clientId) ?? 0) + n));
-        for (const i of invoices) if (i.status !== "CANCELLED") bump(i.clientId, num(i.totalAmount));
+        for (const i of postedInvoices) if (i.status !== "CANCELLED") bump(i.clientId, num(i.totalAmount));
         const [legacy, ded] = await Promise.all([
           tx.clientReceipt.groupBy({ by: ["clientId"], where: { organizationId: orgId, invoiceId: { not: null } }, _sum: { amount: true } }),
           tx.clientInvoiceDeduction.groupBy({ by: ["clientId"], where: { organizationId: orgId }, _sum: { amount: true } }),

@@ -15,7 +15,7 @@ import { PrintButton } from "@/components/print-button";
 import { SmartForm } from "@/components/smart-form";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TFoot, TH, THead, TR } from "@/components/ui/table";
-import { cancelInvoiceAction, recordDeductionAction, recordReceiptAction } from "@/app/actions/billing";
+import { approveInvoiceAction, cancelInvoiceAction, discardDraftAction, markInvoiceSentAction, recordDeductionAction, recordReceiptAction, rejectInvoiceAction, submitInvoiceAction } from "@/app/actions/billing";
 
 const DEDUCTION_TYPES = ["WITHHOLDING_TAX", "LEAVE_ALLOWANCE", "OTHER"];
 
@@ -33,7 +33,10 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
   const treatments = ((inv.taxBasis ?? {}) as { contracts?: Treatment[] }).contracts ?? [];
   const vatBases = [...new Set(treatments.map((t) => t.vatBase))];
   const vatOnIndirectOnly = !treatments.length || (vatBases.length === 1 && vatBases[0] === "INDIRECT");
-  const overdue = balance > 0 && iso(inv.dueDate) < iso(new Date()) && inv.status !== "CANCELLED";
+  const isDraft = inv.status === "DRAFT" || inv.status === "SUBMITTED";
+  const approve = can(ctx.role, "invoice.approve");
+  const mineToApprove = inv.generatedByUserId === ctx.userId || inv.submittedByUserId === ctx.userId;
+  const overdue = balance > 0 && iso(inv.dueDate) < iso(new Date()) && inv.status !== "CANCELLED" && !isDraft;
 
   return (
     <>
@@ -42,6 +45,31 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
         crumbs={[{ href: "/finance/invoices", label: "Billing & receivables" }]}
         actions={
           <>
+            {manage && inv.status === "DRAFT" && (
+              <ActionButton action={submitInvoiceAction.bind(null, inv.id)} confirm="Submit this draft for approval? Someone else has to approve it before it is numbered and posted." variant="outline">
+                Submit for approval
+              </ActionButton>
+            )}
+            {manage && inv.status === "DRAFT" && (
+              <ActionButton action={discardDraftAction.bind(null, inv.id)} reason reasonPlaceholder="Why the draft is being discarded" variant="outline">
+                Discard draft
+              </ActionButton>
+            )}
+            {approve && inv.status === "SUBMITTED" && !mineToApprove && (
+              <>
+                <ActionButton action={approveInvoiceAction.bind(null, inv.id)} confirm="Approve this invoice? It is numbered and posted to the ledger, and can't be edited afterwards." variant="success">
+                  Approve and post
+                </ActionButton>
+                <ActionButton action={rejectInvoiceAction.bind(null, inv.id)} reason reasonPlaceholder="What needs fixing" variant="outline">
+                  Send back
+                </ActionButton>
+              </>
+            )}
+            {manage && ["ISSUED", "PARTIALLY_PAID", "PAID"].includes(inv.status) && (
+              <ActionButton action={markInvoiceSentAction.bind(null, inv.id)} reason reasonPlaceholder="How it was sent (e.g. email to accounts@client)" variant="outline">
+                {inv.sentAt ? "Record sent again" : "Mark as sent"}
+              </ActionButton>
+            )}
             {manage &&
               balance <= 0.01 &&
               inv.status !== "CANCELLED" &&
@@ -195,6 +223,19 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
         </p>
       </div>
 
+      {isDraft && (
+        <p className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900">
+          {inv.status === "DRAFT" ? "This is a draft under a provisional number. It is not in the ledger, is not a receivable and can't take payments. " : "This draft is waiting for approval. "}
+          {inv.rejectionNote ? `Sent back: ${inv.rejectionNote}. ` : ""}
+          {inv.status === "SUBMITTED" && mineToApprove ? "You generated or submitted it, so someone else has to approve it." : "Approving it gives it its invoice number and posts it."}
+        </p>
+      )}
+      {inv.sentAt && (
+        <p className="mb-4 text-xs text-muted-foreground">
+          Sent {fmtDate(inv.sentAt)} by {inv.sentBy}
+          {inv.sentVia ? ` — ${inv.sentVia}` : ""}.{inv.approvedBy ? ` Approved and posted by ${inv.approvedBy} on ${fmtDate(inv.approvedAt)}.` : ""}
+        </p>
+      )}
       <Section
         title="Credit & debit notes"
         flush

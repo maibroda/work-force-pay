@@ -72,6 +72,7 @@ export const PERMISSIONS = [
   "receipt.approve", // approve a refund of a client advance, never the person who asked for it
   "note.manage", // raise credit and debit notes against client invoices
   "note.approve", // approve or turn down a credit or debit note, never the person who raised it
+  "invoice.approve", // approve (and so post) a submitted invoice draft, never whoever generated or submitted it
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
