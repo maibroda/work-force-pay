@@ -203,6 +203,8 @@ export const NAV: NavGroup[] = [
       { href: "/accounting/tax-reports", label: "Tax Reports", perm: "gl.view" },
       { href: "/accounting/wht-certificates", label: "WHT Certificates", perm: "gl.view" },
       { href: "/accounting/periods", label: "Accounting Periods", perm: "gl.view" },
+      { href: "/accounting/reconciliations", label: "Reconciliation Centre", perm: "gl.view" },
+      { href: "/accounting/ar-report", label: "Monthly Receivables Report", perm: "gl.view" },
       { href: "/accounting/mapping", label: "Payroll GL Mapping", perm: "gl.view" },
       { href: "/accounting/accounts", label: "Chart of Accounts", perm: "gl.view" },
       { href: "/accounting/dimensions", label: "Accounting Dimensions", perm: "gl.view" },

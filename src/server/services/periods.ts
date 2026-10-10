@@ -90,6 +90,16 @@ const PERMISSION: Record<PeriodAction, "period.close" | "period.approve" | "peri
 
 export async function transitionPeriod(ctx: Ctx, periodId: string, action: PeriodAction, reason?: string) {
   assertCan(ctx, PERMISSION[action]);
+  // Closing checks the books and works out the snapshot first (heavy reads), then closes and writes it in one transaction.
+  let prepared: import("./period-close").PreparedSnapshot | null = null;
+  if (action === "CLOSE") {
+    const p = await db.accountingPeriod.findFirst({ where: { id: periodId, organizationId: ctx.orgId } });
+    if (p && p.status === "SOFT_CLOSED") {
+      const close = await import("./period-close");
+      await close.assertReadyToClose(ctx, p);
+      prepared = await close.prepareSnapshot(ctx, p);
+    }
+  }
   return db.$transaction(async (tx) => {
     const p = await tx.accountingPeriod.findFirst({ where: { id: periodId, organizationId: ctx.orgId } });
     if (!p) throw new BusinessError("Period not found.");
@@ -118,6 +128,8 @@ export async function transitionPeriod(ctx: Ctx, periodId: string, action: Perio
     }
 
     const updated = await tx.accountingPeriod.update({ where: { id: periodId }, data: { status: to } });
+    if (action === "CLOSE" && prepared) await (await import("./period-close")).writeSnapshot(ctx, tx, p, prepared);
+    if (action === "REOPEN" && p.status === "CLOSED") await (await import("./period-close")).supersedeSnapshots(ctx, tx, periodId);
     await tx.accountingPeriodEvent.create({
       data: { organizationId: ctx.orgId, periodId, action, fromStatus: p.status, toStatus: to, actor: ctx.name, actorUserId: ctx.userId, reason: reason?.trim() || null },
     });

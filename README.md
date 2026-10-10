@@ -1083,6 +1083,29 @@ Finance / Accounting → **Billing & Receivables** and **Proforma Invoices**.
   invoice will be (each contract under its billing rule, tax at the rates in force). Nothing is saved, numbered or posted, and it is printable, marked
   "Not a tax invoice".
 
+### Period close, snapshots and reconciliation
+
+Finance / Accounting → **Accounting Periods** (a **Close centre** link on each month), **Reconciliation Centre** and **Monthly Receivables Report**.
+
+- **Close is checked.** Before a period can be closed (the second person's step), the books are checked as at its last day. **Hard checks** can't be got
+  round: total debits equal total credits; the receivables subledger (invoices less everything that settled them, notes included) equals receivables account 1200;
+  the payables subledger equals 2180; and the client advances held equal 2192. **While any of them is out, close is refused**, with the amounts.
+- **Pending work blocks too, but an approver can close over it with a written reason** (`period.approve`; at least a sentence), which is kept for good: invoice drafts
+  awaiting approval, manual journals submitted or approved but not posted, reversals, credit and debit notes and refunds waiting for approval, all dated in the period.
+  **Advisory** items are shown, never block: draft journals, recurring journals due, locked payroll with no journal, and ledger integrity errors.
+- **Sign-offs** (bank accounts reconciled, accruals and prepayments reviewed, payroll agreed to the register, tax balances reviewed, fixed assets reviewed) are
+  recorded per period by those who may close. They are advisory unless an approver makes them compulsory for the organization.
+- **A snapshot is written when the period closes**, in the same transaction: the trial balance, receivables by client and by invoice with ageing, payables by
+  vendor, and cash, VAT, withholding and advance balances, with a checksum. **It never changes** (the database refuses edits and deletes, even by SQL). If the ledger moves
+  while the snapshot is being worked out, the close is refused and nothing is closed. Reopening a period supersedes its snapshot (kept, marked); closing again writes
+  version 2.
+- **The Monthly Receivables Report** shows a closed month from its snapshot, so September's report is the same in November; a month still open shows live figures,
+  clearly labelled "Not official". For a closed month it also recalculates as at the same date and says whether anything has moved since, and whether the snapshot's
+  checksum still verifies.
+- **As-at figures are as-at correct:** an invoice cancelled after a date was still owed on it, so statements and reconciliations as at an earlier date include it
+  until its cancellation was posted.
+- The **Reconciliation Centre** runs the same four reconciliations as at any date, so a problem shows before month-end.
+
 ### Quick payslip
 
 Payroll → **Quick Payslip** (`payroll.view`). A calculator for offers, budgets and what-ifs; **nothing is saved** and it creates no payroll record.
