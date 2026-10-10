@@ -23,10 +23,12 @@ import { logAudit } from "./audit";
 import { nextNumber } from "./numbering";
 import { payrollByContractAndCategory } from "./reports";
 import { postArDeduction, postArInvoice, postArInvoiceCancellation, postArReceipt } from "./gl-posting";
+import { recordInvoiceTax, resolveTax, reverseInvoiceTax } from "./tax-engine";
 
 const DEFAULT_PAYMENT_TERMS_DAYS = 30;
 
 export interface GenerateInvoicesOptions {
+  /** Leave out to read the rate in force on the invoice date from the tax engine (none, if no tax codes are set up). */
   vatPct?: number;
   whtPct?: number;
   /** Default 90/10 — must sum to 100. */
@@ -37,8 +39,6 @@ export interface GenerateInvoicesOptions {
 /** Generates one invoice per billed client from a locked (or paid) payroll run. */
 export async function generateInvoices(ctx: Ctx, runId: string, opts: GenerateInvoicesOptions = {}) {
   assertCan(ctx, "payment.manage");
-  const vatPct = opts.vatPct ?? 0;
-  const whtPct = opts.whtPct ?? 0;
   const directChargePct = opts.directChargePct ?? 90;
   const indirectChargePct = opts.indirectChargePct ?? 10;
   if (Math.abs(directChargePct + indirectChargePct - 100) > 0.01)
@@ -66,6 +66,12 @@ export async function generateInvoices(ctx: Ctx, runId: string, opts: GenerateIn
   const invoiceDate = run.period.endDate;
   const dueDate = addDays(invoiceDate, DEFAULT_PAYMENT_TERMS_DAYS);
   return db.$transaction(async (tx) => {
+    // the rates in force on the invoice date: from the tax engine, unless a rate was typed for this run
+    const vat = await resolveTax(tx, ctx.orgId, "VAT", invoiceDate, opts.vatPct);
+    const wht = await resolveTax(tx, ctx.orgId, "WHT", invoiceDate, opts.whtPct);
+    const vatPct = vat.ratePct;
+    const whtPct = wht.ratePct;
+    const taxBasis = { date: iso(invoiceDate), vat: { code: vat.code, ratePct: vatPct, source: vat.source }, wht: { code: wht.code, ratePct: whtPct, source: wht.source } };
     const invoices = [];
     for (const [clientId, g] of byClient) {
       const subtotal = round2(g.contracts.reduce((a, c) => a + c.revenue, 0));
@@ -121,11 +127,13 @@ export async function generateInvoices(ctx: Ctx, runId: string, opts: GenerateIn
           whtPct,
           whtAmount,
           totalAmount: round2(subtotal + vatAmount),
+          taxBasis,
           createdBy: ctx.name,
           lines: { create: lineData },
         },
         include: { lines: true },
       });
+      await recordInvoiceTax(tx, ctx.orgId, inv, { vat: vat.taxCodeId, wht: wht.taxCodeId });
       await postArInvoice(ctx, tx, inv);
       invoices.push(inv);
     }
@@ -142,6 +150,7 @@ export async function generateInvoices(ctx: Ctx, runId: string, opts: GenerateIn
           whtPct,
           directChargePct,
           indirectChargePct,
+          taxBasis,
         },
       },
       tx,
@@ -377,6 +386,7 @@ export async function cancelInvoice(ctx: Ctx, id: string, reason: string) {
   // The status change and the reversing journal commit together, so a cancelled invoice never stays in the ledger.
   await db.$transaction(async (tx) => {
     await tx.clientInvoice.update({ where: { id }, data: { status: "CANCELLED", notes: reason } });
+    await reverseInvoiceTax(tx, id);
     await postArInvoiceCancellation(ctx, tx, inv, new Date(new Date().toISOString().slice(0, 10)));
     await logAudit(ctx, { action: "CLIENT_INVOICE_CANCEL", entity: "ClientInvoice", entityId: id, reason }, tx);
   });

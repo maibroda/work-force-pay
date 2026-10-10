@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { isolatedOrg, uid } from "../helpers";
 import { ensureDefaultChart } from "@/server/services/accounting";
 import { postArInvoice } from "@/server/services/gl-posting";
+import { recordInvoiceTax } from "@/server/services/tax-engine";
 import { periodFor } from "@/server/services/periods";
 import { cancelInvoice, recordReceipt } from "@/server/services/billing";
 import { cancelPurchaseInvoice, createPurchaseInvoice, createVendor, recordVendorPayment } from "@/server/services/payables";
@@ -167,7 +168,10 @@ describe("a cancelled invoice reverses its ledger posting", () => {
       const inv = await db.clientInvoice.create({
         data: { organizationId: t.org.id, clientId: client.id, runId: run.id, periodId: period.id, invoiceNumber: `INV-T${uid()}`, invoiceDate: new Date("2026-08-31T00:00:00Z"), dueDate: new Date("2026-09-30T00:00:00Z"), subtotal: total - vat, vatPct: 7.5, vatAmount: vat, totalAmount: total, createdBy: "test" },
       });
-      await db.$transaction((tx) => postArInvoice(fin, tx, inv));
+      await db.$transaction(async (tx) => {
+        await recordInvoiceTax(tx, t.org.id, inv, { vat: null, wht: null }); // as generating an invoice does
+        await postArInvoice(fin, tx, inv);
+      });
       return inv;
     };
     const paid = await mk(1, 1_075_000, 75_000);

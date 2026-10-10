@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { receivablesSummary, unbilledRuns } from "@/server/services/billing";
+import { defaultsOn } from "@/server/services/tax-engine";
 import { options } from "@/server/options";
 import { fmtDate, iso } from "@/lib/dates";
 import { naira, num } from "@/lib/money";
@@ -26,6 +27,9 @@ export default async function InvoicesPage({
     options(ctx),
   ]);
   const today = iso(new Date());
+  // the rates each run's invoices would use, so the form says what a blank field means
+  const rates = await Promise.all(ready.map((r) => defaultsOn(ctx, r.period.endDate)));
+  const rateText = (x: Awaited<ReturnType<typeof defaultsOn>>["VAT"]) => ("error" in x ? x.error : x.source === "NONE" ? "no tax code is set up, so 0%" : `${x.ratePct}% (${x.code})`);
   const invoices = sp.clientId
     ? summary.invoices.filter((i) => i.clientId === sp.clientId)
     : summary.invoices;
@@ -56,10 +60,10 @@ export default async function InvoicesPage({
       {ready.length > 0 && manage && (
         <Section
           title="Locked payrolls without invoices"
-          description="Each employer category's charge-out amount splits into a Direct charge (default 90%) and an Indirect charge (default 10%) — VAT applies to the Indirect charge total only. Withholding tax is informational and defaults to 0%."
+          description="Each employer category's charge-out amount splits into a Direct charge (default 90%) and an Indirect charge (default 10%) — VAT applies to the Indirect charge total only. Leave VAT % and withholding % blank to use the rate in force on the invoice date from Tax Codes & Rates; type a number (0 included) to use that for this run instead, which is recorded on the invoice as typed. Withholding tax is informational."
         >
           <div className="space-y-3">
-            {ready.map((r) => (
+            {ready.map((r, i) => (
               <div key={r.id} className="rounded-md border p-3">
                 <p className="mb-2 text-sm font-medium">
                   {r.period.name} #{r.runNumber} — {naira(r.totalClientBilling)}
@@ -93,7 +97,8 @@ export default async function InvoicesPage({
                       type: "number",
                       min: 0,
                       max: 100,
-                      defaultValue: 0,
+                      placeholder: "from tax codes",
+                      help: `Blank: ${rateText(rates[i].VAT)}`,
                     },
                     {
                       name: "whtPct",
@@ -101,7 +106,8 @@ export default async function InvoicesPage({
                       type: "number",
                       min: 0,
                       max: 100,
-                      defaultValue: 0,
+                      placeholder: "from tax codes",
+                      help: `Blank: ${rateText(rates[i].WHT)}`,
                     },
                   ]}
                 />

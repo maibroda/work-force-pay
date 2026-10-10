@@ -251,6 +251,19 @@ submission never applies when approval is off.
 
 **Still to do in Phase 1:** the backfill of historic unposted documents (D5, awaiting the decision).
 
+## 5c. Phase 2, first step — tax engine (built)
+
+Tax codes and effective-dated rates (`TaxCode`, `TaxRate`), with maker/checker on every rate and a database trigger that makes
+an approved rate immutable; `TaxTransaction` written with each invoice and marked reversed on cancellation, read by the new Tax
+Reports and verified by the integrity check; the invoice calculation reads the rate in force on its date and records what it used.
+A typed rate for a run still works and is recorded as such. With no codes configured the result is identical to before; with
+the default code the VAT base is unchanged (indirect charge only). Invoices issued before the engine were backfilled with tax
+records from their stored figures.
+
+**Phase 2, second step (next):** the service-type and billing-rule master with approved contract overrides, so 90/10 and the
+VAT and withholding base are configured per service and per contract instead of per run. Certificates and input VAT follow in
+Phases 3 and 5.
+
 ## 6. Safety rules for every migration
 
 All migrations are additive. Before each one: dump the database, run it on a copy, run the ledger integrity check
