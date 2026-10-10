@@ -168,6 +168,7 @@ export const NAV: NavGroup[] = [
         perm: "client.view",
         section: "Billing",
       },
+      { href: "/finance/billing-rules", label: "Billing Rules", perm: "gl.view", section: "Billing" },
       {
         href: "/finance/vendors",
         label: "Vendors",

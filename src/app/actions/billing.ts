@@ -14,8 +14,9 @@ export async function generateInvoicesAction(v: V) {
         // blank = the rate in force from the tax engine; a number (even 0) is a rate typed for this run
         vatPct: v.vatPct !== undefined && v.vatPct !== null && String(v.vatPct).trim() !== "" ? Number(v.vatPct) : undefined,
         whtPct: v.whtPct !== undefined && v.whtPct !== null && String(v.whtPct).trim() !== "" ? Number(v.whtPct) : undefined,
-        directChargePct: v.directChargePct ? Number(v.directChargePct) : 90,
-        indirectChargePct: v.indirectChargePct ? Number(v.indirectChargePct) : 10,
+        // blank = each contract's billing rule; a number is a split typed for this whole run
+        directChargePct: v.directChargePct !== undefined && v.directChargePct !== null && String(v.directChargePct).trim() !== "" ? Number(v.directChargePct) : undefined,
+        indirectChargePct: v.indirectChargePct !== undefined && v.indirectChargePct !== null && String(v.indirectChargePct).trim() !== "" ? Number(v.indirectChargePct) : undefined,
       });
       return { message: `${invoices.length} invoice(s) generated.` };
     },

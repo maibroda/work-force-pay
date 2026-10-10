@@ -60,7 +60,7 @@ export default async function InvoicesPage({
       {ready.length > 0 && manage && (
         <Section
           title="Locked payrolls without invoices"
-          description="Each employer category's charge-out amount splits into a Direct charge (default 90%) and an Indirect charge (default 10%) — VAT applies to the Indirect charge total only. Leave VAT % and withholding % blank to use the rate in force on the invoice date from Tax Codes & Rates; type a number (0 included) to use that for this run instead, which is recorded on the invoice as typed. Withholding tax is informational."
+          description="Each contract is billed under its billing rule (Billing Rules): the split of every charge-out amount into a Direct and an Indirect charge, and what VAT and withholding are charged on. Leave the fields blank to use the rules and the rate in force on the invoice date from Tax Codes & Rates; type a number (0 included) to use it for this whole run instead, which is recorded on the invoice as typed. Withholding tax is informational."
         >
           <div className="space-y-3">
             {ready.map((r, i) => (
@@ -80,8 +80,8 @@ export default async function InvoicesPage({
                       type: "number",
                       min: 0,
                       max: 100,
-                      defaultValue: 90,
-                      help: "Must add up to 100% with indirect.",
+                      placeholder: "from billing rules",
+                      help: "Blank: each contract's billing rule. If typed, must add up to 100% with indirect.",
                     },
                     {
                       name: "indirectChargePct",
@@ -89,7 +89,7 @@ export default async function InvoicesPage({
                       type: "number",
                       min: 0,
                       max: 100,
-                      defaultValue: 10,
+                      placeholder: "from billing rules",
                     },
                     {
                       name: "vatPct",

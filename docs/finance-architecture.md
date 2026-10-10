@@ -260,9 +260,19 @@ A typed rate for a run still works and is recorded as such. With no codes config
 the default code the VAT base is unchanged (indirect charge only). Invoices issued before the engine were backfilled with tax
 records from their stored figures.
 
-**Phase 2, second step (next):** the service-type and billing-rule master with approved contract overrides, so 90/10 and the
-VAT and withholding base are configured per service and per contract instead of per run. Certificates and input VAT follow in
-Phases 3 and 5.
+## 5d. Phase 2, second step — billing rules (built)
+
+`ServiceType` and `BillingRule` (one table, scoped to a service type or to one contract, in place of the separate
+`BillingRule` / `ContractBillingOverride` of section 3.2). A rule carries the direct / indirect split, the VAT and withholding
+bases (indirect, direct, whole amount, nothing), optional tax codes, and dates; it is proposed by one person and approved by another,
+a database trigger makes an approved rule immutable, and a new rule can't start on or before an existing rule or an invoice already
+issued under it. Resolution per contract on the invoice date: its approved override, else its service type's rule, else the built-in
+default (90/10, VAT on indirect, withholding on the whole amount). Invoicing works out tax once per code and rate across contracts,
+records the rule used on the invoice and each line, and writes a tax record per group. Existing organizations were given a
+Security & Guarding type holding the original treatment as an approved rule; with it the same inputs give the same invoice to the
+kobo (tested). Typed splits and rates for a run still work and are recorded as typed.
+
+Certificates (withholding) and input VAT follow in Phases 3 and 5.
 
 ## 6. Safety rules for every migration
 

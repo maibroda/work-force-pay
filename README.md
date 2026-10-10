@@ -978,7 +978,31 @@ Finance / Accounting → **Tax Codes & Rates** and **Tax Reports**.
   (recorded as deductions), and ties VAT on live invoices to the VAT payable the invoice journals booked. The ledger integrity
   check verifies the records of every invoice add up to the VAT and withholding stored on it. Invoices issued before the engine
   were given records from their stored figures when it was installed.
-- Not yet: billing rules per service and contract with approved overrides, withholding certificates, input VAT on purchases.
+- Not yet: withholding certificates, input VAT on purchases.
+
+### Billing rules
+
+Finance / Accounting → **Billing Rules** (under Billing).
+
+- **How each service and contract is billed.** A *service type* (Security & Guarding, Consulting …) carries the default rule for its
+  contracts; a contract can carry its own *override*. A rule sets the **direct / indirect split** of every charge-out amount and what
+  **VAT** and **withholding tax** are charged on (the indirect charge, the direct charge, the whole amount, or nothing), and may name a
+  particular VAT or withholding code instead of the organization's default. It applies from a date.
+- **A rule is proposed by one person and approved by another** (`billing.rule.manage` to propose, `billing.rule.approve` to decide;
+  never the proposer). Approving a rule ends the one it replaces the day before. **An approved rule is never edited or deleted** (the
+  database refuses, even by SQL); a change is a new rule from a later date, and a new rule can't start on or before an existing one or
+  before an invoice already issued under it. A rule always splits to exactly 100%.
+- **Moving a contract to another service type** changes which rule bills it, so it takes the approval permission and is audited.
+- **Invoicing reads the rule in force on the invoice date for each contract** (its own override, else its service type's, else the
+  built-in default of 90/10 with VAT on the indirect charge and withholding on the whole amount), and records which one it used on the
+  invoice and on each line. Two contracts of one client with different rules sit on one invoice: each is split and taxed under its own
+  rule, tax is worked out once per code and rate, and the invoice shows how each contract was billed. A change of rule never touches
+  an invoice already issued. A base of "nothing" charges no tax and needs no rate.
+- **The invoice form** leaves the split, VAT % and withholding % blank to use the rules and the tax engine; a number typed there applies
+  to the whole run and is recorded as typed.
+- **Nothing changes until you want it to.** Every existing organization was given a *Security & Guarding* service type holding exactly
+  the original treatment as an approved rule, with all contracts under it; a new organization gets the same from "Set up the standard
+  treatment", and a contract with no rule is billed on the same built-in default. The same inputs give the same invoice to the kobo.
 
 ### Route smoke test
 
