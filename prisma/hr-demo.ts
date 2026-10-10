@@ -19,6 +19,7 @@ import { nextNumber } from "../src/server/services/numbering";
 import { generateLetter } from "../src/server/services/letters";
 import { approveDocument, postDocument, postDueReversals, requestReversal, saveDraft, submitDocument } from "../src/server/services/journals";
 import { generateDue, saveTemplate } from "../src/server/services/recurring-journals";
+import { installStandardBilling, proposeRule } from "../src/server/services/billing-rules";
 import {
   addCandidate,
   approveOffer,
@@ -233,6 +234,29 @@ export async function seedRecurringDemo(orgId: string) {
   await saveTemplate(ctx, null, { name: "Quarterly software licences", kind: "MANUAL", description: "Software licences, {quarter}", frequency: "QUARTERLY", monthEnd: true, startDate: "2026-12-31", autoSubmit: false, lines: pair(expense, accrued, 420_000) } as never);
   await generateDue(ctx, new Date());
   console.log("✔ Recurring journal demo data seeded");
+}
+
+/**
+ * The standard billing treatment (Security & Guarding: 90/10, VAT on the indirect charge) with every contract under it, and one
+ * contract override waiting for approval. Idempotent.
+ */
+export async function seedBillingDemo(orgId: string) {
+  if (await db.serviceType.count({ where: { organizationId: orgId } })) {
+    console.log("• Billing rule demo data already present — skipped");
+    return;
+  }
+  const userOf = async (role: Ctx["role"]): Promise<Ctx | null> => {
+    const u = await db.user.findFirst({ where: { organizationId: orgId, role, active: true } });
+    return u ? { userId: u.id, orgId, role, name: u.name, email: u.email, employeeId: u.employeeId } : null;
+  };
+  const boss = await userOf("COMPANY_ADMIN");
+  const fin = await userOf("FINANCE");
+  if (!boss || !fin) return;
+  await installStandardBilling(boss);
+  const contract = await db.contract.findFirst({ where: { organizationId: orgId }, orderBy: { contractNumber: "asc" } });
+  if (contract)
+    await proposeRule(fin, { contractId: contract.id }, { directPct: 85, indirectPct: 15, vatBase: "FULL", whtBase: "FULL", effectiveFrom: "2026-11-01", reason: "Renegotiated in the 2026 renewal: management fee raised to 15%, with VAT on the whole amount." });
+  console.log("✔ Billing rule demo data seeded");
 }
 
 /** Two employment confirmation letters, so the letters register and a letter's page have something to show. Idempotent. */
@@ -591,6 +615,7 @@ if (process.argv[1] && /hr-demo\.(ts|js)$/.test(process.argv[1])) {
       await seedLetterDemo(o.id);
       await seedJournalDemo(o.id);
       await seedRecurringDemo(o.id);
+      await seedBillingDemo(o.id);
     })
     .then(() => db.$disconnect())
     .catch(async (e) => {

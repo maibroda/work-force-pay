@@ -619,6 +619,8 @@ model Organization {
   journalDocuments          JournalDocument[]
   recurringJournals         RecurringJournal[]
   taxCodes                  TaxCode[]
+  serviceTypes              ServiceType[]
+  billingRules              BillingRule[]
   taxTransactions           TaxTransaction[]
   journalReversals          JournalReversal[]
   /// Whether a manual journal needs a second person's approval before it posts.
@@ -1555,6 +1557,10 @@ model Contract {
   movementsFrom StaffMovement[]     @relation("MoveFromContract")
   movementsTo   StaffMovement[]     @relation("MoveToContract")
   journalLines  JournalLine[]
+  /// Which service this contract is billed as; its billing rule applies unless the contract has an approved override.
+  serviceTypeId String?
+  serviceType   ServiceType?        @relation(fields: [serviceTypeId], references: [id], onDelete: Restrict)
+  billingRules  BillingRule[]
 
   @@unique([organizationId, contractNumber])
 }
@@ -2351,7 +2357,7 @@ model ClientInvoice {
   lines           ClientInvoiceLine[]
   receipts        ClientReceipt[]
   deductions      ClientInvoiceDeduction[]
-  /// The tax codes and rates this invoice was calculated with, and where each came from (the engine, by date, or typed in).
+  /// The billing rule, tax codes and rates each contract on this invoice was calculated with, and where each came from.
   taxBasis        Json?
   taxTransactions TaxTransaction[]
 
@@ -2369,6 +2375,9 @@ model ClientInvoiceLine {
   invoice        ClientInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   contractId     String?
   contract       Contract?     @relation(fields: [contractId], references: [id])
+  /// The billing rule this line's split and taxes were calculated under (null: the built-in default).
+  billingRuleId  String?
+  billingRule    BillingRule?  @relation(fields: [billingRuleId], references: [id], onDelete: Restrict)
   categoryName   String?
   description    String
   headcount      Int
@@ -3988,6 +3997,77 @@ model RecurringJournalLine {
   dimensions  Json?
 
   @@index([templateId])
+}
+
+/// What a tax is charged on, of a charge-out amount that is split into a direct and an indirect charge.
+enum BillingBase {
+  /// The indirect (management) charge only. The security-and-guarding default for VAT.
+  INDIRECT
+  /// The direct (pass-through) charge only.
+  DIRECT
+  /// The whole charge-out amount. The default for expected withholding.
+  FULL
+  /// Nothing: the tax doesn't apply.
+  NONE
+}
+
+enum BillingRuleStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// A kind of service the organization bills (Security & Guarding, Consulting …). Its billing rule is the default for every
+/// contract of the type.
+model ServiceType {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  code           String
+  name           String
+  active         Boolean       @default(true)
+  createdBy      String
+  createdAt      DateTime      @default(now())
+  contracts      Contract[]
+  rules          BillingRule[]
+
+  @@unique([organizationId, code])
+}
+
+/// How a service type, or one contract, is billed from a date: the direct/indirect split and what VAT and withholding are
+/// charged on. A rule is proposed by one person and approved by another and is never edited afterwards (a change is a new
+/// rule from a later date). A contract's own rule is an override of its service type's. Exactly one of serviceTypeId and
+/// contractId is set.
+model BillingRule {
+  id                String              @id @default(cuid())
+  organizationId    String
+  organization      Organization        @relation(fields: [organizationId], references: [id])
+  serviceTypeId     String?
+  serviceType       ServiceType?        @relation(fields: [serviceTypeId], references: [id], onDelete: Restrict)
+  contractId        String?
+  contract          Contract?           @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  directPct         Decimal             @db.Decimal(5, 2)
+  indirectPct       Decimal             @db.Decimal(5, 2)
+  vatBase           BillingBase         @default(INDIRECT)
+  whtBase           BillingBase         @default(FULL)
+  /// A particular tax code for this service or contract; blank = the organization's default code for the type.
+  vatTaxCodeId      String?
+  whtTaxCodeId      String?
+  effectiveFrom     DateTime            @db.Date
+  effectiveTo       DateTime?           @db.Date
+  status            BillingRuleStatus   @default(PENDING)
+  reason            String
+  requestedBy       String
+  requestedByUserId String
+  createdAt         DateTime            @default(now())
+  decidedBy         String?
+  decidedByUserId   String?
+  decidedAt         DateTime?
+  decisionNote      String?
+  lines             ClientInvoiceLine[]
+
+  @@index([organizationId, serviceTypeId, status])
+  @@index([organizationId, contractId, status])
 }
 
 enum TaxType {

@@ -23,7 +23,9 @@ import { logAudit } from "./audit";
 import { nextNumber } from "./numbering";
 import { payrollByContractAndCategory } from "./reports";
 import { postArDeduction, postArInvoice, postArInvoiceCancellation, postArReceipt } from "./gl-posting";
-import { recordInvoiceTax, resolveTax, reverseInvoiceTax } from "./tax-engine";
+import { recordInvoiceTax, resolveTax, reverseInvoiceTax, type ResolvedTax, type TaxGroup } from "./tax-engine";
+import { resolveBilling } from "./billing-rules";
+import { splitCharge, taxableOf, type BillingBase, type RuleSource } from "@/lib/billing-rules";
 
 const DEFAULT_PAYMENT_TERMS_DAYS = 30;
 
@@ -31,17 +33,33 @@ export interface GenerateInvoicesOptions {
   /** Leave out to read the rate in force on the invoice date from the tax engine (none, if no tax codes are set up). */
   vatPct?: number;
   whtPct?: number;
-  /** Default 90/10 — must sum to 100. */
+  /**
+   * Leave both out to bill each contract under its billing rule (its own override, else its service type's, else the
+   * built-in 90/10). Giving one or both applies that split to every contract on the run, recorded as typed. Must sum to 100.
+   */
   directChargePct?: number;
   indirectChargePct?: number;
 }
 
+/** One taxed amount while an invoice is being worked out: the same code and rate across contracts add together. */
+type Bucket = { taxCodeId: string | null; ratePct: number; taxable: number };
+
+const addTo = (buckets: Map<string, Bucket>, taxCodeId: string | null, ratePct: number, taxable: number) => {
+  if (taxable === 0) return;
+  const key = `${taxCodeId ?? ""}|${ratePct}`;
+  const b = buckets.get(key) ?? { taxCodeId, ratePct, taxable: 0 };
+  b.taxable = round2(b.taxable + taxable);
+  buckets.set(key, b);
+};
+
 /** Generates one invoice per billed client from a locked (or paid) payroll run. */
 export async function generateInvoices(ctx: Ctx, runId: string, opts: GenerateInvoicesOptions = {}) {
   assertCan(ctx, "payment.manage");
-  const directChargePct = opts.directChargePct ?? 90;
-  const indirectChargePct = opts.indirectChargePct ?? 10;
-  if (Math.abs(directChargePct + indirectChargePct - 100) > 0.01)
+  const typedSplit =
+    opts.directChargePct !== undefined || opts.indirectChargePct !== undefined
+      ? { directPct: opts.directChargePct ?? 100 - (opts.indirectChargePct ?? 0), indirectPct: opts.indirectChargePct ?? 100 - (opts.directChargePct ?? 0) }
+      : null;
+  if (typedSplit && Math.abs(typedSplit.directPct + typedSplit.indirectPct - 100) > 0.01)
     throw new BusinessError("Direct charge % and indirect charge % must add up to 100%.");
   const run = await db.payrollRun.findFirst({
     where: { id: runId, organizationId: ctx.orgId },
@@ -66,12 +84,32 @@ export async function generateInvoices(ctx: Ctx, runId: string, opts: GenerateIn
   const invoiceDate = run.period.endDate;
   const dueDate = addDays(invoiceDate, DEFAULT_PAYMENT_TERMS_DAYS);
   return db.$transaction(async (tx) => {
-    // the rates in force on the invoice date: from the tax engine, unless a rate was typed for this run
-    const vat = await resolveTax(tx, ctx.orgId, "VAT", invoiceDate, opts.vatPct);
-    const wht = await resolveTax(tx, ctx.orgId, "WHT", invoiceDate, opts.whtPct);
-    const vatPct = vat.ratePct;
-    const whtPct = wht.ratePct;
-    const taxBasis = { date: iso(invoiceDate), vat: { code: vat.code, ratePct: vatPct, source: vat.source }, wht: { code: wht.code, ratePct: whtPct, source: wht.source } };
+    // How each contract is billed on the invoice date: its rule, with the tax rates in force that day (or typed for this run).
+    const contractRows = await tx.contract.findMany({ where: { id: { in: contractLines.map((c) => c.contractId) } }, select: { id: true, serviceTypeId: true } });
+    const rules = await resolveBilling(tx, ctx.orgId, contractRows, invoiceDate);
+    type Taxes = { directPct: number; indirectPct: number; vatBase: BillingBase; whtBase: BillingBase; ruleId: string | null; source: RuleSource; vat: ResolvedTax; wht: ResolvedTax };
+    const taxCache = new Map<string, ResolvedTax>();
+    const rateFor = async (type: "VAT" | "WHT", base: BillingBase, codeId: string | null, typed: number | undefined): Promise<ResolvedTax> => {
+      if (base === "NONE") return { taxCodeId: null, code: null, ratePct: 0, source: "NONE" }; // not charged, so no rate is needed
+      const key = `${type}|${codeId ?? ""}|${typed ?? ""}`;
+      if (!taxCache.has(key)) taxCache.set(key, await resolveTax(tx, ctx.orgId, type, invoiceDate, typed, codeId));
+      return taxCache.get(key)!;
+    };
+    const how = new Map<string, Taxes>();
+    for (const c of contractLines) {
+      const r = rules.get(c.contractId)!;
+      how.set(c.contractId, {
+        directPct: typedSplit?.directPct ?? r.directPct,
+        indirectPct: typedSplit?.indirectPct ?? r.indirectPct,
+        vatBase: r.vatBase,
+        whtBase: r.whtBase,
+        ruleId: r.ruleId,
+        source: typedSplit ? "TYPED" : r.source,
+        vat: await rateFor("VAT", r.vatBase, r.vatTaxCodeId, opts.vatPct),
+        wht: await rateFor("WHT", r.whtBase, r.whtTaxCodeId, opts.whtPct),
+      });
+    }
+
     const invoices = [];
     for (const [clientId, g] of byClient) {
       const subtotal = round2(g.contracts.reduce((a, c) => a + c.revenue, 0));
@@ -79,6 +117,7 @@ export async function generateInvoices(ctx: Ctx, runId: string, opts: GenerateIn
       const multiContract = g.contracts.length > 1;
       const lineData: Array<{
         contractId: string;
+        billingRuleId: string | null;
         categoryName: string;
         description: string;
         headcount: number;
@@ -88,26 +127,57 @@ export async function generateInvoices(ctx: Ctx, runId: string, opts: GenerateIn
         indirectCharge: number;
         sortOrder: number;
       }> = [];
+      const vatBuckets = new Map<string, Bucket>();
+      const whtBuckets = new Map<string, Bucket>();
       let i = 0;
-      for (const c of g.contracts)
+      for (const c of g.contracts) {
+        const h = how.get(c.contractId)!;
         for (const cat of c.categories.filter((x) => x.revenue > 0)) {
-          const directCharge = round2((cat.revenue * directChargePct) / 100);
+          const { direct, indirect } = splitCharge(cat.revenue, h.directPct); // the two always sum to the line amount
+          const part = { amount: cat.revenue, direct, indirect };
+          addTo(vatBuckets, h.vat.taxCodeId, h.vat.ratePct, taxableOf(h.vatBase, part));
+          addTo(whtBuckets, h.wht.taxCodeId, h.wht.ratePct, taxableOf(h.whtBase, part));
           lineData.push({
             contractId: c.contractId,
+            billingRuleId: h.ruleId,
             categoryName: cat.categoryName,
             description: multiContract ? `${c.contractName} — ${cat.categoryName}` : cat.categoryName,
             headcount: cat.headcount,
             rate: cat.revenueRate,
             amount: cat.revenue,
-            directCharge,
-            indirectCharge: round2(cat.revenue - directCharge), // the two always sum to the line amount
+            directCharge: direct,
+            indirectCharge: indirect,
             sortOrder: i++,
           });
         }
+      }
       const totalDirectCharge = round2(lineData.reduce((a, l) => a + l.directCharge, 0));
       const totalIndirectCharge = round2(lineData.reduce((a, l) => a + l.indirectCharge, 0));
-      const vatAmount = round2((totalIndirectCharge * vatPct) / 100);
-      const whtAmount = round2((subtotal * whtPct) / 100);
+      // tax is worked out once per code and rate on everything taxable at it, so one rule gives exactly the figure it always did
+      const groups = (m: Map<string, Bucket>): TaxGroup[] => [...m.values()].map((b) => ({ taxCodeId: b.taxCodeId, taxable: b.taxable, ratePct: b.ratePct, amount: round2((b.taxable * b.ratePct) / 100) }));
+      const vatGroups = groups(vatBuckets);
+      const whtGroups = groups(whtBuckets);
+      const vatAmount = round2(vatGroups.reduce((a, x) => a + x.amount, 0));
+      const whtAmount = round2(whtGroups.reduce((a, x) => a + x.amount, 0));
+      const effective = (list: TaxGroup[], amount: number) => (list.length === 1 ? list[0].ratePct : list.length ? round2((amount / list.reduce((a, x) => a + x.taxable, 0)) * 100) : 0);
+      const vatPct = effective(vatGroups, vatAmount);
+      const whtPct = effective(whtGroups, whtAmount);
+      const splits = new Set(g.contracts.map((c) => how.get(c.contractId)!.directPct));
+      const directChargePct = splits.size === 1 ? [...splits][0] : round2((totalDirectCharge / subtotal) * 100);
+      const summary = (list: TaxGroup[], pct: number, pick: (t: Taxes) => ResolvedTax) => {
+        const used = [...new Set(g.contracts.map((c) => pick(how.get(c.contractId)!)))];
+        const one = list.length <= 1 && used.every((u) => u.source === used[0].source && u.taxCodeId === used[0].taxCodeId);
+        return one ? { code: used[0].code, ratePct: pct, source: used[0].source } : { code: null, ratePct: pct, source: "MIXED" };
+      };
+      const taxBasis = {
+        date: iso(invoiceDate),
+        vat: summary(vatGroups, vatPct, (t) => t.vat),
+        wht: summary(whtGroups, whtPct, (t) => t.wht),
+        contracts: g.contracts.map((c) => {
+          const h = how.get(c.contractId)!;
+          return { contractId: c.contractId, contract: c.contractName, source: h.source, ruleId: h.ruleId, directPct: h.directPct, indirectPct: h.indirectPct, vatBase: h.vatBase, whtBase: h.whtBase, vat: { code: h.vat.code, ratePct: h.vat.ratePct, source: h.vat.source }, wht: { code: h.wht.code, ratePct: h.wht.ratePct, source: h.wht.source } };
+        }),
+      };
       const inv = await tx.clientInvoice.create({
         data: {
           organizationId: ctx.orgId,
@@ -119,7 +189,7 @@ export async function generateInvoices(ctx: Ctx, runId: string, opts: GenerateIn
           dueDate,
           subtotal,
           directChargePct,
-          indirectChargePct,
+          indirectChargePct: round2(100 - directChargePct),
           totalDirectCharge,
           totalIndirectCharge,
           vatPct,
@@ -133,7 +203,7 @@ export async function generateInvoices(ctx: Ctx, runId: string, opts: GenerateIn
         },
         include: { lines: true },
       });
-      await recordInvoiceTax(tx, ctx.orgId, inv, { vat: vat.taxCodeId, wht: wht.taxCodeId });
+      await recordInvoiceTax(tx, ctx.orgId, inv, { vat: null, wht: null }, { vat: vatGroups, wht: whtGroups });
       await postArInvoice(ctx, tx, inv);
       invoices.push(inv);
     }
@@ -146,11 +216,10 @@ export async function generateInvoices(ctx: Ctx, runId: string, opts: GenerateIn
         newValue: {
           period: run.period.name,
           invoices: invoices.length,
-          vatPct,
-          whtPct,
-          directChargePct,
-          indirectChargePct,
-          taxBasis,
+          typedSplit,
+          typedVatPct: opts.vatPct ?? null,
+          typedWhtPct: opts.whtPct ?? null,
+          rules: [...how.entries()].map(([contractId, h]) => ({ contractId, source: h.source, ruleId: h.ruleId, directPct: h.directPct, vat: h.vat.source, wht: h.wht.source })),
         },
       },
       tx,

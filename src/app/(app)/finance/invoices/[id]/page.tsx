@@ -7,6 +7,7 @@ import { fmtDate, iso } from "@/lib/dates";
 import { naira, num } from "@/lib/money";
 import { enumOptions } from "@/server/options";
 import { KV, PageHeader, Section } from "@/components/page";
+import { BASE_LABELS, SOURCE_LABELS, type BillingBase, type RuleSource } from "@/lib/billing-rules";
 import { ActionButton } from "@/components/action-button";
 import { PrintButton } from "@/components/print-button";
 import { SmartForm } from "@/components/smart-form";
@@ -24,6 +25,11 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
   const org = await db.organization.findUnique({ where: { id: ctx.orgId } });
   const manage = can(ctx.role, "payment.manage");
   const balance = num(inv.totalAmount) - num(inv.amountPaid) - num(inv.totalDeductions);
+  // how each contract on the invoice was billed (invoices from before billing rules have none recorded)
+  type Treatment = { contract: string; source: string; directPct: number; indirectPct: number; vatBase: string; whtBase: string; vat: { code: string | null; ratePct: number; source: string }; wht: { code: string | null; ratePct: number; source: string } };
+  const treatments = ((inv.taxBasis ?? {}) as { contracts?: Treatment[] }).contracts ?? [];
+  const vatBases = [...new Set(treatments.map((t) => t.vatBase))];
+  const vatOnIndirectOnly = !treatments.length || (vatBases.length === 1 && vatBases[0] === "INDIRECT");
   const overdue = balance > 0 && iso(inv.dueDate) < iso(new Date()) && inv.status !== "CANCELLED";
 
   return (
@@ -118,7 +124,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             </TR>
             {num(inv.vatPct) > 0 && (
               <TR>
-                <TD colSpan={5}>VAT ({num(inv.vatPct)}% of indirect charge)</TD>
+                <TD colSpan={5}>VAT ({num(inv.vatPct)}%{vatOnIndirectOnly ? " of indirect charge" : ""})</TD>
                 <TD className="text-right">{naira(inv.vatAmount)}</TD>
               </TR>
             )}
@@ -144,9 +150,18 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
         </Table>
         <p className="mt-2 text-[11px] text-muted-foreground">
           Each line splits into a Direct charge ({num(inv.directChargePct)}% of the charge-out rate) and an
-          Indirect charge ({num(inv.indirectChargePct)}%). VAT is computed on the total Indirect charge of{" "}
-          {naira(inv.totalIndirectCharge)} only, not on the full subtotal.
+          Indirect charge ({num(inv.indirectChargePct)}%).
+          {vatOnIndirectOnly ? ` VAT is computed on the total Indirect charge of ${naira(inv.totalIndirectCharge)} only, not on the full subtotal.` : ""}
         </p>
+        {treatments.length > 0 && (
+          <ul className="mt-2 space-y-0.5 text-[11px] text-muted-foreground">
+            {treatments.map((t, i) => (
+              <li key={i}>
+                {t.contract}: {SOURCE_LABELS[t.source as RuleSource] ?? t.source}, split {t.directPct}/{t.indirectPct}, VAT {t.vat.ratePct}% on {BASE_LABELS[t.vatBase as BillingBase]?.toLowerCase()}, withholding {t.wht.ratePct}% on {BASE_LABELS[t.whtBase as BillingBase]?.toLowerCase()}.
+              </li>
+            ))}
+          </ul>
+        )}
         {num(inv.whtPct) > 0 && (
           <p className="mt-2 text-[11px] text-muted-foreground">
             Expected withholding tax credit @ {num(inv.whtPct)}%: {naira(inv.whtAmount)}. This does not reduce

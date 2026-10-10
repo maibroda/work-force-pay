@@ -168,9 +168,13 @@ export interface ResolvedTax {
   source: "ENGINE" | "TYPED" | "NONE";
 }
 
-/** The rate of one type in force on a date. A typed rate wins; otherwise the default code's rate that day; otherwise none. */
-export async function resolveTax(tx: Tx, orgId: string, type: TaxType, date: Date, typed?: number): Promise<ResolvedTax> {
-  const code = await tx.taxCode.findFirst({ where: { organizationId: orgId, type, isDefault: true, active: true }, include: { rates: true } });
+/**
+ * The rate of one type in force on a date. A typed rate wins; otherwise the rate that day of the code asked for (a billing
+ * rule can name one) or, failing that, the default code; otherwise none.
+ */
+export async function resolveTax(tx: Tx, orgId: string, type: TaxType, date: Date, typed?: number, codeId?: string | null): Promise<ResolvedTax> {
+  const code = await tx.taxCode.findFirst({ where: { organizationId: orgId, type, active: true, ...(codeId ? { id: codeId } : { isDefault: true }) }, include: { rates: true } });
+  if (codeId && !code) throw new BusinessError("The tax code named by the billing rule is missing or inactive.");
   if (typed !== undefined) return { taxCodeId: code?.id ?? null, code: code?.code ?? null, ratePct: typed, source: "TYPED" };
   if (!code) return { taxCodeId: null, code: null, ratePct: 0, source: "NONE" };
   const rate = rateOn(code.rates.map((r) => ({ ...rowOf(r), id: r.id })), date);
@@ -192,9 +196,25 @@ interface InvoiceForTax {
   whtAmount: unknown;
 }
 
-/** Writes the invoice's taxed amounts. Called inside the invoice's own transaction. */
-export async function recordInvoiceTax(tx: Tx, orgId: string, inv: InvoiceForTax, codes: { vat: string | null; wht: string | null }) {
+/** One taxed amount: what a tax was charged on, at what rate, under which code. */
+export interface TaxGroup {
+  taxCodeId: string | null;
+  taxable: number;
+  ratePct: number;
+  amount: number;
+}
+
+/**
+ * Writes the invoice's taxed amounts. Called inside the invoice's own transaction. An invoice whose contracts are billed
+ * differently has a group per code, rate and base; without groups the invoice's own totals are recorded as one.
+ */
+export async function recordInvoiceTax(tx: Tx, orgId: string, inv: InvoiceForTax, codes: { vat: string | null; wht: string | null }, groups?: { vat: TaxGroup[]; wht: TaxGroup[] }) {
   const common = { organizationId: orgId, sourceType: "CLIENT_INVOICE", invoiceId: inv.id, clientId: inv.clientId, taxDate: inv.invoiceDate };
+  if (groups) {
+    for (const [kind, list] of [["OUTPUT_VAT", groups.vat], ["EXPECTED_WHT", groups.wht]] as const)
+      for (const g of list) if (g.amount > 0) await tx.taxTransaction.create({ data: { ...common, kind, taxCodeId: g.taxCodeId, taxableAmount: g.taxable, ratePct: g.ratePct, taxAmount: g.amount } });
+    return;
+  }
   if (num(inv.vatAmount) > 0)
     await tx.taxTransaction.create({ data: { ...common, kind: "OUTPUT_VAT", taxCodeId: codes.vat, taxableAmount: num(inv.totalIndirectCharge), ratePct: num(inv.vatPct), taxAmount: num(inv.vatAmount) } });
   if (num(inv.whtAmount) > 0)
