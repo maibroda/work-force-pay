@@ -34,9 +34,14 @@ export default async function ManualJournalsPage({ searchParams }: { searchParam
         description={`Entries that no other part of the system posts. A journal is drafted, submitted, approved by someone other than whoever prepared it, then posted; nothing reaches the ledger until it is posted. After submission its lines can't be changed. A posted journal is never edited: a reversal is requested and approved instead (Journal Reversals). Approval is ${required ? "required" : "switched off"} for this organization. Receivables and payables are control accounts and can't be posted to by hand.`}
         actions={
           manage ? (
-            <Link href="/accounting/manual-journals/new" className={buttonVariants({})}>
-              New journal
-            </Link>
+            <span className="flex gap-2">
+              <Link href="/accounting/recurring-journals" className={buttonVariants({ variant: "outline" })}>
+                Recurring journals
+              </Link>
+              <Link href="/accounting/manual-journals/new" className={buttonVariants({})}>
+                New journal
+              </Link>
+            </span>
           ) : undefined
         }
       />

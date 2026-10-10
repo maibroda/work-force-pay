@@ -18,6 +18,7 @@ import { instantiateOnboardingTasks, todayUtc } from "../src/server/services/hr-
 import { nextNumber } from "../src/server/services/numbering";
 import { generateLetter } from "../src/server/services/letters";
 import { approveDocument, postDocument, postDueReversals, requestReversal, saveDraft, submitDocument } from "../src/server/services/journals";
+import { generateDue, saveTemplate } from "../src/server/services/recurring-journals";
 import {
   addCandidate,
   approveOffer,
@@ -205,6 +206,33 @@ export async function seedJournalDemo(orgId: string) {
   await submitDocument(prep, waiting.id);
   await make({ kind: "MANUAL", description: "Draft: October subscription accrual", postingDate: "2026-10-31", lines: pair(expense, accrued, 40_000) });
   console.log("✔ Manual journal demo data seeded");
+}
+
+/**
+ * Three recurring journals: insurance amortisation that has made (and submitted) August's and September's journals, a
+ * month-end accrual template whose September draft is waiting for its preparer, and a quarterly one not yet due. Idempotent.
+ */
+export async function seedRecurringDemo(orgId: string) {
+  if (await db.recurringJournal.count({ where: { organizationId: orgId } })) {
+    console.log("• Recurring journal demo data already present — skipped");
+    return;
+  }
+  const prep = await db.user.findFirst({ where: { organizationId: orgId, role: "FINANCE", active: true } });
+  if (!prep) return;
+  const ctx: Ctx = { userId: prep.id, orgId, role: "FINANCE", name: prep.name, email: prep.email, employeeId: prep.employeeId };
+  const acct = async (code: string) => (await db.glAccount.findFirst({ where: { organizationId: orgId, code } }))?.id;
+  const [cash, expense, accrued] = await Promise.all([acct("1230"), acct("5400"), acct("2130")]);
+  if (!cash || !expense || !accrued) return;
+  const pair = (debit: string, credit: string, amount: number) => [
+    { accountId: debit, debit: amount, credit: 0 },
+    { accountId: credit, debit: 0, credit: amount },
+  ];
+  const base = { frequency: "MONTHLY", monthEnd: true, autoSubmit: false } as const;
+  await saveTemplate(ctx, null, { ...base, name: "Insurance amortisation", kind: "MANUAL", description: "Insurance cover for {month}", startDate: "2026-08-31", autoSubmit: true, lines: pair(expense, cash, 65_000) } as never);
+  await saveTemplate(ctx, null, { ...base, name: "Security-equipment maintenance accrual", kind: "ACCRUAL", description: "Accrue {month} security-equipment maintenance", startDate: "2026-09-30", reverseAfterDays: 1, lines: pair(expense, accrued, 150_000) } as never);
+  await saveTemplate(ctx, null, { name: "Quarterly software licences", kind: "MANUAL", description: "Software licences, {quarter}", frequency: "QUARTERLY", monthEnd: true, startDate: "2026-12-31", autoSubmit: false, lines: pair(expense, accrued, 420_000) } as never);
+  await generateDue(ctx, new Date());
+  console.log("✔ Recurring journal demo data seeded");
 }
 
 /** Two employment confirmation letters, so the letters register and a letter's page have something to show. Idempotent. */
@@ -562,6 +590,7 @@ if (process.argv[1] && /hr-demo\.(ts|js)$/.test(process.argv[1])) {
       await seedBreachDemo(o.id);
       await seedLetterDemo(o.id);
       await seedJournalDemo(o.id);
+      await seedRecurringDemo(o.id);
     })
     .then(() => db.$disconnect())
     .catch(async (e) => {

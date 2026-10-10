@@ -38,7 +38,7 @@ const said = (status: DocumentStatus) => STATUS_LABELS[status].toLowerCase();
  */
 const CONTROL_ACCOUNTS: Record<string, string> = { [GL_POSTING_ACCOUNTS.AR]: "Receivables", [GL_POSTING_ACCOUNTS.AP]: "Payables" };
 
-async function assertNoControlAccounts(tx: Tx, orgId: string, accountIds: string[]) {
+export async function assertNoControlAccounts(tx: Tx, orgId: string, accountIds: string[]) {
   const hit = await tx.glAccount.findFirst({ where: { organizationId: orgId, id: { in: accountIds }, code: { in: Object.keys(CONTROL_ACCOUNTS) } }, select: { code: true, name: true } });
   if (hit)
     throw new BusinessError(
@@ -171,24 +171,27 @@ export async function approvalRequired(tx: Tx, orgId: string) {
 
 export async function submitDocument(ctx: Ctx, id: string) {
   assertCan(ctx, "journal.manage");
-  return db.$transaction(async (tx) => {
-    const doc = await load(ctx, tx, id);
-    if (!canEditDocument(doc.status as DocumentStatus)) throw new BusinessError(`This journal is ${said(doc.status as DocumentStatus)}, so it can't be submitted.`);
-    const problems = draftProblems({ kind: doc.kind, postingDate: doc.postingDate, reverseOn: doc.reverseOn, lines: doc.lines.map((l) => ({ accountId: l.accountId, description: l.description, debit: Number(l.debit), credit: Number(l.credit) })) });
-    if (problems.length) throw new BusinessError(problems.slice(0, 3).join(" "));
-    await assertNoControlAccounts(tx, ctx.orgId, doc.lines.map((l) => l.accountId));
-    await validateJournal(ctx, tx, postingInput(doc)); // refuses for exactly the reasons posting would
-    const required = await approvalRequired(tx, ctx.orgId);
-    const now = new Date();
-    await tx.journalDocument.update({ where: { id }, data: { status: "SUBMITTED", submittedBy: ctx.name, submittedByUserId: ctx.userId, submittedAt: now, decidedBy: null, decidedByUserId: null, decidedAt: null, decisionNote: null } });
-    await logAudit(ctx, { action: "JOURNAL_DOC_SUBMIT", entity: "JournalDocument", entityId: id, newValue: { documentNumber: doc.documentNumber, approvalRequired: required } }, tx);
-    if (required) return { posted: false as const };
-    // approval switched off by the organization: the preparer's own submission stands as the approval, and it is on the record
-    await tx.journalDocument.update({ where: { id }, data: { status: "APPROVED", decidedBy: ctx.name, decidedByUserId: ctx.userId, decidedAt: now, decisionNote: "Approval not required (organization setting)." } });
-    await logAudit(ctx, { action: "JOURNAL_DOC_APPROVE_WAIVED", entity: "JournalDocument", entityId: id, reason: "Organization setting: manual journals don't need approval" }, tx);
-    const journal = await postApproved(ctx, tx, id);
-    return { posted: true as const, journal };
-  });
+  return db.$transaction((tx) => submitInTx(ctx, tx, id));
+}
+
+/** The body of a submission, for callers (recurring journals) that already hold a transaction. Checks are the same. */
+export async function submitInTx(ctx: Ctx, tx: Tx, id: string) {
+  const doc = await load(ctx, tx, id);
+  if (!canEditDocument(doc.status as DocumentStatus)) throw new BusinessError(`This journal is ${said(doc.status as DocumentStatus)}, so it can't be submitted.`);
+  const problems = draftProblems({ kind: doc.kind, postingDate: doc.postingDate, reverseOn: doc.reverseOn, lines: doc.lines.map((l) => ({ accountId: l.accountId, description: l.description, debit: Number(l.debit), credit: Number(l.credit) })) });
+  if (problems.length) throw new BusinessError(problems.slice(0, 3).join(" "));
+  await assertNoControlAccounts(tx, ctx.orgId, doc.lines.map((l) => l.accountId));
+  await validateJournal(ctx, tx, postingInput(doc)); // refuses for exactly the reasons posting would
+  const required = await approvalRequired(tx, ctx.orgId);
+  const now = new Date();
+  await tx.journalDocument.update({ where: { id }, data: { status: "SUBMITTED", submittedBy: ctx.name, submittedByUserId: ctx.userId, submittedAt: now, decidedBy: null, decidedByUserId: null, decidedAt: null, decisionNote: null } });
+  await logAudit(ctx, { action: "JOURNAL_DOC_SUBMIT", entity: "JournalDocument", entityId: id, newValue: { documentNumber: doc.documentNumber, approvalRequired: required } }, tx);
+  if (required) return { posted: false as const };
+  // approval switched off by the organization: the preparer's own submission stands as the approval, and it is on the record
+  await tx.journalDocument.update({ where: { id }, data: { status: "APPROVED", decidedBy: ctx.name, decidedByUserId: ctx.userId, decidedAt: now, decisionNote: "Approval not required (organization setting)." } });
+  await logAudit(ctx, { action: "JOURNAL_DOC_APPROVE_WAIVED", entity: "JournalDocument", entityId: id, reason: "Organization setting: manual journals don't need approval" }, tx);
+  const journal = await postApproved(ctx, tx, id);
+  return { posted: true as const, journal };
 }
 
 export async function approveDocument(ctx: Ctx, id: string, note?: string) {
@@ -363,7 +366,7 @@ export async function getDocument(ctx: Ctx, id: string) {
   assertCan(ctx, "gl.view");
   const doc = await db.journalDocument.findFirst({
     where: { id, organizationId: ctx.orgId },
-    include: { lines: { orderBy: { sortOrder: "asc" }, include: { account: { select: { code: true, name: true } } } }, journal: { select: { id: true, entryNumber: true, reversedBy: { select: { id: true, entryNumber: true } } } } },
+    include: { lines: { orderBy: { sortOrder: "asc" }, include: { account: { select: { code: true, name: true } } } }, recurringJournal: { select: { id: true, name: true } }, journal: { select: { id: true, entryNumber: true, reversedBy: { select: { id: true, entryNumber: true } } } } },
   });
   return doc;
 }
