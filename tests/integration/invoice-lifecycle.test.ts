@@ -18,6 +18,7 @@ import {
   unbilledRuns,
 } from "@/server/services/billing";
 import { periodFor, transitionPeriod } from "@/server/services/periods";
+import { waiveCheck } from "@/server/services/period-close";
 import { checkLedgerIntegrity } from "@/server/services/ledger-integrity";
 import { raiseNote } from "@/server/services/client-notes";
 import { clientStatement, openInvoicesFor, recordClientReceipt } from "@/server/services/receipts";
@@ -135,6 +136,7 @@ describe("an invoice generated where approval is required", () => {
     await submitInvoice(fin, inv.id);
     const aug = await periodFor(db, t.org.id, day("2026-08-31"));
     await transitionPeriod(fin, aug.id, "SOFT_CLOSE");
+    await waiveCheck(boss, aug.id, "PENDING_INVOICES", "Closing over a submitted invoice to prove it cannot then be approved");
     await transitionPeriod(boss, aug.id, "CLOSE");
     await expect(approveInvoice(boss2, inv.id)).rejects.toThrow(/Aug 2026 is closed/);
     const still = await invoice(inv.id);

@@ -639,7 +639,8 @@ export async function cancelInvoice(ctx: Ctx, id: string, reason: string) {
   await db.$transaction(async (tx) => {
     await tx.clientInvoice.update({ where: { id }, data: { status: "CANCELLED", notes: reason } });
     await reverseInvoiceTax(tx, id);
-    await postArInvoiceCancellation(ctx, tx, inv, new Date(new Date().toISOString().slice(0, 10)));
+    // dated today, or the invoice's own date if that is later: a reversal never comes before what it reverses
+    await postArInvoiceCancellation(ctx, tx, inv, new Date(Math.max(new Date(new Date().toISOString().slice(0, 10)).getTime(), inv.invoiceDate.getTime())));
     await logAudit(ctx, { action: "CLIENT_INVOICE_CANCEL", entity: "ClientInvoice", entityId: id, reason }, tx);
   });
 }

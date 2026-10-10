@@ -296,7 +296,7 @@ export async function clientStatement(ctx: Ctx, clientId: string, asOfRaw?: stri
   if (!client) throw new BusinessError("Client not found.");
 
   const [invoices, legacy, deductions, allocations, newReceipts, refunds, ledgerLines, notes] = await Promise.all([
-    db.clientInvoice.findMany({ where: { organizationId: ctx.orgId, clientId, status: { notIn: ["CANCELLED", "DRAFT", "SUBMITTED"] } } }),
+    db.clientInvoice.findMany({ where: { organizationId: ctx.orgId, clientId, status: { notIn: ["DRAFT", "SUBMITTED"] } } }),
     db.clientReceipt.findMany({ where: { organizationId: ctx.orgId, clientId, invoiceId: { not: null } } }),
     db.clientInvoiceDeduction.findMany({ where: { organizationId: ctx.orgId, clientId } }),
     db.receiptAllocation.findMany({ where: { organizationId: ctx.orgId, invoice: { clientId } }, include: { receipt: { select: { receiptNumber: true } } } }),
@@ -306,7 +306,14 @@ export async function clientStatement(ctx: Ctx, clientId: string, asOfRaw?: stri
     db.clientNote.findMany({ where: { organizationId: ctx.orgId, clientId, status: "APPROVED", noteDate: { lte: asOf } } }),
   ]);
 
-  const stInvoices: StatementInvoice[] = invoices.map((i) => ({ id: i.id, invoiceNumber: i.invoiceNumber, invoiceDate: i.invoiceDate, dueDate: i.dueDate, total: num(i.totalAmount) }));
+  // An invoice cancelled after the statement date was still owed on that date, so it stays until the day its cancellation was posted.
+  const cancelled = invoices.filter((i) => i.status === "CANCELLED");
+  const cancelDates = new Map(
+    cancelled.length
+      ? (await db.journalEntry.findMany({ where: { organizationId: ctx.orgId, source: "AR_INVOICE_CANCEL", sourceType: "CLIENT_INVOICE", sourceId: { in: cancelled.map((i) => i.id) } }, select: { sourceId: true, postingDate: true } })).map((j) => [j.sourceId, j.postingDate] as const)
+      : [],
+  );
+  const stInvoices: StatementInvoice[] = invoices.filter((i) => i.status !== "CANCELLED" || ((cancelDates.get(i.id)?.getTime() ?? 0) > asOf.getTime())).map((i) => ({ id: i.id, invoiceNumber: i.invoiceNumber, invoiceDate: i.invoiceDate, dueDate: i.dueDate, total: num(i.totalAmount) }));
   const settlements: StatementSettlement[] = [
     ...legacy.map((r) => ({ id: r.id, invoiceId: r.invoiceId!, date: r.receivedDate, kind: "RECEIPT" as const, reference: r.reference ?? "Receipt", amount: num(r.amount) })),
     ...notes.filter((n) => n.type === "CREDIT").map((n) => ({ id: n.id, invoiceId: n.invoiceId, date: n.noteDate, kind: "CREDIT_NOTE" as const, reference: n.noteNumber, amount: num(n.totalAmount) })),

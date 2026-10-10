@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { isolatedOrg, uid } from "../helpers";
 import { ensureDefaultChart, updateAccount } from "@/server/services/accounting";
 import { transitionPeriod, periodFor } from "@/server/services/periods";
+import { waiveCheck } from "@/server/services/period-close";
 import { postJournal } from "@/server/services/posting";
 import { ledgerByDimension } from "@/server/services/dimensions";
 import { checkLedgerIntegrity } from "@/server/services/ledger-integrity";
@@ -181,6 +182,7 @@ describe("accounting periods and journals", () => {
     await approveDocument(boss, sept.id);
     const septPeriod = await periodFor(db, t.org.id, day("2026-09-30"));
     await transitionPeriod(prep, septPeriod.id, "SOFT_CLOSE");
+    await waiveCheck(boss2, septPeriod.id, "PENDING_JOURNALS", "Closing over an approved journal to prove it cannot then be posted");
     await transitionPeriod(boss2, septPeriod.id, "CLOSE");
     await expect(postDocument(boss, sept.id)).rejects.toThrow(/Sep 2026 is closed/);
     expect((await getDocument(boss, sept.id))!.status).toBe("APPROVED"); // nothing half-done
@@ -314,6 +316,7 @@ describe("reversing a posted manual journal", () => {
     const oct = await periodFor(db, t.org.id, day("2026-10-15"));
     const req = await requestReversal(prep, doc.journal!.id, "Wrong client, to be put right.", "2026-10-15");
     await transitionPeriod(prep, oct.id, "SOFT_CLOSE");
+    await waiveCheck(boss2, oct.id, "PENDING_REVERSALS", "Closing over a pending reversal to prove it cannot then be approved");
     await transitionPeriod(boss2, oct.id, "CLOSE");
     await expect(decideReversal(boss, req.id, true)).rejects.toThrow(/Oct 2026 is closed/);
     expect((await db.journalReversal.findUniqueOrThrow({ where: { id: req.id } })).status).toBe("PENDING");

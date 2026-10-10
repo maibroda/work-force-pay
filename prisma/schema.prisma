@@ -636,6 +636,8 @@ model Organization {
   journalApprovalRequired   Boolean                    @default(true)
   /// Whether invoices are generated as drafts that a second person approves before they post. Off: invoices post when generated.
   invoiceApprovalRequired   Boolean                    @default(false)
+  /// Whether every sign-off on a period's close checklist must be done before the period can be closed.
+  closeChecklistRequired    Boolean                    @default(false)
 }
 
 model User {
@@ -3785,10 +3787,76 @@ model AccountingPeriod {
   createdAt      DateTime                @default(now())
   journals       JournalEntry[]
   events         AccountingPeriodEvent[]
+  snapshots      PeriodSnapshot[]
+  checklist      CloseChecklistItem[]
+  waivers        CloseWaiver[]
 
   @@unique([organizationId, startDate])
   @@index([organizationId, status])
   @@index([fiscalYearId])
+}
+
+/// The books of a period as they stood when it was closed: trial balance, receivables by client and invoice with ageing, payables
+/// by vendor, cash and tax balances. This is the official record: it does not change when later activity posts, and a period that
+/// is reopened and closed again gets a new version while the old one is kept, marked superseded.
+model PeriodSnapshot {
+  id             String           @id @default(cuid())
+  organizationId String
+  periodId       String
+  period         AccountingPeriod @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  version        Int
+  /// The date the figures are as at: the last day of the period.
+  asAt           DateTime         @db.Date
+  takenAt        DateTime         @default(now())
+  takenBy        String
+  takenByUserId  String
+  data           Json
+  arTotal        Decimal          @db.Decimal(16, 2)
+  arLedger       Decimal          @db.Decimal(16, 2)
+  apTotal        Decimal          @db.Decimal(16, 2)
+  apLedger       Decimal          @db.Decimal(16, 2)
+  trialDebit     Decimal          @db.Decimal(16, 2)
+  trialCredit    Decimal          @db.Decimal(16, 2)
+  /// SHA-256 of the data, so a snapshot can be proved unaltered.
+  checksum       String
+  supersededAt   DateTime?
+  supersededBy   String?
+
+  @@unique([periodId, version])
+  @@index([organizationId, periodId])
+}
+
+/// A sign-off on the close of a period (bank accounts reconciled, accruals reviewed …). Done by a person, with a note.
+model CloseChecklistItem {
+  id             String           @id @default(cuid())
+  organizationId String
+  periodId       String
+  period         AccountingPeriod @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  code           String
+  label          String
+  sortOrder      Int              @default(0)
+  done           Boolean          @default(false)
+  doneBy         String?
+  doneByUserId   String?
+  doneAt         DateTime?
+  note           String?
+
+  @@unique([periodId, code])
+}
+
+/// A pending item on the close checklist that an approver chose to close the period over, with the reason. Append-only.
+model CloseWaiver {
+  id             String           @id @default(cuid())
+  organizationId String
+  periodId       String
+  period         AccountingPeriod @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  checkCode      String
+  reason         String
+  waivedBy       String
+  waivedByUserId String
+  createdAt      DateTime         @default(now())
+
+  @@index([periodId])
 }
 
 /// Append-only trail of everything done to a period: who closed, approved, locked or reopened it, and why.

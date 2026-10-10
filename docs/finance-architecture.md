@@ -308,9 +308,22 @@ notes and refunds.)
 Rather than a link table, certificates are matched to what was withheld by client and normalised number, because receipts and deductions already carry
 the number the client quoted; the reconciliation reports matched, missing, short, over and unrecorded certificates and the amount still to chase.
 
-**Phase 3 is complete**, with these deliberate gaps against the brief: a debit note adjusts an existing invoice rather than standing alone; statements are
+**Phase 3 is complete** (see 5i for Phase 4, which follows), with these deliberate gaps against the brief: a debit note adjusts an existing invoice rather than standing alone; statements are
 CSV plus the browser's print/save-as-PDF (there is no PDF or Excel library in the project, and CSV opens in Excel); certificates *issued* by us belong
 with payables. Next is Phase 4 (period close, AR snapshots and the reconciliation checklist).
+
+## 5i. Phase 4, first step — period close, snapshots and reconciliation (built)
+
+Closing a period now runs the checks in `period-close`: four hard reconciliations as at the last day (trial balance, receivables, payables, client advances),
+pending work dated in the period (waivable by an approver, with a reason that is kept in an append-only `CloseWaiver`), advisory items, and per-period sign-offs
+(`CloseChecklistItem`, compulsory only if the organization says so). The heavy reads and the snapshot are worked out before the closing transaction opens; the
+transaction re-checks the ledger totals, writes `PeriodSnapshot` (immutable, checksummed, versioned, superseded on reopen) and closes the period, so a snapshot can't
+disagree with the ledger it records. The monthly receivables report reads the snapshot for a closed month and a labelled live figure otherwise, and compares a
+closed month with a fresh as-at calculation to show drift. Statement and reconciliation figures are made as-at correct for invoices cancelled later. Existing tests that
+closed over pending work now waive it explicitly.
+
+**Phase 4, still to do:** year-end close (closing entries and the retained-earnings transfer, then closing the last period and the year), and
+payables snapshots at the invoice level once supplier statements exist (Phase 5).
 
 ## 6. Safety rules for every migration
 

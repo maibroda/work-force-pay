@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { listFiscalYears } from "@/server/services/periods";
@@ -63,6 +64,9 @@ export default async function PeriodsPage() {
                     </TD>
                     <TD className="max-w-[18rem] whitespace-normal text-xs text-muted-foreground">{last ? `${last.action.replace("_", " ").toLowerCase()} by ${last.actor}, ${fmtDate(last.createdAt)}${last.reason ? ` — ${last.reason}` : ""}` : "—"}</TD>
                     <TD className="space-x-1 whitespace-nowrap text-right">
+                      <Link className="mr-1 text-xs text-primary underline" href={`/accounting/periods/${p.id}`}>
+                        Close centre
+                      </Link>
                       {canClose && nextStatus("SOFT_CLOSE", s) && (
                         <ActionButton action={transitionPeriodAction.bind(null, p.id, "SOFT_CLOSE")} confirm={`Soft close ${p.name}? Only finance staff with the close permission can post into it afterwards.`} variant="outline">
                           Soft close

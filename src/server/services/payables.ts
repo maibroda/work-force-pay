@@ -377,7 +377,8 @@ export async function cancelPurchaseInvoice(ctx: Ctx, id: string, reason: string
   // The status change and the reversing journal commit together, so a cancelled bill never stays in the ledger.
   await db.$transaction(async (tx) => {
     await tx.purchaseInvoice.update({ where: { id }, data: { status: "CANCELLED", notes: reason } });
-    await postApInvoiceCancellation(ctx, tx, inv, new Date(new Date().toISOString().slice(0, 10)));
+    // dated today, or the bill's own date if that is later: a reversal never comes before what it reverses
+    await postApInvoiceCancellation(ctx, tx, inv, new Date(Math.max(new Date(new Date().toISOString().slice(0, 10)).getTime(), inv.invoiceDate.getTime())));
     await logAudit(ctx, { action: "PURCHASE_INVOICE_CANCEL", entity: "PurchaseInvoice", entityId: id, reason }, tx);
   });
 }
