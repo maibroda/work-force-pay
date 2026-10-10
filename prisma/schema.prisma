@@ -618,6 +618,8 @@ model Organization {
   projects                  Project[]
   journalDocuments          JournalDocument[]
   recurringJournals         RecurringJournal[]
+  taxCodes                  TaxCode[]
+  taxTransactions           TaxTransaction[]
   journalReversals          JournalReversal[]
   /// Whether a manual journal needs a second person's approval before it posts.
   journalApprovalRequired   Boolean                    @default(true)
@@ -2346,9 +2348,12 @@ model ClientInvoice {
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 
-  lines      ClientInvoiceLine[]
-  receipts   ClientReceipt[]
-  deductions ClientInvoiceDeduction[]
+  lines           ClientInvoiceLine[]
+  receipts        ClientReceipt[]
+  deductions      ClientInvoiceDeduction[]
+  /// The tax codes and rates this invoice was calculated with, and where each came from (the engine, by date, or typed in).
+  taxBasis        Json?
+  taxTransactions TaxTransaction[]
 
   @@unique([organizationId, invoiceNumber])
   @@unique([clientId, runId])
@@ -3983,6 +3988,96 @@ model RecurringJournalLine {
   dimensions  Json?
 
   @@index([templateId])
+}
+
+enum TaxType {
+  VAT
+  WHT
+}
+
+enum TaxRateStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum TaxTransactionKind {
+  /// VAT charged on a sale: a liability to the tax authority.
+  OUTPUT_VAT
+  /// Tax the client is expected to withhold on paying an invoice. What they actually withhold is recorded as a deduction.
+  EXPECTED_WHT
+}
+
+/// A tax the organization charges or is charged (VAT, withholding tax). The rate lives in TaxRate, by date.
+model TaxCode {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  code           String
+  name           String
+  type           TaxType
+  /// The ledger account the tax is booked to (output VAT payable, WHT receivable).
+  accountCode    String?
+  /// The code invoices use when nothing more specific applies. At most one per type.
+  isDefault      Boolean          @default(false)
+  active         Boolean          @default(true)
+  notes          String?
+  createdBy      String
+  createdAt      DateTime         @default(now())
+  rates          TaxRate[]
+  transactions   TaxTransaction[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, type])
+}
+
+/// One rate of a tax code from a date. Rates are only ever added: a change is a new rate from a later date, proposed by
+/// one person and approved by another; the database refuses to edit or delete an approved one.
+model TaxRate {
+  id                String        @id @default(cuid())
+  taxCodeId         String
+  taxCode           TaxCode       @relation(fields: [taxCodeId], references: [id], onDelete: Restrict)
+  ratePct           Decimal       @db.Decimal(6, 3)
+  effectiveFrom     DateTime      @db.Date
+  /// Set when a later rate is approved: the day before it starts.
+  effectiveTo       DateTime?     @db.Date
+  status            TaxRateStatus @default(PENDING)
+  reason            String
+  requestedBy       String
+  requestedByUserId String
+  createdAt         DateTime      @default(now())
+  decidedBy         String?
+  decidedByUserId   String?
+  decidedAt         DateTime?
+  decisionNote      String?
+
+  @@index([taxCodeId, status, effectiveFrom])
+}
+
+/// One taxed amount on a posted document: what the VAT and withholding reports read. Written with the invoice, in the
+/// same transaction, and only ever marked reversed.
+model TaxTransaction {
+  id             String             @id @default(cuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  /// Null for amounts that pre-date the tax engine.
+  taxCodeId      String?
+  taxCode        TaxCode?           @relation(fields: [taxCodeId], references: [id], onDelete: Restrict)
+  kind           TaxTransactionKind
+  sourceType     String
+  invoiceId      String?
+  invoice        ClientInvoice?     @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  clientId       String?
+  taxDate        DateTime           @db.Date
+  taxableAmount  Decimal            @db.Decimal(16, 2)
+  ratePct        Decimal            @db.Decimal(6, 3)
+  taxAmount      Decimal            @db.Decimal(16, 2)
+  reversed       Boolean            @default(false)
+  reversedAt     DateTime?
+  createdAt      DateTime           @default(now())
+
+  @@index([organizationId, kind, taxDate])
+  @@index([invoiceId])
 }
 
 enum JournalReversalStatus {

@@ -12,6 +12,9 @@
  * Reversal checks (ERROR): a journal that reverses another must negate it exactly, account by account, and the
  * original must be in the same organization.
  *
+ * Tax checks (ERROR): the tax records of every live invoice add up to the VAT and withholding stored on it, and a cancelled
+ * invoice has none left live.
+ *
  * Dimension checks (ERROR): a line's client, contract, cost centre and other dimensions must belong to the same
  * organization, and a contract on a line must belong to that line's client.
  *
@@ -162,6 +165,18 @@ export async function checkLedgerIntegrity(orgId: string): Promise<IntegrityRepo
       const posted = new Set(journals.map((j) => j.runId).filter(Boolean));
       const runs = await tx.payrollRun.findMany({ where: { organizationId: orgId, status: { in: ["LOCKED", "PAID"] } }, select: { id: true, runNumber: true } });
       for (const r of runs) if (!posted.has(r.id)) add("PAYROLL_UNPOSTED", "ERROR", `A locked payroll run has no journal.`, `run ${r.runNumber}`);
+
+      // Tax records: what the VAT and withholding reports read must agree with the invoices.
+      const taxed = await tx.clientInvoice.findMany({
+        where: { organizationId: orgId },
+        select: { invoiceNumber: true, status: true, vatAmount: true, whtAmount: true, taxTransactions: { where: { reversed: false }, select: { kind: true, taxAmount: true } } },
+      });
+      for (const inv of taxed) {
+        const live = (kind: string) => round2(inv.taxTransactions.filter((t) => t.kind === kind).reduce((s, t) => s + num(t.taxAmount), 0));
+        const [vat, wht] = inv.status === "CANCELLED" ? [0, 0] : [num(inv.vatAmount), num(inv.whtAmount)];
+        if (Math.abs(live("OUTPUT_VAT") - round2(vat)) >= TOLERANCE) add("TAX_VAT_RECORDS", "ERROR", `VAT records total ${live("OUTPUT_VAT")} but the invoice says ${round2(vat)}.`, inv.invoiceNumber);
+        if (Math.abs(live("EXPECTED_WHT") - round2(wht)) >= TOLERANCE) add("TAX_WHT_RECORDS", "ERROR", `Withholding records total ${live("EXPECTED_WHT")} but the invoice says ${round2(wht)}.`, inv.invoiceNumber);
+      }
 
       // Subledgers against their control accounts.
       const balanceOf = async (code: string) => {

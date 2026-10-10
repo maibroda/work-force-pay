@@ -955,6 +955,31 @@ For entries that repeat (rent, insurance amortisation, a standing accrual): Fina
   be deleted; one that has stays on record (pause it).
 - Receivables and payables control accounts are refused in a template, as in a journal.
 
+### Tax codes and rates
+
+Finance / Accounting → **Tax Codes & Rates** and **Tax Reports**.
+
+- **A tax is a code with rates by date.** VAT and withholding tax each have a code (for example `VAT-STD`), the ledger account
+  it is booked to, and one default per type. "Set up VAT and withholding" creates the two codes with *proposed* rates (VAT 7.5%
+  from 1 February 2020, withholding 5% on services). They are a starting point, not advice: confirm them with your tax adviser.
+- **A rate is proposed by one person and approved by another** (`tax.manage` to propose, `tax.approve` to decide; never the
+  proposer). Approving a rate ends the one it replaces the day before it starts. A proposal that hasn't been approved is never
+  used. **An approved rate is history**: the database refuses to edit or delete it, even by SQL. A change is a new rate from a
+  later date, and a new rate can't start on or before an existing one.
+- **An invoice reads the rate in force on its own date**, keeps the code and rate it used (`taxBasis`), and writes a
+  `TaxTransaction` for the VAT and for the withholding expected, in the invoice's own transaction. Changing a rate later
+  never touches an invoice already issued. If a default code exists but no rate is in force that day, generating invoices stops
+  with a message instead of quietly charging nothing.
+- **Typing a rate for a run still works** (leave the field blank to use the engine; a number, including 0, is used as typed and
+  recorded as typed). An organization with no tax codes behaves exactly as before. VAT is still charged on the indirect charge
+  only; the figures are identical to what the same inputs gave before.
+- **Tax Reports** lists VAT charged and withholding expected by month and by client from the tax records (cancelled invoices
+  excluded; cancelling an invoice marks its records reversed), alongside the withholding clients have actually deducted
+  (recorded as deductions), and ties VAT on live invoices to the VAT payable the invoice journals booked. The ledger integrity
+  check verifies the records of every invoice add up to the VAT and withholding stored on it. Invoices issued before the engine
+  were given records from their stored figures when it was installed.
+- Not yet: billing rules per service and contract with approved overrides, withholding certificates, input VAT on purchases.
+
 ### Route smoke test
 
 Unit and integration tests prove the services; they can't prove a *page* renders. `npm run smoke` does:

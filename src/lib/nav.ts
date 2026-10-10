@@ -193,6 +193,8 @@ export const NAV: NavGroup[] = [
       { href: "/accounting/manual-journals", label: "Manual Journals", perm: "gl.view" },
       { href: "/accounting/recurring-journals", label: "Recurring Journals", perm: "gl.view" },
       { href: "/accounting/reversals", label: "Journal Reversals", perm: "gl.view" },
+      { href: "/accounting/tax-codes", label: "Tax Codes & Rates", perm: "gl.view" },
+      { href: "/accounting/tax-reports", label: "Tax Reports", perm: "gl.view" },
       { href: "/accounting/periods", label: "Accounting Periods", perm: "gl.view" },
       { href: "/accounting/mapping", label: "Payroll GL Mapping", perm: "gl.view" },
       { href: "/accounting/accounts", label: "Chart of Accounts", perm: "gl.view" },
