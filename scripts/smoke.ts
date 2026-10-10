@@ -187,7 +187,7 @@ async function main() {
       else notes.push(`no sample record for ${p.route} — skipped`);
       continue;
     }
-    const paths = p.route === "/employees/[id]" ? [`/employees/${id}`, ...tabs.map((t) => `/employees/${id}?tab=${t}`)] : [p.route.replace("[id]", id)];
+    const paths = p.route === "/employees/[id]" ? [`/employees/${id}`, ...tabs.map((t) => `/employees/${id}?tab=${t}`)] : [p.route.replace(/\[[^\]]+\]/, id)]; // whatever the dynamic segment is called ([id], [clientId] …)
     for (const role of ROLES) for (const path of paths) probes.push({ role, path, expect: expectFor(role, p.perm, true) });
   }
 
