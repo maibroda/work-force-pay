@@ -177,3 +177,38 @@ export async function ledgerByDimension(ctx: Ctx, input: { dimension: string; fr
   const totals = rows.reduce((t, r) => ({ income: round2(t.income + r.income), expense: round2(t.expense + r.expense), net: round2(t.net + r.net), debit: round2(t.debit + r.debit), credit: round2(t.credit + r.credit), lines: t.lines + r.lines }), { income: 0, expense: 0, net: 0, debit: 0, credit: 0, lines: 0 });
   return { dimension: dim.key, label: dim.label, from: input.from, to: input.to, rows, totals, dimensions: DIMENSIONS };
 }
+
+/** Choices for every dimension, for forms that let someone tag a ledger line. Retired regions, branches, profit centres and projects are left out. */
+export async function dimensionOptions(ctx: Ctx): Promise<Record<DimensionColumn, Array<{ value: string; label: string }>>> {
+  assertCan(ctx, "gl.view");
+  const where = { organizationId: ctx.orgId };
+  const active = { ...where, active: true };
+  const pair = <T extends { id: string }>(rows: T[], label: (r: T) => string) => rows.map((r) => ({ value: r.id, label: label(r) }));
+  const [clients, contracts, beats, costCenters, departments, employees, assets, regions, branches, profitCentres, projects] = await Promise.all([
+    db.client.findMany({ where, orderBy: { name: "asc" }, select: { id: true, code: true, name: true } }),
+    db.contract.findMany({ where, orderBy: { contractNumber: "asc" }, select: { id: true, contractNumber: true, name: true } }),
+    db.beat.findMany({ where, orderBy: { name: "asc" }, select: { id: true, code: true, name: true } }),
+    db.costCenter.findMany({ where: active, orderBy: { name: "asc" }, select: { id: true, code: true, name: true } }),
+    db.department.findMany({ where, orderBy: { name: "asc" }, select: { id: true, code: true, name: true } }),
+    db.employee.findMany({ where, orderBy: { employeeNumber: "asc" }, select: { id: true, employeeNumber: true, firstName: true, lastName: true } }),
+    db.fixedAsset.findMany({ where, orderBy: { assetNumber: "asc" }, select: { id: true, assetNumber: true, name: true } }),
+    db.region.findMany({ where: active, orderBy: { code: "asc" }, select: { id: true, code: true, name: true } }),
+    db.branch.findMany({ where: active, orderBy: { code: "asc" }, select: { id: true, code: true, name: true } }),
+    db.profitCentre.findMany({ where: active, orderBy: { code: "asc" }, select: { id: true, code: true, name: true } }),
+    db.project.findMany({ where: active, orderBy: { code: "asc" }, select: { id: true, code: true, name: true } }),
+  ]);
+  const cn = (r: { code: string; name: string }) => `${r.code} — ${r.name}`;
+  return {
+    clientId: pair(clients, cn),
+    contractId: pair(contracts, (r) => `${r.contractNumber} — ${r.name}`),
+    beatId: pair(beats, cn),
+    costCenterId: pair(costCenters, cn),
+    departmentId: pair(departments, cn),
+    employeeId: pair(employees, (r) => `${r.employeeNumber} — ${r.firstName} ${r.lastName}`),
+    fixedAssetId: pair(assets, (r) => `${r.assetNumber} — ${r.name}`),
+    regionId: pair(regions, cn),
+    branchId: pair(branches, cn),
+    profitCentreId: pair(profitCentres, cn),
+    projectId: pair(projects, cn),
+  };
+}

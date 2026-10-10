@@ -17,6 +17,7 @@ import { createContract } from "../src/server/services/contracts";
 import { instantiateOnboardingTasks, todayUtc } from "../src/server/services/hr-policy";
 import { nextNumber } from "../src/server/services/numbering";
 import { generateLetter } from "../src/server/services/letters";
+import { approveDocument, postDocument, postDueReversals, requestReversal, saveDraft, submitDocument } from "../src/server/services/journals";
 import {
   addCandidate,
   approveOffer,
@@ -157,6 +158,53 @@ export async function seedBreachDemo(orgId: string) {
     ],
   );
   console.log("✔ Data breach demo data seeded");
+}
+
+/**
+ * Four manual journals in different states and one pending reversal: an accrual that has posted and reversed itself, a
+ * posted journal with a reversal waiting for approval, one waiting for approval, and a draft. Idempotent.
+ */
+export async function seedJournalDemo(orgId: string) {
+  if (await db.journalDocument.count({ where: { organizationId: orgId } })) {
+    console.log("• Manual journal demo data already present — skipped");
+    return;
+  }
+  const userOf = async (role: Ctx["role"]): Promise<Ctx | null> => {
+    const u = await db.user.findFirst({ where: { organizationId: orgId, role, active: true } });
+    return u ? { userId: u.id, orgId, role, name: u.name, email: u.email, employeeId: u.employeeId } : null;
+  };
+  const prep = await userOf("FINANCE");
+  const boss = await userOf("COMPANY_ADMIN");
+  if (!prep || !boss) return;
+  const acct = async (code: string) => (await db.glAccount.findFirst({ where: { organizationId: orgId, code } }))?.id;
+  const [cash, expense, accrued] = await Promise.all([acct("1230"), acct("5400"), acct("2130")]);
+  if (!cash || !expense || !accrued) return;
+  const pair = (debit: string, credit: string, amount: number) => [
+    { accountId: debit, debit: amount, credit: 0 },
+    { accountId: credit, debit: 0, credit: amount },
+  ];
+  const make = (over: Record<string, unknown>) => saveDraft(prep, null, over as never);
+  const post = async (id: string) => {
+    await submitDocument(prep, id);
+    await approveDocument(boss, id);
+    return postDocument(boss, id);
+  };
+
+  // an accrual, posted, which reverses itself on the first of the next month
+  const accrual = await make({ kind: "ACCRUAL", description: "Accrue September security-equipment maintenance", postingDate: "2026-09-30", reverseOn: "2026-10-01", lines: pair(expense, accrued, 180_000) });
+  await post(accrual.id);
+  await postDueReversals(boss, new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z"));
+
+  // a posted manual journal with a reversal waiting for someone else to approve
+  const dup = await make({ kind: "MANUAL", description: "Office rent for September", postingDate: "2026-09-28", lines: pair(expense, cash, 95_000) });
+  const dupJournal = await post(dup.id);
+  await requestReversal(prep, dupJournal.id, "Entered twice: the rent was already posted through the supplier's bill.", "2026-10-02");
+
+  // one waiting for approval, and a draft
+  const waiting = await make({ kind: "ADJUSTMENT", description: "Correct September bank charges", postingDate: "2026-09-30", lines: pair(expense, cash, 12_500) });
+  await submitDocument(prep, waiting.id);
+  await make({ kind: "MANUAL", description: "Draft: October subscription accrual", postingDate: "2026-10-31", lines: pair(expense, accrued, 40_000) });
+  console.log("✔ Manual journal demo data seeded");
 }
 
 /** Two employment confirmation letters, so the letters register and a letter's page have something to show. Idempotent. */
@@ -513,6 +561,7 @@ if (process.argv[1] && /hr-demo\.(ts|js)$/.test(process.argv[1])) {
       await seedDataRequestDemo(o.id);
       await seedBreachDemo(o.id);
       await seedLetterDemo(o.id);
+      await seedJournalDemo(o.id);
     })
     .then(() => db.$disconnect())
     .catch(async (e) => {

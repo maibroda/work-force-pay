@@ -237,8 +237,14 @@ engine and the integrity check, the same database immutability, invoices split b
 reversals, and a Ledger by Dimension report that reconciles to the trial balance. Payroll does not carry dimensions
 yet (Phase 7).
 
-**Still to do in Phase 1:** general reversals with approval; manual, recurring and reversing journals; the backfill of
-historic unposted documents (D5).
+**Manual journals and reversals — built.** Manual journals as approved documents (draft, submit, approve by someone else,
+post), frozen by the database once submitted; kinds manual, adjustment, reclassification and accrual, with accruals
+reversing themselves on their date; reversal of any posted manual journal by request and approval, posting an exact
+mirror; control accounts (receivables, payables) closed to manual postings; an approval on/off setting. System-generated
+journals are corrected through their own documents, not reversed on their own.
+
+**Still to do in Phase 1:** recurring journals (a template that generates a draft each period); the backfill of historic
+unposted documents (D5).
 
 ## 6. Safety rules for every migration
 
