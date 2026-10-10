@@ -473,6 +473,11 @@ enum GlHeadType {
 }
 
 enum InvoiceStatus {
+  /// Generated and waiting to be checked. Not in the ledger, not a receivable, and under a provisional number.
+  DRAFT
+  /// Handed to a second person to approve.
+  SUBMITTED
+  /// Approved and posted: the invoice proper.
   ISSUED
   PARTIALLY_PAID
   PAID
@@ -628,6 +633,8 @@ model Organization {
   journalReversals          JournalReversal[]
   /// Whether a manual journal needs a second person's approval before it posts.
   journalApprovalRequired   Boolean                    @default(true)
+  /// Whether invoices are generated as drafts that a second person approves before they post. Off: invoices post when generated.
+  invoiceApprovalRequired   Boolean                    @default(false)
 }
 
 model User {
@@ -2367,6 +2374,19 @@ model ClientInvoice {
   totalCredits       Decimal                  @default(0) @db.Decimal(16, 2)
   totalDebits        Decimal                  @default(0) @db.Decimal(16, 2)
   adjustmentNotes    ClientNote[]
+  /// Who generated the draft (never the person who approves it), who submitted it, who approved and posted it, and when it was sent.
+  generatedByUserId  String?
+  submittedBy        String?
+  submittedByUserId  String?
+  submittedAt        DateTime?
+  approvedBy         String?
+  approvedByUserId   String?
+  approvedAt         DateTime?
+  /// Why an approver sent a draft back.
+  rejectionNote      String?
+  sentAt             DateTime?
+  sentBy             String?
+  sentVia            String?
   /// The billing rule, tax codes and rates each contract on this invoice was calculated with, and where each came from.
   taxBasis           Json?
   taxTransactions    TaxTransaction[]

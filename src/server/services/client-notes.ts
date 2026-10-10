@@ -49,6 +49,7 @@ const money = (inv: { totalAmount: unknown; totalDebits: unknown; totalCredits: 
 async function factsFor(tx: Tx, orgId: string, invoiceId: string, excludeNoteId?: string): Promise<{ invoice: NonNullable<Awaited<ReturnType<typeof loadInvoice>>>; facts: NoteFacts }> {
   const invoice = await loadInvoice(tx, orgId, invoiceId);
   if (!invoice) throw new BusinessError("Invoice not found.");
+  if (invoice.status === "DRAFT" || invoice.status === "SUBMITTED") throw new BusinessError(`${invoice.invoiceNumber} has not been approved and posted yet, so no note can be raised against it.`);
   const approved = await tx.clientNote.findMany({ where: { invoiceId, status: "APPROVED", ...(excludeNoteId ? { id: { not: excludeNoteId } } : {}) } });
   const sum = (type: NoteType, f: "netAmount" | "vatAmount") => approved.filter((n) => n.type === type).reduce((s, n) => s + num(n[f]), 0);
   return {

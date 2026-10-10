@@ -1047,6 +1047,27 @@ Finance / Accounting → **Credit & Debit Notes** (under Billing); raise one fro
   in date order, and the VAT and integrity checks count them. An invoice with notes can't be cancelled.
 - A debit note is raised against an invoice and shares its due date; a standalone charge with no invoice is not supported yet.
 
+### Invoice approval, immutability and proforma invoices
+
+Finance / Accounting → **Billing & Receivables** and **Proforma Invoices**.
+
+- **An organization setting** (Billing & Receivables, switched by a period approver, audited; **off by default** so nothing changes for anyone who
+  doesn't want it) decides how invoices are made. **Off:** an invoice is numbered and posted as it is generated, as it always was.
+  **On:** invoices are generated as **drafts** under provisional numbers (`DRAFT-xxxxxxxx`): not in the ledger, not receivables, not on
+  statements or ageing, with no tax records, and unable to take a receipt, deduction, note or cancellation.
+- **Draft → submitted → approved and posted.** The preparer submits it; **someone who neither generated nor submitted it** (`invoice.approve`) approves it,
+  which gives it the next invoice number, writes its tax records and posts it to the ledger, dated the end of the payroll period (which must still be
+  open; if it has closed the approval is refused and the invoice stays submitted, with no number used). An approver can send it back with a reason.
+  A draft can be **discarded** so the run can be invoiced again (for example after a billing rule was corrected); because the real number is only given
+  at approval, discarding leaves no gap in the invoice numbers.
+- **A posted invoice is frozen by the database.** Its client, dates, amounts, rules and rates can't be edited, it can't go back to a draft, its lines
+  can't change, and it can't be deleted, not even by SQL. What moves after posting is what settles it (payments, deductions, credit and debit notes),
+  its status and when it was sent. A cancelled invoice can't change at all. To correct a posted invoice, cancel it or issue a credit or debit note.
+- **Sent**: "Mark as sent" records when and how a posted invoice went to the client.
+- **Proforma** (Proforma Invoices): choose a payroll run, even one not yet locked, and see what each client would be invoiced, worked out exactly as the
+  invoice will be (each contract under its billing rule, tax at the rates in force). Nothing is saved, numbered or posted, and it is printable, marked
+  "Not a tax invoice".
+
 ### Route smoke test
 
 Unit and integration tests prove the services; they can't prove a *page* renders. `npm run smoke` does:

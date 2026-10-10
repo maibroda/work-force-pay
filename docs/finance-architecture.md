@@ -292,8 +292,17 @@ computed from the total, the notes, payments and deductions in one place (`lib/n
 integrity check (which verifies the stored credits and debits against the approved notes). Deliberately simpler than the brief's
 "allocatable like invoices": a debit note adjusts a specific invoice and shares its due date, so receipts and ageing work unchanged.
 
-**Phase 3, still to do:** the invoice lifecycle (draft, approve, post, sent) with proforma invoices and immutability once posted, standalone
-debit notes, withholding certificates, PDF / Excel statements.
+## 5g. Phase 3, third step — invoice lifecycle and proforma (built)
+
+Invoice generation is split into a pure planning step (each contract under its billing rule, the split, the tax) and a saving step. Where the
+organization requires approval (`invoiceApprovalRequired`, off by default so existing behaviour is unchanged) the plan is saved as a DRAFT under a
+provisional number and nothing else; a second person's approval numbers it, writes the tax records and posts it. The same planning step gives the
+proforma, which saves nothing. A database trigger makes a posted invoice and its lines immutable (only settlement fields, status and sent-details move)
+and forbids deleting one. Drafts are excluded from receivables, statements, the subledger and the integrity checks. (The brief's separate
+`ProformaInvoice` table and an explicit APPROVED-then-POSTED state were not needed: a proforma is computed on demand, and approval posts, as for
+notes and refunds.)
+
+**Phase 3, still to do:** standalone debit notes, withholding certificates, PDF / Excel statements. Then Phase 4 (period close and AR snapshots).
 
 ## 6. Safety rules for every migration
 

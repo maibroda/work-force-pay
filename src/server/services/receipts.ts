@@ -296,7 +296,7 @@ export async function clientStatement(ctx: Ctx, clientId: string, asOfRaw?: stri
   if (!client) throw new BusinessError("Client not found.");
 
   const [invoices, legacy, deductions, allocations, newReceipts, refunds, ledgerLines, notes] = await Promise.all([
-    db.clientInvoice.findMany({ where: { organizationId: ctx.orgId, clientId, status: { not: "CANCELLED" } } }),
+    db.clientInvoice.findMany({ where: { organizationId: ctx.orgId, clientId, status: { notIn: ["CANCELLED", "DRAFT", "SUBMITTED"] } } }),
     db.clientReceipt.findMany({ where: { organizationId: ctx.orgId, clientId, invoiceId: { not: null } } }),
     db.clientInvoiceDeduction.findMany({ where: { organizationId: ctx.orgId, clientId } }),
     db.receiptAllocation.findMany({ where: { organizationId: ctx.orgId, invoice: { clientId } }, include: { receipt: { select: { receiptNumber: true } } } }),
