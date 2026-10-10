@@ -617,6 +617,7 @@ model Organization {
   profitCentres             ProfitCentre[]
   projects                  Project[]
   journalDocuments          JournalDocument[]
+  recurringJournals         RecurringJournal[]
   journalReversals          JournalReversal[]
   /// Whether a manual journal needs a second person's approval before it posts.
   journalApprovalRequired   Boolean                    @default(true)
@@ -2810,13 +2811,14 @@ model GlAccount {
   /// Which tax return or tax ledger this account feeds (VAT_OUTPUT, WHT_RECEIVABLE, PAYE …).
   taxMapping     String?
 
-  debitMappings      PayrollGlMapping[]    @relation("MappingDebit")
-  creditMappings     PayrollGlMapping[]    @relation("MappingCredit")
+  debitMappings      PayrollGlMapping[]     @relation("MappingDebit")
+  creditMappings     PayrollGlMapping[]     @relation("MappingCredit")
   lines              JournalLine[]
   bankAccounts       BankAccount[]
   /// Dimensions every posting to this account must carry (CLIENT, CONTRACT, COST_CENTER …). Empty = none required.
-  requiredDimensions String[]              @default([])
+  requiredDimensions String[]               @default([])
   documentLines      JournalDocumentLine[]
+  recurringLines     RecurringJournalLine[]
 
   @@unique([organizationId, code])
 }
@@ -3873,34 +3875,38 @@ enum JournalDocumentStatus {
 /// engine. Only a posted document has a journal; until then nothing touches the ledger. Once submitted its lines can no
 /// longer be changed (the database enforces it) until it is rejected back to draft.
 model JournalDocument {
-  id                String                @id @default(cuid())
-  organizationId    String
-  organization      Organization          @relation(fields: [organizationId], references: [id])
-  documentNumber    String
-  kind              JournalDocumentKind   @default(MANUAL)
-  description       String
-  postingDate       DateTime              @db.Date
+  id                 String                @id @default(cuid())
+  organizationId     String
+  organization       Organization          @relation(fields: [organizationId], references: [id])
+  documentNumber     String
+  kind               JournalDocumentKind   @default(MANUAL)
+  description        String
+  postingDate        DateTime              @db.Date
   /// For an accrual: the date its automatic reversal is posted.
-  reverseOn         DateTime?             @db.Date
-  status            JournalDocumentStatus @default(DRAFT)
-  createdBy         String
-  createdByUserId   String
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
-  submittedBy       String?
-  submittedByUserId String?
-  submittedAt       DateTime?
-  decidedBy         String?
-  decidedByUserId   String?
-  decidedAt         DateTime?
-  decisionNote      String?
-  postedBy          String?
-  postedAt          DateTime?
-  journalId         String?               @unique
-  journal           JournalEntry?         @relation(fields: [journalId], references: [id], onDelete: Restrict)
-  lines             JournalDocumentLine[]
+  reverseOn          DateTime?             @db.Date
+  status             JournalDocumentStatus @default(DRAFT)
+  createdBy          String
+  createdByUserId    String
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  submittedBy        String?
+  submittedByUserId  String?
+  submittedAt        DateTime?
+  decidedBy          String?
+  decidedByUserId    String?
+  decidedAt          DateTime?
+  decisionNote       String?
+  postedBy           String?
+  postedAt           DateTime?
+  journalId          String?               @unique
+  journal            JournalEntry?         @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  lines              JournalDocumentLine[]
+  /// The recurring template that generated this draft, if any. One document per template per posting date.
+  recurringJournalId String?
+  recurringJournal   RecurringJournal?     @relation(fields: [recurringJournalId], references: [id], onDelete: Restrict)
 
   @@unique([organizationId, documentNumber])
+  @@unique([recurringJournalId, postingDate])
   @@index([organizationId, status])
 }
 
@@ -3918,6 +3924,65 @@ model JournalDocumentLine {
   dimensions  Json?
 
   @@index([documentId])
+}
+
+enum RecurrenceFrequency {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+/// A template that generates a journal draft each period (rent, insurance, amortisation, standing accruals). The draft
+/// goes through the ordinary submit / approve / post path; the template itself never touches the ledger.
+model RecurringJournal {
+  id               String                 @id @default(cuid())
+  organizationId   String
+  organization     Organization           @relation(fields: [organizationId], references: [id])
+  name             String
+  kind             JournalDocumentKind    @default(MANUAL)
+  /// May contain {month}, {quarter} and {year}, filled in with the posting date of each generated journal.
+  description      String
+  frequency        RecurrenceFrequency    @default(MONTHLY)
+  /// Post on the last day of the month instead of the first date's day of the month.
+  monthEnd         Boolean                @default(false)
+  startDate        DateTime               @db.Date
+  endDate          DateTime?              @db.Date
+  /// The posting date of the next journal to generate; null once the template has run to its end date.
+  nextRunDate      DateTime?              @db.Date
+  generatedCount   Int                    @default(0)
+  /// For an accrual: days after its posting date that it reverses on.
+  reverseAfterDays Int?
+  /// Submit each generated draft for approval straight away (only when the organization requires approval).
+  autoSubmit       Boolean                @default(false)
+  active           Boolean                @default(true)
+  createdBy        String
+  createdByUserId  String
+  createdAt        DateTime               @default(now())
+  /// Whoever last changed the template: the preparer of every journal it generates after that.
+  updatedBy        String
+  updatedByUserId  String
+  updatedAt        DateTime               @updatedAt
+  lastRunAt        DateTime?
+  lastRunNote      String?
+  lines            RecurringJournalLine[]
+  documents        JournalDocument[]
+
+  @@index([organizationId, active, nextRunDate])
+}
+
+model RecurringJournalLine {
+  id          String           @id @default(cuid())
+  templateId  String
+  template    RecurringJournal @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  accountId   String
+  account     GlAccount        @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  description String
+  debit       Decimal          @default(0) @db.Decimal(16, 2)
+  credit      Decimal          @default(0) @db.Decimal(16, 2)
+  sortOrder   Int              @default(0)
+  dimensions  Json?
+
+  @@index([templateId])
 }
 
 enum JournalReversalStatus {

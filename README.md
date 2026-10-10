@@ -932,6 +932,29 @@ For entries no other part of the system posts (Finance / Accounting → **Manual
   audit trail. Break-glass approval for a one-person finance team arrives with the approval engine.
 - The integrity check now verifies that every reversal exactly negates its original, account by account.
 
+### Recurring journals
+
+For entries that repeat (rent, insurance amortisation, a standing accrual): Finance / Accounting → **Recurring Journals**.
+
+- **A template, not an entry.** It holds the lines (accounts, narration, debit or credit, dimensions), a first date, how often
+  (monthly, quarterly, yearly), whether to post on the last day of the month, an optional end date, and for an accrual how many
+  days after posting it reverses. The description may use `{month}`, `{quarter}` and `{year}`. The template never touches the
+  ledger.
+- **Each period it makes an ordinary manual-journal draft** (`/api/cron/recurring-journals`, same `CRON_SECRET` bearer as the
+  other jobs, or the "Generate what is due" button). The draft is submitted, approved by someone other than its preparer, and
+  posted exactly like one typed in by hand, with every check that implies. **Nothing is ever posted automatically.**
+- **The preparer is whoever last changed the template** (or last resumed it), so they cannot approve what it makes. "Submit each
+  one for approval as soon as it is made" is optional; it is ignored if the organization has switched approval off, because that
+  would post to the ledger with nobody looking.
+- **A draft that can't be submitted** (a closed period, an inactive account) is left as a draft with the reason on the template,
+  and the run carries on with the rest.
+- **No doubling up.** One journal per template per posting date, enforced by the database, so a repeated or simultaneous run
+  can't create two. A template that has been idle (or paused) catches up oldest first, at most 24 journals a run.
+- **The schedule is fixed once the first journal exists**; lines, description, end date and the rest can change and apply from
+  the next journal on. To change the schedule, end the template and start another. A template that never generated anything can
+  be deleted; one that has stays on record (pause it).
+- Receivables and payables control accounts are refused in a template, as in a journal.
+
 ### Route smoke test
 
 Unit and integration tests prove the services; they can't prove a *page* renders. `npm run smoke` does:

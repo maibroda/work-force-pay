@@ -2,6 +2,8 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { saveAndSubmitAction, saveDraftAction } from "@/app/actions/journals";
+import { saveTemplateAction } from "@/app/actions/recurring-journals";
+import { FREQUENCY_LABELS, type Frequency } from "@/lib/recurring";
 import { DIMENSIONS } from "@/lib/dimensions";
 import { KIND_HELP, KIND_LABELS, type JournalKind } from "@/lib/journals";
 import { naira } from "@/lib/money";
@@ -22,16 +24,35 @@ export interface EditorInitial {
   lines: Array<{ accountId: string; description: string; debit: number; credit: number; dimensions: Dims }>;
 }
 
+/** Present when the editor is making a recurring template instead of a one-off journal. */
+export interface TemplateInitial {
+  name: string;
+  frequency: Frequency;
+  monthEnd: boolean;
+  endDate: string;
+  reverseAfterDays: string;
+  autoSubmit: boolean;
+  /** The schedule can't change once the template has generated a journal. */
+  scheduleLocked: boolean;
+}
+
 const blank = (): Line => ({ accountId: "", description: "", debit: "", credit: "", dimensions: {} });
 const cents = (v: string) => Math.round((Number(v) || 0) * 100);
 
-export function JournalEditor({ initial, accounts, dimensionOptions, note }: { initial: EditorInitial; accounts: Opt[]; dimensionOptions: Record<string, Opt[]>; note?: string | null }) {
+export function JournalEditor({ initial, accounts, dimensionOptions, note, template }: { initial: EditorInitial; accounts: Opt[]; dimensionOptions: Record<string, Opt[]>; note?: string | null; template?: TemplateInitial }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [kind, setKind] = useState<JournalKind>(initial.kind);
   const [description, setDescription] = useState(initial.description);
   const [postingDate, setPostingDate] = useState(initial.postingDate);
   const [reverseOn, setReverseOn] = useState(initial.reverseOn);
+  const [name, setName] = useState(template?.name ?? "");
+  const [frequency, setFrequency] = useState<Frequency>(template?.frequency ?? "MONTHLY");
+  const [monthEnd, setMonthEnd] = useState(template?.monthEnd ?? false);
+  const [endDate, setEndDate] = useState(template?.endDate ?? "");
+  const [reverseAfterDays, setReverseAfterDays] = useState(template?.reverseAfterDays ?? "1");
+  const [autoSubmit, setAutoSubmit] = useState(template?.autoSubmit ?? false);
+  const locked = template?.scheduleLocked ?? false;
   const [lines, setLines] = useState<Line[]>(
     initial.lines.length
       ? initial.lines.map((l) => ({ accountId: l.accountId, description: l.description, debit: l.debit ? String(l.debit) : "", credit: l.credit ? String(l.credit) : "", dimensions: l.dimensions ?? {} }))
@@ -46,17 +67,24 @@ export function JournalEditor({ initial, accounts, dimensionOptions, note }: { i
   const setDim = (i: number, column: string, value: string) =>
     setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, dimensions: { ...l.dimensions, [column]: value } } : l)));
 
-  const payload = () => ({
-    kind,
-    description,
-    postingDate,
-    reverseOn: kind === "ACCRUAL" ? reverseOn : "",
-    linesJson: JSON.stringify(
+  const linesJson = () =>
+    JSON.stringify(
       lines
         .filter((l) => l.accountId || cents(l.debit) || cents(l.credit))
         .map((l) => ({ accountId: l.accountId, description: l.description, debit: Number(l.debit) || 0, credit: Number(l.credit) || 0, dimensions: Object.fromEntries(Object.entries(l.dimensions).filter(([, v]) => v)) })),
-    ),
-  });
+    );
+  const payload = () => ({ kind, description, postingDate, reverseOn: kind === "ACCRUAL" ? reverseOn : "", linesJson: linesJson() });
+  const templatePayload = () => ({ name, kind, description, frequency, monthEnd, startDate: postingDate, endDate, reverseAfterDays: kind === "ACCRUAL" ? reverseAfterDays : "", autoSubmit, linesJson: linesJson() });
+
+  const saveTemplate = () =>
+    start(async () => {
+      const res = await saveTemplateAction(initial.id, templatePayload());
+      toast(res.ok, res.ok ? (res.message ?? "Saved.") : (res.error ?? "Failed."));
+      if (res.ok && res.redirectTo) {
+        router.push(res.redirectTo);
+        router.refresh();
+      }
+    });
 
   const run = (action: typeof saveDraftAction) =>
     start(async () => {
@@ -72,6 +100,12 @@ export function JournalEditor({ initial, accounts, dimensionOptions, note }: { i
     <div className="space-y-5 rounded-lg border bg-card p-4">
       {note && <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">Returned with this note: {note}</p>}
       <div className="grid gap-4 sm:grid-cols-3">
+        {template && (
+          <div className="space-y-1 sm:col-span-3">
+            <Label htmlFor="name">Template name *</Label>
+            <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Insurance amortisation" />
+          </div>
+        )}
         <div className="space-y-1">
           <Label htmlFor="kind">Kind</Label>
           <Select id="kind" value={kind} onChange={(e) => setKind(e.target.value as JournalKind)}>
@@ -84,10 +118,44 @@ export function JournalEditor({ initial, accounts, dimensionOptions, note }: { i
           <p className="text-xs text-muted-foreground">{KIND_HELP[kind]}</p>
         </div>
         <div className="space-y-1">
-          <Label htmlFor="postingDate">Posting date *</Label>
-          <Input id="postingDate" type="date" value={postingDate} onChange={(e) => setPostingDate(e.target.value)} />
+          <Label htmlFor="postingDate">{template ? "First posting date *" : "Posting date *"}</Label>
+          <Input id="postingDate" type="date" value={postingDate} onChange={(e) => setPostingDate(e.target.value)} disabled={locked} />
         </div>
-        {kind === "ACCRUAL" && (
+        {template && (
+          <>
+            <div className="space-y-1">
+              <Label htmlFor="frequency">Repeats</Label>
+              <Select id="frequency" value={frequency} onChange={(e) => setFrequency(e.target.value as Frequency)} disabled={locked}>
+                {(Object.keys(FREQUENCY_LABELS) as Frequency[]).map((f) => (
+                  <option key={f} value={f}>
+                    {FREQUENCY_LABELS[f]}
+                  </option>
+                ))}
+              </Select>
+              {locked && <p className="text-xs text-muted-foreground">The schedule is fixed once journals have been generated.</p>}
+            </div>
+            <label className="flex items-center gap-2 self-end pb-2 text-sm">
+              <input type="checkbox" checked={monthEnd} onChange={(e) => setMonthEnd(e.target.checked)} disabled={locked} />
+              Always the last day of the month
+            </label>
+            <div className="space-y-1">
+              <Label htmlFor="endDate">Stops after (optional)</Label>
+              <Input id="endDate" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            </div>
+            <label className="flex items-center gap-2 self-end pb-2 text-sm sm:col-span-2">
+              <input type="checkbox" checked={autoSubmit} onChange={(e) => setAutoSubmit(e.target.checked)} />
+              Submit each one for approval as soon as it is made (it still has to be approved by someone else; it is never posted automatically)
+            </label>
+          </>
+        )}
+        {kind === "ACCRUAL" && template && (
+          <div className="space-y-1">
+            <Label htmlFor="reverseAfterDays">Reverses after (days) *</Label>
+            <Input id="reverseAfterDays" type="number" min={1} max={90} value={reverseAfterDays} onChange={(e) => setReverseAfterDays(e.target.value)} />
+            <p className="text-xs text-muted-foreground">Each accrual reverses itself this many days after it posts.</p>
+          </div>
+        )}
+        {kind === "ACCRUAL" && !template && (
           <div className="space-y-1">
             <Label htmlFor="reverseOn">Reverses on *</Label>
             <Input id="reverseOn" type="date" value={reverseOn} onChange={(e) => setReverseOn(e.target.value)} />
@@ -96,7 +164,12 @@ export function JournalEditor({ initial, accounts, dimensionOptions, note }: { i
         )}
         <div className="space-y-1 sm:col-span-3">
           <Label htmlFor="description">What it is for *</Label>
-          <Input id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Accrue September security-equipment maintenance" />
+          <Input id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={template ? "e.g. Insurance for {month}" : "e.g. Accrue September security-equipment maintenance"} />
+          {template && (
+            <p className="text-xs text-muted-foreground">
+              {"{month}"}, {"{quarter}"} and {"{year}"} are replaced with the period each journal posts in. The amounts below are the same every time; a generated draft can be edited before it is submitted.
+            </p>
+          )}
         </div>
       </div>
 
@@ -172,12 +245,20 @@ export function JournalEditor({ initial, accounts, dimensionOptions, note }: { i
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" onClick={() => run(saveDraftAction)} disabled={pending}>
-          {pending ? "Saving…" : "Save draft"}
-        </Button>
-        <Button onClick={() => run(saveAndSubmitAction)} disabled={pending}>
-          Save and submit for approval
-        </Button>
+        {template ? (
+          <Button onClick={saveTemplate} disabled={pending}>
+            {pending ? "Saving…" : "Save template"}
+          </Button>
+        ) : (
+          <>
+            <Button variant="outline" onClick={() => run(saveDraftAction)} disabled={pending}>
+              {pending ? "Saving…" : "Save draft"}
+            </Button>
+            <Button onClick={() => run(saveAndSubmitAction)} disabled={pending}>
+              Save and submit for approval
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );

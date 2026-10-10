@@ -243,8 +243,13 @@ reversing themselves on their date; reversal of any posted manual journal by req
 mirror; control accounts (receivables, payables) closed to manual postings; an approval on/off setting. System-generated
 journals are corrected through their own documents, not reversed on their own.
 
-**Still to do in Phase 1:** recurring journals (a template that generates a draft each period); the backfill of historic
-unposted documents (D5).
+**Recurring journals — built.** A template (lines, frequency, month-end option, end date, accrual reversal interval) that
+generates an ordinary manual-journal draft each period through a scheduled route or a button. The draft keeps the full
+submit / approve / post path; the template never posts and carries no approval of its own. The preparer is whoever last changed
+the template, one journal per template per date is enforced by the database, schedules are frozen once used, and automatic
+submission never applies when approval is off.
+
+**Still to do in Phase 1:** the backfill of historic unposted documents (D5, awaiting the decision).
 
 ## 6. Safety rules for every migration
 

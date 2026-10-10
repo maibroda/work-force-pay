@@ -77,6 +77,15 @@ export default async function JournalDocumentPage({ params }: { params: Promise<
         }
       />
 
+      {doc.recurringJournal && (
+        <p className="mb-4 text-sm text-muted-foreground">
+          Made by the recurring journal{" "}
+          <Link className="text-primary underline" href={`/accounting/recurring-journals/${doc.recurringJournal.id}`}>
+            {doc.recurringJournal.name}
+          </Link>
+          . The amounts can be checked and corrected here before it is submitted.
+        </p>
+      )}
       {status === "SUBMITTED" && mine && <p className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900">You prepared or submitted this journal, so someone else has to approve it.</p>}
 
       {editable ? (
