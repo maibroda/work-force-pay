@@ -45,6 +45,8 @@ async function world() {
   return { ...w, fin, fin2, boss, boss2, hr, clientId: first.clientId, jun, jul, aug, receive, ledger, invoice };
 }
 
+const TODAY = new Date().toISOString().slice(0, 10);
+
 describe("a receipt across several invoices", () => {
   it("settles three invoices from one 10,000,000 receipt, in one journal, and the statement agrees with the ledger", async () => {
     const { t, fin, clientId, jun, jul, aug, receive, ledger, invoice } = await world();
@@ -56,7 +58,7 @@ describe("a receipt across several invoices", () => {
     const journal = await db.journalEntry.findFirstOrThrow({ where: { organizationId: t.org.id, sourceType: "CLIENT_RECEIPT", sourceId: r.id }, include: { lines: true } });
     expect(journal.lines.map((l) => [l.accountCode, num(l.debit), num(l.credit)]).sort()).toEqual([["1200", 0, 10_000_000], ["1230", 10_000_000, 0]]);
     expect(await ledger("2192")).toBe(0); // nothing held
-    const s = await clientStatement(fin, clientId, "2026-10-10");
+    const s = await clientStatement(fin, clientId, TODAY);
     expect(s.closing).toBe(2_000_000);
     expect(s.closing).toBe(s.ledger); // the statement balance is the client's balance in the receivables account
     expect(s.advances).toBe(0);
@@ -75,7 +77,7 @@ describe("a receipt across several invoices", () => {
     expect([jul2.status, num(jul2.amountPaid), num(jul2.totalDeductions)]).toEqual(["PAID", 3_500_000, 500_000]);
     expect(r.whtReference).toBe("WHT-77");
     expect(await findings(t.org.id)).toEqual([]);
-    expect((await clientStatement(fin, r.clientId!, "2026-10-10")).lines.map((l) => l.type)).toContain("TAX_WITHHELD");
+    expect((await clientStatement(fin, r.clientId!, TODAY)).lines.map((l) => l.type)).toContain("TAX_WITHHELD");
   });
 
   it("holds what isn't applied as an advance, applies it later, and refuses to over-apply", async () => {
@@ -84,7 +86,7 @@ describe("a receipt across several invoices", () => {
     expect(await ledger("2192")).toBe(-2_000_000); // a liability: 2,000,000 held for the client
     const got = await getClientReceipt(fin, r.id);
     expect(got!.position).toMatchObject({ cashApplied: 3_000_000, cashLeft: 2_000_000, held: 2_000_000 });
-    expect((await clientStatement(fin, clientId, "2026-10-10")).advances).toBe(2_000_000);
+    expect((await clientStatement(fin, clientId, TODAY)).advances).toBe(2_000_000);
     await applyAdvance(fin, r.id, [{ invoiceId: jun.id, cash: 1_000_000, wht: 0 }, { invoiceId: jul.id, cash: 500_000, wht: 0 }], "2026-10-06");
     expect(num((await invoice(jun.id)).amountPaid)).toBe(4_000_000);
     expect((await invoice(jun.id)).status).toBe("PAID");
@@ -94,7 +96,7 @@ describe("a receipt across several invoices", () => {
     await expect(applyAdvance(fin, r.id, [{ invoiceId: jul.id, cash: 100, wht: 0 }], "2026-09-01")).rejects.toThrow(/before the receipt date/);
     await applyAdvance(boss, r.id, [{ invoiceId: jul.id, cash: 500_000, wht: 0 }]);
     expect(await ledger("2192")).toBe(0);
-    expect((await clientStatement(fin, clientId, "2026-10-10")).advances).toBe(0);
+    expect((await clientStatement(fin, clientId, TODAY)).advances).toBe(0);
     expect(await findings(t.org.id)).toEqual([]);
   });
 
@@ -118,7 +120,7 @@ describe("a receipt across several invoices", () => {
     expect(await ledger("2192")).toBe(-500_000);
     await expect(decideRefund(boss2, req.id, true)).rejects.toThrow(/already been decided/);
     await decideRefund(boss2, mine.id, false, "Not needed after all");
-    expect((await clientStatement(fin, clientId, "2026-10-10")).advances).toBe(500_000);
+    expect((await clientStatement(fin, clientId, TODAY)).advances).toBe(500_000);
     expect(await findings(t.org.id)).toEqual([]);
   });
 
@@ -170,7 +172,7 @@ describe("statements and ageing", () => {
   it("lists invoices and settlements in date order with a running balance, as at any date", async () => {
     const { fin, clientId, jun, jul, receive } = await world();
     await receive({ amount: 6_000_000, receivedDate: "2026-08-15", allocations: [{ invoiceId: jun.id, cash: 4_000_000 }, { invoiceId: jul.id, cash: 2_000_000 }] });
-    const s = await clientStatement(fin, clientId, "2026-10-10");
+    const s = await clientStatement(fin, clientId, TODAY);
     expect(s.lines.map((l) => [l.type, l.debit, l.credit, l.balance])).toEqual([
       ["INVOICE", 4_000_000, 0, 4_000_000], // 30 Jun
       ["INVOICE", 4_000_000, 0, 8_000_000], // 31 Jul
@@ -183,19 +185,19 @@ describe("statements and ageing", () => {
     const july = await clientStatement(fin, clientId, "2026-07-31");
     expect([july.closing, july.lines.length]).toEqual([8_000_000, 2]);
     expect(july.closing).toBe(july.ledger);
-    await expect(clientStatement(fin, "nope", "2026-10-10")).rejects.toThrow(/Client not found/);
+    await expect(clientStatement(fin, "nope", TODAY)).rejects.toThrow(/Client not found/);
   });
 
   it("ages what is owed by days past the due date, and the buckets add up to the balance", async () => {
     const { fin, clientId, jun, receive } = await world();
     await receive({ amount: 1_000_000, receivedDate: "2026-07-01", allocations: [{ invoiceId: jun.id, cash: 1_000_000 }] });
-    const s = await clientStatement(fin, clientId, "2026-10-10");
+    const s = await clientStatement(fin, clientId, TODAY);
     // June (due 30 Jul, 72 days) owes 3,000,000; July (due 30 Aug, 41 days) and August (due 30 Sep, 10 days) 4,000,000 each
     expect(s.ageing).toEqual({ "Not yet due": 0, "1–30 days": 4_000_000, "31–60 days": 4_000_000, "61–90 days": 3_000_000, "Over 90 days": 0 });
     expect(Object.values(s.ageing).reduce((a, b) => a + b, 0)).toBe(s.closing);
     const early = await clientStatement(fin, clientId, "2026-07-15");
     expect(early.ageing["Not yet due"]).toBe(early.closing);
-    const all = await receivablesAgeing(fin, "2026-10-10");
+    const all = await receivablesAgeing(fin, TODAY);
     expect(all).toHaveLength(1);
     expect(all[0]).toMatchObject({ clientId, closing: 11_000_000, ledger: 11_000_000 });
   });
@@ -203,7 +205,7 @@ describe("statements and ageing", () => {
   it("nets advances against what is owed, and exports to CSV", async () => {
     const { fin, clientId, receive } = await world();
     await receive({ amount: 2_000_000 }); // held entirely as an advance
-    const s = await clientStatement(fin, clientId, "2026-10-10");
+    const s = await clientStatement(fin, clientId, TODAY);
     expect([s.closing, s.advances, s.net]).toEqual([12_000_000, 2_000_000, 10_000_000]);
     const csv = statementCsv("Test client", s.asOf, s);
     expect(csv).toMatch(/"Closing balance",,,,,,12000000\.00/);
@@ -217,7 +219,7 @@ describe("statements and ageing", () => {
     expect(await listClientReceipts(other.fin)).toEqual([]);
     await mine.receive({ amount: 1_000_000 });
     expect((await listClientReceipts(mine.fin)).map((r) => r.position.held)).toEqual([1_000_000]);
-    await expect(clientStatement(other.fin, mine.clientId, "2026-10-10")).rejects.toThrow(/Client not found/);
-    await expect(clientStatement(mine.t.ctx("EMPLOYEE"), mine.clientId, "2026-10-10")).rejects.toThrow(/permission/i);
+    await expect(clientStatement(other.fin, mine.clientId, TODAY)).rejects.toThrow(/Client not found/);
+    await expect(clientStatement(mine.t.ctx("EMPLOYEE"), mine.clientId, TODAY)).rejects.toThrow(/permission/i);
   });
 });

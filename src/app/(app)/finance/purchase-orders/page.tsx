@@ -2,6 +2,11 @@ import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { listPurchaseOrders } from "@/server/services/purchase-orders";
+import { matchPolicy, receiptProgressFor } from "@/server/services/matching";
+import { db } from "@/lib/db";
+import { RECEIPT_PROGRESS_LABELS } from "@/lib/three-way-match";
+import { SmartForm } from "@/components/smart-form";
+import { setMatchPolicyAction } from "@/app/actions/matching";
 import { fmtDate } from "@/lib/dates";
 import { naira } from "@/lib/money";
 import { FilterBar, FilterField, PageHeader, Section, Empty } from "@/components/page";
@@ -21,6 +26,9 @@ export default async function PurchaseOrdersPage({
   const sp = await searchParams;
   const manage = can(ctx.role, "payment.manage");
   const orders = await listPurchaseOrders(ctx, { status: sp.status });
+  const progress = await receiptProgressFor(ctx, orders.filter((o) => o.status === "APPROVED" || o.status === "CONVERTED").map((o) => o.id));
+  const policy = await matchPolicy(db, ctx.orgId);
+  const canConfigure = can(ctx.role, "settings.manage");
 
   return (
     <>
@@ -59,6 +67,7 @@ export default async function PurchaseOrdersPage({
               <TH>Requested</TH>
               <TH className="text-right">Total</TH>
               <TH>Status</TH>
+              <TH>Received</TH>
             </TR>
           </THead>
           <TBody>
@@ -76,12 +85,31 @@ export default async function PurchaseOrdersPage({
                 <TD>
                   <StatusBadge status={o.status} />
                 </TD>
+                <TD className="text-xs">{progress[o.id] ? RECEIPT_PROGRESS_LABELS[progress[o.id]] : "—"}</TD>
               </TR>
             ))}
           </TBody>
         </Table>
         {!orders.length && <Empty>No purchase orders yet — request one above.</Empty>}
       </Section>
+
+      {canConfigure && (
+        <Section
+          title="Matching policy"
+          description="How closely a vendor's bill has to agree with the order and the goods received before it can be paid without a second person's approval."
+        >
+          <SmartForm
+            columns={3}
+            submitLabel="Save policy"
+            action={setMatchPolicyAction}
+            fields={[
+              { name: "pricePct", label: "Price tolerance above the order (%)", type: "number", required: true, min: 0, max: 100, defaultValue: policy.tolerance.pricePct },
+              { name: "qtyPct", label: "Quantity tolerance above what was received (%)", type: "number", required: true, min: 0, max: 100, defaultValue: policy.tolerance.qtyPct },
+              { name: "threshold", label: "Approval needed for a bill with no order from (₦)", type: "number", required: true, min: 0, defaultValue: policy.threshold },
+            ]}
+          />
+        </Section>
+      )}
     </>
   );
 }

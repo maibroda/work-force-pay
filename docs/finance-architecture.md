@@ -325,6 +325,18 @@ closed over pending work now waive it explicitly.
 **Phase 4, still to do:** year-end close (closing entries and the retained-earnings transfer, then closing the last period and the year), and
 payables snapshots at the invoice level once supplier statements exist (Phase 5).
 
+## 5k. Phase 5, first step — goods receipt and three-way match (built)
+
+`GoodsReceipt` / `GoodsReceiptLine` (immutable by trigger; the receipt can only be cancelled once, with who and why). `PurchaseInvoiceLine.orderLineId` ties a bill line to an
+order line; `PurchaseInvoice.matchStatus` (NOT_REQUIRED / MATCHED / EXCEPTION / APPROVED) and `matchExceptions` hold the result of `applyMatch`, which re-runs when a
+receipt is recorded or cancelled and never downgrades an approved bill. A trigger on `VendorPayment` refuses a payment against an EXCEPTION bill. Tolerances and the
+no-order limit live on `Organization` (`matchPricePct`, `matchQtyPct`, `billApprovalThreshold`). Segregation of duties: the order's requester can neither approve it nor
+receive against it, and a bill's recorder can't approve its exceptions (new permissions `purchase.approve`, `goods.receive`). Purchase order approval previously needed no second
+person; it now does. An order still converts one-to-one to a bill; partial billing across several bills is not modelled yet. No goods-received-not-invoiced accrual yet.
+
+**Phase 5, still to do:** input VAT through the tax engine to a recoverable account, with supplier credit and debit notes; supplier payments with allocation and approval,
+supplier statements, payables ageing, and bill-level payables in the period snapshot.
+
 ## 6. Safety rules for every migration
 
 All migrations are additive. Before each one: dump the database, run it on a copy, run the ledger integrity check
