@@ -3,6 +3,10 @@ import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { getPurchaseOrder } from "@/server/services/purchase-orders";
+import { listGoodsReceipts, orderPosition } from "@/server/services/matching";
+import { RECEIPT_PROGRESS_LABELS } from "@/lib/three-way-match";
+import { ReceiveForm } from "./receive-form";
+import { cancelGoodsReceiptAction } from "@/app/actions/matching";
 import { fmtDate, iso } from "@/lib/dates";
 import { naira, num } from "@/lib/money";
 import { KV, PageHeader, Section } from "@/components/page";
@@ -24,6 +28,11 @@ export default async function PurchaseOrderPage({ params }: { params: Promise<{ 
   const order = await getPurchaseOrder(ctx, id);
   if (!order) notFound();
   const manage = can(ctx.role, "payment.manage");
+  const canApprove = can(ctx.role, "purchase.approve");
+  const canReceive = can(ctx.role, "goods.receive");
+  const [position, receipts] = await Promise.all([orderPosition(ctx, order.id), listGoodsReceipts(ctx, order.id)]);
+  const received = order.status === "APPROVED" || order.status === "CONVERTED";
+  const todayIso = iso(new Date());
 
   return (
     <>
@@ -38,7 +47,7 @@ export default async function PurchaseOrderPage({ params }: { params: Promise<{ 
                   Submit for approval
                 </ActionButton>
               )}
-              {order.status === "PENDING_APPROVAL" && (
+              {order.status === "PENDING_APPROVAL" && canApprove && order.requestedByUserId !== ctx.userId && (
                 <>
                   <ActionButton action={approvePurchaseOrderAction.bind(null, order.id)}>Approve</ActionButton>
                   <ActionButton
@@ -123,6 +132,83 @@ export default async function PurchaseOrderPage({ params }: { params: Promise<{ 
         </Table>
       </Section>
 
+      {received && (
+        <Section
+          title="Goods received"
+          description={`${RECEIPT_PROGRESS_LABELS[position.progress]}. The vendor's bill is matched to what was ordered and what is recorded here; a bill that doesn't match can't be paid until a second person approves it.`}
+          flush
+        >
+          <Table>
+            <THead>
+              <TR>
+                <TH>Line</TH>
+                <TH className="text-right">Ordered</TH>
+                <TH className="text-right">Received</TH>
+                <TH className="text-right">Billed</TH>
+                <TH className="text-right">Outstanding</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {position.lines.map((l) => (
+                <TR key={l.id}>
+                  <TD>{l.description}</TD>
+                  <TD className="text-right">{l.ordered}</TD>
+                  <TD className="text-right">{l.received}</TD>
+                  <TD className="text-right">{l.billed}</TD>
+                  <TD className="text-right">{l.open}</TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </Section>
+      )}
+
+      {received && receipts.length > 0 && (
+        <Section title="Receipts" flush>
+          <Table>
+            <THead>
+              <TR>
+                <TH>Receipt</TH>
+                <TH>Date</TH>
+                <TH>Delivery note</TH>
+                <TH>Received</TH>
+                <TH>By</TH>
+                <TH>Status</TH>
+                <TH />
+              </TR>
+            </THead>
+            <TBody>
+              {receipts.map((r) => (
+                <TR key={r.id}>
+                  <TD className="font-mono text-xs">{r.receiptNumber}</TD>
+                  <TD>{fmtDate(r.receivedDate)}</TD>
+                  <TD className="text-xs">{r.deliveryNote ?? "—"}</TD>
+                  <TD className="text-xs">{r.lines.map((l) => `${num(l.quantity)} × ${l.orderLine.description}`).join("; ")}</TD>
+                  <TD className="text-xs">{r.receivedBy}</TD>
+                  <TD>
+                    <StatusBadge status={r.status} />
+                    {r.cancelReason && <span className="ml-1 text-xs text-muted-foreground">{r.cancelReason}</span>}
+                  </TD>
+                  <TD>
+                    {canReceive && r.status === "POSTED" && (
+                      <ActionButton action={cancelGoodsReceiptAction.bind(null, r.id)} reason reasonPlaceholder="Why is this receipt being cancelled?" variant="outline">
+                        Cancel
+                      </ActionButton>
+                    )}
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </Section>
+      )}
+
+      {canReceive && received && position.lines.some((l) => l.open > 0) && order.requestedByUserId !== ctx.userId && (
+        <Section title="Record goods received" description="Quantities default to what is still outstanding; change them to what actually arrived.">
+          <ReceiveForm orderId={order.id} today={todayIso} lines={position.lines.filter((l) => l.open > 0).map((l) => ({ id: l.id, description: l.description, open: l.open }))} />
+        </Section>
+      )}
+
       {order.convertedInvoice && (
         <Section title="Converted bill">
           <p className="text-sm">
@@ -140,6 +226,11 @@ export default async function PurchaseOrderPage({ params }: { params: Promise<{ 
           title="Convert to a bill"
           description="Record the vendor's actual invoice once it arrives — vendor, cost center and lines carry over from this order."
         >
+          <p className="mb-3 text-sm">
+            <Link className="text-primary underline" href={`/finance/payables/new?po=${order.id}`}>
+              The bill differs from the order? Record it with its own quantities and prices
+            </Link>
+          </p>
           <SmartForm
             columns={3}
             submitLabel="Convert to bill"

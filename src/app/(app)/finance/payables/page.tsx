@@ -6,7 +6,7 @@ import { fmtDate, iso } from "@/lib/dates";
 import { naira, num } from "@/lib/money";
 import { FilterBar, FilterField, PageHeader, Section, Stat, StatGrid, Empty } from "@/components/page";
 import { Input, Select } from "@/components/ui/input";
-import { StatusBadge } from "@/components/ui/badge";
+import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { buttonVariants } from "@/components/ui/button";
 
@@ -119,6 +119,7 @@ export default async function PayablesPage({
               <TH className="text-right">Deducted</TH>
               <TH className="text-right">Balance</TH>
               <TH>Status</TH>
+              <TH>Match</TH>
             </TR>
           </THead>
           <TBody>
@@ -147,6 +148,17 @@ export default async function PayablesPage({
                   <TD className="text-right font-medium">{naira(balance)}</TD>
                   <TD>
                     <StatusBadge status={inv.status} />
+                  </TD>
+                  <TD>
+                    {inv.matchStatus === "EXCEPTION" ? (
+                      <Badge tone="red">Exceptions</Badge>
+                    ) : inv.matchStatus === "APPROVED" ? (
+                      <Badge tone="blue">Approved</Badge>
+                    ) : inv.matchStatus === "MATCHED" ? (
+                      <Badge tone="green">Matched</Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
                   </TD>
                 </TR>
               );

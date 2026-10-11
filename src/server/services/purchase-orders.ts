@@ -68,6 +68,7 @@ export async function createPurchaseOrder(ctx: Ctx, raw: z.input<typeof purchase
         totalAmount: round2(subtotal + vatAmount),
         notes: v.notes ?? null,
         requestedBy: ctx.name,
+        requestedByUserId: ctx.userId,
         lines: { create: lineData },
       },
     });
@@ -96,18 +97,20 @@ export async function decidePurchaseOrder(
   decision: "APPROVED" | "REJECTED",
   reason?: string,
 ) {
-  assertCan(ctx, "payment.manage");
+  assertCan(ctx, "purchase.approve");
   if (decision === "REJECTED" && (!reason || reason.trim().length < 5))
     throw new BusinessError("Give a reason for rejecting this order.");
   const order = await db.purchaseOrder.findFirst({ where: { id, organizationId: ctx.orgId } });
   if (!order) throw new BusinessError("Purchase order not found.");
   if (order.status !== "PENDING_APPROVAL")
     throw new BusinessError("Only an order pending approval can be approved or rejected.");
+  if (order.requestedByUserId === ctx.userId) throw new BusinessError("You raised this order, so someone else has to approve it.");
   const updated = await db.purchaseOrder.update({
     where: { id },
     data: {
       status: decision,
       decidedBy: ctx.name,
+      decidedByUserId: ctx.userId,
       decidedAt: new Date(),
       decisionReason: reason?.trim() || null,
     },
@@ -143,7 +146,11 @@ export const convertPurchaseOrderSchema = z.object({
   dueDate: z.string().min(10),
 });
 
-/** Turns an APPROVED order into a PurchaseInvoice, carrying over vendor, cost center, lines and VAT. */
+/**
+ * Turns an APPROVED order into a PurchaseInvoice, carrying over vendor, cost center, lines and VAT. The bill is matched to what was
+ * received, so converting before delivery leaves it as an exception until the goods are recorded. When the vendor's bill differs from
+ * the order, record it from the order instead (Record a vendor bill, against the order) with its actual quantities and prices.
+ */
 export async function convertPurchaseOrderToInvoice(ctx: Ctx, raw: z.input<typeof convertPurchaseOrderSchema>) {
   assertCan(ctx, "payment.manage");
   const v = convertPurchaseOrderSchema.parse(raw);
@@ -155,8 +162,9 @@ export async function convertPurchaseOrderToInvoice(ctx: Ctx, raw: z.input<typeo
   if (order.status !== "APPROVED") throw new BusinessError("Only an approved order can be converted to a bill.");
   if (d(v.dueDate) < d(v.invoiceDate)) throw new BusinessError("Due date can't be before the invoice date.");
 
-  const invoice = await createPurchaseInvoice(ctx, {
+  return createPurchaseInvoice(ctx, {
     vendorId: order.vendorId,
+    purchaseOrderId: order.id,
     vendorRef: v.vendorRef,
     costCenterId: order.costCenterId ?? undefined,
     description: order.description,
@@ -167,23 +175,9 @@ export async function convertPurchaseOrderToInvoice(ctx: Ctx, raw: z.input<typeo
       description: l.description,
       quantity: num(l.quantity),
       rate: num(l.rate),
+      orderLineId: l.id,
     })),
   } as never);
-
-  // Link the two records and flip the order to CONVERTED together, so a failure here can't leave
-  // an invoice that exists without a status change (the invoice itself is already safely recorded
-  // by this point either way).
-  const [updatedInvoice] = await db.$transaction([
-    db.purchaseInvoice.update({ where: { id: invoice.id }, data: { purchaseOrderId: order.id } }),
-    db.purchaseOrder.update({ where: { id: order.id }, data: { status: "CONVERTED" } }),
-  ]);
-  await logAudit(ctx, {
-    action: "PURCHASE_ORDER_CONVERT",
-    entity: "PurchaseOrder",
-    entityId: order.id,
-    newValue: { purchaseInvoiceId: invoice.id },
-  });
-  return updatedInvoice;
 }
 
 export async function listPurchaseOrders(ctx: Ctx, filter: { vendorId?: string; status?: string } = {}) {

@@ -8,21 +8,32 @@ import { Input, Label, Select } from "@/components/ui/input";
 import { toast } from "@/components/toaster";
 
 type Opt = { value: string; label: string };
-type Line = { description: string; quantity: string; rate: string };
+type Line = { description: string; quantity: string; rate: string; orderLineId?: string };
+export type OrderPrefill = {
+  id: string;
+  orderNumber: string;
+  vendorId: string;
+  costCenterId: string;
+  description: string;
+  vatPct: number;
+  lines: { id: string; description: string; quantity: number; rate: number }[];
+};
 
 const emptyLine = (): Line => ({ description: "", quantity: "1", rate: "0" });
 
-export function NewInvoiceForm({ vendors, costCenters }: { vendors: Opt[]; costCenters: Opt[] }) {
+export function NewInvoiceForm({ vendors, costCenters, order }: { vendors: Opt[]; costCenters: Opt[]; order?: OrderPrefill }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [vendorId, setVendorId] = useState("");
+  const [vendorId, setVendorId] = useState(order?.vendorId ?? "");
   const [vendorRef, setVendorRef] = useState("");
-  const [costCenterId, setCostCenterId] = useState("");
-  const [description, setDescription] = useState("");
+  const [costCenterId, setCostCenterId] = useState(order?.costCenterId ?? "");
+  const [description, setDescription] = useState(order?.description ?? "");
   const [invoiceDate, setInvoiceDate] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [vatPct, setVatPct] = useState("0");
-  const [lines, setLines] = useState<Line[]>([emptyLine()]);
+  const [vatPct, setVatPct] = useState(String(order?.vatPct ?? 0));
+  const [lines, setLines] = useState<Line[]>(
+    order ? order.lines.map((l) => ({ description: l.description, quantity: String(l.quantity), rate: String(l.rate), orderLineId: l.id })) : [emptyLine()],
+  );
 
   const amounts = lines.map((l) => (Number(l.quantity) || 0) * (Number(l.rate) || 0));
   const subtotal = amounts.reduce((a, b) => a + b, 0);
@@ -39,6 +50,7 @@ export function NewInvoiceForm({ vendors, costCenters }: { vendors: Opt[]; costC
           description: l.description,
           quantity: Number(l.quantity) || 1,
           rate: Number(l.rate),
+          orderLineId: l.orderLineId,
         }));
       if (!vendorId) return toast(false, "Select a vendor.");
       if (!cleanLines.length) return toast(false, "Add at least one line item.");
@@ -50,6 +62,7 @@ export function NewInvoiceForm({ vendors, costCenters }: { vendors: Opt[]; costC
         invoiceDate,
         dueDate,
         vatPct: Number(vatPct) || 0,
+        purchaseOrderId: order?.id,
         linesJson: JSON.stringify(cleanLines),
       });
       toast(res.ok, res.ok ? (res.message ?? "Recorded.") : (res.error ?? "Failed."));
@@ -58,10 +71,15 @@ export function NewInvoiceForm({ vendors, costCenters }: { vendors: Opt[]; costC
 
   return (
     <div className="space-y-5 rounded-lg border bg-card p-4">
+      {order && (
+        <p className="rounded bg-blue-50 px-3 py-2 text-sm text-blue-900">
+          Against purchase order <b>{order.orderNumber}</b>. Enter what the vendor actually billed: quantities above what was received, or prices above the order, need a second person&apos;s approval before the bill can be paid.
+        </p>
+      )}
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="space-y-1">
           <Label htmlFor="vendorId">Vendor *</Label>
-          <Select id="vendorId" value={vendorId} onChange={(e) => setVendorId(e.target.value)}>
+          <Select id="vendorId" value={vendorId} disabled={!!order} onChange={(e) => setVendorId(e.target.value)}>
             <option value="">— Select —</option>
             {vendors.map((v) => (
               <option key={v.value} value={v.value}>

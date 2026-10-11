@@ -22,6 +22,7 @@ import { waiveCheck } from "@/server/services/period-close";
 import { checkLedgerIntegrity } from "@/server/services/ledger-integrity";
 import { raiseNote } from "@/server/services/client-notes";
 import { clientStatement, openInvoicesFor, recordClientReceipt } from "@/server/services/receipts";
+const TODAY = new Date().toISOString().slice(0, 10);
 
 const day = (s: string) => new Date(`${s}T00:00:00Z`);
 const findings = async (orgId: string) => (await checkLedgerIntegrity(orgId)).findings.filter((f) => f.check !== "PAYROLL_UNPOSTED"); // the fixture's locked runs have no payroll journals
@@ -57,7 +58,7 @@ describe("an invoice generated where approval is required", () => {
     expect((await receivablesSummary(fin)).totals.billed).toBe(0);
     expect((await unbilledRuns(fin)).map((r) => r.id)).not.toContain(run.id);
     expect((await openInvoicesFor(fin, clientId)).length).toBe(0);
-    expect((await clientStatement(fin, clientId, "2026-10-10")).closing).toBe(0);
+    expect((await clientStatement(fin, clientId, TODAY)).closing).toBe(0);
     await expect(generateInvoices(fin, run.id)).rejects.toThrow(/already exist/);
     expect(await findings(t.org.id)).toEqual([]);
   });
@@ -75,7 +76,7 @@ describe("an invoice generated where approval is required", () => {
     expect(issued.approvedBy).toBe(boss.name);
     expect(await journalsFor(inv.id)).toBe(1);
     expect((await db.taxTransaction.findMany({ where: { invoiceId: inv.id } })).map((r) => [r.kind, num(r.taxAmount)])).toEqual([["OUTPUT_VAT", 30_000]]);
-    const s = await clientStatement(fin, clientId, "2026-10-10");
+    const s = await clientStatement(fin, clientId, TODAY);
     expect(s.closing).toBe(4_030_000);
     expect(s.closing).toBe(s.ledger);
     expect((await invoice(inv.id)).status).toBe("ISSUED");

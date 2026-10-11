@@ -17,6 +17,7 @@ const DEFAULTS: Record<string, { prefix: string; digits: number }> = {
   INVOICE: { prefix: "INV", digits: 6 },
   PURCHASE_INVOICE: { prefix: "PINV", digits: 6 },
   PURCHASE_ORDER: { prefix: "PO", digits: 6 },
+  GOODS_RECEIPT: { prefix: "GRN", digits: 6 },
   FIXED_ASSET: { prefix: "FA", digits: 6 },
   EMPLOYMENT_CONTRACT: { prefix: "EC", digits: 6 },
   REQUISITION: { prefix: "REQ", digits: 5 },

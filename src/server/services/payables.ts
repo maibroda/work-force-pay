@@ -16,6 +16,7 @@ import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { nextNumber } from "./numbering";
 import { postApDeduction, postApInvoice, postApInvoiceCancellation, postApPayment } from "./gl-posting";
+import { applyMatch } from "./matching";
 
 const opt = z
   .string()
@@ -96,6 +97,8 @@ export const purchaseInvoiceLineSchema = z.object({
   description: z.string().trim().min(1),
   quantity: z.coerce.number().positive().default(1),
   rate: z.coerce.number().min(0),
+  /** The purchase order line this bill line is for, when the bill is against an order. */
+  orderLineId: opt,
 });
 
 export const purchaseInvoiceSchema = z.object({
@@ -106,6 +109,8 @@ export const purchaseInvoiceSchema = z.object({
   invoiceDate: z.string().min(10, "Invoice date is required"),
   dueDate: z.string().min(10, "Due date is required"),
   vatPct: z.coerce.number().min(0).max(100).optional(),
+  /** The approved purchase order this bill is for. The bill is then matched to what was ordered and received. */
+  purchaseOrderId: opt,
   lines: z.array(purchaseInvoiceLineSchema).min(1, "At least one line is required"),
 });
 
@@ -118,6 +123,13 @@ export async function createPurchaseInvoice(ctx: Ctx, raw: z.input<typeof purcha
     const cc = await db.costCenter.findFirst({ where: { id: v.costCenterId, organizationId: ctx.orgId } });
     if (!cc) throw new BusinessError("Cost center not found.");
   }
+  if (v.vendorRef) {
+    const dup = await db.purchaseInvoice.findFirst({
+      where: { organizationId: ctx.orgId, vendorId: v.vendorId, status: { not: "CANCELLED" }, vendorRef: { equals: v.vendorRef, mode: "insensitive" } },
+      select: { invoiceNumber: true },
+    });
+    if (dup) throw new BusinessError(`This vendor's bill ${v.vendorRef} is already recorded as ${dup.invoiceNumber}.`);
+  }
   const vatPct = v.vatPct ?? 0;
   const lineData = v.lines.map((l, i) => ({
     description: l.description,
@@ -125,17 +137,32 @@ export async function createPurchaseInvoice(ctx: Ctx, raw: z.input<typeof purcha
     rate: l.rate,
     amount: round2(l.quantity * l.rate),
     sortOrder: i,
+    orderLineId: l.orderLineId ?? null,
   }));
   const subtotal = round2(lineData.reduce((a, l) => a + l.amount, 0));
   const vatAmount = round2((subtotal * vatPct) / 100);
   return db.$transaction(async (tx) => {
+    if (v.purchaseOrderId) {
+      const order = await tx.purchaseOrder.findFirst({ where: { id: v.purchaseOrderId, organizationId: ctx.orgId }, include: { lines: { select: { id: true } } } });
+      if (!order) throw new BusinessError("Purchase order not found.");
+      if (order.vendorId !== v.vendorId) throw new BusinessError("This order is with a different vendor.");
+      if (order.status !== "APPROVED") throw new BusinessError("Only an approved order that has not been billed can have a bill recorded against it.");
+      const own = new Set(order.lines.map((l) => l.id));
+      if (lineData.some((l) => l.orderLineId && !own.has(l.orderLineId))) throw new BusinessError("A bill line points at a line that is not on the purchase order.");
+      await tx.purchaseOrder.update({ where: { id: order.id }, data: { status: "CONVERTED" } });
+      await logAudit(ctx, { action: "PURCHASE_ORDER_CONVERT", entity: "PurchaseOrder", entityId: order.id }, tx);
+    } else if (lineData.some((l) => l.orderLineId)) {
+      throw new BusinessError("Bill lines can only point at order lines when the bill is against a purchase order.");
+    }
     const invoiceNumber = await nextNumber(tx, ctx.orgId, "PURCHASE_INVOICE");
-    const inv = await tx.purchaseInvoice.create({
+    const created = await tx.purchaseInvoice.create({
       data: {
         organizationId: ctx.orgId,
         vendorId: v.vendorId,
         invoiceNumber,
         vendorRef: v.vendorRef ?? null,
+        purchaseOrderId: v.purchaseOrderId ?? null,
+        createdByUserId: ctx.userId,
         costCenterId: v.costCenterId ?? null,
         description: v.description,
         invoiceDate: d(v.invoiceDate),
@@ -148,7 +175,9 @@ export async function createPurchaseInvoice(ctx: Ctx, raw: z.input<typeof purcha
         lines: { create: lineData },
       },
     });
-    await postApInvoice(ctx, tx, inv);
+    await postApInvoice(ctx, tx, created);
+    await applyMatch(tx, ctx.orgId, created.id);
+    const inv = await tx.purchaseInvoice.findUniqueOrThrow({ where: { id: created.id } });
     await logAudit(
       ctx,
       { action: "PURCHASE_INVOICE_CREATE", entity: "PurchaseInvoice", entityId: inv.id, newValue: inv },
@@ -265,6 +294,10 @@ export async function recordVendorPayment(ctx: Ctx, raw: z.input<typeof vendorPa
     const inv = await tx.purchaseInvoice.findFirst({ where: { id: v.invoiceId, organizationId: ctx.orgId } });
     if (!inv) throw new BusinessError("Purchase invoice not found.");
     if (inv.status === "CANCELLED") throw new BusinessError("This invoice was cancelled.");
+    if (inv.matchStatus === "EXCEPTION") {
+      const why = ((inv.matchExceptions ?? []) as { message: string }[]).map((e) => e.message).join(" ");
+      throw new BusinessError(`This bill has unresolved match exceptions, so it can't be paid until a second person approves it. ${why}`.trim());
+    }
     const balance = balanceOf(inv);
     if (v.amount > balance + 0.01)
       throw new BusinessError(`Amount exceeds the outstanding balance of ₦${balance.toFixed(2)}.`);

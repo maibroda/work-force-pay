@@ -7,6 +7,7 @@ import { checkLedgerIntegrity } from "@/server/services/ledger-integrity";
 import { taxReport } from "@/server/services/tax-engine";
 import { clientStatement, recordClientReceipt } from "@/server/services/receipts";
 import { decideNote, getNote, listNotes, noteContext, raiseNote, withdrawNote } from "@/server/services/client-notes";
+const TODAY = new Date().toISOString().slice(0, 10);
 
 const findings = async (orgId: string) => (await checkLedgerIntegrity(orgId)).findings.filter((f) => f.check !== "PAYROLL_UNPOSTED"); // the fixture's locked runs have no payroll journals
 
@@ -53,7 +54,7 @@ describe("a credit note", () => {
     const journal = await db.journalEntry.findFirstOrThrow({ where: { organizationId: t.org.id, sourceType: "CLIENT_NOTE", sourceId: n.id }, include: { lines: true } });
     expect(journal.lines.map((l) => [l.accountCode, num(l.debit), num(l.credit)]).sort()).toEqual([["1200", 0, 1_007_500], ["2190", 7_500, 0], ["4100", 1_000_000, 0]]);
     expect(await ledger("1200")).toBe(3 * 4_030_000 - 1_007_500);
-    const s = await clientStatement(fin, clientId, "2026-10-10");
+    const s = await clientStatement(fin, clientId, TODAY);
     expect(s.closing).toBe(3 * 4_030_000 - 1_007_500);
     expect(s.closing).toBe(s.ledger);
     expect(s.lines.map((l) => l.type)).toContain("CREDIT_NOTE");

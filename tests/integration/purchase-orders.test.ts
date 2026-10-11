@@ -14,6 +14,7 @@ import { ctxFor, uid } from "../helpers";
 describe("purchase orders", () => {
   it("computes VAT/total from lines, and only 'payment.manage' can create one", async () => {
     const fin = await ctxFor("FINANCE");
+    const admin = await ctxFor("COMPANY_ADMIN");
     const auditor = await ctxFor("AUDITOR");
     const tag = uid();
     const vendor = await createVendor(fin, { name: `PO Vendor ${tag}`, category: "EQUIPMENT" });
@@ -47,6 +48,7 @@ describe("purchase orders", () => {
 
   it("moves through the request → submit → approve/reject lifecycle, blocking out-of-order transitions", async () => {
     const fin = await ctxFor("FINANCE");
+    const admin = await ctxFor("COMPANY_ADMIN");
     const tag = uid();
     const vendor = await createVendor(fin, { name: `PO Lifecycle Vendor ${tag}`, category: "OTHER" });
     const order = await createPurchaseOrder(fin, {
@@ -56,7 +58,7 @@ describe("purchase orders", () => {
     });
 
     // can't approve/reject before it's submitted
-    await expect(decidePurchaseOrder(fin, order.id, "APPROVED")).rejects.toThrow(/pending approval/);
+    await expect(decidePurchaseOrder(admin, order.id, "APPROVED")).rejects.toThrow(/pending approval/);
 
     const submitted = await submitPurchaseOrder(fin, order.id);
     expect(submitted.status).toBe("PENDING_APPROVAL");
@@ -65,20 +67,21 @@ describe("purchase orders", () => {
     await expect(submitPurchaseOrder(fin, order.id)).rejects.toThrow(/draft order/);
 
     // rejection requires a reason
-    await expect(decidePurchaseOrder(fin, order.id, "REJECTED")).rejects.toThrow(/reason/);
+    await expect(decidePurchaseOrder(admin, order.id, "REJECTED")).rejects.toThrow(/reason/);
 
-    const approved = await decidePurchaseOrder(fin, order.id, "APPROVED");
+    const approved = await decidePurchaseOrder(admin, order.id, "APPROVED");
     expect(approved.status).toBe("APPROVED");
-    expect(approved.decidedBy).toBe(fin.name);
+    expect(approved.decidedBy).toBe(admin.name);
 
     // can't decide twice
-    await expect(decidePurchaseOrder(fin, order.id, "REJECTED", "changed my mind")).rejects.toThrow(
+    await expect(decidePurchaseOrder(admin, order.id, "REJECTED", "changed my mind")).rejects.toThrow(
       /pending approval/,
     );
   });
 
   it("rejects a submitted order with a reason, and cancellation is blocked once converted", async () => {
     const fin = await ctxFor("FINANCE");
+    const admin = await ctxFor("COMPANY_ADMIN");
     const tag = uid();
     const vendor = await createVendor(fin, { name: `PO Reject Vendor ${tag}`, category: "OTHER" });
 
@@ -88,7 +91,7 @@ describe("purchase orders", () => {
       lines: [{ description: "Item", quantity: 1, rate: 50000 }],
     });
     await submitPurchaseOrder(fin, rejectedOrder.id);
-    const rejected = await decidePurchaseOrder(fin, rejectedOrder.id, "REJECTED", "Budget not available this quarter");
+    const rejected = await decidePurchaseOrder(admin, rejectedOrder.id, "REJECTED", "Budget not available this quarter");
     expect(rejected.status).toBe("REJECTED");
     expect(rejected.decisionReason).toMatch(/Budget/);
 
@@ -98,7 +101,7 @@ describe("purchase orders", () => {
       lines: [{ description: "Item", quantity: 1, rate: 60000 }],
     });
     await submitPurchaseOrder(fin, convertedOrder.id);
-    await decidePurchaseOrder(fin, convertedOrder.id, "APPROVED");
+    await decidePurchaseOrder(admin, convertedOrder.id, "APPROVED");
     const invoice = await convertPurchaseOrderToInvoice(fin, {
       purchaseOrderId: convertedOrder.id,
       invoiceDate: "2026-08-01",
@@ -120,6 +123,7 @@ describe("purchase orders", () => {
 
   it("cancelling a draft order needs a reason and is terminal", async () => {
     const fin = await ctxFor("FINANCE");
+    const admin = await ctxFor("COMPANY_ADMIN");
     const tag = uid();
     const vendor = await createVendor(fin, { name: `PO Cancel Vendor ${tag}`, category: "OTHER" });
     const order = await createPurchaseOrder(fin, {

@@ -494,6 +494,19 @@ enum VendorCategory {
   OTHER
 }
 
+/// Where a vendor bill stands against its purchase order and the goods or services received.
+enum BillMatchStatus {
+  NOT_REQUIRED
+  MATCHED
+  EXCEPTION
+  APPROVED
+}
+
+enum GoodsReceiptStatus {
+  POSTED
+  CANCELLED
+}
+
 enum PurchaseInvoiceStatus {
   RECORDED
   PARTIALLY_PAID
@@ -574,6 +587,7 @@ model Organization {
   costCenterBudgets         CostCenterBudget[]
   vendors                   Vendor[]
   purchaseOrders            PurchaseOrder[]
+  goodsReceipts             GoodsReceipt[]
   purchaseInvoices          PurchaseInvoice[]
   purchaseInvoiceDeductions PurchaseInvoiceDeduction[]
   vendorPayments            VendorPayment[]
@@ -638,6 +652,12 @@ model Organization {
   invoiceApprovalRequired   Boolean                    @default(false)
   /// Whether every sign-off on a period's close checklist must be done before the period can be closed.
   closeChecklistRequired    Boolean                    @default(false)
+  /// Three-way match: how far above the order's price (percent) a bill line may be before it needs a second person's approval.
+  matchPricePct             Decimal                    @default(1) @db.Decimal(5, 2)
+  /// Three-way match: how far above the quantity received (percent) a bill line may be. Zero means exact.
+  matchQtyPct               Decimal                    @default(0) @db.Decimal(5, 2)
+  /// A bill with no purchase order behind it needs a second person's approval at or above this amount (zero: every such bill).
+  billApprovalThreshold     Decimal                    @default(500000) @db.Decimal(16, 2)
 }
 
 model User {
@@ -2516,6 +2536,7 @@ model Vendor {
   payments   VendorPayment[]
   deductions PurchaseInvoiceDeduction[]
   orders     PurchaseOrder[]
+  receipts   GoodsReceipt[]
 
   @@unique([organizationId, name])
 }
@@ -2533,30 +2554,33 @@ enum PurchaseOrderStatus {
 /// PurchaseInvoice once the bill actually arrives. Lines are fixed once submitted for approval;
 /// corrections mean cancelling and raising a new order.
 model PurchaseOrder {
-  id             String              @id @default(cuid())
-  organizationId String
-  organization   Organization        @relation(fields: [organizationId], references: [id])
-  orderNumber    String
-  vendorId       String
-  vendor         Vendor              @relation(fields: [vendorId], references: [id])
-  costCenterId   String?
-  costCenter     CostCenter?         @relation(fields: [costCenterId], references: [id])
-  description    String
-  subtotal       Decimal             @db.Decimal(16, 2)
-  vatPct         Decimal             @default(0) @db.Decimal(5, 2)
-  vatAmount      Decimal             @default(0) @db.Decimal(16, 2)
-  totalAmount    Decimal             @db.Decimal(16, 2)
-  status         PurchaseOrderStatus @default(DRAFT)
-  requestedBy    String
-  requestedAt    DateTime            @default(now())
-  decidedBy      String?
-  decidedAt      DateTime?
-  decisionReason String?
-  notes          String?
-  updatedAt      DateTime            @updatedAt
+  id                String              @id @default(cuid())
+  organizationId    String
+  organization      Organization        @relation(fields: [organizationId], references: [id])
+  orderNumber       String
+  vendorId          String
+  vendor            Vendor              @relation(fields: [vendorId], references: [id])
+  costCenterId      String?
+  costCenter        CostCenter?         @relation(fields: [costCenterId], references: [id])
+  description       String
+  subtotal          Decimal             @db.Decimal(16, 2)
+  vatPct            Decimal             @default(0) @db.Decimal(5, 2)
+  vatAmount         Decimal             @default(0) @db.Decimal(16, 2)
+  totalAmount       Decimal             @db.Decimal(16, 2)
+  status            PurchaseOrderStatus @default(DRAFT)
+  requestedBy       String
+  requestedByUserId String?
+  requestedAt       DateTime            @default(now())
+  decidedBy         String?
+  decidedByUserId   String?
+  decidedAt         DateTime?
+  decisionReason    String?
+  notes             String?
+  updatedAt         DateTime            @updatedAt
 
   lines            PurchaseOrderLine[]
   convertedInvoice PurchaseInvoice?
+  receipts         GoodsReceipt[]
 
   @@unique([organizationId, orderNumber])
   @@index([organizationId, vendorId])
@@ -2572,37 +2596,87 @@ model PurchaseOrderLine {
   rate        Decimal       @db.Decimal(14, 2)
   amount      Decimal       @db.Decimal(14, 2)
   sortOrder   Int           @default(0)
+
+  receiptLines GoodsReceiptLine[]
+  billLines    PurchaseInvoiceLine[]
+}
+
+/// Goods or services received against an approved purchase order. A receipt is a record of fact: it is never edited, only cancelled
+/// (with a reason) if it was recorded in error. The bill is matched against what was ordered and what was actually received.
+model GoodsReceipt {
+  id               String             @id @default(cuid())
+  organizationId   String
+  organization     Organization       @relation(fields: [organizationId], references: [id])
+  receiptNumber    String
+  orderId          String
+  order            PurchaseOrder      @relation(fields: [orderId], references: [id])
+  vendorId         String
+  vendor           Vendor             @relation(fields: [vendorId], references: [id])
+  receivedDate     DateTime           @db.Date
+  deliveryNote     String?
+  notes            String?
+  status           GoodsReceiptStatus @default(POSTED)
+  receivedBy       String
+  receivedByUserId String
+  createdAt        DateTime           @default(now())
+  cancelledAt      DateTime?
+  cancelledBy      String?
+  cancelReason     String?
+
+  lines GoodsReceiptLine[]
+
+  @@unique([organizationId, receiptNumber])
+  @@index([organizationId, orderId])
+}
+
+model GoodsReceiptLine {
+  id          String            @id @default(cuid())
+  receiptId   String
+  receipt     GoodsReceipt      @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  orderLineId String
+  orderLine   PurchaseOrderLine @relation(fields: [orderLineId], references: [id])
+  quantity    Decimal           @db.Decimal(10, 2)
+
+  @@index([orderLineId])
 }
 
 /// A vendor bill. Never edited once recorded — corrections go through a deduction or a new invoice.
 model PurchaseInvoice {
-  id              String                @id @default(cuid())
-  organizationId  String
-  organization    Organization          @relation(fields: [organizationId], references: [id])
-  vendorId        String
-  vendor          Vendor                @relation(fields: [vendorId], references: [id])
-  invoiceNumber   String // our internal sequence number
-  vendorRef       String? // the vendor's own invoice/bill number
-  costCenterId    String?
-  costCenter      CostCenter?           @relation(fields: [costCenterId], references: [id])
-  purchaseOrderId String?               @unique
-  purchaseOrder   PurchaseOrder?        @relation(fields: [purchaseOrderId], references: [id])
-  invoiceDate     DateTime              @db.Date
-  dueDate         DateTime              @db.Date
-  description     String
-  subtotal        Decimal               @db.Decimal(16, 2)
-  vatPct          Decimal               @default(0) @db.Decimal(5, 2)
-  vatAmount       Decimal               @default(0) @db.Decimal(16, 2)
-  totalAmount     Decimal               @db.Decimal(16, 2)
-  amountPaid      Decimal               @default(0) @db.Decimal(16, 2)
+  id                    String                @id @default(cuid())
+  organizationId        String
+  organization          Organization          @relation(fields: [organizationId], references: [id])
+  vendorId              String
+  vendor                Vendor                @relation(fields: [vendorId], references: [id])
+  invoiceNumber         String // our internal sequence number
+  vendorRef             String? // the vendor's own invoice/bill number
+  costCenterId          String?
+  costCenter            CostCenter?           @relation(fields: [costCenterId], references: [id])
+  purchaseOrderId       String?               @unique
+  purchaseOrder         PurchaseOrder?        @relation(fields: [purchaseOrderId], references: [id])
+  invoiceDate           DateTime              @db.Date
+  dueDate               DateTime              @db.Date
+  description           String
+  subtotal              Decimal               @db.Decimal(16, 2)
+  vatPct                Decimal               @default(0) @db.Decimal(5, 2)
+  vatAmount             Decimal               @default(0) @db.Decimal(16, 2)
+  totalAmount           Decimal               @db.Decimal(16, 2)
+  amountPaid            Decimal               @default(0) @db.Decimal(16, 2)
   /// Sum of PurchaseInvoiceDeduction — WHT we withheld from the vendor, or any other justified,
   /// evidenced deduction (short-payment, damaged-goods credit, etc.).
-  totalDeductions Decimal               @default(0) @db.Decimal(16, 2)
-  status          PurchaseInvoiceStatus @default(RECORDED)
-  notes           String?
-  createdBy       String
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
+  totalDeductions       Decimal               @default(0) @db.Decimal(16, 2)
+  status                PurchaseInvoiceStatus @default(RECORDED)
+  notes                 String?
+  createdBy             String
+  createdByUserId       String?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  /// Three-way match result. EXCEPTION blocks payment until a second person approves (then APPROVED) or the exceptions clear.
+  matchStatus           BillMatchStatus       @default(NOT_REQUIRED)
+  matchExceptions       Json?
+  matchApprovedBy       String?
+  matchApprovedByUserId String?
+  matchApprovedAt       DateTime?
+  matchApprovalReason   String?
 
   lines      PurchaseInvoiceLine[]
   payments   VendorPayment[]
@@ -2614,14 +2688,17 @@ model PurchaseInvoice {
 }
 
 model PurchaseInvoiceLine {
-  id          String          @id @default(cuid())
+  id          String             @id @default(cuid())
   invoiceId   String
-  invoice     PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice     PurchaseInvoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   description String
-  quantity    Decimal         @default(1) @db.Decimal(10, 2)
-  rate        Decimal         @db.Decimal(14, 2)
-  amount      Decimal         @db.Decimal(14, 2)
-  sortOrder   Int             @default(0)
+  quantity    Decimal            @default(1) @db.Decimal(10, 2)
+  rate        Decimal            @db.Decimal(14, 2)
+  amount      Decimal            @db.Decimal(14, 2)
+  sortOrder   Int                @default(0)
+  /// The purchase order line this bill line is for, when the bill is against an order.
+  orderLineId String?
+  orderLine   PurchaseOrderLine? @relation(fields: [orderLineId], references: [id])
 }
 
 /// A justified, evidenced deduction WE apply instead of paying a vendor bill in full — withholding

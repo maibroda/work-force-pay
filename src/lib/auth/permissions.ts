@@ -73,6 +73,8 @@ export const PERMISSIONS = [
   "note.manage", // raise credit and debit notes against client invoices
   "note.approve", // approve or turn down a credit or debit note, never the person who raised it
   "invoice.approve", // approve (and so post) a submitted invoice draft, never whoever generated or submitted it
+  "purchase.approve", // approve a purchase order, never its requester; approve a vendor bill that failed its match, never whoever recorded it
+  "goods.receive", // record goods or services received against a purchase order, never the person who raised it
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -187,6 +189,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "tax.manage",
     "billing.rule.manage",
     "note.manage",
+    "goods.receive",
   ],
   AUDITOR: READ_ALL,
   SUPERVISOR: [

@@ -30,7 +30,7 @@ export async function submitPurchaseOrderAction(id: string) {
 
 export async function approvePurchaseOrderAction(id: string) {
   return act(
-    "payment.manage",
+    "purchase.approve",
     async (ctx) => {
       await po.decidePurchaseOrder(ctx, id, "APPROVED");
       return { message: "Purchase order approved." };
@@ -41,7 +41,7 @@ export async function approvePurchaseOrderAction(id: string) {
 
 export async function rejectPurchaseOrderAction(id: string, reason?: string) {
   return act(
-    "payment.manage",
+    "purchase.approve",
     async (ctx) => {
       await po.decidePurchaseOrder(ctx, id, "REJECTED", reason);
       return { message: "Purchase order rejected." };

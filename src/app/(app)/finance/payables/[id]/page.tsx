@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { getPurchaseInvoice } from "@/server/services/payables";
+import { approveBillExceptionAction } from "@/app/actions/matching";
+import { MATCH_CODE_LABELS, type MatchCode } from "@/lib/three-way-match";
 import { fmtDate, iso } from "@/lib/dates";
 import { naira, num } from "@/lib/money";
 import { enumOptions } from "@/server/options";
@@ -25,6 +27,8 @@ export default async function PurchaseInvoicePage({ params }: { params: Promise<
   const inv = await getPurchaseInvoice(ctx, id);
   if (!inv) notFound();
   const manage = can(ctx.role, "payment.manage");
+  const canApproveMatch = can(ctx.role, "purchase.approve");
+  const exceptions = (inv.matchExceptions ?? []) as { code: MatchCode; message: string }[];
   const balance = num(inv.totalAmount) - num(inv.amountPaid) - num(inv.totalDeductions);
   const overdue = balance > 0 && iso(inv.dueDate) < iso(new Date()) && inv.status !== "CANCELLED";
 
@@ -142,6 +146,43 @@ export default async function PurchaseInvoicePage({ params }: { params: Promise<
         )}
       </div>
 
+      {(inv.matchStatus !== "NOT_REQUIRED" || exceptions.length > 0) && (
+        <Section
+          title="Three-way match"
+          description="This bill against its purchase order and the goods or services received. A bill with exceptions can't be paid until a second person approves it."
+        >
+          <p className="mb-2">
+            <Badge tone={inv.matchStatus === "MATCHED" ? "green" : inv.matchStatus === "APPROVED" ? "blue" : "red"}>
+              {inv.matchStatus === "MATCHED" ? "Matched" : inv.matchStatus === "APPROVED" ? "Approved despite exceptions" : "Exceptions — payment blocked"}
+            </Badge>
+          </p>
+          {exceptions.length > 0 && (
+            <ul className="list-disc space-y-1 pl-5 text-sm">
+              {exceptions.map((e, i) => (
+                <li key={i}>
+                  <b>{MATCH_CODE_LABELS[e.code] ?? e.code}.</b> {e.message}
+                </li>
+              ))}
+            </ul>
+          )}
+          {inv.matchStatus === "APPROVED" && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Approved by {inv.matchApprovedBy} on {fmtDate(inv.matchApprovedAt)}: {inv.matchApprovalReason}
+            </p>
+          )}
+          {inv.matchStatus === "EXCEPTION" && canApproveMatch && inv.createdByUserId !== ctx.userId && (
+            <div className="mt-3">
+              <ActionButton action={approveBillExceptionAction.bind(null, inv.id)} reason reasonPlaceholder="Why is it right to pay this bill as it is?">
+                Approve for payment
+              </ActionButton>
+            </div>
+          )}
+          {inv.matchStatus === "EXCEPTION" && (
+            <p className="mt-2 text-xs text-muted-foreground">It clears by itself if the goods are recorded as received, or the bill can be cancelled and recorded again correctly.</p>
+          )}
+        </Section>
+      )}
+
       <Section title="Payments made" flush>
         <Table>
           <THead>
@@ -204,7 +245,7 @@ export default async function PurchaseInvoicePage({ params }: { params: Promise<
         )}
       </Section>
 
-      {manage && balance > 0.01 && inv.status !== "CANCELLED" && (
+      {manage && balance > 0.01 && inv.status !== "CANCELLED" && inv.matchStatus !== "EXCEPTION" && (
         <>
           <Section title="Record a payment">
             <KV

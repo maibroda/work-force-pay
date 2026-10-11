@@ -269,11 +269,24 @@ Ikoyi (19–25), XYZ Manufacturing Lekki (26–30).
 
 - **Finance / Accounting → Purchase Orders** — raised before a vendor bill exists: request an order
   (auto-numbered `PO-######`, vendor + line items + VAT, shared vendor/cost-center list with
-  Billing & Payables) → submit for approval → an approver (`payment.manage`, same permission as the
-  requester — this app has no separate maker-checker role split) approves or rejects it with a
-  reason → once **APPROVED**, convert it to a `PurchaseInvoice` when the bill actually arrives,
-  carrying over vendor, cost center, lines and VAT automatically. A converted order is terminal (no
+  Billing & Payables) → submit for approval → **someone else** (`purchase.approve`, never the requester) approves or rejects it with a
+  reason → once **APPROVED**, record the vendor's bill against it when the bill actually arrives. A converted order is terminal (no
   re-cancelling); a draft or approved order not yet converted can still be cancelled with a reason.
+
+#### Goods received and the three-way match
+
+- **Receiving is its own step** (`goods.receive`, and never the person who raised the order). On an approved order, record what arrived, with the date and delivery
+  note: `GRN-######`. You can't receive more than is outstanding or date it in the future. A receipt is never edited or deleted (the database refuses both); if it
+  was recorded in error it is cancelled with a reason.
+- **Every bill against an order is matched** to what was ordered and what was received, line by line: not more than ordered, not more than received, not priced
+  above the order. Tolerances are set under *Matching policy* on the Purchase Orders page (default: quantity exact, price within 1%). *Record a vendor bill* has
+  an "against the order" route that pre-fills the order's lines so you can enter what the vendor actually billed; the quick *Convert to bill* copies the order exactly.
+- **A bill that fails is an exception and can't be paid.** Someone else with `purchase.approve` can approve it, with a reason (never whoever recorded the bill); the
+  application refuses the payment and so does the database. An exception clears by itself when the delivery is recorded afterwards, and returns if that
+  receipt is cancelled (unless it had been approved).
+- **A bill with no order** is held for approval at or above a limit (default ₦500,000; zero means every such bill). The same vendor's bill number can't be recorded
+  twice, and the same vendor, amount and date is flagged as a possible duplicate.
+- Goods received are not yet accrued in the ledger (no goods-received-not-invoiced liability); the bill is what posts to payables, as before.
 
 ### Fixed asset register
 
