@@ -76,6 +76,8 @@ function resolvers(orgId: string): Record<string, () => Promise<string | undefin
   return {
     // a client organization of any bureau (none in the demo data yet, so this page is skipped until one exists)
     "/bureau/clients/[id]": () => first(db.organization.findFirst({ where: { bureauOrganizationId: { not: null } }, select: { id: true } })),
+    // a rule release of any bureau (none in the demo data yet, so this page is skipped until one exists)
+    "/bureau/rules/[id]": () => first(db.ruleRelease.findFirst({ select: { id: true } })),
     "/accounting/journals/[id]": () => first(db.journalEntry.findFirst({ where, select: { id: true } })),
     "/clients/[id]": () => first(db.client.findFirst({ where, select: { id: true } })),
     "/employees/[id]": () => first(db.employee.findFirst({ where, orderBy: { employeeNumber: "asc" }, select: { id: true } })),

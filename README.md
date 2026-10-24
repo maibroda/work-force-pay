@@ -1086,6 +1086,19 @@ For a payroll outsourcing business (ThreeRoots). **Each client is its own organi
   Access is re-checked against the database on every request, so removing it takes effect at once; a client's own users can never reach the bureau or another client; and database rules stop a client being moved to another bureau or access crossing bureaus.
 - **Audited where it happens.** Entering a client, granting and removing access, and everything staff do inside a client are written to the client's own audit log under the person's own name, tagged with the bureau they came from. Because the same person is the same user in every client, maker-checker rules (the preparer can't approve) hold across clients.
 
+### Statutory rule library
+
+Bureau → **Statutory Rule Library**. The bureau's own PAYE, pension and employer-contribution tables are the master set; this is how a new version reaches clients.
+
+- **Propose** (`rules.manage`: payroll admin, company admin): create the new version in the bureau's own tables as usual (Payroll → PAYE / Pension), then put it forward here with **where it comes from** (law, gazette, circular) and **what changed and why**.
+- **Verify** (`rules.verify`): **one person from HR and one from Finance**, each saying what they checked it against. Neither can be whoever proposed it, each place is filled once, and other roles (including company admin) can't stand in. The release records a fingerprint of exactly what was
+  proposed; if the master rule is edited afterwards the fingerprint no longer matches and it can be neither verified nor published. Withdraw and propose it again.
+- **Publish** (`rules.manage`) once both have signed off: every live client (not ended) gets the version in its own tables, and the version it replaces is end-dated the day before, as when rules are added by hand. A client that can't take it cleanly (for example it holds a later rule) is reported and left alone, and the others still get it;
+  the release can be published again later, for clients onboarded afterwards or for one that has been put right. Each client's audit log records the publication with who verified it.
+- **Clients can't change their own PAYE or pension rules** any more: they come from here. (Payroll business parameters such as proration and overtime stay per client.)
+- **New clients start only on verified rates.** Onboarding copies rules published through the library, plus the baseline the bureau already pays on today that never went through it; anything proposed but unpublished, withdrawn, or future-dated without a release is left out.
+- The releases list is the **rule-change log**: who proposed, who verified, when it was published and to how many clients. Verification and publication records are unalterable, and the database enforces the order and the HR / Finance roles too.
+
 ### Importing employees
 
 Workforce / Personnel → **Import Employees** (`employee.manage`). Download the template, fill it in (Excel: Save As → CSV UTF-8) and upload it; Excel `.xlsx` files are not read directly.
