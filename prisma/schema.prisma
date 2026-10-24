@@ -599,6 +599,10 @@ model Organization {
   staffAccessAsBureau       StaffClientAccess[]        @relation("AccessBureau")
   staffAccessAsClient       StaffClientAccess[]        @relation("AccessClient")
   ruleReleases              RuleRelease[]
+  calendarSetting           PayrollCalendarSetting?
+  calendarEntries           PayrollCalendarEntry[]
+  inputItems                PayrollInputItem[]
+  inputIssues               PayrollInputIssue[]
   rulePublications          RulePublication[]
   employeeImports           EmployeeImportBatch[]
   purchaseInvoices          PurchaseInvoice[]
@@ -679,6 +683,95 @@ model Organization {
   varianceTotalPct          Decimal                    @default(10) @db.Decimal(5, 2)
   /// An employee's net pay must move by at least this much (naira) to be flagged, so small amounts don't drown the real changes.
   varianceMinAmount         Decimal                    @default(5000) @db.Decimal(16, 2)
+}
+
+/// How a client's payroll month runs, agreed once: the dates below are worked out from it for each month.
+model PayrollCalendarSetting {
+  id                  String       @id @default(cuid())
+  organizationId      String       @unique
+  organization        Organization @relation(fields: [organizationId], references: [id])
+  inputCutoffDay      Int          @default(20)
+  draftWorkingDays    Int          @default(3)
+  approvalWorkingDays Int          @default(2)
+  payDayOfMonth       Int          @default(28)
+  remittanceDueDay    Int          @default(10)
+  /// Which inputs the client is expected to send each month.
+  expectedInputs      String[]     @default(["ATTENDANCE", "OVERTIME", "ALLOWANCES", "DEDUCTIONS", "LOANS", "JOINERS_LEAVERS"])
+  updatedBy           String?
+  updatedAt           DateTime     @updatedAt
+}
+
+/// One pay month's concrete dates. Worked out from the setting, then adjustable (a public holiday, an agreed exception) with a reason.
+model PayrollCalendarEntry {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  periodId       String        @unique
+  period         PayrollPeriod @relation(fields: [periodId], references: [id])
+  inputCutoff    DateTime      @db.Date
+  draftDue       DateTime      @db.Date
+  approvalDue    DateTime      @db.Date
+  payDate        DateTime      @db.Date
+  remittanceDue  DateTime      @db.Date
+  adjusted       Boolean       @default(false)
+  adjustReason   String?
+  adjustedBy     String?
+  createdBy      String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([organizationId])
+}
+
+enum InputItemStatus {
+  EXPECTED
+  RECEIVED
+  NOT_APPLICABLE
+}
+
+/// One input the client owes for a pay month, and whether it has come.
+model PayrollInputItem {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  periodId       String
+  period         PayrollPeriod   @relation(fields: [periodId], references: [id])
+  kind           String
+  status         InputItemStatus @default(EXPECTED)
+  receivedAt     DateTime?
+  markedBy       String?
+  markedByUserId String?
+  /// How and from whom it arrived, or why it does not apply.
+  note           String?
+  createdAt      DateTime        @default(now())
+
+  @@unique([periodId, kind])
+  @@index([organizationId, status])
+}
+
+enum InputIssueStatus {
+  OPEN
+  RESOLVED
+}
+
+/// A missing or inconsistent item found in a client's inputs, kept as a log with how it was settled.
+model PayrollInputIssue {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  periodId       String
+  period         PayrollPeriod    @relation(fields: [periodId], references: [id])
+  kind           String?
+  description    String
+  status         InputIssueStatus @default(OPEN)
+  raisedBy       String
+  raisedByUserId String
+  createdAt      DateTime         @default(now())
+  resolvedBy     String?
+  resolvedAt     DateTime?
+  resolution     String?
+
+  @@index([organizationId, periodId, status])
 }
 
 enum RuleKind {
@@ -2059,10 +2152,13 @@ model PayrollPeriod {
   overtime         Overtime[]
   deductions       Deduction[]
   otherEarnings    OtherEarning[]
-  arrearsOriginal  Arrears[]        @relation("ArrearsOriginal")
-  arrearsProcessed Arrears[]        @relation("ArrearsProcessed")
+  arrearsOriginal  Arrears[]             @relation("ArrearsOriginal")
+  arrearsProcessed Arrears[]             @relation("ArrearsProcessed")
   invoices         ClientInvoice[]
   exitSettlements  ExitSettlement[]
+  calendarEntry    PayrollCalendarEntry?
+  inputItems       PayrollInputItem[]
+  inputIssues      PayrollInputIssue[]
 
   @@unique([organizationId, year, month])
 }
