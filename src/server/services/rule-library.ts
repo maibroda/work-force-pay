@@ -240,8 +240,15 @@ export async function publishRelease(ctx: Ctx, releaseId: string, clientIds?: st
 
 // ─────────────────────────────── Reading ───────────────────────────────
 
+/** Whether the signed-in person's organization is a payroll bureau (the library's pages say so plainly when it is not). */
+export async function inBureau(ctx: Ctx): Promise<boolean> {
+  const org = await db.organization.findUnique({ where: { id: ctx.homeOrgId ?? ctx.orgId }, select: { isBureau: true } });
+  return !!org?.isBureau;
+}
+
 export async function listReleases(ctx: Ctx) {
   assertCan(ctx, "bureau.view");
+  if (!(await inBureau(ctx))) return [];
   const bureau = await bureauOf(ctx);
   return db.ruleRelease.findMany({
     where: { bureauOrganizationId: bureau.id },
@@ -254,6 +261,7 @@ export async function listReleases(ctx: Ctx) {
 /** The bureau's own rule versions that could be put forward: none already in a live release. */
 export async function releasableRules(ctx: Ctx) {
   assertCan(ctx, "rules.manage");
+  if (!(await inBureau(ctx))) return [];
   const bureau = await bureauOf(ctx);
   const [tax, pension, employer, live] = await Promise.all([
     db.taxRule.findMany({ where: { organizationId: bureau.id }, orderBy: { effectiveFrom: "desc" } }),
@@ -271,6 +279,7 @@ export async function releasableRules(ctx: Ctx) {
 
 export async function getRelease(ctx: Ctx, releaseId: string) {
   assertCan(ctx, "bureau.view");
+  if (!(await inBureau(ctx))) return null;
   const bureau = await bureauOf(ctx);
   const rel = await db.ruleRelease.findFirst({
     where: { id: releaseId, bureauOrganizationId: bureau.id },

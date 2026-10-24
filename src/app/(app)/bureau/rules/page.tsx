@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
-import { listReleases, releasableRules, RULE_KIND_LABELS } from "@/server/services/rule-library";
+import { inBureau, listReleases, releasableRules, RULE_KIND_LABELS } from "@/server/services/rule-library";
 import { fmtDate } from "@/lib/dates";
 import { Empty, PageHeader, Section } from "@/components/page";
 import { SmartForm } from "@/components/smart-form";
@@ -13,6 +13,7 @@ const TONE = { PROPOSED: "amber", VERIFIED: "blue", PUBLISHED: "green", WITHDRAW
 
 export default async function RuleLibraryPage() {
   const ctx = await requirePage("bureau.view");
+  if (!(await inBureau(ctx))) return <PageHeader title="Statutory rule library" description="This organization is not set up as a payroll bureau." />;
   const [releases, options] = await Promise.all([listReleases(ctx), can(ctx.role, "rules.manage") ? releasableRules(ctx) : Promise.resolve([])]);
   return (
     <>
