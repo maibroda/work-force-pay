@@ -1119,6 +1119,23 @@ Finance / Accounting → **Accounting Periods** (a **Close centre** link on each
   until its cancellation was posted.
 - The **Reconciliation Centre** runs the same four reconciliations as at any date, so a problem shows before month-end.
 
+### Year-end close
+
+Finance / Accounting → **Accounting Periods**, under each financial year (`period.approve` to close, `period.reopen` to reopen).
+
+- **One closing journal.** When every earlier period that has postings is closed and the year's last period still accepts postings, the year can be closed. It posts a
+  single journal dated the last day of the year that brings **every income and expense account to nil**, reversing each balance **dimension by dimension** (so an account
+  that requires a client or contract still gets one, and the dimension reports still net to nil), and moves the **profit or loss to the equity account you choose**
+  (Retained Earnings is suggested). It is a debit to retained earnings for a loss. The year records who closed it, when, the journal and the account.
+- **Then close the last period** in the usual way, with its checks and snapshot. The closing entries are posted into it first, which is why it must still be open or soft closed.
+- **The result stays true.** Once a year is closed the posting engine refuses any income or expense posting dated in it (balance sheet movements and next-year postings are fine);
+  the ledger integrity check verifies every income and expense account still nets to nil for it, and the database won't let a year be marked closed without its closing journal
+  (or the link be cut by itself).
+- **Performance still reads as performance.** The income statement and the dimension reports leave the closing journal out, so December's profit and loss is December's, and a year's
+  is the year's. The trial balance and balance sheet include it: after closing, income and expense show nil and the profit sits in retained earnings, with total equity unchanged.
+- **Reopening** (with a reason, while the last period still accepts postings) reverses the closing journal exactly and lifts the restriction; the year can be closed again, which
+  writes a new closing journal. A closed or locked last period has to be reopened first (a locked one can't be, so neither can its year).
+
 ### Quick payslip
 
 Payroll → **Quick Payslip** (`payroll.view`). A calculator for offers, budgets and what-ifs; **nothing is saved** and it creates no payroll record.

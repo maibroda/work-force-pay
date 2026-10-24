@@ -3010,6 +3010,7 @@ model JournalEntry {
   reversedBy       JournalEntry?     @relation("JournalReversal")
   document         JournalDocument?
   reversalRequests JournalReversal[]
+  closedYear       FiscalYear?       @relation("YearEndClosing")
 
   @@unique([organizationId, entryNumber])
   @@index([organizationId, postingDate])
@@ -3837,14 +3838,23 @@ enum AccountingPeriodStatus {
 
 /// A financial year: twelve monthly accounting periods starting in the organization's first fiscal month.
 model FiscalYear {
-  id             String             @id @default(cuid())
-  organizationId String
-  organization   Organization       @relation(fields: [organizationId], references: [id])
-  name           String
-  startDate      DateTime           @db.Date
-  endDate        DateTime           @db.Date
-  createdAt      DateTime           @default(now())
-  periods        AccountingPeriod[]
+  id                        String             @id @default(cuid())
+  organizationId            String
+  organization              Organization       @relation(fields: [organizationId], references: [id])
+  name                      String
+  startDate                 DateTime           @db.Date
+  endDate                   DateTime           @db.Date
+  createdAt                 DateTime           @default(now())
+  periods                   AccountingPeriod[]
+  /// Set when the year-end closing entries have been posted: the profit or loss moved to retained earnings and every income and
+  /// expense account brought to nil. While it is set, nothing more can be posted to income or expense accounts dated in the year.
+  closedAt                  DateTime?
+  closedBy                  String?
+  closedByUserId            String?
+  closingJournalId          String?            @unique
+  closingJournal            JournalEntry?      @relation("YearEndClosing", fields: [closingJournalId], references: [id], onDelete: Restrict)
+  /// The equity account the year's profit or loss was moved to.
+  retainedEarningsAccountId String?
 
   @@unique([organizationId, startDate])
 }

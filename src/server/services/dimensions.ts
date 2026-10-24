@@ -149,7 +149,7 @@ export async function ledgerByDimension(ctx: Ctx, input: { dimension: string; fr
   const grouped = await db.journalLine.groupBy({
     by: [dim.column, "accountId"],
     // a profit-and-loss view: only income and expense lines (the balance-sheet side of an entry isn't part of the result)
-    where: { account: { type: { in: ["INCOME", "EXPENSE"] } }, journal: { organizationId: ctx.orgId, ...(from || to ? { postingDate: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}) } },
+    where: { account: { type: { in: ["INCOME", "EXPENSE"] } }, journal: { organizationId: ctx.orgId, source: { notIn: ["YEAR_END_CLOSE", "YEAR_END_REOPEN"] }, ...(from || to ? { postingDate: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}) } },
     _sum: { debit: true, credit: true },
     _count: { _all: true },
   });

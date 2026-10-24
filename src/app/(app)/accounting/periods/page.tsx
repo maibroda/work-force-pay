@@ -10,12 +10,15 @@ import { SmartForm } from "@/components/smart-form";
 import { Badge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { createFiscalYearAction, transitionPeriodAction } from "@/app/actions/periods";
+import { yearEndStatus } from "@/server/services/year-end";
+import { YearEnd } from "./year-end-panel";
 
 const tone: Record<PeriodStatus, "green" | "amber" | "gray" | "red"> = { OPEN: "green", SOFT_CLOSED: "amber", CLOSED: "gray", LOCKED: "red" };
 
 export default async function PeriodsPage() {
   const ctx = await requirePage("gl.view");
   const { years, startMonth } = await listFiscalYears(ctx);
+  const ends = await Promise.all(years.map((y) => yearEndStatus(ctx, y.id)));
   const canClose = can(ctx.role, "period.close");
   const canApprove = can(ctx.role, "period.approve");
   const canReopen = can(ctx.role, "period.reopen");
@@ -35,7 +38,7 @@ export default async function PeriodsPage() {
           />
         </FormPanel>
       )}
-      {years.map((y) => (
+      {years.map((y, yi) => (
         <Section key={y.id} title={`${y.name} — ${fmtDate(y.startDate)} to ${fmtDate(y.endDate)}`} flush>
           <Table>
             <THead>
@@ -93,6 +96,7 @@ export default async function PeriodsPage() {
               })}
             </TBody>
           </Table>
+          <YearEnd status={ends[yi]} canClose={canApprove} canReopen={canReopen} />
         </Section>
       ))}
       {!years.length && (

@@ -16,6 +16,8 @@
  * receipt holds unapplied (less refunds) agrees with the client advances account. (WARN) A client's own balance in the
  * receivables account agrees with what they owe on their invoices.
  *
+ * Year-end (ERROR): in a closed financial year every income and expense account nets to nil, closing journal included.
+ *
  * Invoice drafts (generated, awaiting approval) are not in the ledger or the subledger and have no tax records until approved.
  *
  * Credit and debit notes (ERROR): an invoice's credits and debits equal its approved notes, and the receivables subledger counts them.
@@ -173,6 +175,13 @@ export async function checkLedgerIntegrity(orgId: string): Promise<IntegrityRepo
       const posted = new Set(journals.map((j) => j.runId).filter(Boolean));
       const runs = await tx.payrollRun.findMany({ where: { organizationId: orgId, status: { in: ["LOCKED", "PAID"] } }, select: { id: true, runNumber: true } });
       for (const r of runs) if (!posted.has(r.id)) add("PAYROLL_UNPOSTED", "ERROR", `A locked payroll run has no journal.`, `run ${r.runNumber}`);
+
+      // A closed financial year has its income and expense accounts at nil.
+      for (const y of await tx.fiscalYear.findMany({ where: { organizationId: orgId, closingJournalId: { not: null } }, select: { name: true, startDate: true, endDate: true } })) {
+        const per = await tx.journalLine.groupBy({ by: ["accountId"], where: { account: { organizationId: orgId, type: { in: ["INCOME", "EXPENSE"] } }, journal: { organizationId: orgId, postingDate: { gte: y.startDate, lte: y.endDate } } }, _sum: { debit: true, credit: true } });
+        const off = per.filter((p) => Math.abs(num(p._sum.debit) - num(p._sum.credit)) >= TOLERANCE);
+        if (off.length) add("YEAR_NOT_AT_NIL", "ERROR", `${y.name} is closed but ${off.length} income or expense account(s) are not at nil for it.`, y.name);
+      }
 
       // Tax records: what the VAT and withholding reports read must agree with the invoices.
       const taxed = await tx.clientInvoice.findMany({
