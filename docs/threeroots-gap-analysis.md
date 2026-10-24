@@ -25,6 +25,7 @@ That is the one structural decision the rest depends on. Two ways to do it:
 
 | Spec | Status | Notes |
 |---|---|---|
+| 3.1 Bureau layer (client organizations, staff access, engagement terms) | Built (first part) | Option A: each client is its own organization; staff switch between the clients they are given; package, term, fees, contact, SLA and data-processing terms recorded per client; audited in the client's log. Still to do: HR + Finance verified rule library that publishes to clients, per-client payroll calendar. |
 | 3.1 Client records, sites, headcount | Partial | `Client`, `Contract`, `Beat` exist, but as the employer's customers. Under option A the employer becomes an `Organization`; package, contract term and start date are new fields on a bureau-level client record. |
 | 3.1 Packages, fees, add-ons | Missing | Billing rules exist for the security-company model (per-service-type billing of the employer's customers). A package/per-employee/minimum/onboarding-fee model for ThreeRoots's own invoicing is new. |
 | 3.1 Per-client payroll calendar | Missing | Payroll periods exist; cut-off, draft, approval, pay and remittance dates per client do not. |

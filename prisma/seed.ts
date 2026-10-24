@@ -1282,6 +1282,21 @@ async function main() {
       },
     });
 
+  // ─────────────── ThreeRoots Payroll Services (a payroll bureau; clients are onboarded in the app) ───────────────
+  const bureau = await db.organization.create({
+    data: { name: "ThreeRoots Payroll Services", code: "THREEROOTS", address: "Lagos", isBureau: true },
+  });
+  for (const [email, name, role] of [
+    ["founder@threeroots.test", "Tolu Founder", "COMPANY_ADMIN"],
+    ["officer@threeroots.test", "Ngozi Payroll Officer", "PAYROLL_ADMIN"],
+    ["reviewer@threeroots.test", "Femi Payroll Reviewer", "FINANCE"],
+    ["hr@threeroots.test", "Amaka HR", "HR_ADMIN"],
+    ["auditor@threeroots.test", "Bayo Auditor", "AUDITOR"],
+  ] as const)
+    await db.user.create({ data: { organizationId: bureau.id, email, name, role, passwordHash: hash } });
+  await seedStatutory(bureau.id);
+  await ensureDefaultChart(db, bureau.id);
+
   await seedHrDemo(org.id);
   await seedInventoryDemo(org.id);
   await seedLoanDemo(org.id);

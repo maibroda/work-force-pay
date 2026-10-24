@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { can, ForbiddenError, type Permission, type Role } from "./permissions";
 import type { Ctx } from "./context";
 import { TwoFactorRequiredError, twoFactorStateFor } from "./two-factor-gate";
+import { mayWorkIn } from "./bureau-access";
 
 const COOKIE = "wp_session";
 const MAX_AGE = 60 * 60 * 10; // 10 hours
@@ -52,13 +53,19 @@ export async function getSession(): Promise<Ctx | null> {
     const userId = String(payload.userId);
     const current = await db.user.findUnique({
       where: { id: userId },
-      select: { sessionVersion: true, active: true },
+      select: { sessionVersion: true, active: true, organizationId: true, role: true },
     });
     if (!current || !current.active || current.sessionVersion !== payload.sessionVersion) return null;
+    // Working in a client organization: the token says so, but access is re-checked against the database on every request, so
+    // revoking someone's access (or deactivating them) takes effect at once and a token can't be made to point somewhere new.
+    const orgId = String(payload.orgId);
+    const acting = orgId !== current.organizationId;
+    if (acting && !(await mayWorkIn({ id: userId, organizationId: current.organizationId, role: current.role as Role }, orgId))) return null;
     const h = await headers();
     return {
       userId,
-      orgId: String(payload.orgId),
+      orgId,
+      homeOrgId: acting ? current.organizationId : null,
       role: payload.role as Role,
       name: String(payload.name),
       email: String(payload.email),

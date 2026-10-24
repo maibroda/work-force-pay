@@ -74,6 +74,8 @@ const first = async (q: Promise<{ id: string } | null>) => (await q)?.id;
 function resolvers(orgId: string): Record<string, () => Promise<string | undefined>> {
   const where = { organizationId: orgId };
   return {
+    // a client organization of any bureau (none in the demo data yet, so this page is skipped until one exists)
+    "/bureau/clients/[id]": () => first(db.organization.findFirst({ where: { bureauOrganizationId: { not: null } }, select: { id: true } })),
     "/accounting/journals/[id]": () => first(db.journalEntry.findFirst({ where, select: { id: true } })),
     "/clients/[id]": () => first(db.client.findFirst({ where, select: { id: true } })),
     "/employees/[id]": () => first(db.employee.findFirst({ where, orderBy: { employeeNumber: "asc" }, select: { id: true } })),

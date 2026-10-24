@@ -6,6 +6,8 @@ export interface NavItem {
   perm: Permission;
   /** Optional sub-heading rendered above this item within its group (e.g. "Reports"). */
   section?: string;
+  /** Shown only in a payroll bureau, or while working in one of its clients. */
+  bureauOnly?: boolean;
 }
 export interface NavGroup {
   title: string;
@@ -14,6 +16,7 @@ export interface NavGroup {
 
 export const NAV: NavGroup[] = [
   { title: "Dashboard", items: [{ href: "/", label: "Dashboard", perm: "dashboard.view" }] },
+  { title: "Bureau", items: [{ href: "/bureau", label: "Clients", perm: "bureau.view", bureauOnly: true }] },
   {
     title: "Workforce / Personnel",
     items: [

@@ -75,6 +75,8 @@ export const PERMISSIONS = [
   "invoice.approve", // approve (and so post) a submitted invoice draft, never whoever generated or submitted it
   "purchase.approve", // approve a purchase order, never its requester; approve a vendor bill that failed its match, never whoever recorded it
   "goods.receive", // record goods or services received against a purchase order, never the person who raised it
+  "bureau.view", // work in the client organizations of your bureau that you have been given access to
+  "bureau.manage", // onboard clients, set their terms, give staff access, and work in every client of the bureau
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -96,6 +98,7 @@ const READ_ALL: Permission[] = [
   "inventory.view",
   "appraisal.view",
   "self.security",
+  "bureau.view",
 ];
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
@@ -131,6 +134,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "leave.approve",
     "leave.manage",
     "self.security",
+    "bureau.view",
   ],
   OPERATIONS: [
     "dashboard.view",
@@ -172,6 +176,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "gl.view",
     "inventory.view",
     "self.security",
+    "bureau.view",
   ],
   FINANCE: [
     ...READ_ALL,

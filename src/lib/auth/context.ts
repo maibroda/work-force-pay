@@ -8,5 +8,7 @@ export interface Ctx {
   name: string;
   email: string;
   employeeId?: string | null;
+  /** Set while bureau staff are working in a client organization: the bureau organization they belong to. `orgId` is then the client. */
+  homeOrgId?: string | null;
   ip?: string | null;
 }
