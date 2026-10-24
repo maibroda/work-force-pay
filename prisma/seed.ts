@@ -35,6 +35,7 @@ import {
   runPayroll,
   submitForApproval,
 } from "../src/server/services/payroll";
+import { explainIssue } from "../src/server/services/payroll-controls";
 import { createPaymentBatches, generateRemittances, markBatchPaid } from "../src/server/services/payments";
 import { ensureDefaultChart } from "../src/server/services/accounting";
 import { applyForLeave, decideLeave } from "../src/server/services/leave";
@@ -979,6 +980,9 @@ async function main() {
         i.id,
         "Reviewed by Finance for historical demo period — documented exception.",
       );
+    // variance findings against the previous month are explained by the preparer before submitting
+    const unexplained = await db.payrollValidationIssue.findMany({ where: { runId: run.id, requiresExplanation: true, explanation: null, overridden: false } });
+    for (const i of unexplained) await explainIssue(ctx("PAYROLL_ADMIN"), i.id, "Demo history: movement reviewed with the client and accepted.");
     await submitForApproval(ctx("PAYROLL_ADMIN"), run.id);
     await approveRun(finance, run.id);
     await lockRun(finance, run.id);

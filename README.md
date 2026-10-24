@@ -1075,6 +1075,19 @@ Finance / Accounting → **Credit & Debit Notes** (under Billing); raise one fro
   in date order, and the VAT and integrity checks count them. An invoice with notes can't be cancelled.
 - A debit note is raised against an invoice and shares its due date; a standalone charge with no invoice is not supported yet.
 
+### Payroll controls
+
+Payroll → **Payroll Runs**, on a run's Control Centre.
+
+- **The person who prepared a payroll can't approve it.** Everyone who has calculated a run is recorded, and so is whoever submitted it; none of them can approve it (and the preparers can't override its validation errors either).
+  The database refuses it too. Who approved and when is now stored on the run, not just the period. Returning a run clears its submission and approval.
+- **Variance against the previous payroll.** Calculating a regular payroll compares it with the latest approved, locked or paid one: headcount, total net pay, and each person's net pay (a move beyond the percentage *and* at least the
+  minimum amount). Findings appear under the new VARIANCE category and **each needs a written explanation** (by the preparer, while the payroll is being prepared) before it can be submitted. Joiners and leavers aren't flagged as personal changes.
+  An explanation stays attached through a recalculation only if the finding reads exactly the same; changed figures need a new one. Limits are set at the foot of the Control Centre by whoever manages settings
+  (defaults: headcount 5%, total 10%, a person 20% and at least ₦5,000).
+- **Reconciliation to the previous payroll.** A bridge from last month to this one: headcount, gross and net through joiners, leavers, anyone who appears or drops out without a record (these need a note), and the change for continuing staff.
+  Signing it off records who and when, and recalculating clears it. Whether sign-off is required before submission is a setting (off by default).
+
 ### Invoice approval, immutability and proforma invoices
 
 Finance / Accounting → **Billing & Receivables** and **Proforma Invoices**.

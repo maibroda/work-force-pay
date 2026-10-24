@@ -50,7 +50,7 @@ import {
   clientProfitability,
 } from "@/server/services/reports";
 import { listAudit } from "@/server/services/audit";
-import { ctxFor, periodFor, uid } from "../helpers";
+import { ctxFor, explainVariances, periodFor, uid } from "../helpers";
 
 describe("CRITICAL END-TO-END: client → contract → structure → beats → employees → movement → work register → payroll → lock → payslip → reports → audit", () => {
   it("runs the complete WorkforcePay workflow", async () => {
@@ -285,6 +285,7 @@ describe("CRITICAL END-TO-END: client → contract → structure → beats → e
     expect(num(rec.managementShare)).toBeCloseTo(36000, 2);
 
     // APPROVE → LOCK
+    await explainVariances(payroll, run.id);
     await submitForApproval(payroll, run.id);
     await approveRun(fin, run.id);
     await lockRun(fin, run.id);

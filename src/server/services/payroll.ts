@@ -18,6 +18,7 @@ import { activeRecurringDeductionRules } from "./deduction-rules";
 import { findDuplicates } from "./employees";
 import { recentBankChanges } from "./change-requests";
 import { CLIENT_MISMATCH, LOCATION_MISMATCH } from "./operations";
+import { submissionBlockers, varianceIssues } from "./payroll-controls";
 import { loadRateBook } from "./rates";
 import { employerCostRuleFor, payrollRuleFor, pensionRuleFor, taxRuleFor } from "./statutory";
 
@@ -81,6 +82,8 @@ interface Issue {
   severity: "CRITICAL" | "WARNING" | "INFO";
   code: string;
   message: string;
+  /** A written explanation is needed before the payroll can be submitted (variance findings). */
+  requiresExplanation?: boolean;
 }
 
 /**
@@ -392,7 +395,8 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
         });
       }
       const runId = run.id;
-      const keptOverrides = await tx.payrollValidationIssue.findMany({ where: { runId, overridden: true } });
+      // overrides and written explanations survive a recalculation, for findings that read exactly the same
+      const keptOverrides = await tx.payrollValidationIssue.findMany({ where: { runId, OR: [{ overridden: true }, { explanation: { not: null } }] } });
       await tx.payrollValidationIssue.deleteMany({ where: { runId } });
       await tx.payrollRecord.deleteMany({ where: { runId } });
 
@@ -447,9 +451,14 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
               severity: i.severity,
               code: i.code,
               message: i.message,
-              overridden: Boolean(k),
+              overridden: Boolean(k?.overridden),
               overrideReason: k?.overrideReason ?? null,
               overriddenBy: k?.overriddenBy ?? null,
+              requiresExplanation: Boolean(i.requiresExplanation),
+              explanation: k?.explanation ?? null,
+              explainedBy: k?.explainedBy ?? null,
+              explainedByUserId: k?.explainedByUserId ?? null,
+              explainedAt: k?.explainedAt ?? null,
             };
           }),
         });
@@ -474,6 +483,18 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
           calculatedBy: ctx.name,
           calculatedAt: new Date(),
           calculationCount: { increment: 1 },
+          // new figures: whoever calculates them is a preparer, and nothing signed off on the old ones stands
+          preparedByUserIds: Array.from(new Set([...run.preparedByUserIds, ctx.userId])),
+          submittedBy: null,
+          submittedByUserId: null,
+          submittedAt: null,
+          approvedBy: null,
+          approvedByUserId: null,
+          approvedAt: null,
+          reconciledBy: null,
+          reconciledByUserId: null,
+          reconciledAt: null,
+          reconciliationNote: null,
         },
       });
       await tx.payrollPeriod.update({ where: { id: period.id }, data: { status: "PENDING_VALIDATION" } });
@@ -624,7 +645,7 @@ function summarize(list: EngineResult[]) {
 
 async function validate(
   ctx: Ctx,
-  period: { id: string; name: string; startDate: Date; endDate: Date },
+  period: { id: string; name: string; year: number; month: number; startDate: Date; endDate: Date },
   a: Assembled,
   rows: Array<{ emp: Assembled["employees"][number]; res: EngineResult }>,
 ): Promise<Issue[]> {
@@ -896,6 +917,15 @@ async function validate(
       `Suspected duplicate (${f.type.replace("_", " ").toLowerCase()} ${f.value}): ${f.employees.map((e) => e.employeeNumber).join(", ")}.`,
     );
   }
+  // VARIANCE — against the previous payroll; each finding needs a written explanation before the payroll is submitted
+  issues.push(
+    ...(await varianceIssues(
+      ctx.orgId,
+      period,
+      rows.map((r) => ({ id: r.emp.id, label: `${r.emp.employeeNumber} ${fullName(r.emp)}`, gross: r.res.totalEarnings, net: r.res.netPay })),
+      a.employees,
+    )),
+  );
   return issues;
 }
 
@@ -921,7 +951,12 @@ export async function submitForApproval(ctx: Ctx, runId: string) {
   const run = await getRun(ctx, runId);
   if (run.status !== "CALCULATED")
     throw new BusinessError("Only a calculated payroll can be submitted for approval.");
-  await db.payrollRun.update({ where: { id: runId }, data: { status: "PENDING_APPROVAL" } });
+  const blockers = await submissionBlockers(ctx.orgId, run);
+  if (blockers.length) throw new BusinessError(`This payroll can't be submitted yet. ${blockers.join(" ")}`);
+  await db.payrollRun.update({
+    where: { id: runId },
+    data: { status: "PENDING_APPROVAL", submittedBy: ctx.name, submittedByUserId: ctx.userId, submittedAt: new Date() },
+  });
   if (run.type === "REGULAR")
     await db.payrollPeriod.update({ where: { id: run.periodId }, data: { status: "PENDING_APPROVAL" } });
   await logAudit(ctx, { action: "PAYROLL_SUBMITTED", entity: "PayrollRun", entityId: runId });
@@ -933,13 +968,18 @@ export async function approveRun(ctx: Ctx, runId: string) {
   const run = await getRun(ctx, runId);
   if (run.status !== "PENDING_APPROVAL")
     throw new BusinessError("Payroll must be submitted for approval first.");
+  if (run.preparedByUserIds.includes(ctx.userId) || run.submittedByUserId === ctx.userId)
+    throw new BusinessError("You prepared or submitted this payroll, so someone else has to approve it.");
   const critical = await openCriticalCount(runId);
   if (critical)
     throw new BusinessError(
       `Payroll cannot be approved: ${critical} critical validation error(s) must be resolved or overridden by Finance with a documented reason.`,
     );
   await db.$transaction(async (tx) => {
-    await tx.payrollRun.update({ where: { id: runId }, data: { status: "APPROVED" } });
+    await tx.payrollRun.update({
+      where: { id: runId },
+      data: { status: "APPROVED", approvedBy: ctx.name, approvedByUserId: ctx.userId, approvedAt: new Date() },
+    });
     if (run.type === "REGULAR")
       await tx.payrollPeriod.update({
         where: { id: run.periodId },
@@ -963,7 +1003,10 @@ export async function returnRun(ctx: Ctx, runId: string, reason: string) {
   const run = await getRun(ctx, runId);
   if (!["PENDING_APPROVAL", "APPROVED"].includes(run.status))
     throw new BusinessError("Only a payroll awaiting approval (or approved, not locked) can be returned.");
-  await db.payrollRun.update({ where: { id: runId }, data: { status: "CALCULATED" } });
+  await db.payrollRun.update({
+    where: { id: runId },
+    data: { status: "CALCULATED", submittedBy: null, submittedByUserId: null, submittedAt: null, approvedBy: null, approvedByUserId: null, approvedAt: null },
+  });
   if (run.type === "REGULAR")
     await db.payrollPeriod.update({
       where: { id: run.periodId },
@@ -1032,6 +1075,8 @@ export async function overrideIssue(ctx: Ctx, issueId: string, reason: string) {
   if (!issue) throw new BusinessError("Validation issue not found.");
   if (["APPROVED", "LOCKED", "PAID"].includes(issue.run.status))
     throw new BusinessError("Payroll is already approved.");
+  if (issue.run.preparedByUserIds.includes(ctx.userId))
+    throw new BusinessError("You prepared this payroll, so someone else has to override its validation errors.");
   await db.payrollValidationIssue.update({
     where: { id: issueId },
     data: { overridden: true, overrideReason: reason, overriddenBy: ctx.name },
@@ -1144,6 +1189,7 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
         calculatedBy: ctx.name,
         calculatedAt: new Date(),
         calculationCount: 1,
+        preparedByUserIds: [ctx.userId],
       },
     });
     for (const { emp, res } of rows) {

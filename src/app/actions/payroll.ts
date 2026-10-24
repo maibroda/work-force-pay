@@ -3,6 +3,7 @@ import { act } from "./_run";
 import * as st from "@/server/services/structures";
 import * as inp from "@/server/services/inputs";
 import * as pr from "@/server/services/payroll";
+import * as controls from "@/server/services/payroll-controls";
 import * as pay from "@/server/services/payments";
 import * as stat from "@/server/services/statutory";
 
@@ -223,6 +224,36 @@ export async function lockRunAction(id: string) {
       return { message: "Payroll locked. Operational changes for this period are now blocked." };
     },
     ["/payroll", "/"],
+  );
+}
+export async function explainIssueAction(id: string, explanation?: string) {
+  return act(
+    "payroll.run",
+    async (ctx) => {
+      await controls.explainIssue(ctx, id, explanation ?? "");
+      return { message: "Explanation recorded." };
+    },
+    ["/payroll"],
+  );
+}
+export async function signOffReconciliationAction(id: string, note?: string) {
+  return act(
+    "payroll.run",
+    async (ctx) => {
+      await controls.signOffReconciliation(ctx, id, note);
+      return { message: "Reconciliation signed off." };
+    },
+    ["/payroll"],
+  );
+}
+export async function setVariancePolicyAction(v: V) {
+  return act(
+    "settings.manage",
+    async (ctx) => {
+      await controls.setVariancePolicy(ctx, v as never);
+      return { message: "Payroll control settings saved." };
+    },
+    ["/payroll"],
   );
 }
 export async function overrideIssueAction(id: string, reason?: string) {
