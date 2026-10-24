@@ -1086,6 +1086,19 @@ For a payroll outsourcing business (ThreeRoots). **Each client is its own organi
   Access is re-checked against the database on every request, so removing it takes effect at once; a client's own users can never reach the bureau or another client; and database rules stop a client being moved to another bureau or access crossing bureaus.
 - **Audited where it happens.** Entering a client, granting and removing access, and everything staff do inside a client are written to the client's own audit log under the person's own name, tagged with the bureau they came from. Because the same person is the same user in every client, maker-checker rules (the preparer can't approve) hold across clients.
 
+### Payroll calendar and input tracker
+
+Payroll → **Payroll Calendar**, in each client organization (a bureau's staff reach it by working in the client).
+
+- **The rhythm is agreed once** (*This client's rhythm*, `settings.manage`): the day inputs are due, working days to the draft, working days to client approval, the pay day, the day statutory remittances fall due, and which inputs the client is expected to send (attendance, overtime, allowances,
+  deductions, loans, joiners and leavers). Defaults: the 20th, 3 and 2 working days, the 28th, the 10th of the next month. Check the remittance dates with HR and Finance; the app does not decide them.
+- **Each month gets its own dates** (`payroll.inputs`): worked out from the rhythm (a weekend moves a date to the working day before; a day the month doesn't have becomes its last day), and shown with warnings when a rhythm cannot work (for example approval falling after the pay date).
+  They can be **adjusted** for a public holiday or an agreed exception, but only with a reason, which is kept with the dates. Public holidays are not known to the app.
+- **Where each deadline stands is read from the payroll itself**, not ticked by hand: inputs due is done when every expected input is received or marked not applicable; the draft when the run is calculated; approval when it is approved; pay date when the run is paid; remittances when every remittance is paid. A deadline is *done*, *overdue*, *due soon* (within 3 days) or *upcoming*.
+- **The tracker** lists each input for the month: *received* (with how and from whom, and flagged if after the cut-off), *not applicable* (with why), or still expected, next to what already exists in the system for it as a cross-check. Inputs stop being tracked once the payroll is approved.
+  A **log of missing or inconsistent items** records what had to be chased and how it was settled.
+- **Bureau → Due This Week** lists what is overdue or due in the next 7 days across the clients you work on.
+
 ### Statutory rule library
 
 Bureau → **Statutory Rule Library**. The bureau's own PAYE, pension and employer-contribution tables are the master set; this is how a new version reaches clients.

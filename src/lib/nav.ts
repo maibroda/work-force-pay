@@ -20,6 +20,7 @@ export const NAV: NavGroup[] = [
     title: "Bureau",
     items: [
       { href: "/bureau", label: "Clients", perm: "bureau.view", bureauOnly: true },
+      { href: "/bureau/deadlines", label: "Due This Week", perm: "bureau.view", bureauOnly: true },
       { href: "/bureau/rules", label: "Statutory Rule Library", perm: "bureau.view", bureauOnly: true },
     ],
   },
@@ -76,6 +77,7 @@ export const NAV: NavGroup[] = [
       { href: "/payroll/structures", label: "Salary Structures", perm: "structure.view" },
       { href: "/payroll/components", label: "Salary Components", perm: "structure.view" },
       { href: "/payroll/periods", label: "Payroll Periods", perm: "payroll.view" },
+      { href: "/payroll/calendar", label: "Payroll Calendar", perm: "payroll.view" },
       { href: "/payroll/runs", label: "Payroll Runs", perm: "payroll.view" },
       { href: "/payroll/quick-payslip", label: "Quick Payslip", perm: "payroll.view" },
       { href: "/payroll/earnings", label: "Earnings", perm: "payroll.view" },
