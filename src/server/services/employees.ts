@@ -107,10 +107,10 @@ export async function createEmployee(ctx: Ctx, raw: EmployeeInput) {
 }
 
 /** The transactional core of createEmployee — also used when a recruitment candidate is hired. */
-export async function createEmployeeInTx(ctx: Ctx, tx: Tx, v: z.output<typeof employeeSchema>) {
+export async function createEmployeeInTx(ctx: Ctx, tx: Tx, v: z.output<typeof employeeSchema>, extra: { importBatchId?: string } = {}) {
   const employeeNumber = await nextNumber(tx, ctx.orgId, "EMPLOYEE");
   const emp = await tx.employee.create({
-    data: { organizationId: ctx.orgId, employeeNumber, ...toData(v) },
+    data: { organizationId: ctx.orgId, employeeNumber, ...toData(v), importBatchId: extra.importBatchId ?? null },
   });
   await logAudit(
     ctx,

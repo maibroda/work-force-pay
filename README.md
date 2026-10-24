@@ -1075,6 +1075,17 @@ Finance / Accounting → **Credit & Debit Notes** (under Billing); raise one fro
   in date order, and the VAT and integrity checks count them. An invoice with notes can't be cancelled.
 - A debit note is raised against an invoice and shares its due date; a standalone charge with no invoice is not supported yet.
 
+### Importing employees
+
+Workforce / Personnel → **Import Employees** (`employee.manage`). Download the template, fill it in (Excel: Save As → CSV UTF-8) and upload it; Excel `.xlsx` files are not read directly.
+
+- **Checked before anything is saved.** Columns are matched by name regardless of case and spacing. Each row is checked for the required details (name, employment date, category), a category and department that exist (by code or name), real dates (day-first or ISO),
+  a valid email, a 10-digit account number, and **duplicates**: account number, tax ID, pension PIN and name with date of birth are errors, a shared phone number is a warning, both within the file and against everyone already on the books.
+  Missing bank, pension or tax details are warnings, because payroll will flag them later. A file of up to 1,000 rows at a time.
+- **All or nothing by default.** If any row has an error nothing is imported, so a client is never left half loaded; there is an option to import only the clean rows and leave the others out. The file is checked again on the server when you import.
+- **Same path as adding one employee.** Employee numbers are generated, audit entries and onboarding tasks are created. Every import also writes an unalterable batch record (who, when, the file name, and what happened to each row), and each employee is linked to it.
+- Account numbers are checked for length only; the bank check digit needs a bank code list, which is not in place yet.
+
 ### Payroll controls
 
 Payroll → **Payroll Runs**, on a run's Control Centre.
