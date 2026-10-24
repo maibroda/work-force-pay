@@ -16,7 +16,13 @@ export interface NavGroup {
 
 export const NAV: NavGroup[] = [
   { title: "Dashboard", items: [{ href: "/", label: "Dashboard", perm: "dashboard.view" }] },
-  { title: "Bureau", items: [{ href: "/bureau", label: "Clients", perm: "bureau.view", bureauOnly: true }] },
+  {
+    title: "Bureau",
+    items: [
+      { href: "/bureau", label: "Clients", perm: "bureau.view", bureauOnly: true },
+      { href: "/bureau/rules", label: "Statutory Rule Library", perm: "bureau.view", bureauOnly: true },
+    ],
+  },
   {
     title: "Workforce / Personnel",
     items: [

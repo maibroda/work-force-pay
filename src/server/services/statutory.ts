@@ -5,6 +5,7 @@ import { num } from "@/lib/money";
 import type { TaxRuleDef } from "@/lib/payroll/paye";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
+import { assertNotBureauManaged } from "./rule-library";
 
 /** The tax rule version effective on a date. Stored on every payroll run and record. */
 export async function taxRuleFor(tx: Tx, orgId: string, date: Date) {
@@ -50,8 +51,9 @@ export async function taxRuleFor(tx: Tx, orgId: string, date: Date) {
  * Copies every statutory rule version (PAYE with its bands, reliefs and exemptions; pension; payroll; employer cost) from one
  * organization to another, so a new client starts on the same verified tables as the rest. History is copied too, so past dates still calculate.
  */
-export async function copyStatutoryRules(tx: Tx, fromOrgId: string, toOrgId: string) {
-  const taxRules = await tx.taxRule.findMany({ where: { organizationId: fromOrgId }, include: { bands: true, reliefs: true, exemptions: true } });
+export async function copyStatutoryRules(tx: Tx, fromOrgId: string, toOrgId: string, allowed?: ReadonlySet<string>) {
+  const ok = (id: string) => !allowed || allowed.has(id);
+  const taxRules = (await tx.taxRule.findMany({ where: { organizationId: fromOrgId }, include: { bands: true, reliefs: true, exemptions: true } })).filter((r) => ok(r.id));
   for (const r of taxRules)
     await tx.taxRule.create({
       data: {
@@ -68,7 +70,7 @@ export async function copyStatutoryRules(tx: Tx, fromOrgId: string, toOrgId: str
         exemptions: { create: r.exemptions.map((x) => ({ code: x.code, description: x.description, annualGrossCeiling: x.annualGrossCeiling, active: x.active })) },
       },
     });
-  const pension = await tx.pensionRule.findMany({ where: { organizationId: fromOrgId } });
+  const pension = (await tx.pensionRule.findMany({ where: { organizationId: fromOrgId } })).filter((r) => ok(r.id));
   for (const r of pension)
     await tx.pensionRule.create({
       data: { organizationId: toOrgId, version: r.version, employeeRate: r.employeeRate, employerRate: r.employerRate, pensionableCodes: r.pensionableCodes, effectiveFrom: r.effectiveFrom, effectiveTo: r.effectiveTo },
@@ -90,7 +92,7 @@ export async function copyStatutoryRules(tx: Tx, fromOrgId: string, toOrgId: str
         effectiveTo: r.effectiveTo,
       },
     });
-  const employer = await tx.employerCostRule.findMany({ where: { organizationId: fromOrgId } });
+  const employer = (await tx.employerCostRule.findMany({ where: { organizationId: fromOrgId } })).filter((r) => ok(r.id));
   for (const r of employer)
     await tx.employerCostRule.create({
       data: {
@@ -231,6 +233,7 @@ export const taxRuleSchema = z.object({
 /** Adds a NEW tax rule version; the previous version is end-dated, never edited. */
 export async function createTaxRuleVersion(ctx: Ctx, raw: z.input<typeof taxRuleSchema>) {
   assertCan(ctx, "settings.manage");
+  await assertNotBureauManaged(db, ctx.orgId, "PAYE rules");
   const v = taxRuleSchema.parse(raw);
   const from = d(v.effectiveFrom);
   return db.$transaction(async (tx) => {
@@ -306,6 +309,7 @@ export const pensionRuleSchema = z.object({
 
 export async function createPensionRule(ctx: Ctx, raw: z.input<typeof pensionRuleSchema>) {
   assertCan(ctx, "settings.manage");
+  await assertNotBureauManaged(db, ctx.orgId, "Pension rules");
   const v = pensionRuleSchema.parse(raw);
   const from = d(v.effectiveFrom);
   return db.$transaction(async (tx) => {

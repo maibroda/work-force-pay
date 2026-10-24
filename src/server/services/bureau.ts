@@ -13,6 +13,7 @@ import { num } from "@/lib/money";
 import { ensureDefaultChart } from "./accounting";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
+import { startingRuleIds } from "./rule-library";
 import { copyStatutoryRules } from "./statutory";
 
 const opt = z
@@ -96,7 +97,7 @@ export async function onboardClient(ctx: Ctx, raw: z.input<typeof onboardClientS
   return db.$transaction(
     async (tx) => {
       const client = await tx.organization.create({ data: { name: v.name, code: v.code, bureauOrganizationId: bureau.id, currency: bureau.currency } });
-      const rules = await copyStatutoryRules(tx, bureau.id, client.id);
+      const rules = await copyStatutoryRules(tx, bureau.id, client.id, await startingRuleIds(tx, bureau.id));
       await ensureDefaultChart(tx, client.id);
       const engagement = await tx.clientEngagement.create({
         data: {

@@ -598,6 +598,8 @@ model Organization {
   engagement                ClientEngagement?          @relation("EngagementClient")
   staffAccessAsBureau       StaffClientAccess[]        @relation("AccessBureau")
   staffAccessAsClient       StaffClientAccess[]        @relation("AccessClient")
+  ruleReleases              RuleRelease[]
+  rulePublications          RulePublication[]
   employeeImports           EmployeeImportBatch[]
   purchaseInvoices          PurchaseInvoice[]
   purchaseInvoiceDeductions PurchaseInvoiceDeduction[]
@@ -677,6 +679,93 @@ model Organization {
   varianceTotalPct          Decimal                    @default(10) @db.Decimal(5, 2)
   /// An employee's net pay must move by at least this much (naira) to be flagged, so small amounts don't drown the real changes.
   varianceMinAmount         Decimal                    @default(5000) @db.Decimal(16, 2)
+}
+
+enum RuleKind {
+  TAX
+  PENSION
+  EMPLOYER_COST
+}
+
+enum RuleReleaseStatus {
+  PROPOSED
+  VERIFIED
+  PUBLISHED
+  WITHDRAWN
+}
+
+/// The two sign-offs a statutory rate change needs before it reaches any client: one from HR, one from Finance.
+enum VerifierSlot {
+  HR
+  FINANCE
+}
+
+/// A statutory rule version held by the bureau (its master set), put forward for release to its clients. The checksum pins exactly what was
+/// proposed, verified and published: if the master rule is changed afterwards, the release no longer matches and cannot go out.
+model RuleRelease {
+  id                   String            @id @default(cuid())
+  bureauOrganizationId String
+  bureau               Organization      @relation(fields: [bureauOrganizationId], references: [id])
+  kind                 RuleKind
+  /// The master rule row in the bureau's own organization.
+  ruleId               String
+  label                String
+  version              String
+  effectiveFrom        DateTime          @db.Date
+  /// What changed and why.
+  summary              String
+  /// The legal basis or source: the law, gazette, circular or notice this comes from.
+  source               String
+  checksum             String
+  status               RuleReleaseStatus @default(PROPOSED)
+  proposedBy           String
+  proposedByUserId     String
+  createdAt            DateTime          @default(now())
+  publishedAt          DateTime?
+  publishedBy          String?
+  withdrawnReason      String?
+  withdrawnBy          String?
+
+  verifications RuleVerification[]
+  publications  RulePublication[]
+
+  @@index([bureauOrganizationId, createdAt])
+}
+
+model RuleVerification {
+  id             String       @id @default(cuid())
+  releaseId      String
+  release        RuleRelease  @relation(fields: [releaseId], references: [id])
+  slot           VerifierSlot
+  verifierName   String
+  verifierUserId String
+  /// What the rate was checked against.
+  note           String
+  /// The checksum of the rule at the moment it was verified.
+  checksum       String
+  createdAt      DateTime     @default(now())
+
+  @@unique([releaseId, slot])
+}
+
+enum RulePublicationOutcome {
+  PUBLISHED
+  ALREADY_HELD
+  FAILED
+}
+
+model RulePublication {
+  id                   String                 @id @default(cuid())
+  releaseId            String
+  release              RuleRelease            @relation(fields: [releaseId], references: [id])
+  clientOrganizationId String
+  client               Organization           @relation(fields: [clientOrganizationId], references: [id])
+  outcome              RulePublicationOutcome
+  message              String?
+  publishedBy          String
+  createdAt            DateTime               @default(now())
+
+  @@unique([releaseId, clientOrganizationId])
 }
 
 enum EngagementPackage {

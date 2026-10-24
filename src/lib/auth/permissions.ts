@@ -77,6 +77,8 @@ export const PERMISSIONS = [
   "goods.receive", // record goods or services received against a purchase order, never the person who raised it
   "bureau.view", // work in the client organizations of your bureau that you have been given access to
   "bureau.manage", // onboard clients, set their terms, give staff access, and work in every client of the bureau
+  "rules.manage", // put a statutory rule version forward for release to clients, publish a verified one, withdraw an unpublished one
+  "rules.verify", // verify a proposed statutory rate: HR and Finance each, never the person who proposed it
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -135,6 +137,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "leave.manage",
     "self.security",
     "bureau.view",
+    "rules.verify",
   ],
   OPERATIONS: [
     "dashboard.view",
@@ -177,6 +180,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "inventory.view",
     "self.security",
     "bureau.view",
+    "rules.manage",
   ],
   FINANCE: [
     ...READ_ALL,
@@ -195,6 +199,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "billing.rule.manage",
     "note.manage",
     "goods.receive",
+    "rules.verify",
   ],
   AUDITOR: READ_ALL,
   SUPERVISOR: [
