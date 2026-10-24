@@ -93,6 +93,13 @@ async function prepare(ctx: Ctx, tx: Tx, input: PostingInput) {
 
   await checkDimensions(ctx, tx, input.description, resolved);
 
+  // A closed financial year's income and expense accounts are at nil; nothing more may be posted to them in it, or the closing
+  // entries would stop being true. (The closing journal itself, and its reversal, are the exceptions.)
+  if (!input.source.startsWith("YEAR_END_") && resolved.some(({ a }) => a.type === "INCOME" || a.type === "EXPENSE")) {
+    const closed = await tx.fiscalYear.findFirst({ where: { organizationId: ctx.orgId, closingJournalId: { not: null }, startDate: { lte: input.postingDate }, endDate: { gte: input.postingDate } }, select: { name: true } });
+    if (closed) throw new BusinessError(`${closed.name} has been closed, so nothing more can be posted to income or expense accounts dated in it. Reopen the year first (with a reason), or date the entry in the new year.`);
+  }
+
   // The accounting period must accept postings.
   const period = await periodFor(tx, ctx.orgId, input.postingDate);
   const check = postingAllowed(period.status as PeriodStatus, period.name, canPostWhenSoftClosed(ctx));

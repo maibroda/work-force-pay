@@ -322,8 +322,16 @@ disagree with the ledger it records. The monthly receivables report reads the sn
 closed month with a fresh as-at calculation to show drift. Statement and reconciliation figures are made as-at correct for invoices cancelled later. Existing tests that
 closed over pending work now waive it explicitly.
 
-**Phase 4, still to do:** year-end close (closing entries and the retained-earnings transfer, then closing the last period and the year), and
-payables snapshots at the invoice level once supplier statements exist (Phase 5).
+## 5j. Phase 4, last step — year-end close (built)
+
+`FiscalYear` gains `closedAt` / `closingJournalId` / `retainedEarningsAccountId`. `closeFiscalYear` posts one `YEAR_END_CLOSE` journal through the posting engine, dated
+the last day of the year: each income and expense balance reversed per dimension combination, one balancing line on the chosen equity account. The heavy read happens
+before the transaction, which re-checks the year's P&L total so a concurrent posting aborts the close. The engine then refuses income and expense postings dated in a closed
+year (except the year-end journals), a trigger keeps the closed-year fields consistent, and the integrity check verifies the nil balances. The income statement and dimension
+ledger exclude `YEAR_END_*` journals; the trial balance and balance sheet include them. Reopening posts the exact mirror with `reversalOfId`. The year-end journal is not
+reversible from the manual-journal reversal screen (it is not a manual journal).
+
+**Phase 4 is complete**, apart from payables snapshots at the invoice level, which wait for supplier statements (Phase 5). Next: Phase 5, payables and procurement.
 
 ## 5k. Phase 5, first step — goods receipt and three-way match (built)
 

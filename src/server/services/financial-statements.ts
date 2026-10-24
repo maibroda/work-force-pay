@@ -29,9 +29,9 @@ type AccountRow = { account: { id: string; code: string; name: string; type: str
 
 /** Every JournalLine in range, grouped by account, net = debit − credit (each account's own
  *  natural balance side is whichever of debit/credit that nets positive). */
-async function accountBalances(orgId: string, where: { lte?: Date; gte?: Date }) {
+async function accountBalances(orgId: string, where: { lte?: Date; gte?: Date }, excludeSources: string[] = []) {
   const lines = await db.journalLine.findMany({
-    where: { journal: { organizationId: orgId, postingDate: where } },
+    where: { journal: { organizationId: orgId, postingDate: where, ...(excludeSources.length ? { source: { notIn: excludeSources } } : {}) } },
     include: { account: true },
   });
   const byAccount = new Map<string, AccountRow>();
@@ -76,7 +76,8 @@ export async function incomeStatement(ctx: Ctx, from: string, to: string) {
   const toDate = d(to);
   if (toDate < fromDate) throw new Error("'to' must be on or after 'from'.");
 
-  const balances = await accountBalances(ctx.orgId, { gte: fromDate, lte: toDate });
+  // the year-end closing journal clears these accounts to nil; a year's performance is what happened in it, so it is left out
+  const balances = await accountBalances(ctx.orgId, { gte: fromDate, lte: toDate }, ["YEAR_END_CLOSE", "YEAR_END_REOPEN"]);
   const sortByCode = (a: { account: { code: string } }, b: { account: { code: string } }) =>
     a.account.code.localeCompare(b.account.code);
 
