@@ -21,6 +21,7 @@ export const NAV: NavGroup[] = [
     title: "Workforce / Personnel",
     items: [
       { href: "/employees", label: "Employees", perm: "employee.view" },
+      { href: "/employees/import", label: "Import Employees", perm: "employee.manage" },
       { href: "/employees/categories", label: "Employee Categories", perm: "employee.view" },
       { href: "/employees/departments", label: "Departments", perm: "employee.view" },
       { href: "/employees/bank", label: "Bank Information", perm: "employee.sensitive" },

@@ -32,7 +32,7 @@ That is the one structural decision the rest depends on. Two ways to do it:
 | 3.1 Per-client rule configuration | Built | Salary structures, components, overtime, deduction types are per organization. |
 | 3.1 Agreement, SLA, data-processing terms | Partial | A data-protection policy and retention rules exist; terms are not stored per client. |
 | 3.2 Employee master data | Built | Records, categories, sites (beats), bank/pension/tax details, change requests with approval. |
-| 3.2 Bulk import and validation | Missing *(unverified)* | No employee import found. |
+| 3.2 Bulk import and validation | Built (CSV) | Template, preview with row-level errors and warnings, duplicate checks within the file and against existing staff, all-or-nothing import, unalterable batch record. Account numbers are checked for length only (no bank check digit yet); `.xlsx` is not read directly. |
 | 3.2 Joiners, leavers, effective-dated history | Partial | Exits and clearance, movements and employment contracts exist; a generic effective-dated change history for pay fields should be checked. |
 | 3.2 Encrypted, masked sensitive fields | Partial | Sensitive changes are approved and audited and fields are permission-gated. No field-level encryption was found. |
 | 3.3 Input templates | Partial | Overtime, arrears, earnings, deductions and loans each have entry screens; per-client downloadable templates and import do not exist. |

@@ -598,6 +598,7 @@ model Organization {
   engagement                ClientEngagement?          @relation("EngagementClient")
   staffAccessAsBureau       StaffClientAccess[]        @relation("AccessBureau")
   staffAccessAsClient       StaffClientAccess[]        @relation("AccessClient")
+  employeeImports           EmployeeImportBatch[]
   purchaseInvoices          PurchaseInvoice[]
   purchaseInvoiceDeductions PurchaseInvoiceDeduction[]
   vendorPayments            VendorPayment[]
@@ -891,43 +892,66 @@ model EmployeeCategory {
   @@unique([organizationId, code])
 }
 
+/// One bulk import of employees from a file: who, when, which file, and what happened to each row. Never changed afterwards.
+model EmployeeImportBatch {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  fileName        String
+  rowCount        Int
+  importedCount   Int
+  skippedCount    Int
+  warningCount    Int
+  /// Per row: line, outcome (IMPORTED / SKIPPED), employee number, and the errors or warnings found.
+  outcomes        Json
+  createdBy       String
+  createdByUserId String
+  createdAt       DateTime     @default(now())
+
+  employees Employee[]
+
+  @@index([organizationId, createdAt])
+}
+
 model Employee {
-  id                 String           @id @default(cuid())
+  id                 String               @id @default(cuid())
   organizationId     String
-  organization       Organization     @relation(fields: [organizationId], references: [id])
+  organization       Organization         @relation(fields: [organizationId], references: [id])
+  importBatchId      String?
+  importBatch        EmployeeImportBatch? @relation(fields: [importBatchId], references: [id])
   employeeNumber     String
   firstName          String
   middleName         String?
   lastName           String
   gender             Gender?
-  dateOfBirth        DateTime?        @db.Date
+  dateOfBirth        DateTime?            @db.Date
   phone              String?
   email              String?
   address            String?
-  employmentDate     DateTime         @db.Date
-  exitDate           DateTime?        @db.Date
+  employmentDate     DateTime             @db.Date
+  exitDate           DateTime?            @db.Date
   /// Set when the personal details were removed after the retention period (the record, employee number and pay figures stay).
   anonymizedAt       DateTime?
-  status             EmployeeStatus   @default(ACTIVE)
+  status             EmployeeStatus       @default(ACTIVE)
   categoryId         String
-  category           EmployeeCategory @relation(fields: [categoryId], references: [id])
+  category           EmployeeCategory     @relation(fields: [categoryId], references: [id])
   departmentId       String?
-  department         Department?      @relation(fields: [departmentId], references: [id])
+  department         Department?          @relation(fields: [departmentId], references: [id])
   bankName           String?
   accountNumber      String?
   accountName        String?
   taxId              String?
   pensionPin         String?
   pfa                String?
-  annualRent         Decimal?         @db.Decimal(14, 2) // declared rent for NTA 2025 rent relief
+  annualRent         Decimal?             @db.Decimal(14, 2) // declared rent for NTA 2025 rent relief
   currentClientId    String?
-  currentClient      Client?          @relation(fields: [currentClientId], references: [id])
+  currentClient      Client?              @relation(fields: [currentClientId], references: [id])
   currentBeatId      String?
-  currentBeat        Beat?            @relation("CurrentBeat", fields: [currentBeatId], references: [id])
+  currentBeat        Beat?                @relation("CurrentBeat", fields: [currentBeatId], references: [id])
   reportingManagerId String?
-  reportingManager   Employee?        @relation("ReportingLine", fields: [reportingManagerId], references: [id])
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
+  reportingManager   Employee?            @relation("ReportingLine", fields: [reportingManagerId], references: [id])
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
 
   user                    User?
   deployments             Deployment[]

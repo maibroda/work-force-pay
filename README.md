@@ -1086,6 +1086,17 @@ For a payroll outsourcing business (ThreeRoots). **Each client is its own organi
   Access is re-checked against the database on every request, so removing it takes effect at once; a client's own users can never reach the bureau or another client; and database rules stop a client being moved to another bureau or access crossing bureaus.
 - **Audited where it happens.** Entering a client, granting and removing access, and everything staff do inside a client are written to the client's own audit log under the person's own name, tagged with the bureau they came from. Because the same person is the same user in every client, maker-checker rules (the preparer can't approve) hold across clients.
 
+### Importing employees
+
+Workforce / Personnel → **Import Employees** (`employee.manage`). Download the template, fill it in (Excel: Save As → CSV UTF-8) and upload it; Excel `.xlsx` files are not read directly.
+
+- **Checked before anything is saved.** Columns are matched by name regardless of case and spacing. Each row is checked for the required details (name, employment date, category), a category and department that exist (by code or name), real dates (day-first or ISO),
+  a valid email, a 10-digit account number, and **duplicates**: account number, tax ID, pension PIN and name with date of birth are errors, a shared phone number is a warning, both within the file and against everyone already on the books.
+  Missing bank, pension or tax details are warnings, because payroll will flag them later. A file of up to 1,000 rows at a time.
+- **All or nothing by default.** If any row has an error nothing is imported, so a client is never left half loaded; there is an option to import only the clean rows and leave the others out. The file is checked again on the server when you import.
+- **Same path as adding one employee.** Employee numbers are generated, audit entries and onboarding tasks are created. Every import also writes an unalterable batch record (who, when, the file name, and what happened to each row), and each employee is linked to it.
+- Account numbers are checked for length only; the bank check digit needs a bank code list, which is not in place yet.
+
 ### Payroll controls
 
 Payroll → **Payroll Runs**, on a run's Control Centre.
