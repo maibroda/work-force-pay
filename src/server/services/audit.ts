@@ -22,7 +22,8 @@ export async function logAudit(ctx: Ctx, entry: AuditEntry, tx: Tx = db) {
       oldValue: entry.oldValue === undefined ? undefined : toJson(entry.oldValue),
       newValue: entry.newValue === undefined ? undefined : toJson(entry.newValue),
       reason: entry.reason ?? null,
-      metadata: toJson({ role: ctx.role, ip: ctx.ip ?? null }),
+      // `bureau` is set when bureau staff did this while working in a client organization: the organization they work for
+      metadata: toJson({ role: ctx.role, ip: ctx.ip ?? null, ...(ctx.homeOrgId ? { bureau: ctx.homeOrgId } : {}) }),
     },
   });
 }

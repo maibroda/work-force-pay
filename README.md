@@ -1075,6 +1075,17 @@ Finance / Accounting → **Credit & Debit Notes** (under Billing); raise one fro
   in date order, and the VAT and integrity checks count them. An invoice with notes can't be cancelled.
 - A debit note is raised against an invoice and shares its due date; a standalone charge with no invoice is not supported yet.
 
+### Payroll bureau: clients and staff access
+
+For a payroll outsourcing business (ThreeRoots). **Each client is its own organization**, so its employees, pay rules, payroll and audit log are isolated from every other client's by construction. The bureau keeps its own organization for its own books.
+
+- **Set up:** a bureau manager (`bureau.manage`) opens *Bureau → Clients* and makes the organization a payroll bureau. The demo seed has one: `founder@threeroots.test` (and officer, reviewer, HR and auditor users), same demo password.
+- **Onboard a client** (*Onboard a client*): creates the client's organization with the bureau's statutory rule tables copied in (so the bureau's tables are the master set) and a standard chart of accounts, and records the engagement:
+  package, 6 or 12 month term, start date, rate per employee, monthly minimum, onboarding fee, add-ons, contact, agreed service levels, and the reference and date of the signed data-processing terms.
+- **Who can work where.** Bureau managers can work in every client. Other staff (`bureau.view`: HR, payroll, finance, auditor roles) only in the clients they are given, on the client's page. They switch organization with *Work in this client*, and a banner (with *Back to…*) shows where they are.
+  Access is re-checked against the database on every request, so removing it takes effect at once; a client's own users can never reach the bureau or another client; and database rules stop a client being moved to another bureau or access crossing bureaus.
+- **Audited where it happens.** Entering a client, granting and removing access, and everything staff do inside a client are written to the client's own audit log under the person's own name, tagged with the bureau they came from. Because the same person is the same user in every client, maker-checker rules (the preparer can't approve) hold across clients.
+
 ### Payroll controls
 
 Payroll → **Payroll Runs**, on a run's Control Centre.

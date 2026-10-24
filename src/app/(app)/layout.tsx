@@ -9,12 +9,15 @@ import { NAV, SELF_NAV } from "@/lib/nav";
 import { db } from "@/lib/db";
 import { Sidebar } from "@/components/sidebar";
 import { logoutAction } from "@/app/actions/auth";
+import { returnToBureauAction } from "@/app/actions/bureau";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // Every page inside this layout runs its own requirePage (which enforces the two-factor requirement); the
   // layout itself must not, or someone sent to My security would be redirected from it, in a loop.
   const ctx = await requirePage(undefined, { allowUnenrolled: true });
   const [org, gate] = await Promise.all([db.organization.findUnique({ where: { id: ctx.orgId } }), twoFactorStateFor(ctx)]);
+  const home = ctx.homeOrgId ? await db.organization.findUnique({ where: { id: ctx.homeOrgId }, select: { name: true } }) : null;
+  const showBureau = Boolean(org?.isBureau || ctx.homeOrgId);
   const reminder = twoFactorReminder(gate.state, gate.enforceFrom, new Date(new Date().toISOString().slice(0, 10)));
   const groups = [
     ...(["SUPERVISOR", "EMPLOYEE"].includes(ctx.role) ? SELF_NAV : []),
@@ -24,7 +27,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .map((g) => ({
       title: g.title,
       items: g.items
-        .filter((i) => can(ctx.role, i.perm))
+        .filter((i) => can(ctx.role, i.perm) && (!i.bureauOnly || showBureau))
         .map(({ href, label, section }) => ({ href, label, section })),
     }))
     .filter((g) => g.items.length);
@@ -49,6 +52,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </button>
           </form>
         </header>
+        {ctx.homeOrgId && (
+          <div className="no-print flex flex-wrap items-center gap-2 border-b border-blue-300 bg-blue-50 px-4 py-2 text-sm text-blue-900">
+            You are working in <b>{org?.name}</b> for {home?.name ?? "the bureau"}. Everything you do here is recorded in this client&apos;s audit log under your name.
+            <form action={returnToBureauAction}>
+              <button className="font-medium underline" type="submit">
+                Back to {home?.name ?? "the bureau"}
+              </button>
+            </form>
+          </div>
+        )}
         {reminder && (
           <div className="no-print border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">
             {reminder}{" "}

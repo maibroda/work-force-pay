@@ -588,6 +588,16 @@ model Organization {
   vendors                   Vendor[]
   purchaseOrders            PurchaseOrder[]
   goodsReceipts             GoodsReceipt[]
+  /// A payroll bureau (ThreeRoots) serves client organizations. Each client is its own organization, so its data is isolated by construction;
+  /// bureau staff are given access to the clients they work on and switch between them.
+  isBureau                  Boolean                    @default(false)
+  bureauOrganizationId      String?
+  bureauOrganization        Organization?              @relation("BureauClients", fields: [bureauOrganizationId], references: [id])
+  clientOrganizations       Organization[]             @relation("BureauClients")
+  engagementsAsBureau       ClientEngagement[]         @relation("EngagementBureau")
+  engagement                ClientEngagement?          @relation("EngagementClient")
+  staffAccessAsBureau       StaffClientAccess[]        @relation("AccessBureau")
+  staffAccessAsClient       StaffClientAccess[]        @relation("AccessClient")
   purchaseInvoices          PurchaseInvoice[]
   purchaseInvoiceDeductions PurchaseInvoiceDeduction[]
   vendorPayments            VendorPayment[]
@@ -668,6 +678,70 @@ model Organization {
   varianceMinAmount         Decimal                    @default(5000) @db.Decimal(16, 2)
 }
 
+enum EngagementPackage {
+  PAYROLL_ESSENTIALS
+  PAYROLL_COMPLIANCE
+  MANAGED_PAYROLL_PLUS
+  ENTERPRISE
+  HEALTH_CHECK
+}
+
+enum EngagementStatus {
+  ONBOARDING
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+/// The commercial terms and contacts for one client of the bureau. Lives with the bureau; the client organization holds the payroll data.
+model ClientEngagement {
+  id                   String            @id @default(cuid())
+  bureauOrganizationId String
+  bureau               Organization      @relation("EngagementBureau", fields: [bureauOrganizationId], references: [id])
+  clientOrganizationId String            @unique
+  client               Organization      @relation("EngagementClient", fields: [clientOrganizationId], references: [id])
+  package              EngagementPackage
+  status               EngagementStatus  @default(ONBOARDING)
+  startDate            DateTime          @db.Date
+  /// 6 or 12 months.
+  termMonths           Int
+  perEmployeeRate      Decimal           @default(0) @db.Decimal(14, 2)
+  monthlyMinimum       Decimal           @default(0) @db.Decimal(14, 2)
+  onboardingFee        Decimal           @default(0) @db.Decimal(14, 2)
+  addOns               String?
+  contactName          String?
+  contactEmail         String?
+  contactPhone         String?
+  /// Agreed turnaround and service levels, in the client's words.
+  slaTerms             String?
+  /// Reference to the signed data-processing terms, and when they were signed.
+  dpaReference         String?
+  dpaSignedAt          DateTime?         @db.Date
+  notes                String?
+  createdBy            String
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  @@index([bureauOrganizationId, status])
+}
+
+/// Which bureau staff may work in which client organization. Whoever manages the bureau can work in all of them without a grant.
+model StaffClientAccess {
+  id                   String       @id @default(cuid())
+  bureauOrganizationId String
+  bureau               Organization @relation("AccessBureau", fields: [bureauOrganizationId], references: [id])
+  userId               String
+  user                 User         @relation(fields: [userId], references: [id])
+  clientOrganizationId String
+  client               Organization @relation("AccessClient", fields: [clientOrganizationId], references: [id])
+  grantedBy            String
+  grantedByUserId      String
+  createdAt            DateTime     @default(now())
+
+  @@unique([userId, clientOrganizationId])
+  @@index([clientOrganizationId])
+}
+
 model User {
   id              String       @id @default(cuid())
   organizationId  String
@@ -697,6 +771,7 @@ model User {
   backupCodes    String[]  @default([])
 
   passwordResetTokens PasswordResetToken[]
+  clientAccess        StaffClientAccess[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

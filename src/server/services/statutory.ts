@@ -46,6 +46,71 @@ export async function taxRuleFor(tx: Tx, orgId: string, date: Date) {
   return { rule, def };
 }
 
+/**
+ * Copies every statutory rule version (PAYE with its bands, reliefs and exemptions; pension; payroll; employer cost) from one
+ * organization to another, so a new client starts on the same verified tables as the rest. History is copied too, so past dates still calculate.
+ */
+export async function copyStatutoryRules(tx: Tx, fromOrgId: string, toOrgId: string) {
+  const taxRules = await tx.taxRule.findMany({ where: { organizationId: fromOrgId }, include: { bands: true, reliefs: true, exemptions: true } });
+  for (const r of taxRules)
+    await tx.taxRule.create({
+      data: {
+        organizationId: toOrgId,
+        code: r.code,
+        name: r.name,
+        version: r.version,
+        legalBasis: r.legalBasis,
+        effectiveFrom: r.effectiveFrom,
+        effectiveTo: r.effectiveTo,
+        active: r.active,
+        bands: { create: r.bands.map((b) => ({ sortOrder: b.sortOrder, lowerBound: b.lowerBound, upperBound: b.upperBound, rate: b.rate })) },
+        reliefs: { create: r.reliefs.map((x) => ({ code: x.code, name: x.name, type: x.type, rate: x.rate, amount: x.amount, cap: x.cap, active: x.active })) },
+        exemptions: { create: r.exemptions.map((x) => ({ code: x.code, description: x.description, annualGrossCeiling: x.annualGrossCeiling, active: x.active })) },
+      },
+    });
+  const pension = await tx.pensionRule.findMany({ where: { organizationId: fromOrgId } });
+  for (const r of pension)
+    await tx.pensionRule.create({
+      data: { organizationId: toOrgId, version: r.version, employeeRate: r.employeeRate, employerRate: r.employerRate, pensionableCodes: r.pensionableCodes, effectiveFrom: r.effectiveFrom, effectiveTo: r.effectiveTo },
+    });
+  const payroll = await tx.payrollRule.findMany({ where: { organizationId: fromOrgId } });
+  for (const r of payroll)
+    await tx.payrollRule.create({
+      data: {
+        organizationId: toOrgId,
+        version: r.version,
+        prorationBasis: r.prorationBasis,
+        defaultOperativeSharePct: r.defaultOperativeSharePct,
+        standardHoursPerDay: r.standardHoursPerDay,
+        overtimeMultiplier: r.overtimeMultiplier,
+        maxOvertimeHoursPerMonth: r.maxOvertimeHoursPerMonth,
+        maxDeductionPctOfGross: r.maxDeductionPctOfGross,
+        backOfficeChargePct: r.backOfficeChargePct,
+        effectiveFrom: r.effectiveFrom,
+        effectiveTo: r.effectiveTo,
+      },
+    });
+  const employer = await tx.employerCostRule.findMany({ where: { organizationId: fromOrgId } });
+  for (const r of employer)
+    await tx.employerCostRule.create({
+      data: {
+        organizationId: toOrgId,
+        version: r.version,
+        itfPct: r.itfPct,
+        nsitfPct: r.nsitfPct,
+        nhfMedicalPct: r.nhfMedicalPct,
+        insurancePct: r.insurancePct,
+        uniformKitsPct: r.uniformKitsPct,
+        recruitmentTrainingPct: r.recruitmentTrainingPct,
+        leaveRelieverPct: r.leaveRelieverPct,
+        outsourcingLeaveAllowancePct: r.outsourcingLeaveAllowancePct,
+        effectiveFrom: r.effectiveFrom,
+        effectiveTo: r.effectiveTo,
+      },
+    });
+  return { tax: taxRules.length, pension: pension.length, payroll: payroll.length, employerCost: employer.length };
+}
+
 export async function pensionRuleFor(tx: Tx, orgId: string, date: Date) {
   const r = await tx.pensionRule.findFirst({
     where: {
