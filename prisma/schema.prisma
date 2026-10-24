@@ -658,6 +658,14 @@ model Organization {
   matchQtyPct               Decimal                    @default(0) @db.Decimal(5, 2)
   /// A bill with no purchase order behind it needs a second person's approval at or above this amount (zero: every such bill).
   billApprovalThreshold     Decimal                    @default(500000) @db.Decimal(16, 2)
+  /// Whether a payroll must be reconciled to the previous one and signed off before it can be submitted for approval.
+  reconciliationRequired    Boolean                    @default(false)
+  /// Payroll variance checks against the previous payroll: a change beyond these needs a written explanation before submission.
+  varianceHeadcountPct      Decimal                    @default(5) @db.Decimal(5, 2)
+  varianceEmployeePct       Decimal                    @default(20) @db.Decimal(5, 2)
+  varianceTotalPct          Decimal                    @default(10) @db.Decimal(5, 2)
+  /// An employee's net pay must move by at least this much (naira) to be flagged, so small amounts don't drown the real changes.
+  varianceMinAmount         Decimal                    @default(5000) @db.Decimal(16, 2)
 }
 
 model User {
@@ -1909,6 +1917,19 @@ model PayrollRun {
   calculatedBy                   String?
   calculatedAt                   DateTime?
   calculationCount               Int           @default(0)
+  /// Everyone who has calculated this payroll. None of them, nor whoever submitted it, may approve it.
+  preparedByUserIds              String[]      @default([])
+  submittedBy                    String?
+  submittedByUserId              String?
+  submittedAt                    DateTime?
+  approvedBy                     String?
+  approvedByUserId               String?
+  approvedAt                     DateTime?
+  /// Sign-off that this payroll has been reconciled to the previous one. Cleared when the payroll is recalculated.
+  reconciledBy                   String?
+  reconciledByUserId             String?
+  reconciledAt                   DateTime?
+  reconciliationNote             String?
   createdAt                      DateTime      @default(now())
   updatedAt                      DateTime      @updatedAt
 
@@ -2030,22 +2051,28 @@ model PayrollAllocation {
 }
 
 model PayrollValidationIssue {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  runId          String
-  run            PayrollRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
-  employeeId     String?
-  employee       Employee?    @relation(fields: [employeeId], references: [id])
-  category       String // POPULATION, SALARY, ATTENDANCE, LOCATION, BANK, PENSION, PAYE, OVERTIME, ARREARS, DEDUCTIONS, DUPLICATES
-  severity       Severity
-  code           String
-  message        String
-  resolved       Boolean      @default(false)
-  overridden     Boolean      @default(false)
-  overrideReason String?
-  overriddenBy   String?
-  createdAt      DateTime     @default(now())
+  id                  String       @id @default(cuid())
+  organizationId      String
+  organization        Organization @relation(fields: [organizationId], references: [id])
+  runId               String
+  run                 PayrollRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  employeeId          String?
+  employee            Employee?    @relation(fields: [employeeId], references: [id])
+  category            String // POPULATION, SALARY, ATTENDANCE, LOCATION, BANK, PENSION, PAYE, OVERTIME, ARREARS, DEDUCTIONS, DUPLICATES
+  severity            Severity
+  code                String
+  message             String
+  resolved            Boolean      @default(false)
+  overridden          Boolean      @default(false)
+  overrideReason      String?
+  overriddenBy        String?
+  /// Variance findings must be explained in writing before the payroll can be submitted.
+  requiresExplanation Boolean      @default(false)
+  explanation         String?
+  explainedBy         String?
+  explainedByUserId   String?
+  explainedAt         DateTime?
+  createdAt           DateTime     @default(now())
 
   @@index([organizationId, runId, severity])
 }

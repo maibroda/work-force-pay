@@ -3,6 +3,9 @@ import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { getRunDetail, listRecords } from "@/server/services/payroll";
+import { reconciliationFor } from "@/server/services/payroll-controls";
+import { ReconciliationPanel } from "./reconciliation-panel";
+import { SmartForm } from "@/components/smart-form";
 import { compactNaira, naira, num } from "@/lib/money";
 import { fmtDate } from "@/lib/dates";
 import { FilterBar, FilterField, PageHeader, Section, Stat, StatGrid, Empty } from "@/components/page";
@@ -13,6 +16,8 @@ import { Table, TBody, TD, TH, THead, TR, TFoot } from "@/components/ui/table";
 import {
   approveRunAction,
   createBatchesAction,
+  explainIssueAction,
+  setVariancePolicyAction,
   generateRemittancesAction,
   lockRunAction,
   overrideIssueAction,
@@ -33,6 +38,7 @@ const CATS = [
   "ARREARS",
   "DEDUCTIONS",
   "DUPLICATES",
+  "VARIANCE",
 ];
 
 export default async function RunPage({
@@ -48,6 +54,9 @@ export default async function RunPage({
   const run = await getRunDetail(ctx, id);
   if (!run) notFound();
   const records = await listRecords(ctx, id, sp.q);
+  const recon = run.type === "REGULAR" ? await reconciliationFor(ctx, id) : null;
+  const controlPolicy = recon && can(ctx.role, "settings.manage") ? { policy: recon.policy, reconciliationRequired: recon.reconciliationRequired } : null;
+  const mine = run.preparedByUserIds.includes(ctx.userId) || run.submittedByUserId === ctx.userId;
   const open = run.issues.filter((i) => !i.resolved && !i.overridden);
   const crit = open.filter((i) => i.severity === "CRITICAL");
   const warn = open.filter((i) => i.severity === "WARNING");
@@ -81,7 +90,7 @@ export default async function RunPage({
             {run.status === "CALCULATED" && can(ctx.role, "payroll.run") && (
               <ActionButton action={submitRunAction.bind(null, run.id)}>Submit for approval</ActionButton>
             )}
-            {run.status === "PENDING_APPROVAL" && can(ctx.role, "payroll.approve") && (
+            {run.status === "PENDING_APPROVAL" && can(ctx.role, "payroll.approve") && !mine && (
               <ActionButton action={approveRunAction.bind(null, run.id)} variant="success">
                 Approve payroll
               </ActionButton>
@@ -113,6 +122,12 @@ export default async function RunPage({
           </>
         }
       />
+      <p className="text-xs text-muted-foreground">
+        Prepared by {run.calculatedBy ?? "—"}
+        {run.submittedBy ? ` · submitted by ${run.submittedBy} on ${fmtDate(run.submittedAt)}` : ""}
+        {run.approvedBy ? ` · approved by ${run.approvedBy}${run.approvedAt ? ` on ${fmtDate(run.approvedAt)}` : ""}` : ""}
+        {run.status === "PENDING_APPROVAL" && mine ? " · you prepared or submitted this payroll, so someone else has to approve it" : ""}
+      </p>
       <StatGrid cols={6}>
         <Stat
           label="Critical errors"
@@ -164,6 +179,8 @@ export default async function RunPage({
           </div>
         </Section>
       )}
+
+      {recon && <ReconciliationPanel ctx={ctx} view={recon} />}
 
       <Section
         title="Validation categories"
@@ -259,6 +276,14 @@ export default async function RunPage({
                     <span title={i.overrideReason ?? ""}>
                       <Badge tone="violet">Overridden</Badge> by {i.overriddenBy}
                     </span>
+                  ) : i.requiresExplanation ? (
+                    i.explanation ? (
+                      <span title={i.explanation}>
+                        <Badge tone="green">Explained</Badge> by {i.explainedBy}: {i.explanation}
+                      </span>
+                    ) : (
+                      <Badge tone="amber">Explanation needed</Badge>
+                    )
                   ) : i.resolved ? (
                     <Badge tone="green">Resolved</Badge>
                   ) : (
@@ -266,9 +291,20 @@ export default async function RunPage({
                   )}
                 </TD>
                 <TD>
+                  {i.requiresExplanation && !i.explanation && run.status === "CALCULATED" && can(ctx.role, "payroll.run") && (
+                    <ActionButton
+                      action={explainIssueAction.bind(null, i.id)}
+                      reason
+                      reasonPlaceholder="Why did this change? (min 10 chars)"
+                      variant="outline"
+                    >
+                      Explain
+                    </ActionButton>
+                  )}
                   {i.severity === "CRITICAL" &&
                     !i.overridden &&
                     can(ctx.role, "payroll.override") &&
+                    !run.preparedByUserIds.includes(ctx.userId) &&
                     ["CALCULATED", "PENDING_APPROVAL"].includes(run.status) && (
                       <ActionButton
                         action={overrideIssueAction.bind(null, i.id)}
@@ -378,6 +414,25 @@ export default async function RunPage({
           </TFoot>
         </Table>
       </Section>
+      {controlPolicy && (
+        <Section
+          title="Payroll control settings"
+          description="Findings beyond these limits against the previous payroll need a written explanation before submission. Applies to the whole organisation."
+        >
+          <SmartForm
+            columns={3}
+            submitLabel="Save settings"
+            action={setVariancePolicyAction}
+            fields={[
+              { name: "headcountPct", label: "Headcount change (%)", type: "number", required: true, min: 0, defaultValue: controlPolicy.policy.headcountPct },
+              { name: "totalPct", label: "Total net pay change (%)", type: "number", required: true, min: 0, defaultValue: controlPolicy.policy.totalPct },
+              { name: "employeePct", label: "One person's net pay change (%)", type: "number", required: true, min: 0, defaultValue: controlPolicy.policy.employeePct },
+              { name: "minAmount", label: "…and at least (₦)", type: "number", required: true, min: 0, defaultValue: controlPolicy.policy.minAmount },
+              { name: "reconciliationRequired", label: "Reconciliation sign-off required before submission", type: "checkbox", defaultValue: controlPolicy.reconciliationRequired },
+            ]}
+          />
+        </Section>
+      )}
       <p className="text-xs text-muted-foreground">
         Period {fmtDate(run.period.startDate)} – {fmtDate(run.period.endDate)}. Approved by{" "}
         {run.period.approvedBy ?? "—"}; locked by {run.period.lockedBy ?? "—"}.

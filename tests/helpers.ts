@@ -51,3 +51,10 @@ export async function isolatedOrg() {
   });
   return { org, guardId: guard.id, officeId: office.id, deptId: dept.id, ctx };
 }
+
+/** Writes the explanation every variance finding on a run needs before it can be submitted (tests that only want to move a run along). */
+export async function explainVariances(ctx: Ctx, runId: string) {
+  const { explainIssue } = await import("@/server/services/payroll-controls");
+  const open = await db.payrollValidationIssue.findMany({ where: { runId, requiresExplanation: true, explanation: null, overridden: false } });
+  for (const i of open) await explainIssue(ctx, i.id, "Test: movement reviewed and accepted.");
+}

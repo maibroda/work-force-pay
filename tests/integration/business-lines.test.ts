@@ -16,7 +16,7 @@ import { deployEmployee, recordAttendance, recordMonthlyAttendance } from "@/ser
 import { generateRemittances, listRemittances } from "@/server/services/payments";
 import { approveRun, createPeriod, lockRun, runPayroll, submitForApproval } from "@/server/services/payroll";
 import { clientProfitability } from "@/server/services/reports";
-import { beatByName, ctxFor, uid } from "../helpers";
+import { beatByName, ctxFor, explainVariances, uid } from "../helpers";
 
 describe("business lines: guarding vs outsourcing vs back-office", () => {
   it("a contract's business line can be reclassified, and only by someone who can manage clients", async () => {
@@ -122,6 +122,7 @@ describe("business lines: guarding vs outsourcing vs back-office", () => {
       where: { runId: run.id, severity: "CRITICAL", overridden: false },
     });
     expect(criticals).toBe(0);
+    await explainVariances(payroll, run.id);
     await submitForApproval(payroll, run.id);
     await approveRun(fin, run.id);
     await lockRun(fin, run.id);

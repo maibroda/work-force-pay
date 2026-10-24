@@ -22,7 +22,8 @@ import {
   submitForApproval,
 } from "@/server/services/payroll";
 import { loadRateBook } from "@/server/services/rates";
-import { beatByName, ctxFor, employeeByNumber, periodFor } from "../helpers";
+import { beatByName, ctxFor, employeeByNumber, explainVariances, periodFor } from "../helpers";
+import { explainIssue } from "@/server/services/payroll-controls";
 
 /** Runs in order against the seeded, OPEN September 2026 payroll. */
 describe("September 2026 payroll (seeded)", () => {
@@ -173,12 +174,36 @@ describe("September 2026 payroll (seeded)", () => {
     expect(num(after.totalEarnings)).toBeCloseTo(num(before.totalEarnings) + 7000, 2);
   });
 
+  it("#26b variance findings against the previous payroll need a written explanation, which survives a recalculation", async () => {
+    const ctx = await ctxFor("PAYROLL_ADMIN");
+    const sep = await periodFor(ctx, 2026, 9);
+    let run = await runPayroll(ctx, sep.id);
+    const findings = await db.payrollValidationIssue.findMany({ where: { runId: run.id, requiresExplanation: true } });
+    expect(findings.length).toBeGreaterThan(0);
+    expect(findings.every((f) => f.category === "VARIANCE" && f.severity === "WARNING" && !f.explanation)).toBe(true);
+    expect((await db.payrollRun.findUniqueOrThrow({ where: { id: run.id } })).preparedByUserIds).toContain(ctx.userId);
+
+    // the payroll can't be submitted while a finding is unexplained, and a one-word answer is not an explanation
+    await expect(submitForApproval(ctx, run.id)).rejects.toThrow(/written explanation/);
+    await expect(explainIssue(ctx, findings[0].id, "ok")).rejects.toThrow(/at least 10/);
+    await explainIssue(ctx, findings[0].id, "Overtime and the new Lekki posting account for this");
+
+    // recalculating gives the same finding the same words; nothing else is silently explained
+    run = await runPayroll(ctx, sep.id);
+    const again = await db.payrollValidationIssue.findMany({ where: { runId: run.id, requiresExplanation: true } });
+    const kept = again.find((f) => f.message === findings[0].message);
+    expect(kept?.explanation).toBe("Overtime and the new Lekki posting account for this");
+    expect(kept?.explainedBy).toBe(ctx.name);
+    expect(again.filter((f) => f.explanation).length).toBe(1);
+  });
+
   it("#27 approval is blocked by critical errors; resolved & overridden payroll can be approved and locked", async () => {
     const payroll = await ctxFor("PAYROLL_ADMIN");
     const ops = await ctxFor("OPERATIONS");
     const fin = await ctxFor("FINANCE");
     const sep = await periodFor(payroll, 2026, 9);
     let run = (await currentRun(payroll, sep.id))!;
+    await explainVariances(payroll, run.id);
     await submitForApproval(payroll, run.id);
     await expect(approveRun(fin, run.id)).rejects.toThrow(/critical validation error/);
 
@@ -220,6 +245,7 @@ describe("September 2026 payroll (seeded)", () => {
         i.id,
         "Payment withheld pending HR bank verification — Finance memo FIN/2026/091",
       );
+    await explainVariances(payroll, run.id);
     await submitForApproval(payroll, run.id);
     await approveRun(fin, run.id);
     await lockRun(fin, run.id);
