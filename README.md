@@ -1086,6 +1086,22 @@ For a payroll outsourcing business (ThreeRoots). **Each client is its own organi
   Access is re-checked against the database on every request, so removing it takes effect at once; a client's own users can never reach the bureau or another client; and database rules stop a client being moved to another bureau or access crossing bureaus.
 - **Audited where it happens.** Entering a client, granting and removing access, and everything staff do inside a client are written to the client's own audit log under the person's own name, tagged with the bureau they came from. Because the same person is the same user in every client, maker-checker rules (the preparer can't approve) hold across clients.
 
+### ThreeRoots demo client and the acceptance checks
+
+The demo seed builds a fictional client of the ThreeRoots bureau, **Acme Facilities Ltd** (sign in as `founder@threeroots.test` / `officer@threeroots.test` / `reviewer@threeroots.test` / `hr@threeroots.test`, same demo password, then *Bureau → Clients → Work in this client*): onboarded with the bureau's rules,
+**30 employees across 3 sites** (Lagos HQ, Abuja Office, Port Harcourt Depot) loaded from a CSV, each with a monthly gross, and **October 2026 taken from inputs to a locked payroll** with the app's own services: calendar and inputs, calculation, reconciliation sign-off, approval by someone other than the preparer, lock, payment batches and remittances.
+The code is `prisma/demo-client.ts`, used by both the seed and the acceptance test.
+
+`tests/integration/acceptance-threeroots.test.ts` runs the MVP acceptance checks from the spec (section 8) against it:
+
+| Check | Result |
+|---|---|
+| 30 employees across 3 sites run a full month from inputs to locked payroll | Passes |
+| The preparer cannot approve their own payroll (application and database both refuse) | Passes |
+| Changing a statutory rate creates a new effective-dated rule; old payrolls still reproduce | Passes (verified release to the client; October still calculates on the old rule to the same figures; December uses the new one) |
+| Every edit to employee pay data appears in the audit log | Passes for pay rate, bank details (request and approval) and extra payments, each with who, when, why and the bureau they came from |
+| Payslips, register, bank file and remittance schedule export correctly | Passes for the figures: every payslip adds up; register and PAYE schedule match the run; the Excel bank file has 30 payments totalling the net pay; PAYE and each pension fund administrator remittance add up. **Payslips are not yet produced as PDFs** (they print from the browser); that is the next piece |
+
 ### Bank payment file
 
 Payroll → **Payroll Runs** → a locked run → **Bank payment file** (`payment.manage`). An **Excel (.xlsx)** file the client uploads to their own bank; the app only makes the file and never moves money.

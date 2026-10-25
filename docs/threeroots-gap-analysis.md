@@ -41,7 +41,7 @@ That is the one structural decision the rest depends on. Two ways to do it:
 | 3.4 Gross-to-net, statutory rules as data | Built | Versioned, effective-dated PAYE, pension and payroll rule tables; engine, supplementary runs, final settlements, Quick Payslip. |
 | 3.4 Reproduce past payrolls | Built | Runs record the rule version used. |
 | 3.4 Retro adjustments | Built | Supplementary payroll and arrears. |
-| 3.4 Test mode and demo data | Built | Seeded demo organization. A 30-employee, 3-site ThreeRoots demo client would be added. |
+| 3.4 Test mode and demo data | Built | Seeded demo organization, and the ThreeRoots demo client (Acme Facilities Ltd: 30 employees, 3 sites, October 2026 locked) with an acceptance test for the spec's section 8 checks. |
 | 3.5 Run workflow | Partial | States today: Draft, Calculated, Pending approval, Approved, Locked, Paid, Superseded, plus a validation screen. Reconciliation is now a recorded sign-off (not a separate state). Missing: Inputs collected, a separate client-approval record. |
 | 3.5 Maker-checker enforced | Built | Everyone who calculates or submits a run is recorded and none of them can approve it or override its errors; a database trigger backs it. Acceptance check #2 is met. |
 | 3.5 Validations and variance report | Built | Critical/warning validations with Finance override, plus headcount, total and per-person variance against the previous payroll, each needing a written explanation before submission. |
