@@ -62,7 +62,7 @@ export async function saveCalendarSetting(ctx: Ctx, raw: z.input<typeof calendar
 
 // ─────────────────────────────── Each month ───────────────────────────────
 
-const toDates = (e: { inputCutoff: Date; draftDue: Date; approvalDue: Date; payDate: Date; remittanceDue: Date }): CalendarDates => ({
+export const toDates = (e: { inputCutoff: Date; draftDue: Date; approvalDue: Date; payDate: Date; remittanceDue: Date }): CalendarDates => ({
   inputCutoff: iso(e.inputCutoff), draftDue: iso(e.draftDue), approvalDue: iso(e.approvalDue), payDate: iso(e.payDate), remittanceDue: iso(e.remittanceDue),
 });
 
@@ -165,7 +165,7 @@ export async function resolveInputIssue(ctx: Ctx, issueId: string, resolution: s
 export type MilestoneView = { key: string; label: string; due: string; done: boolean; state: MilestoneState; days: number };
 
 /** The five deadlines for an entry, each with whether the payroll itself shows it done. */
-async function milestonesFor(orgId: string, periodId: string, entry: CalendarDates, today: string): Promise<MilestoneView[]> {
+export async function milestonesFor(orgId: string, periodId: string, entry: CalendarDates, today: string): Promise<MilestoneView[]> {
   const [items, run] = await Promise.all([
     db.payrollInputItem.findMany({ where: { periodId }, select: { status: true } }),
     db.payrollRun.findFirst({ where: { periodId, organizationId: orgId, type: "REGULAR", status: { not: "SUPERSEDED" } }, orderBy: { runNumber: "desc" }, select: { id: true, status: true } }),

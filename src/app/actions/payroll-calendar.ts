@@ -1,6 +1,7 @@
 "use server";
 import { act } from "./_run";
 import * as cal from "@/server/services/payroll-calendar";
+import * as rem from "@/server/services/payroll-reminders";
 
 type V = Record<string, unknown>;
 const PATHS = ["/payroll/calendar", "/bureau/deadlines"];
@@ -78,6 +79,30 @@ export async function resolveInputIssueAction(issueId: string, resolution?: stri
     async (ctx) => {
       await cal.resolveInputIssue(ctx, issueId, resolution ?? "");
       return { message: "Issue resolved." };
+    },
+    PATHS,
+  );
+}
+
+export async function saveReminderSettingAction(v: V) {
+  return act(
+    "settings.manage",
+    async (ctx) => {
+      await rem.saveReminderSetting(ctx, v as never);
+      return { message: "Reminder settings saved." };
+    },
+    PATHS,
+  );
+}
+
+export async function sendRemindersNowAction() {
+  return act(
+    "payroll.inputs",
+    async (ctx) => {
+      const r = await rem.sendRemindersNow(ctx);
+      const sent = r.outcomes.filter((o) => o.status === "SENT").length;
+      const failed = r.outcomes.filter((o) => o.status === "FAILED").length;
+      return { message: r.skipped ?? (sent ? `${sent} reminder(s) sent${failed ? `, ${failed} failed` : ""}.` : "Nothing to send right now.") };
     },
     PATHS,
   );

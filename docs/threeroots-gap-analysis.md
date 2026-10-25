@@ -28,7 +28,7 @@ That is the one structural decision the rest depends on. Two ways to do it:
 | 3.1 Bureau layer (client organizations, staff access, engagement terms) | Built (first part) | Option A: each client is its own organization; staff switch between the clients they are given; package, term, fees, contact, SLA and data-processing terms recorded per client; audited in the client's log. Still to do: HR + Finance verified rule library that publishes to clients, per-client payroll calendar. |
 | 3.1 Client records, sites, headcount | Partial | `Client`, `Contract`, `Beat` exist, but as the employer's customers. Under option A the employer becomes an `Organization`; package, contract term and start date are new fields on a bureau-level client record. |
 | 3.1 Packages, fees, add-ons | Missing | Billing rules exist for the security-company model (per-service-type billing of the employer's customers). A package/per-employee/minimum/onboarding-fee model for ThreeRoots's own invoicing is new. |
-| 3.1 Per-client payroll calendar | Built | Agreed rhythm per client, concrete dates per month (adjustable with a reason), and where each deadline stands read from the payroll. Email reminders still to do. |
+| 3.1 Per-client payroll calendar | Built | Agreed rhythm per client, concrete dates per month (adjustable with a reason), and where each deadline stands read from the payroll. Email reminders built (off by default per client). |
 | 3.1 Per-client rule configuration | Built | Salary structures, components, overtime, deduction types are per organization. |
 | 3.1 Agreement, SLA, data-processing terms | Partial | A data-protection policy and retention rules exist; terms are not stored per client. |
 | 3.2 Employee master data | Built | Records, categories, sites (beats), bank/pension/tax details, change requests with approval. |
@@ -36,7 +36,7 @@ That is the one structural decision the rest depends on. Two ways to do it:
 | 3.2 Joiners, leavers, effective-dated history | Partial | Exits and clearance, movements and employment contracts exist; a generic effective-dated change history for pay fields should be checked. |
 | 3.2 Encrypted, masked sensitive fields | Partial | Sensitive changes are approved and audited and fields are permission-gated. No field-level encryption was found. |
 | 3.3 Input templates | Partial | Overtime, arrears, earnings, deductions and loans each have entry screens; per-client downloadable templates and import do not exist. |
-| 3.3 Input tracker, cut-offs, reminders | Partial | Tracker per client and month (received / not applicable / expected, lateness against the cut-off, evidence counts), a log of missing or inconsistent items, and a bureau-wide "due this week" view. Email reminders still to do. |
+| 3.3 Input tracker, cut-offs, reminders | Partial | Tracker per client and month (received / not applicable / expected, lateness against the cut-off, evidence counts), a log of missing or inconsistent items, and a bureau-wide "due this week" view, and email reminders to the client contact and the team (daily cron, once a day at most, logged). |
 | 3.3 Change requests with reasons | Built | Employee detail changes. |
 | 3.4 Gross-to-net, statutory rules as data | Built | Versioned, effective-dated PAYE, pension and payroll rule tables; engine, supplementary runs, final settlements, Quick Payslip. |
 | 3.4 Reproduce past payrolls | Built | Runs record the rule version used. |

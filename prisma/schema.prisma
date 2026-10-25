@@ -600,6 +600,8 @@ model Organization {
   staffAccessAsClient       StaffClientAccess[]        @relation("AccessClient")
   ruleReleases              RuleRelease[]
   calendarSetting           PayrollCalendarSetting?
+  reminderSetting           PayrollReminderSetting?
+  reminderLogs              PayrollReminderLog[]
   calendarEntries           PayrollCalendarEntry[]
   inputItems                PayrollInputItem[]
   inputIssues               PayrollInputIssue[]
@@ -699,6 +701,40 @@ model PayrollCalendarSetting {
   expectedInputs      String[]     @default(["ATTENDANCE", "OVERTIME", "ALLOWANCES", "DEDUCTIONS", "LOANS", "JOINERS_LEAVERS"])
   updatedBy           String?
   updatedAt           DateTime     @updatedAt
+}
+
+/// Whether, and to whom, payroll deadline reminders are emailed for a client. Off until someone switches it on.
+model PayrollReminderSetting {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  enabled        Boolean      @default(false)
+  /// Email the client's contact (from the engagement) about inputs and approval they owe.
+  remindClient   Boolean      @default(true)
+  /// Email the bureau team working on the client a digest of overdue and imminent deadlines.
+  remindTeam     Boolean      @default(true)
+  /// Remind this many days before a deadline, and after it passes.
+  leadDays       Int          @default(2)
+  extraEmails    String[]     @default([])
+  updatedBy      String?
+  updatedAt      DateTime     @updatedAt
+}
+
+/// Every reminder email sent: to whom, about which month, when. Also what keeps the same reminder from going out twice in a day.
+model PayrollReminderLog {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  periodId       String
+  kind           String
+  toEmail        String
+  subject        String
+  /// The calendar day (UTC) it was sent on.
+  day            DateTime     @db.Date
+  sentAt         DateTime     @default(now())
+
+  @@unique([periodId, kind, toEmail, day])
+  @@index([organizationId, sentAt])
 }
 
 /// One pay month's concrete dates. Worked out from the setting, then adjustable (a public holiday, an agreed exception) with a reason.
