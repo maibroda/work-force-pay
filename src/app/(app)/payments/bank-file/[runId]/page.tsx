@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { BusinessError } from "@/server/services/_base";
 import { listExports, paymentFilePreview } from "@/server/services/payment-file";
+import { recordSensitiveAccess } from "@/server/services/sensitive-access";
 import { PAYMENT_FILE_HEADERS } from "@/lib/payment-file";
 import { fmtDate } from "@/lib/dates";
 import { naira } from "@/lib/money";
@@ -22,6 +23,7 @@ export default async function BankFilePage({ params }: { params: Promise<{ runId
     why = e.message;
   }
   if (!p && why === "Payroll run not found.") notFound();
+  if (p) await recordSensitiveAccess(ctx, { kind: "PAYMENTS", ref: runId, count: p.rows.length });
   const exports = p ? await listExports(ctx, runId) : [];
 
   return (

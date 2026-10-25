@@ -3,6 +3,7 @@ import { requirePage } from "@/lib/auth/session";
 import { listTaxRules } from "@/server/services/statutory";
 import { payeSchedule, resolveRun } from "@/server/services/reports";
 import { runOptions } from "@/server/options";
+import { recordSensitiveAccess } from "@/server/services/sensitive-access";
 import { fmtDate } from "@/lib/dates";
 import { naira, num } from "@/lib/money";
 import { PageHeader, Section, Stat, StatGrid } from "@/components/page";
@@ -23,6 +24,7 @@ export default async function PayePage({
     runOptions(ctx),
   ]);
   const rows = run ? await payeSchedule(ctx, run.id) : [];
+  if (rows.length) await recordSensitiveAccess(ctx, { kind: "TAX", ref: "paye", count: rows.length });
   const current = rules.find((r) => !r.effectiveTo) ?? rules[0];
   return (
     <>

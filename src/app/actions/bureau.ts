@@ -90,3 +90,14 @@ export async function revokeAccessAction(clientOrgId: string, userId: string) {
     PATHS,
   );
 }
+
+export async function bringForwardStaffTwoFactorAction(v: V) {
+  return act(
+    "bureau.manage",
+    async (ctx) => {
+      await bureau.bringForwardStaffTwoFactor(ctx, { from: String(v.from ?? "") });
+      return { message: "The start day has been brought forward." };
+    },
+    PATHS,
+  );
+}

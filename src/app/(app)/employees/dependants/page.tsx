@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
+import { recordSensitiveAccess } from "@/server/services/sensitive-access";
 import { recordsOverview } from "@/server/services/personal-records";
 import { ageOn } from "@/lib/personal-records";
 import { fullName } from "@/lib/utils";
@@ -10,6 +11,7 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 export default async function DependantsPage() {
   const ctx = await requirePage("employee.sensitive");
   const { rows } = await recordsOverview(ctx);
+  await recordSensitiveAccess(ctx, { kind: "PERSONAL_RECORDS", ref: "dependants", count: rows.length });
   const today = new Date();
   const withDeps = rows.filter((r) => r.contacts.some((c) => c.kind === "DEPENDANT" || c.isBeneficiary));
   const dependants = rows.reduce((a, r) => a + r.contacts.filter((c) => c.kind === "DEPENDANT").length, 0);

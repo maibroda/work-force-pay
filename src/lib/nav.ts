@@ -286,6 +286,7 @@ export const NAV: NavGroup[] = [
       { href: "/settings/appraisal-criteria", label: "Appraisal Criteria", perm: "appraisal.manage" },
       { href: "/settings/numbering", label: "Numbering Rules", perm: "employee.view" },
       { href: "/reports/audit", label: "Audit Logs", perm: "audit.view" },
+      { href: "/settings/sensitive-access", label: "Who Looked at Sensitive Details", perm: "audit.view" },
     ],
   },
 ];

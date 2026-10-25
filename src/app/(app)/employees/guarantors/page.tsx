@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
+import { recordSensitiveAccess } from "@/server/services/sensitive-access";
 import { can } from "@/lib/auth/permissions";
 import { listGuarantors, recordsOverview } from "@/server/services/personal-records";
 import { fmtDate } from "@/lib/dates";
@@ -24,6 +25,7 @@ export default async function GuarantorsPage({ searchParams }: { searchParams: P
   const filter = sp.status ?? "";
   const manage = can(ctx.role, "hr.manage");
   const [{ rows, totals, policy }, all] = await Promise.all([recordsOverview(ctx), listGuarantors(ctx)]);
+  await recordSensitiveAccess(ctx, { kind: "PERSONAL_RECORDS", ref: "guarantors", count: all.length });
   const shown = all.filter((g) => (filter === "ALL" ? true : filter ? g.status === filter : g.status === "PENDING"));
   const short = rows.filter((r) => r.gaps.guarantorsMissing > 0);
   const needing = rows.filter((r) => r.gaps.guarantorsNeeded > 0).length;

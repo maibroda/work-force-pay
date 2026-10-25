@@ -8,7 +8,8 @@ import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { mayWorkIn } from "@/lib/auth/bureau-access";
 import { can } from "@/lib/auth/permissions";
-import { d } from "@/lib/dates";
+import { twoFactorState, type TwoFactorState } from "@/lib/two-factor-policy";
+import { d, iso } from "@/lib/dates";
 import { num } from "@/lib/money";
 import { ensureDefaultChart } from "./accounting";
 import { assertCan, BusinessError, db } from "./_base";
@@ -45,6 +46,53 @@ export async function enableBureau(ctx: Ctx) {
   if (org.isBureau) throw new BusinessError("This organization is already a bureau.");
   await db.organization.update({ where: { id: org.id }, data: { isBureau: true } });
   await logAudit({ ...ctx, orgId: org.id }, { action: "BUREAU_ENABLE", entity: "Organization", entityId: org.id });
+}
+
+// ─────────────────────────────── Staff two-factor ───────────────────────────────
+
+const utcToday = () => {
+  const n = new Date();
+  return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate()));
+};
+
+/**
+ * Where the bureau's own staff stand on the two-factor sign-in that is compulsory for all of them (any role, in the bureau and in every client).
+ * The start day is set when the bureau is set up, and can only be brought forward.
+ */
+export async function staffTwoFactorStatus(ctx: Ctx) {
+  assertCan(ctx, "bureau.view");
+  const org = await requireBureau(ctx);
+  const from = org.staffTwoFactorFrom;
+  const today = utcToday();
+  const users = await db.user.findMany({
+    where: { organizationId: org.id, active: true },
+    select: { id: true, name: true, email: true, role: true, totpEnabled: true },
+    orderBy: [{ role: "asc" }, { name: "asc" }],
+  });
+  const rows = users.map((u) => ({ ...u, state: (from ? twoFactorState({ roles: [u.role], enforceFrom: from, role: u.role, enrolled: u.totpEnabled, today }) : "NOT_REQUIRED") as TwoFactorState }));
+  return { from, rows, missing: rows.filter((r) => !r.totpEnabled).length, inForce: !!from && from <= today };
+}
+
+export const staffTwoFactorSchema = z.object({ from: z.string().min(1, "Choose a date") });
+
+/** Brings the start day forward. It can never be put back, or removed: that is what makes it a control. */
+export async function bringForwardStaffTwoFactor(ctx: Ctx, raw: z.input<typeof staffTwoFactorSchema>) {
+  assertCan(ctx, "bureau.manage");
+  const v = staffTwoFactorSchema.parse(raw);
+  const org = await requireBureau(ctx);
+  const today = utcToday();
+  const next = d(v.from);
+  if (Number.isNaN(next.getTime())) throw new BusinessError("That date isn't valid.");
+  if (!org.staffTwoFactorFrom) throw new BusinessError("This bureau has no start day set.");
+  if (next >= org.staffTwoFactorFrom) throw new BusinessError(`The start day is already ${iso(org.staffTwoFactorFrom)}. It can only be brought forward, never put back.`);
+  const effective = next < today ? today : next;
+  if (effective <= today) {
+    // don't let the person making the change lock themselves (and so possibly everyone) out
+    const me = await db.user.findUnique({ where: { id: ctx.userId }, select: { totpEnabled: true } });
+    if (!me?.totpEnabled) throw new BusinessError("Turn on two-factor for your own account first (My security), or this would lock you out as soon as it's saved.");
+  }
+  await db.organization.update({ where: { id: org.id }, data: { staffTwoFactorFrom: effective } });
+  await logAudit({ ...ctx, orgId: org.id }, { action: "BUREAU_STAFF_TWO_FACTOR_FROM", entity: "Organization", entityId: org.id, oldValue: { from: iso(org.staffTwoFactorFrom) }, newValue: { from: iso(effective) } });
 }
 
 // ─────────────────────────────── Clients ───────────────────────────────

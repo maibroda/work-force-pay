@@ -4,6 +4,7 @@ import type { Ctx } from "@/lib/auth/context";
 import { fullName } from "@/lib/utils";
 import { naira } from "@/lib/money";
 import { findDuplicates } from "@/server/services/employees";
+import { recordSensitiveAccess } from "@/server/services/sensitive-access";
 import { PageHeader, Section, Stat, StatGrid } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
@@ -15,6 +16,7 @@ export async function InfoTable({ ctx, kind }: { ctx: Ctx; kind: Kind }) {
     where: { organizationId: ctx.orgId, status: { notIn: ["EXITED"] } },
     orderBy: { employeeNumber: "asc" },
   });
+  await recordSensitiveAccess(ctx, { kind: kind.toUpperCase() as "BANK" | "PENSION" | "TAX", count: emps.length });
   const dups = await findDuplicates(ctx);
   const dupType = kind === "bank" ? "BANK_ACCOUNT" : kind === "pension" ? "PENSION_PIN" : "TAX_ID";
   const dupIds = new Set(dups.filter((f) => f.type === dupType).flatMap((f) => f.employees.map((e) => e.id)));

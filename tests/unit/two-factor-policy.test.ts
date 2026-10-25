@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { daysUntilEnforced, twoFactorReminder, twoFactorState } from "@/lib/two-factor-policy";
+import { combineTwoFactor, daysUntilEnforced, twoFactorReminder, twoFactorState } from "@/lib/two-factor-policy";
 
 const day = (s: string) => new Date(`${s}T00:00:00Z`);
 const base = { roles: ["HR_ADMIN", "PAYROLL_ADMIN"], enforceFrom: day("2026-11-01"), role: "HR_ADMIN", enrolled: false, today: day("2026-10-06") };
@@ -46,5 +46,22 @@ describe("twoFactorReminder", () => {
   it("says nothing to anyone else", () => {
     for (const state of ["NOT_REQUIRED", "ENROLLED", "BLOCKED"] as const) expect(twoFactorReminder(state, from, day("2026-10-06"))).toBeNull();
     expect(twoFactorReminder("GRACE", null, day("2026-10-06"))).toBeNull();
+  });
+});
+
+describe("combineTwoFactor", () => {
+  const d1 = day("2026-11-01");
+  const d2 = day("2026-12-01");
+  it("takes the stricter of two rules, and the earlier start day of those that apply", () => {
+    expect(combineTwoFactor({ state: "GRACE", enforceFrom: d2 }, { state: "BLOCKED", enforceFrom: d1 })).toEqual({ state: "BLOCKED", enforceFrom: d1 });
+    expect(combineTwoFactor({ state: "GRACE", enforceFrom: d2 }, { state: "GRACE", enforceFrom: d1 })).toEqual({ state: "GRACE", enforceFrom: d1 });
+  });
+  it("ignores the start day of a rule that does not cover the person", () => {
+    expect(combineTwoFactor({ state: "NOT_REQUIRED", enforceFrom: d1 }, { state: "GRACE", enforceFrom: d2 })).toEqual({ state: "GRACE", enforceFrom: d2 });
+  });
+  it("is enrolled when either rule says so, and not required only when neither applies", () => {
+    expect(combineTwoFactor({ state: "NOT_REQUIRED", enforceFrom: null }, { state: "ENROLLED", enforceFrom: d1 }).state).toBe("ENROLLED");
+    expect(combineTwoFactor({ state: "ENROLLED", enforceFrom: d1 }, { state: "ENROLLED", enforceFrom: d2 })).toEqual({ state: "ENROLLED", enforceFrom: d1 });
+    expect(combineTwoFactor({ state: "NOT_REQUIRED", enforceFrom: null }, { state: "NOT_REQUIRED", enforceFrom: null })).toEqual({ state: "NOT_REQUIRED", enforceFrom: null });
   });
 });

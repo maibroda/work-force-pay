@@ -34,7 +34,7 @@ That is the one structural decision the rest depends on. Two ways to do it:
 | 3.2 Employee master data | Built | Records, categories, sites (beats), bank/pension/tax details, change requests with approval. |
 | 3.2 Bulk import and validation | Built (CSV) | Template, preview with row-level errors and warnings, duplicate checks within the file and against existing staff, all-or-nothing import, unalterable batch record. Account numbers are checked for length only (no bank check digit yet); `.xlsx` is not read directly. |
 | 3.2 Joiners, leavers, effective-dated history | Partial | Exits and clearance, movements and employment contracts exist; a generic effective-dated change history for pay fields should be checked. |
-| 3.2 Encrypted, masked sensitive fields | Partial | Sensitive changes are approved and audited and fields are permission-gated. No field-level encryption was found. |
+| 3.2 Encrypted, masked sensitive fields | Partial | Sensitive changes are approved and audited, fields are permission-gated and reads are recorded. No field-level encryption yet: the design is in `docs/field-encryption-plan.md`, waiting on decisions about key custody. |
 | 3.3 Input templates | Partial | Overtime, arrears, earnings, deductions and loans each have entry screens; per-client downloadable templates and import do not exist. |
 | 3.3 Input tracker, cut-offs, reminders | Partial | Tracker per client and month (received / not applicable / expected, lateness against the cut-off, evidence counts), a log of missing or inconsistent items, and a bureau-wide "due this week" view, and email reminders to the client contact and the team (daily cron, once a day at most, logged). |
 | 3.3 Change requests with reasons | Built | Employee detail changes. |
@@ -60,9 +60,9 @@ That is the one structural decision the rest depends on. Two ways to do it:
 | 3.12 Billing and collections | **Largely built** | The finance work of Phases 1 to 5 covers invoicing, receipts, advances, credit/debit notes, ageing, statements, VAT/WHT, period close. What is new is subscription-style fees, MRR and churn. |
 | 3.13 Service desk | Partial (queries built) | Client query log with threads, first-reply time, a 24-hour flag, email notifications and a bureau-wide open-queries view. Still to do: SLA timers beyond the first reply, escalation, and the incident register link. A data-breach register and data-access requests also exist. |
 | 3.14 Performance dashboard | Missing | |
-| 4 MFA for staff | Built | TOTP two-factor and session invalidation exist. Enforcement for all staff roles is a setting to confirm. |
+| 4 MFA for staff | Built | TOTP two-factor and session invalidation. Compulsory for every bureau user in any role, in the bureau and inside clients, from a start day (14 days' notice by default) that can only be brought forward; clients' own people always use it. The rule for other organizations is still the by-role setting. |
 | 4 Audit log of changes | Built | Every service writes who, what, when and reason. |
-| 4 Audit of *reads* of sensitive data | Missing *(unverified)* | Changes are logged; reads were not found to be. |
+| 4 Audit of *reads* of sensitive data | Built | Every page showing bank, tax or pension identifiers, personal records, payslips, payment accounts or sensitive report columns records who opened it; a viewer for auditors with per-person totals and a flag for unusual volume. Downloads were already logged. |
 | 4 Retention and deletion | Built | Records retention and erasure workflows. |
 | 4 Data-protection register | Built | Policies and acknowledgements, access requests, breach register. |
 | 4 Backups and tested restore | Partial | Dumps and restores are done by hand for migrations; not an automated, documented procedure. |
@@ -90,7 +90,7 @@ The finance phases already built are the foundation for 3.12 and for ThreeRoots'
 3. **Bureau layer (needs your decision on A or B).** Cross-organization staff identity and client switcher, client onboarding (package, term, fees, SLA and data-processing terms), per-client payroll calendar.
 4. **Inputs.** Per-client templates, import with validation, submission tracker with cut-offs and reminders. Employee bulk import with the duplicate / missing-field / account-number checks.
 5. **Outputs.** PDF payslips (and the delivery decision), per-bank payment file formats for the first bank(s) you choose, branded templates, management reports.
-6. **Security.** Field-level encryption for bank and identifier fields, audit of reads of sensitive data, MFA enforced for all staff, documented backup and restore.
+6. **Security.** *Done:* audit of reads of sensitive data, MFA enforced for all bureau staff. *Still to do:* field-level encryption for bank and identifier fields (plan written, needs your decisions), documented backup and restore.
 7. **MVP demo.** Fictional client with 30 employees across 3 sites, run end to end against the acceptance checks in section 8 of the spec.
 8. **Phase 2 and 3.** Client portal, compliance calendar, then CRM, pricing and Health Check, then service desk and performance dashboard, in the order of the spec.
 

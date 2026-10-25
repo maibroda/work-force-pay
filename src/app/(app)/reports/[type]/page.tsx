@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { buildReport, REPORT_TYPES, type ReportType } from "@/server/report-registry";
 import { reportPermission } from "@/lib/report-access";
+import { isSensitiveReport } from "@/lib/sensitive-access";
+import { recordSensitiveAccess } from "@/server/services/sensitive-access";
 import { options, runOptions } from "@/server/options";
 import { naira } from "@/lib/money";
 import { FilterBar, FilterField, PageHeader, Section, Empty } from "@/components/page";
@@ -29,6 +31,7 @@ export default async function ReportPage({
     options(ctx),
   ]);
   if (!report) notFound();
+  if (isSensitiveReport(report.columns)) await recordSensitiveAccess(ctx, { kind: "REPORT", ref: type, count: report.rows.length });
   const qs = new URLSearchParams(Object.entries(sp).filter(([, v]) => v) as [string, string][]).toString();
   const fmt = (c: { money?: boolean }, v: unknown) =>
     c.money ? naira(v) : v === null || v === undefined ? "" : String(v);

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { getEmployee } from "@/server/services/employees";
+import { recordSensitiveAccess } from "@/server/services/sensitive-access";
 import { employeeLocationHistory } from "@/server/services/operations";
 import { employeeTimeline } from "@/server/services/hr-overview";
 import { listItems, listPacks, outstandingKit } from "@/server/services/inventory";
@@ -67,6 +68,9 @@ export default async function EmployeePage({
   const tab = sp.tab ?? "overview";
   const o = await options(ctx);
   const sensitive = can(ctx.role, "employee.sensitive");
+  // the overview and the details tab show bank, tax and pension identifiers; the contacts tab shows guarantors and next of kin
+  if (sensitive && (tab === "overview" || tab === "details")) await recordSensitiveAccess(ctx, { kind: "IDENTIFIERS", employeeId: e.id });
+  if (sensitive && tab === "contacts") await recordSensitiveAccess(ctx, { kind: "PERSONAL_RECORDS", employeeId: e.id });
   const hrView = can(ctx.role, "hr.view");
   const hrManage = can(ctx.role, "hr.manage");
   const hrApprove = can(ctx.role, "hr.approve");
