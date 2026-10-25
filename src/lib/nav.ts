@@ -36,6 +36,7 @@ export const NAV: NavGroup[] = [
       { href: "/service-desk", label: "Service Desk", perm: "query.respond", bureauOnly: true },
       { href: "/settings/client-portal", label: "Client Portal Access", perm: "users.manage", bureauOnly: true },
       { href: "/bureau/rules", label: "Statutory Rule Library", perm: "bureau.view", bureauOnly: true },
+      { href: "/bureau/readiness", label: "Launch Checklist", perm: "bureau.view", bureauOnly: true },
     ],
   },
   {

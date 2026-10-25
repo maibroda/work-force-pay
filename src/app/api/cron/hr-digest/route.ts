@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { refuseUnlessCronAuthorized } from "@/lib/cron-auth";
+import { recordJob } from "@/server/services/job-runs";
 import { runDigestForAllOrgs } from "@/server/services/reminders";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +9,7 @@ export const dynamic = "force-dynamic";
 async function handle(req: Request) {
   const refused = refuseUnlessCronAuthorized(req);
   if (refused) return refused;
-  const results = await runDigestForAllOrgs();
+  const results = await recordJob("hr-digest", () => runDigestForAllOrgs());
   return NextResponse.json({ ok: true, results });
 }
 

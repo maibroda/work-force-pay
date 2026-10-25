@@ -65,7 +65,8 @@ That is the one structural decision the rest depends on. Two ways to do it:
 | 4 Audit of *reads* of sensitive data | Built | Every page showing bank, tax or pension identifiers, personal records, payslips, payment accounts or sensitive report columns records who opened it; a viewer for auditors with per-person totals and a flag for unusual volume. Downloads were already logged. |
 | 4 Retention and deletion | Built | Records retention and erasure workflows. |
 | 4 Data-protection register | Built | Policies and acknowledgements, access requests, breach register. |
-| 4 Backups and tested restore | Partial | Dumps and restores are done by hand for migrations; not an automated, documented procedure. |
+| 4 Backups and tested restore | Partial | `npm run db:backup` and `db:restore-check` exist and are documented in `docs/going-live.md`; a restore rehearsal is a launch-checklist item confirmed by a manager. Backups are not scheduled by the app. |
+| 4 Go-live readiness | Built | Bureau → Launch Checklist: rate tables verified and published, email, https address, real secrets, a scheduler calling the jobs (heartbeat), staff two-factor, client data-processing terms, plus bank codes, a real payslip email and a restore rehearsal confirmed by a manager with a note. |
 
 ## Roles
 
