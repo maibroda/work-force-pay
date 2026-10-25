@@ -22,6 +22,7 @@ export const NAV: NavGroup[] = [
     title: "Your payroll",
     items: [
       { href: "/portal", label: "Your Payroll", perm: "portal.view", clientOnly: true },
+      { href: "/portal/inputs", label: "Monthly Inputs", perm: "portal.view", clientOnly: true },
       { href: "/portal/queries", label: "Your Queries", perm: "portal.query", clientOnly: true },
       { href: "/portal/employees", label: "Your Employees", perm: "portal.changes", clientOnly: true },
     ],
@@ -91,6 +92,7 @@ export const NAV: NavGroup[] = [
       { href: "/payroll/components", label: "Salary Components", perm: "structure.view" },
       { href: "/payroll/periods", label: "Payroll Periods", perm: "payroll.view" },
       { href: "/payroll/calendar", label: "Payroll Calendar", perm: "payroll.view" },
+      { href: "/payroll/client-inputs", label: "Client Inputs", perm: "payroll.view", bureauOnly: true },
       { href: "/payroll/runs", label: "Payroll Runs", perm: "payroll.view" },
       { href: "/payroll/quick-payslip", label: "Quick Payslip", perm: "payroll.view" },
       { href: "/payroll/earnings", label: "Earnings", perm: "payroll.view" },

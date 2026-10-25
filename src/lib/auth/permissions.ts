@@ -87,6 +87,7 @@ export const PERMISSIONS = [
   "portal.query", // raise queries with the bureau, and follow them, in the portal
   "portal.download", // download the client's own payslips and payroll register from the portal
   "portal.changes", // ask the bureau to change an employee's bank, tax or pension details (the client's HR contact)
+  "portal.inputs", // send the month's overtime, allowances, bonuses and deductions as a file, and follow what happened to it (the client's HR contact)
   "query.respond", // answer clients' queries and close them (bureau staff)
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
@@ -232,7 +233,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise"],
   // clients' own people see only their portal
   CLIENT_APPROVER: ["portal.view", "portal.approve", "portal.query", "portal.download", "self.security"],
-  CLIENT_HR: ["portal.view", "portal.query", "portal.download", "portal.changes", "self.security"],
+  CLIENT_HR: ["portal.view", "portal.query", "portal.download", "portal.changes", "portal.inputs", "self.security"],
 };
 
 export function can(role: Role, permission: Permission): boolean {
