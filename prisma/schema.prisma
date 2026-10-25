@@ -602,6 +602,8 @@ model Organization {
   calendarSetting           PayrollCalendarSetting?
   reminderSetting           PayrollReminderSetting?
   bankCodes                 BankCode[]
+  payslipSetting            PayslipSetting?
+  payslipDeliveries         PayslipDelivery[]
   paymentFileExports        PaymentFileExport[]
   reminderLogs              PayrollReminderLog[]
   calendarEntries           PayrollCalendarEntry[]
@@ -703,6 +705,34 @@ model PayrollCalendarSetting {
   expectedInputs      String[]     @default(["ATTENDANCE", "OVERTIME", "ALLOWANCES", "DEDUCTIONS", "LOANS", "JOINERS_LEAVERS"])
   updatedBy           String?
   updatedAt           DateTime     @updatedAt
+}
+
+/// Whether payslips may be emailed to employees from this organization. Off until someone switches it on; downloads are always available.
+model PayslipSetting {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  emailEnabled   Boolean      @default(false)
+  updatedBy      String?
+  updatedAt      DateTime     @updatedAt
+}
+
+/// Every payslip emailed: to whom, when, by whom, and a fingerprint of the PDF sent. Never changed.
+model PayslipDelivery {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  runId          String
+  recordId       String
+  employeeId     String
+  toEmail        String
+  checksum       String
+  sentBy         String
+  sentByUserId   String
+  sentAt         DateTime     @default(now())
+
+  @@index([organizationId, runId])
+  @@index([recordId])
 }
 
 /// A bank and the code a bulk payment upload asks for. Starts from a standard list, corrected or extended per organization; confirm against the
