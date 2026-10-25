@@ -610,6 +610,8 @@ model Organization {
   clientApprovals           PayrollClientApproval[]
   clientQueries             ClientQuery[]
   clientQueryMessages       ClientQueryMessage[]
+  clientInputBatches        ClientInputBatch[]
+  clientInputRows           ClientInputRow[]
   calendarSetting           PayrollCalendarSetting?
   reminderSetting           PayrollReminderSetting?
   bankCodes                 BankCode[]
@@ -722,6 +724,74 @@ enum QueryStatus {
   OPEN
   ANSWERED
   CLOSED
+}
+
+enum ClientInputStatus {
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+/// A month's inputs (overtime, allowances, bonuses, deductions) sent by the client's HR contact as a file. Nothing in it reaches the payroll until
+/// the bureau accepts it. Its rows are never changed; the decision is recorded once.
+model ClientInputBatch {
+  id                String            @id @default(cuid())
+  organizationId    String
+  organization      Organization      @relation(fields: [organizationId], references: [id])
+  periodId          String
+  period            PayrollPeriod     @relation(fields: [periodId], references: [id])
+  number            String
+  fileName          String
+  /// SHA-256 of the file, so the same file is not sent twice for a month.
+  checksum          String
+  status            ClientInputStatus @default(SUBMITTED)
+  rowCount          Int
+  warningCount      Int               @default(0)
+  earningsTotal     Decimal           @db.Decimal(14, 2)
+  deductionsTotal   Decimal           @db.Decimal(14, 2)
+  /// Sent after the month's input cut-off.
+  late              Boolean           @default(false)
+  note              String?
+  /// The tracker inputs this upload marked as received (put back if it is refused or withdrawn).
+  markedKinds       String[]
+  submittedBy       String
+  submittedByUserId String
+  createdAt         DateTime          @default(now())
+  decidedBy         String?
+  decidedByUserId   String?
+  decidedAt         DateTime?
+  decisionNote      String?
+
+  rows ClientInputRow[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId, periodId, status])
+}
+
+model ClientInputRow {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  batchId        String
+  batch          ClientInputBatch @relation(fields: [batchId], references: [id])
+  line           Int
+  employeeId     String
+  employee       Employee         @relation(fields: [employeeId], references: [id])
+  /// OVERTIME, ALLOWANCE, BONUS, OTHER_EARNING, or a deduction type (DEDUCTION, PENALTY, RECOVERY, SALARY_ADVANCE).
+  type           String
+  description    String
+  amount         Decimal          @db.Decimal(14, 2)
+  taxable        Boolean          @default(true)
+  reference      String?
+  note           String?
+  warnings       String[]
+  /// Once accepted: what the row became (OtherEarning or Deduction) and its id.
+  appliedKind    String?
+  appliedId      String?
+
+  @@index([batchId])
+  @@index([organizationId, employeeId])
 }
 
 /// A question or request from a client to the bureau, with a thread of messages. How quickly it was first answered is measured from it.
@@ -1286,6 +1356,7 @@ model Employee {
   organization       Organization         @relation(fields: [organizationId], references: [id])
   importBatchId      String?
   importBatch        EmployeeImportBatch? @relation(fields: [importBatchId], references: [id])
+  clientInputRows    ClientInputRow[]
   employeeNumber     String
   firstName          String
   middleName         String?
@@ -2344,6 +2415,7 @@ model PayrollPeriod {
   calendarEntry    PayrollCalendarEntry?
   inputItems       PayrollInputItem[]
   inputIssues      PayrollInputIssue[]
+  clientInputs     ClientInputBatch[]
 
   @@unique([organizationId, year, month])
 }

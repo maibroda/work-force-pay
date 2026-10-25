@@ -28,7 +28,7 @@ export const RESPONSE_TARGET_HOURS = 24;
 const isClientRole = (ctx: Ctx) => ctx.role === "CLIENT_APPROVER" || ctx.role === "CLIENT_HR";
 const hours = (a: Date, b: Date) => Math.round(((b.getTime() - a.getTime()) / 3_600_000) * 10) / 10;
 
-async function notify(to: string[], subject: string, text: string) {
+export async function notify(to: string[], subject: string, text: string) {
   for (const t of to) {
     try {
       await sendEmail({ to: t, subject, text, html: `<div style="font-family:system-ui,sans-serif;max-width:600px">${text.split("\n").map((l) => `<p>${l.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</p>`).join("")}</div>` });
