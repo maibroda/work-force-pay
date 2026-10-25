@@ -18,12 +18,21 @@ export interface NavGroup {
 
 export const NAV: NavGroup[] = [
   { title: "Dashboard", items: [{ href: "/", label: "Dashboard", perm: "dashboard.view" }] },
-  { title: "Your payroll", items: [{ href: "/portal", label: "Your Payroll", perm: "portal.view", clientOnly: true }] },
+  {
+    title: "Your payroll",
+    items: [
+      { href: "/portal", label: "Your Payroll", perm: "portal.view", clientOnly: true },
+      { href: "/portal/queries", label: "Your Queries", perm: "portal.query", clientOnly: true },
+      { href: "/portal/employees", label: "Your Employees", perm: "portal.changes", clientOnly: true },
+    ],
+  },
   {
     title: "Bureau",
     items: [
       { href: "/bureau", label: "Clients", perm: "bureau.view", bureauOnly: true },
       { href: "/bureau/deadlines", label: "Due This Week", perm: "bureau.view", bureauOnly: true },
+      { href: "/bureau/queries", label: "Open Queries", perm: "bureau.view", bureauOnly: true },
+      { href: "/service-desk", label: "Service Desk", perm: "query.respond", bureauOnly: true },
       { href: "/settings/client-portal", label: "Client Portal Access", perm: "users.manage", bureauOnly: true },
       { href: "/bureau/rules", label: "Statutory Rule Library", perm: "bureau.view", bureauOnly: true },
     ],

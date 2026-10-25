@@ -13,7 +13,9 @@ import { num } from "@/lib/money";
 import { payslipModel, renderPayslipPdf, type PayslipInput, type PayslipLine } from "@/lib/payslip-pdf";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
+import { csvField } from "@/lib/employee-import";
 import { getPayslip } from "./payroll";
+import { neutralizeFormula } from "./reports";
 
 const OK_RUN = ["APPROVED", "LOCKED", "PAID"];
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -92,6 +94,31 @@ async function recordsOf(ctx: Ctx, runId: string) {
 /** Every payslip of a payroll in one zip, a PDF each. */
 export async function payslipsZip(ctx: Ctx, runId: string) {
   assertCan(ctx, "payslip.distribute");
+  return buildZip(ctx, runId, "PAYSLIPS_ZIP_DOWNLOAD");
+}
+
+/** The same, for the client's own people in the portal: their own organization's payroll only. */
+export async function portalPayslipsZip(ctx: Ctx, runId: string) {
+  assertCan(ctx, "portal.download");
+  return buildZip(ctx, runId, "PORTAL_PAYSLIPS_DOWNLOAD");
+}
+
+/** The payroll register as a CSV for the client: who was paid what, once the payroll is approved. */
+export async function portalRegisterCsv(ctx: Ctx, runId: string) {
+  assertCan(ctx, "portal.download");
+  const { run } = await recordsOf(ctx, runId);
+  const recs = await db.payrollRecord.findMany({ where: { runId, organizationId: ctx.orgId }, orderBy: { employeeNumber: "asc" } });
+  const cell = (s: string) => csvField(neutralizeFormula(s));
+  const head = ["Employee No.", "Name", "Department", "Days worked", "Days in month", "Gross pay", "PAYE", "Employee pension", "Other deductions", "Net pay"].join(",");
+  const rows = recs.map((r) =>
+    [cell(r.employeeNumber), cell(r.employeeName), cell(r.departmentName ?? ""), num(r.daysWorked), r.basisDays, num(r.totalEarnings), num(r.paye), num(r.employeePension), num(r.otherDeductions), num(r.netPay)].join(","),
+  );
+  const fileName = `payroll-register-${slug(run.period.name)}${run.type === "SUPPLEMENTARY" ? `-adjustment-${run.runNumber}` : ""}.csv`;
+  await logAudit(ctx, { action: "PORTAL_REGISTER_DOWNLOAD", entity: "PayrollRun", entityId: runId, newValue: { rows: recs.length, fileName } });
+  return { csv: `\uFEFF${[head, ...rows].join("\r\n")}\r\n`, fileName };
+}
+
+async function buildZip(ctx: Ctx, runId: string, auditAction: string) {
   const { run, ids } = await recordsOf(ctx, runId);
   const c = await context(ctx.orgId);
   const zip = new JSZip();
@@ -101,7 +128,7 @@ export async function payslipsZip(ctx: Ctx, runId: string) {
   }
   const buffer = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
   const fileName = `payslips-${slug(run.period.name)}${run.type === "SUPPLEMENTARY" ? `-adjustment-${run.runNumber}` : ""}.zip`;
-  await logAudit(ctx, { action: "PAYSLIPS_ZIP_DOWNLOAD", entity: "PayrollRun", entityId: runId, newValue: { payslips: ids.length, fileName } });
+  await logAudit(ctx, { action: auditAction, entity: "PayrollRun", entityId: runId, newValue: { payslips: ids.length, fileName } });
   return { buffer, fileName, count: ids.length };
 }
 

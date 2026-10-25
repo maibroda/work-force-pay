@@ -47,6 +47,16 @@ export default async function PortalPayrollPage({ params }: { params: Promise<{ 
         }
       />
 
+      {["APPROVED", "LOCKED", "PAID"].includes(run.status) && can(ctx.role, "portal.download") && (
+        <p className="flex flex-wrap gap-4 text-sm">
+          <a className="text-primary underline" href={`/api/portal/runs/${run.id}/register`}>
+            Download the payroll register (CSV)
+          </a>
+          <a className="text-primary underline" href={`/api/portal/runs/${run.id}/payslips`}>
+            Download all payslips (zip of PDFs)
+          </a>
+        </p>
+      )}
       {approval.awaiting && <p className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-900">This payroll is waiting for your approval. Check the figures below. Once you approve, the bureau can lock it and prepare the payments.</p>}
       {approval.approvedNow && approval.last && (
         <p className="rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-900">

@@ -14,6 +14,7 @@ import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { milestonesFor, toDates } from "./payroll-calendar";
 import { buildReconciliation } from "./payroll-controls";
+import { requestChangeCore } from "./change-requests";
 import { sendRunBack } from "./payroll";
 import { sendInvitation } from "./security";
 
@@ -138,4 +139,38 @@ export async function clientApprovalStatus(ctx: Ctx, runId: string) {
   const st = await approvalState(ctx.orgId, run);
   const history = await db.payrollClientApproval.findMany({ where: { runId }, orderBy: { createdAt: "desc" }, take: 5 });
   return { ...st, history };
+}
+
+// ─────────────────────────────── Employee changes (the client's HR contact) ───────────────────────────────
+
+const maskTail = (v: string | null | undefined) => (v ? `${"*".repeat(Math.max(v.length - 4, 0))}${v.slice(-4)}` : "—");
+
+/** The client's current staff, with bank, tax and pension details masked, and any change already waiting for the bureau. */
+export async function portalEmployees(ctx: Ctx) {
+  assertCan(ctx, "portal.changes");
+  const [emps, pending] = await Promise.all([
+    db.employee.findMany({ where: { organizationId: ctx.orgId, status: { in: ["ACTIVE", "ON_LEAVE", "SUSPENDED"] } }, include: { department: { select: { name: true } } }, orderBy: { employeeNumber: "asc" } }),
+    db.employeeChangeRequest.findMany({ where: { organizationId: ctx.orgId, status: "PENDING" }, select: { employeeId: true, kind: true } }),
+  ]);
+  return emps.map((e) => ({
+    id: e.id,
+    employeeNumber: e.employeeNumber,
+    name: `${e.firstName} ${e.lastName}`,
+    department: e.department?.name ?? "—",
+    bank: e.bankName ? `${e.bankName} ${maskTail(e.accountNumber)}` : "—",
+    taxId: maskTail(e.taxId),
+    pensionPin: maskTail(e.pensionPin),
+    pending: pending.filter((p) => p.employeeId === e.id).map((p) => p.kind),
+  }));
+}
+
+/** The client's HR contact asks the bureau to change an employee's bank, tax or pension details. It waits for the bureau's approval like any other change. */
+export async function portalRequestChange(ctx: Ctx, employeeId: string, kind: "BANK" | "TAX" | "PENSION", raw: Record<string, unknown>, reason: string) {
+  assertCan(ctx, "portal.changes");
+  return requestChangeCore(ctx, employeeId, kind, raw, reason);
+}
+
+export async function portalChangeRequests(ctx: Ctx) {
+  assertCan(ctx, "portal.changes");
+  return db.employeeChangeRequest.findMany({ where: { organizationId: ctx.orgId }, include: { employee: { select: { employeeNumber: true, firstName: true, lastName: true } } }, orderBy: { createdAt: "desc" }, take: 30 });
 }

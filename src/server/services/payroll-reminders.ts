@@ -66,7 +66,7 @@ export type ReminderOutcome = {
 };
 export type ReminderRun = { organization: string; skipped?: string; outcomes: ReminderOutcome[]; notes: string[] };
 
-async function teamEmails(orgId: string, bureauId: string | null, extra: string[]): Promise<string[]> {
+export async function teamEmails(orgId: string, bureauId: string | null, extra: string[]): Promise<string[]> {
   let users: { email: string; role: Role }[];
   if (bureauId) {
     const [granted, bureauUsers] = await Promise.all([

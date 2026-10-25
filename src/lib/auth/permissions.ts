@@ -84,6 +84,10 @@ export const PERMISSIONS = [
   "payslip.distribute", // download a payroll's payslips as PDFs and email them to employees
   "portal.view", // the client portal: this month's dates and inputs, and payrolls awaiting or past the client's approval
   "portal.approve", // approve or refuse the client's payroll in the portal (the client's approver)
+  "portal.query", // raise queries with the bureau, and follow them, in the portal
+  "portal.download", // download the client's own payslips and payroll register from the portal
+  "portal.changes", // ask the bureau to change an employee's bank, tax or pension details (the client's HR contact)
+  "query.respond", // answer clients' queries and close them (bureau staff)
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -144,6 +148,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "bureau.view",
     "rules.verify",
     "payslip.distribute",
+    "query.respond",
   ],
   OPERATIONS: [
     "dashboard.view",
@@ -188,6 +193,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "bureau.view",
     "rules.manage",
     "payslip.distribute",
+    "query.respond",
   ],
   FINANCE: [
     ...READ_ALL,
@@ -208,6 +214,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "goods.receive",
     "rules.verify",
     "payslip.distribute",
+    "query.respond",
   ],
   AUDITOR: READ_ALL,
   SUPERVISOR: [
@@ -224,8 +231,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
   EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise"],
   // clients' own people see only their portal
-  CLIENT_APPROVER: ["portal.view", "portal.approve", "self.security"],
-  CLIENT_HR: ["portal.view", "self.security"],
+  CLIENT_APPROVER: ["portal.view", "portal.approve", "portal.query", "portal.download", "self.security"],
+  CLIENT_HR: ["portal.view", "portal.query", "portal.download", "portal.changes", "self.security"],
 };
 
 export function can(role: Role, permission: Permission): boolean {

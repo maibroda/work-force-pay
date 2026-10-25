@@ -15,6 +15,7 @@ import { approveRun, createPeriod, lockRun, runPayroll, submitForApproval } from
 import { createPaymentBatches, generateRemittances } from "../src/server/services/payments";
 import { INPUT_KINDS } from "../src/lib/payroll-calendar";
 import { clientApproveRun, inviteClientUser, setClientApprovalRequired } from "../src/server/services/portal";
+import { raiseQuery, replyToQuery } from "../src/server/services/client-queries";
 
 /** Bureau staff, as they are in the bureau's own organization. */
 export type DemoStaff = { founder: Ctx; officer: Ctx; reviewer: Ctx; hr: Ctx };
@@ -88,6 +89,8 @@ export async function buildDemoClient(staff: DemoStaff, opts: { name?: string; c
   const invited = await inviteClientUser(founder, { name: "Mrs Funmi Bello", email: `approver@${(opts.code ?? "acmefac").toLowerCase()}.test`, role: "CLIENT_APPROVER" });
   await setClientApprovalRequired(founder, true);
   const approver: Ctx = { userId: invited.id, orgId: client.id, role: "CLIENT_APPROVER", name: invited.name, email: invited.email, employeeId: null };
+  const invitedHr = await inviteClientUser(founder, { name: "Mr Tunde Ola", email: `hr@${(opts.code ?? "acmefac").toLowerCase()}.test`, role: "CLIENT_HR" });
+  const hrContact: Ctx = { userId: invitedHr.id, orgId: client.id, role: "CLIENT_HR", name: invitedHr.name, email: invitedHr.email, employeeId: null };
 
   // the month: dates, inputs received, calculation, reconciliation, approval by someone else, lock, payments
   await setVariancePolicy(founder, { headcountPct: 5, employeePct: 20, totalPct: 10, minAmount: 5000, reconciliationRequired: true } as never);
@@ -95,7 +98,7 @@ export async function buildDemoClient(staff: DemoStaff, opts: { name?: string; c
   await generateCalendar(officer, period.id);
   for (const kind of INPUT_KINDS) await markInput(officer, period.id, kind, kind === "LOANS" ? "NOT_APPLICABLE" : "RECEIVED", kind === "LOANS" ? "No staff loans this month" : "Sent by the client's HR by email, 19 Oct");
   const run = await runPayroll(officer, period.id);
-  return { client, bureauId, as, founder, officer, reviewer, hr, approver, employees, imported, period, run };
+  return { client, bureauId, as, founder, officer, reviewer, hr, approver, hrContact, employees, imported, period, run };
 }
 
 /** Takes the calculated month on to a locked, payable payroll: reconciled, submitted, approved and locked by someone else, then batches and remittances. */
@@ -107,5 +110,8 @@ export async function finishDemoMonth(d: Awaited<ReturnType<typeof buildDemoClie
   await lockRun(d.reviewer, d.run.id);
   const batches = await createPaymentBatches(d.reviewer, d.run.id);
   await generateRemittances(d.reviewer, d.run.id);
+  // a question from the client, answered by the bureau
+  const q = await raiseQuery(d.hrContact, { subject: "Pay date for November", category: "PAYROLL", body: "Will November's salaries be paid on the 28th again, or earlier because of the weekend?" });
+  await replyToQuery(d.officer, q.id, "The 28th falls on a Saturday, so the pay date is Friday the 27th. We will confirm when the draft is ready.");
   return { batches };
 }
