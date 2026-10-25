@@ -74,10 +74,10 @@ const first = async (q: Promise<{ id: string } | null>) => (await q)?.id;
 function resolvers(orgId: string): Record<string, () => Promise<string | undefined>> {
   const where = { organizationId: orgId };
   return {
-    // a client organization of any bureau (none in the demo data yet, so this page is skipped until one exists)
-    "/bureau/clients/[id]": () => first(db.organization.findFirst({ where: { bureauOrganizationId: { not: null } }, select: { id: true } })),
-    // a rule release of any bureau (none in the demo data yet, so this page is skipped until one exists)
-    "/bureau/rules/[id]": () => first(db.ruleRelease.findFirst({ select: { id: true } })),
+    // a client of the organization being smoked (the demo company is not a bureau, so this page is skipped)
+    "/bureau/clients/[id]": () => first(db.organization.findFirst({ where: { bureauOrganizationId: orgId }, select: { id: true } })),
+    // a rule release of the organization being smoked (the demo company is not a bureau, so this page is skipped)
+    "/bureau/rules/[id]": () => first(db.ruleRelease.findFirst({ where: { bureauOrganizationId: orgId }, select: { id: true } })),
     "/payroll/calendar/[periodId]": () => first(db.payrollPeriod.findFirst({ where, select: { id: true } })),
     "/payments/bank-file/[runId]": () => first(db.payrollRun.findFirst({ where: { ...where, status: "LOCKED" }, select: { id: true } })),
     "/accounting/journals/[id]": () => first(db.journalEntry.findFirst({ where, select: { id: true } })),

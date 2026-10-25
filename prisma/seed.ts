@@ -10,6 +10,7 @@ import "dotenv/config";
 import bcrypt from "bcryptjs";
 import type { Prisma } from "@prisma/client";
 import type { Ctx } from "../src/lib/auth/context";
+import type { Role } from "../src/lib/auth/permissions";
 import { addDays, d, eachDay, iso } from "../src/lib/dates";
 import { leaveEligibility } from "../src/lib/leave";
 import { NTA_2025_BANDS } from "../src/lib/payroll/paye";
@@ -36,6 +37,7 @@ import {
   submitForApproval,
 } from "../src/server/services/payroll";
 import { explainIssue } from "../src/server/services/payroll-controls";
+import { buildDemoClient, finishDemoMonth } from "./demo-client";
 import { createPaymentBatches, generateRemittances, markBatchPaid } from "../src/server/services/payments";
 import { ensureDefaultChart } from "../src/server/services/accounting";
 import { applyForLeave, decideLeave } from "../src/server/services/leave";
@@ -1286,6 +1288,7 @@ async function main() {
   const bureau = await db.organization.create({
     data: { name: "ThreeRoots Payroll Services", code: "THREEROOTS", address: "Lagos", isBureau: true },
   });
+  const bureauUsers: Array<{ id: string; role: Role; name: string; email: string }> = [];
   for (const [email, name, role] of [
     ["founder@threeroots.test", "Tolu Founder", "COMPANY_ADMIN"],
     ["officer@threeroots.test", "Ngozi Payroll Officer", "PAYROLL_ADMIN"],
@@ -1293,7 +1296,7 @@ async function main() {
     ["hr@threeroots.test", "Amaka HR", "HR_ADMIN"],
     ["auditor@threeroots.test", "Bayo Auditor", "AUDITOR"],
   ] as const)
-    await db.user.create({ data: { organizationId: bureau.id, email, name, role, passwordHash: hash } });
+    bureauUsers.push(await db.user.create({ data: { organizationId: bureau.id, email, name, role, passwordHash: hash } }));
   await seedStatutory(bureau.id);
   await ensureDefaultChart(db, bureau.id);
 
@@ -1310,6 +1313,15 @@ async function main() {
   await seedJournalDemo(org.id);
   await seedRecurringDemo(org.id);
   await seedBillingDemo(org.id);
+
+  // the demo client: 30 employees, 3 sites, one full month (see prisma/demo-client.ts and the acceptance test)
+  console.log("→ ThreeRoots demo client (Acme Facilities Ltd): onboarding, import, October 2026 payroll");
+  const staffCtx = (role: Role): Ctx => {
+    const u = bureauUsers.find((x) => x.role === role)!;
+    return { userId: u.id, orgId: bureau.id, role, name: u.name, email: u.email, employeeId: null };
+  };
+  const demo = await buildDemoClient({ founder: staffCtx("COMPANY_ADMIN"), officer: staffCtx("PAYROLL_ADMIN"), reviewer: staffCtx("FINANCE"), hr: staffCtx("HR_ADMIN") });
+  await finishDemoMonth(demo);
 
   const counts = {
     employees: await db.employee.count({ where: { organizationId: org.id } }),
