@@ -113,7 +113,7 @@ export async function varianceIssues(
   }));
 }
 
-async function loadRun(ctx: Ctx, runId: string) {
+async function loadRun(ctx: { orgId: string }, runId: string) {
   const run = await db.payrollRun.findFirst({ where: { id: runId, organizationId: ctx.orgId }, include: { period: true } });
   if (!run) throw new BusinessError("Payroll run not found.");
   return run;
@@ -132,6 +132,11 @@ export type ReconciliationView = {
 
 export async function reconciliationFor(ctx: Ctx, runId: string): Promise<ReconciliationView> {
   assertCan(ctx, "payroll.view");
+  return buildReconciliation(ctx, runId);
+}
+
+/** The reconciliation of a payroll in the caller's organization. The caller checks who may see it (staff, or the client in the portal). */
+export async function buildReconciliation(ctx: { orgId: string }, runId: string): Promise<ReconciliationView> {
   const run = await loadRun(ctx, runId);
   const recs = await db.payrollRecord.findMany({ where: { runId }, select: { employeeId: true, employeeNumber: true, employeeName: true, totalEarnings: true, netPay: true } });
   const current: PayPerson[] = recs.map((r) => ({ id: r.employeeId, label: `${r.employeeNumber} ${r.employeeName}`, gross: num(r.totalEarnings), net: num(r.netPay) }));

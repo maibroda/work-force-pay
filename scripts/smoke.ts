@@ -80,6 +80,7 @@ function resolvers(orgId: string): Record<string, () => Promise<string | undefin
     "/bureau/rules/[id]": () => first(db.ruleRelease.findFirst({ where: { bureauOrganizationId: orgId }, select: { id: true } })),
     "/payroll/calendar/[periodId]": () => first(db.payrollPeriod.findFirst({ where, select: { id: true } })),
     "/payments/bank-file/[runId]": () => first(db.payrollRun.findFirst({ where: { ...where, status: "LOCKED" }, select: { id: true } })),
+    "/portal/payroll/[runId]": () => first(db.payrollRun.findFirst({ where, select: { id: true } })),
     "/accounting/journals/[id]": () => first(db.journalEntry.findFirst({ where, select: { id: true } })),
     "/clients/[id]": () => first(db.client.findFirst({ where, select: { id: true } })),
     "/employees/[id]": () => first(db.employee.findFirst({ where, orderBy: { employeeNumber: "asc" }, select: { id: true } })),

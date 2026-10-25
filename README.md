@@ -1086,6 +1086,16 @@ For a payroll outsourcing business (ThreeRoots). **Each client is its own organi
   Access is re-checked against the database on every request, so removing it takes effect at once; a client's own users can never reach the bureau or another client; and database rules stop a client being moved to another bureau or access crossing bureaus.
 - **Audited where it happens.** Entering a client, granting and removing access, and everything staff do inside a client are written to the client's own audit log under the person's own name, tagged with the bureau they came from. Because the same person is the same user in every client, maker-checker rules (the preparer can't approve) hold across clients.
 
+### Client portal and the client's approval
+
+For a bureau's clients (`/portal`). A client's own people sign in to a portal that shows **only their own organization's payroll**.
+
+- **Two roles** (`CLIENT_APPROVER`, `CLIENT_HR`): the approver reviews and approves payrolls; the HR contact sees the calendar and inputs. Neither has any staff permission, can reach the bureau or any other client, or sees any other screen. **Two-factor sign-in is compulsory for them, from the first sign-in, with no grace period**: until it is set up the only page they can open is *My security*.
+- **Inviting them** (*Bureau staff, working in the client → Client Portal Access*, `users.manage`): enter a name, email and role. They get an email with a link (valid 72 hours) to choose their own password; nobody, including whoever invited them, ever knows it.
+- **What they see** (*Your Payroll*): each month's deadlines and where each stands, what the bureau has received from them, and any payroll waiting for their approval. A payroll is shown to them once the bureau has approved it. The review page shows the totals, who joined and left since last time, the changes the bureau had to explain, and every employee's gross, PAYE, pension and net pay.
+- **Approval is optional per client** (*Client approval* on the same settings page, `settings.manage`; needs an active approver first). Where it is on, after the bureau's own approval the client's approver **approves or sends the payroll back with a reason**; only then can it be locked. The sign-off names the calculation it covers, so a payroll calculated again needs a fresh approval; the application and the database both refuse to lock without it. Sending it back returns it to the bureau's preparer with the comment. The payroll page shows the bureau's staff where the client's sign-off stands. Every decision is recorded (who, when, why) and can't be changed or deleted. Applies to regular payrolls, not supplementary ones.
+- The demo client Acme Facilities has an approver (`approver@acmefac.test`, the demo password; set up two-factor on first sign-in) and requires the client's approval; its October payroll was approved that way.
+
 ### Payslip PDFs
 
 Payroll → a payroll run (approved, locked or paid) → **Payslips** (`payslip.distribute`: company admin, payroll admin, finance, HR admin). An employee can also download their own from their payslip page once the payroll is approved.

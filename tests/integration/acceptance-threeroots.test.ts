@@ -71,6 +71,9 @@ describe("1. One fictional client with 30 employees across 3 sites runs a full m
     expect(items).toHaveLength(6);
     expect(items.every((i) => i.status !== "EXPECTED")).toBe(true);
     expect(await db.payrollCalendarEntry.count({ where: { periodId: demo.period.id } })).toBe(1);
+    // the client's own approver signed off the figures before it could be locked
+    const signoff = await db.payrollClientApproval.findFirstOrThrow({ where: { runId: run.id } });
+    expect(signoff).toMatchObject({ decision: "APPROVED", byName: demo.approver.name, calculationCount: run.calculationCount });
   });
 
   it("paid the October joiners for the days they were there, and posted the payroll to the client's ledger", async () => {

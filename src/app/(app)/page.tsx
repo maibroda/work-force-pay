@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { requirePage } from "@/lib/auth/session";
+import { redirect } from "next/navigation";
+import { getSession, requirePage } from "@/lib/auth/session";
 import { dashboard } from "@/server/services/analytics";
 import { activationSummary } from "@/server/services/clients";
 import { db } from "@/lib/db";
@@ -10,6 +11,8 @@ import { StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 
 export default async function DashboardPage() {
+  const session = await getSession();
+  if (session && (session.role === "CLIENT_APPROVER" || session.role === "CLIENT_HR")) redirect("/portal");
   const ctx = await requirePage("dashboard.view");
   const [dash, act] = await Promise.all([dashboard(ctx), activationSummary(ctx)]);
   const run = dash.run;

@@ -7,7 +7,9 @@ export type Role =
   | "FINANCE"
   | "AUDITOR"
   | "SUPERVISOR"
-  | "EMPLOYEE";
+  | "EMPLOYEE"
+  | "CLIENT_APPROVER"
+  | "CLIENT_HR";
 
 export const PERMISSIONS = [
   "dashboard.view",
@@ -80,6 +82,8 @@ export const PERMISSIONS = [
   "rules.manage", // put a statutory rule version forward for release to clients, publish a verified one, withdraw an unpublished one
   "rules.verify", // verify a proposed statutory rate: HR and Finance each, never the person who proposed it
   "payslip.distribute", // download a payroll's payslips as PDFs and email them to employees
+  "portal.view", // the client portal: this month's dates and inputs, and payrolls awaiting or past the client's approval
+  "portal.approve", // approve or refuse the client's payroll in the portal (the client's approver)
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -219,6 +223,9 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "appraisal.review",
   ],
   EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise"],
+  // clients' own people see only their portal
+  CLIENT_APPROVER: ["portal.view", "portal.approve", "self.security"],
+  CLIENT_HR: ["portal.view", "self.security"],
 };
 
 export function can(role: Role, permission: Permission): boolean {

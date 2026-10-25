@@ -1000,6 +1000,11 @@ export async function approveRun(ctx: Ctx, runId: string) {
 
 export async function returnRun(ctx: Ctx, runId: string, reason: string) {
   assertCan(ctx, "payroll.approve");
+  await sendRunBack(ctx, runId, reason, "PAYROLL_RETURNED");
+}
+
+/** Takes a payroll awaiting approval, or approved but not locked, back to the preparer. Who may do it is the caller's check. */
+export async function sendRunBack(ctx: Ctx, runId: string, reason: string, auditAction: string) {
   const run = await getRun(ctx, runId);
   if (!["PENDING_APPROVAL", "APPROVED"].includes(run.status))
     throw new BusinessError("Only a payroll awaiting approval (or approved, not locked) can be returned.");
@@ -1012,7 +1017,7 @@ export async function returnRun(ctx: Ctx, runId: string, reason: string) {
       where: { id: run.periodId },
       data: { status: "OPEN", approvedBy: null, approvedAt: null },
     });
-  await logAudit(ctx, { action: "PAYROLL_RETURNED", entity: "PayrollRun", entityId: runId, reason });
+  await logAudit(ctx, { action: auditAction, entity: "PayrollRun", entityId: runId, reason });
 }
 
 /**
@@ -1023,6 +1028,11 @@ export async function lockRun(ctx: Ctx, runId: string) {
   assertCan(ctx, "payroll.lock");
   const run = await getRun(ctx, runId);
   if (run.status !== "APPROVED") throw new BusinessError("Only an approved payroll can be locked.");
+  if (run.type === "REGULAR" && (await db.organization.findUnique({ where: { id: ctx.orgId }, select: { clientApprovalRequired: true } }))?.clientApprovalRequired) {
+    const last = await db.payrollClientApproval.findFirst({ where: { runId }, orderBy: [{ createdAt: "desc" }, { id: "desc" }] });
+    if (!last || last.decision !== "APPROVED" || last.calculationCount !== run.calculationCount)
+      throw new BusinessError("This payroll is waiting for the client's own approval of its current figures before it can be locked.");
+  }
   await db.$transaction(
     async (tx) => {
       await tx.payrollRun.update({ where: { id: runId }, data: { status: "LOCKED" } });

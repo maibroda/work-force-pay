@@ -14,6 +14,7 @@ import { setVariancePolicy, signOffReconciliation } from "../src/server/services
 import { approveRun, createPeriod, lockRun, runPayroll, submitForApproval } from "../src/server/services/payroll";
 import { createPaymentBatches, generateRemittances } from "../src/server/services/payments";
 import { INPUT_KINDS } from "../src/lib/payroll-calendar";
+import { clientApproveRun, inviteClientUser, setClientApprovalRequired } from "../src/server/services/portal";
 
 /** Bureau staff, as they are in the bureau's own organization. */
 export type DemoStaff = { founder: Ctx; officer: Ctx; reviewer: Ctx; hr: Ctx };
@@ -83,13 +84,18 @@ export async function buildDemoClient(staff: DemoStaff, opts: { name?: string; c
   for (const [i, e] of employees.entries())
     await createPayRate(hr, { employeeId: e.id, monthlyGross: grossFor(i), structureCode: "STD", reason: "Offer letter", approvedBy: "Mrs Funmi Bello", effectiveFrom: e.employmentDate >= new Date("2026-10-01T00:00:00Z") ? e.employmentDate.toISOString().slice(0, 10) : "2026-01-01" });
 
+  // the client's own approver, who signs the payroll off in the portal before it can be locked
+  const invited = await inviteClientUser(founder, { name: "Mrs Funmi Bello", email: `approver@${(opts.code ?? "acmefac").toLowerCase()}.test`, role: "CLIENT_APPROVER" });
+  await setClientApprovalRequired(founder, true);
+  const approver: Ctx = { userId: invited.id, orgId: client.id, role: "CLIENT_APPROVER", name: invited.name, email: invited.email, employeeId: null };
+
   // the month: dates, inputs received, calculation, reconciliation, approval by someone else, lock, payments
   await setVariancePolicy(founder, { headcountPct: 5, employeePct: 20, totalPct: 10, minAmount: 5000, reconciliationRequired: true } as never);
   const period = await createPeriod(officer, DEMO_MONTH.year, DEMO_MONTH.month);
   await generateCalendar(officer, period.id);
   for (const kind of INPUT_KINDS) await markInput(officer, period.id, kind, kind === "LOANS" ? "NOT_APPLICABLE" : "RECEIVED", kind === "LOANS" ? "No staff loans this month" : "Sent by the client's HR by email, 19 Oct");
   const run = await runPayroll(officer, period.id);
-  return { client, bureauId, as, founder, officer, reviewer, hr, employees, imported, period, run };
+  return { client, bureauId, as, founder, officer, reviewer, hr, approver, employees, imported, period, run };
 }
 
 /** Takes the calculated month on to a locked, payable payroll: reconciled, submitted, approved and locked by someone else, then batches and remittances. */
@@ -97,6 +103,7 @@ export async function finishDemoMonth(d: Awaited<ReturnType<typeof buildDemoClie
   await signOffReconciliation(d.officer, d.run.id, "First payroll for this client; opening run");
   await submitForApproval(d.officer, d.run.id);
   await approveRun(d.reviewer, d.run.id);
+  await clientApproveRun(d.approver, d.run.id, "Figures checked against our records.");
   await lockRun(d.reviewer, d.run.id);
   const batches = await createPaymentBatches(d.reviewer, d.run.id);
   await generateRemittances(d.reviewer, d.run.id);

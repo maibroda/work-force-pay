@@ -45,6 +45,21 @@ export async function requestPasswordReset(email: string) {
   });
 }
 
+const INVITATION_TTL_HOURS = 72;
+
+/** Emails a new portal user a link to choose their own password. Nobody, including whoever invited them, ever knows it. */
+export async function sendInvitation(user: { id: string; email: string; name: string; organizationId: string }, orgName: string, invitedBy: string) {
+  const token = crypto.randomBytes(32).toString("base64url");
+  await db.passwordResetToken.create({ data: { organizationId: user.organizationId, userId: user.id, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + INVITATION_TTL_HOURS * 3_600_000) } });
+  const url = `${process.env.APP_URL ?? "http://localhost:3000"}/reset-password?token=${token}`;
+  await sendEmail({
+    to: user.email,
+    subject: `You have been invited to the ${orgName} payroll portal`,
+    text: `Hello ${user.name},\n\n${invitedBy} has invited you to review and approve ${orgName}'s payroll online.\n\nChoose your password here (the link works for ${INVITATION_TTL_HOURS} hours): ${url}\n\nYou will be asked to set up two-factor sign-in the first time you sign in.`,
+    html: `<p>Hello ${user.name},</p><p>${invitedBy} has invited you to review and approve ${orgName}'s payroll online.</p><p><a href="${url}">Choose your password</a> (the link works for ${INVITATION_TTL_HOURS} hours).</p><p>You will be asked to set up two-factor sign-in the first time you sign in.</p>`,
+  });
+}
+
 export const resetPasswordSchema = z.object({
   token: z.string().min(1),
   password: z.string().min(8, "Password must be at least 8 characters"),
