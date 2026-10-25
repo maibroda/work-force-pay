@@ -49,7 +49,7 @@ That is the one structural decision the rest depends on. Two ways to do it:
 | 3.5 Locked is immutable, corrections as adjustments | Built | |
 | 3.6 Payslips | Partial | Payslip report with browser printing. No PDF generation, no password-protected PDFs, no portal delivery. |
 | 3.6 Register, summary, remittance schedules | Built | Payroll register, PAYE, pension, NSITF, ITF, NHF schedules, statutory remittance tracking. |
-| 3.6 Bank payment files per bank | Partial | Bank payment schedule and payment batches exist. Per-bank upload formats were not found. |
+| 3.6 Bank payment files per bank | Built (one generic layout) | Excel file with Name, Account Number, Bank Code, Amount, Payment Description from a locked payroll; refuses unusable details unless left out on purpose; every file recorded with a fingerprint. Bank-specific layouts only if a client's bank rejects the generic one. Bank codes are a starting list to confirm. |
 | 3.6 Management reports | Partial | Many schedules exist; cost by site, headcount movement and variance explanations need checking against the list. |
 | 3.6 Branded templates | Missing | |
 | 3.7 Compliance calendar, evidence, rule-change log | Partial | Remittances have due dates. No calendar, reminders or evidence upload. The rule-change log is built: the Statutory Rule Library records who proposed, who verified (HR and Finance), and when each version was published to which clients. |

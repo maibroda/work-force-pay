@@ -1086,6 +1086,17 @@ For a payroll outsourcing business (ThreeRoots). **Each client is its own organi
   Access is re-checked against the database on every request, so removing it takes effect at once; a client's own users can never reach the bureau or another client; and database rules stop a client being moved to another bureau or access crossing bureaus.
 - **Audited where it happens.** Entering a client, granting and removing access, and everything staff do inside a client are written to the client's own audit log under the person's own name, tagged with the bureau they came from. Because the same person is the same user in every client, maker-checker rules (the preparer can't approve) hold across clients.
 
+### Bank payment file
+
+Payroll → **Payroll Runs** → a locked run → **Bank payment file** (`payment.manage`). An **Excel (.xlsx)** file the client uploads to their own bank; the app only makes the file and never moves money.
+
+- **One sheet, five columns:** Name, Account Number, Bank Code, Amount, Payment Description (for example "Salary October 2026"). Account numbers and bank codes are stored as text, so a leading zero survives; amounts are numbers with two decimals. One row per person to be paid, whichever bank they bank with.
+- **Built from what was frozen with the locked payroll** (the payment batches), not from whatever an employee's record says now, so the file matches what was approved. Create the payment batches first.
+- **Nobody is guessed at.** A person with no account number, an account number that isn't 10 digits, no bank name, a bank with no code in the list, or nothing to pay is listed as a problem and the file is **refused** until it is put right, or until you choose to download it **without** them (they must then be paid separately; who was left out is named on the record). Two people on the same account are flagged to check, not dropped.
+- **Bank codes** (*Payments → Bank List & Codes*): a starting list of the standard 3-digit bank codes per organization, matched to employees' free-text bank names ignoring case, spacing and words like "Bank" and "Plc", and through alternative names. **It is a starting point: correct it, add microfinance and mobile-money banks (longer codes), and confirm the codes against the upload guide of the bank the client pays from before the first file is sent.** A name that would answer to two different codes is refused. Employee import now warns when a bank isn't in the list.
+- **Every file is recorded**: who, when, how many people, the total, who was left out, and a fingerprint (SHA-256) of the file, so the one uploaded to the bank can be matched to the one the app made. Records can't be changed or deleted. A payroll already marked paid is not exported again.
+- Account numbers are still checked for length only. The bank check digit (NUBAN) is not checked: it needs a verified test set against real accounts first.
+
 ### Payroll calendar and input tracker
 
 Payroll → **Payroll Calendar**, in each client organization (a bureau's staff reach it by working in the client).

@@ -601,6 +601,8 @@ model Organization {
   ruleReleases              RuleRelease[]
   calendarSetting           PayrollCalendarSetting?
   reminderSetting           PayrollReminderSetting?
+  bankCodes                 BankCode[]
+  paymentFileExports        PaymentFileExport[]
   reminderLogs              PayrollReminderLog[]
   calendarEntries           PayrollCalendarEntry[]
   inputItems                PayrollInputItem[]
@@ -701,6 +703,43 @@ model PayrollCalendarSetting {
   expectedInputs      String[]     @default(["ATTENDANCE", "OVERTIME", "ALLOWANCES", "DEDUCTIONS", "LOANS", "JOINERS_LEAVERS"])
   updatedBy           String?
   updatedAt           DateTime     @updatedAt
+}
+
+/// A bank and the code a bulk payment upload asks for. Starts from a standard list, corrected or extended per organization; confirm against the
+/// upload guide of the bank the client pays from.
+model BankCode {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  code           String
+  /// Other names employees' records use for the bank.
+  aliases        String[]     @default([])
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, name])
+  @@index([organizationId, code])
+}
+
+/// A bank payment file produced for a payroll run: who produced it, when, how many people and how much, who was left out, and a fingerprint of the
+/// file itself so the one uploaded to the bank can be matched to the one the app made. Never changed.
+model PaymentFileExport {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  runId           String
+  fileName        String
+  rowCount        Int
+  totalAmount     Decimal      @db.Decimal(16, 2)
+  /// People left out because their bank details could not be used, with why.
+  excluded        Json
+  checksum        String
+  createdBy       String
+  createdByUserId String
+  createdAt       DateTime     @default(now())
+
+  @@index([organizationId, runId, createdAt])
 }
 
 /// Whether, and to whom, payroll deadline reminders are emailed for a client. Off until someone switches it on.

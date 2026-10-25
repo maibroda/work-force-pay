@@ -9,6 +9,7 @@ import { iso } from "@/lib/dates";
 import { checkImport, type ImportCheck } from "@/lib/employee-import";
 import { employeeSchema, createEmployeeInTx } from "./employees";
 import { assertCan, BusinessError, db } from "./_base";
+import { bankResolver } from "./payment-file";
 import { logAudit } from "./audit";
 
 async function reference(ctx: Ctx) {
@@ -25,6 +26,7 @@ async function reference(ctx: Ctx) {
     departments,
     existing: people.map((p) => ({ ...p, dateOfBirth: p.dateOfBirth ? iso(p.dateOfBirth) : null })),
     today: iso(new Date()),
+    knownBank: await bankResolver(db, ctx.orgId),
   };
 }
 
