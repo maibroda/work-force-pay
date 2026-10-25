@@ -1120,6 +1120,15 @@ For a bureau's clients (`/portal`). A client's own people sign in to a portal th
 - Overtime here is a *whole-month amount per employee* (the client works out hours × rate). The security-company overtime model (by site and contract) is not used for a bureau's clients. Loans are not accepted in the file; they have their own module.
 - Not yet: accepting or leaving out individual rows (a batch is accepted or sent back as a whole), and a pay-rule check of an amount against the employee's salary.
 
+### Launch checklist
+
+**Bureau → Launch Checklist** (`bureau.view`; confirming needs `bureau.manage`) lists what has to be true before a real client's payroll runs here, and *Bureau → Clients* shows a pointer to it until it is finished. How to get each item done is in [`docs/going-live.md`](docs/going-live.md).
+
+- **Judged by the app:** the bureau's own PAYE, pension and employer-contribution tables in force today are each **verified by HR and Finance and published** through the rule library (none, or one that was never proposed, is *to do*; one part-way is *needs attention*, with how many of the two signatures it has); email is really configured (`RESEND_API_KEY`, and an `EMAIL_FROM` that is not Resend's test address, which delivers only to the account owner); `APP_URL` is https and not local; `AUTH_SECRET` and `CRON_SECRET` are real, not the example values; **a scheduler is calling the jobs** (each cron route records a heartbeat in `JobRun`, and the reminders job must have run within four days and not failed); every staff member has two-factor on; every client has signed data-processing terms recorded.
+- **Confirmed by a bureau manager, with a note and the date** (not an empty tick: the note must say what was done, the database refuses a short one; audited, and can be withdrawn with a reason): bank codes checked against each client's bank guide, a real payslip email received and opened, a backup restored into a scratch database.
+- **Send me a test email** mails the manager a small PDF attachment to prove the provider accepts attachments; with no provider configured it says nothing was sent.
+- The rate-table item carries the **points HR and Finance should settle** when they verify: the minimum-wage exemption that sits beside the ₦800,000 zero band, deductions the tables don't model (NHIS, life assurance, home-loan interest), the off-by-default NHF relief, and the security-business costing percentages mixed into the employer-contribution table. The tables were written from the Act's schedule and are **not certified**; the app does not claim they are.
+
 ### Payslip PDFs
 
 Payroll → a payroll run (approved, locked or paid) → **Payslips** (`payslip.distribute`: company admin, payroll admin, finance, HR admin). An employee can also download their own from their payslip page once the payroll is approved.

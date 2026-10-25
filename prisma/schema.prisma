@@ -612,6 +612,7 @@ model Organization {
   clientQueryMessages       ClientQueryMessage[]
   clientInputBatches        ClientInputBatch[]
   clientInputRows           ClientInputRow[]
+  launchChecks              LaunchCheck[]
   calendarSetting           PayrollCalendarSetting?
   reminderSetting           PayrollReminderSetting?
   bankCodes                 BankCode[]
@@ -724,6 +725,32 @@ enum QueryStatus {
   OPEN
   ANSWERED
   CLOSED
+}
+
+/// One run of a scheduled job (the reminders, the HR digest, ...), written by the job's own endpoint so the app can tell whether a scheduler is calling it.
+model JobRun {
+  id         String    @id @default(cuid())
+  name       String
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  ok         Boolean   @default(false)
+  error      String?
+
+  @@index([name, startedAt])
+}
+
+/// A launch-checklist item a bureau manager has confirmed by hand (something the app can't see for itself), with who, when and what they did.
+model LaunchCheck {
+  id                   String       @id @default(cuid())
+  bureauOrganizationId String
+  bureau               Organization @relation(fields: [bureauOrganizationId], references: [id])
+  key                  String
+  note                 String
+  confirmedBy          String
+  confirmedByUserId    String
+  confirmedAt          DateTime     @default(now())
+
+  @@unique([bureauOrganizationId, key])
 }
 
 enum ClientInputStatus {

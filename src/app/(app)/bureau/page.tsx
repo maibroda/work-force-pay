@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { listClients, PACKAGE_LABELS, staffTwoFactorStatus } from "@/server/services/bureau";
+import { launchProgress } from "@/server/services/launch-readiness";
 import { fmtDate, iso } from "@/lib/dates";
 import { naira, num } from "@/lib/money";
 import { ActionButton } from "@/components/action-button";
@@ -19,6 +20,7 @@ export default async function BureauPage() {
   const { bureau, clients } = await listClients(ctx);
   const manage = can(ctx.role, "bureau.manage");
   const tf = bureau.isBureau && !ctx.homeOrgId ? await staffTwoFactorStatus(ctx) : null;
+  const launch = bureau.isBureau && !ctx.homeOrgId ? await launchProgress(ctx) : null;
 
   if (!bureau.isBureau)
     return (
@@ -47,6 +49,14 @@ export default async function BureauPage() {
           )
         }
       />
+      {launch && !launch.ready && (
+        <p className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm">
+          Launch checklist: {launch.done} of {launch.total} done.{" "}
+          <Link className="text-primary underline" href="/bureau/readiness">
+            See what is left
+          </Link>
+        </p>
+      )}
       <Section title={`${clients.length} client(s)`} flush>
         <Table>
           <THead>
