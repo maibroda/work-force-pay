@@ -19,7 +19,14 @@ const todayUtc = () => {
  * Where this person stands against the company's two-factor requirement. One cheap lookup of the policy; the
  * user is only read when their role is actually covered.
  */
+export const CLIENT_ROLES: readonly string[] = ["CLIENT_APPROVER", "CLIENT_HR"];
+
 export async function twoFactorStateFor(who: { userId: string; orgId: string; role: string }): Promise<{ state: TwoFactorState; enforceFrom: Date | null }> {
+  // a client's own people always sign in with a second factor: no grace period, no policy to switch off
+  if (CLIENT_ROLES.includes(who.role)) {
+    const u = await db.user.findUnique({ where: { id: who.userId }, select: { totpEnabled: true } });
+    return { state: u?.totpEnabled ? "ENROLLED" : "BLOCKED", enforceFrom: null };
+  }
   const p = await db.hrPolicy.findUnique({ where: { organizationId: who.orgId }, select: { twoFactorRoles: true, twoFactorEnforceFrom: true } });
   const roles: string[] = p?.twoFactorRoles ?? [];
   const enforceFrom = p?.twoFactorEnforceFrom ?? null;

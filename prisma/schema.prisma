@@ -25,6 +25,9 @@ enum Role {
   AUDITOR
   SUPERVISOR
   EMPLOYEE
+  /// A client's own approver and HR contact, who use the client portal and nothing else. Always need two-factor sign-in.
+  CLIENT_APPROVER
+  CLIENT_HR
 }
 
 enum EmployeeStatus {
@@ -599,6 +602,9 @@ model Organization {
   staffAccessAsBureau       StaffClientAccess[]        @relation("AccessBureau")
   staffAccessAsClient       StaffClientAccess[]        @relation("AccessClient")
   ruleReleases              RuleRelease[]
+  /// Whether a payroll needs the client's own sign-off, after the bureau's internal approval, before it can be locked.
+  clientApprovalRequired    Boolean                    @default(false)
+  clientApprovals           PayrollClientApproval[]
   calendarSetting           PayrollCalendarSetting?
   reminderSetting           PayrollReminderSetting?
   bankCodes                 BankCode[]
@@ -705,6 +711,28 @@ model PayrollCalendarSetting {
   expectedInputs      String[]     @default(["ATTENDANCE", "OVERTIME", "ALLOWANCES", "DEDUCTIONS", "LOANS", "JOINERS_LEAVERS"])
   updatedBy           String?
   updatedAt           DateTime     @updatedAt
+}
+
+enum ClientDecision {
+  APPROVED
+  REJECTED
+}
+
+/// The client's own sign-off (or refusal) of a payroll, with who and why. It names the calculation it covers: a payroll calculated again afterwards
+/// needs a fresh approval. Never changed.
+model PayrollClientApproval {
+  id               String         @id @default(cuid())
+  organizationId   String
+  organization     Organization   @relation(fields: [organizationId], references: [id])
+  runId            String
+  calculationCount Int
+  decision         ClientDecision
+  comment          String?
+  byName           String
+  byUserId         String
+  createdAt        DateTime       @default(now())
+
+  @@index([organizationId, runId, createdAt])
 }
 
 /// Whether payslips may be emailed to employees from this organization. Off until someone switches it on; downloads are always available.

@@ -6,6 +6,7 @@ import { getRunDetail, listRecords } from "@/server/services/payroll";
 import { reconciliationFor } from "@/server/services/payroll-controls";
 import { ReconciliationPanel } from "./reconciliation-panel";
 import { PayslipDelivery } from "./payslip-delivery";
+import { ClientApprovalPanel } from "./client-approval-panel";
 import { SmartForm } from "@/components/smart-form";
 import { compactNaira, naira, num } from "@/lib/money";
 import { fmtDate } from "@/lib/dates";
@@ -185,6 +186,7 @@ export default async function RunPage({
       )}
 
       {recon && <ReconciliationPanel ctx={ctx} view={recon} />}
+      {run.type === "REGULAR" && <ClientApprovalPanel ctx={ctx} runId={run.id} />}
       {["APPROVED", "LOCKED", "PAID"].includes(run.status) && can(ctx.role, "payslip.distribute") && <PayslipDelivery ctx={ctx} runId={run.id} />}
 
       <Section

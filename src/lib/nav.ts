@@ -8,6 +8,8 @@ export interface NavItem {
   section?: string;
   /** Shown only in a payroll bureau, or while working in one of its clients. */
   bureauOnly?: boolean;
+  /** Shown only to a client's own people (the portal roles). */
+  clientOnly?: boolean;
 }
 export interface NavGroup {
   title: string;
@@ -16,11 +18,13 @@ export interface NavGroup {
 
 export const NAV: NavGroup[] = [
   { title: "Dashboard", items: [{ href: "/", label: "Dashboard", perm: "dashboard.view" }] },
+  { title: "Your payroll", items: [{ href: "/portal", label: "Your Payroll", perm: "portal.view", clientOnly: true }] },
   {
     title: "Bureau",
     items: [
       { href: "/bureau", label: "Clients", perm: "bureau.view", bureauOnly: true },
       { href: "/bureau/deadlines", label: "Due This Week", perm: "bureau.view", bureauOnly: true },
+      { href: "/settings/client-portal", label: "Client Portal Access", perm: "users.manage", bureauOnly: true },
       { href: "/bureau/rules", label: "Statutory Rule Library", perm: "bureau.view", bureauOnly: true },
     ],
   },

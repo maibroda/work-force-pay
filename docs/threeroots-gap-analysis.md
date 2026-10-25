@@ -53,7 +53,7 @@ That is the one structural decision the rest depends on. Two ways to do it:
 | 3.6 Management reports | Partial | Many schedules exist; cost by site, headcount movement and variance explanations need checking against the list. |
 | 3.6 Branded templates | Missing | |
 | 3.7 Compliance calendar, evidence, rule-change log | Partial | Remittances have due dates. No calendar, reminders or evidence upload. The rule-change log is built: the Statutory Rule Library records who proposed, who verified (HR and Finance), and when each version was published to which clients. |
-| 3.8 Client portal | Missing | `EMPLOYEE` self-service exists for staff, not for client approvers or HR contacts. Needs MFA-enforced client roles. |
+| 3.8 Client portal | Partial (approval, calendar, inputs view) | Client approver and HR contact roles with compulsory two-factor, invited by email, limited to their own organization; calendar and input status, payroll review and approve / send back with the separate client-approval record, enforced at the lock. Still to do: clients submitting inputs and employee changes, downloading reports and payslips, and the query log. |
 | 3.9 CRM and pipeline | Missing | A sales-commission design note exists (`docs/sales-commission-design.md`); no leads, stages, activity log or referral partners. |
 | 3.10 Pricing and proposals | Missing | |
 | 3.11 Payroll Health Check | Missing | |

@@ -27,7 +27,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .map((g) => ({
       title: g.title,
       items: g.items
-        .filter((i) => can(ctx.role, i.perm) && (!i.bureauOnly || showBureau))
+        .filter((i) => can(ctx.role, i.perm) && (!i.bureauOnly || showBureau) && (!i.clientOnly || ctx.role === "CLIENT_APPROVER" || ctx.role === "CLIENT_HR"))
         .map(({ href, label, section }) => ({ href, label, section })),
     }))
     .filter((g) => g.items.length);
