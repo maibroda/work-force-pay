@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
+import { recordSensitiveAccess } from "@/server/services/sensitive-access";
 import { recordsOverview } from "@/server/services/personal-records";
 import { fullName } from "@/lib/utils";
 import { PageHeader, Section, Stat, StatGrid } from "@/components/page";
@@ -21,6 +22,7 @@ function Who({ c }: { c?: Contact }) {
 export default async function NextOfKinPage() {
   const ctx = await requirePage("employee.sensitive");
   const { rows, totals, policy } = await recordsOverview(ctx);
+  await recordSensitiveAccess(ctx, { kind: "PERSONAL_RECORDS", ref: "next-of-kin", count: rows.length });
   const main = (r: (typeof rows)[number], kind: Contact["kind"]) => {
     const list = r.contacts.filter((c) => c.kind === kind);
     return list.find((c) => c.isPrimary) ?? list[0];

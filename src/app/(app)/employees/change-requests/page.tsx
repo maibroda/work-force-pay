@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { listChanges } from "@/server/services/change-requests";
+import { recordSensitiveAccess } from "@/server/services/sensitive-access";
 import { FIELD_LABELS, KIND_FIELDS, KIND_LABELS } from "@/lib/change-control";
 import { fmtDate } from "@/lib/dates";
 import { fullName } from "@/lib/utils";
@@ -26,6 +27,7 @@ export default async function ChangeRequestsPage({ searchParams }: { searchParam
   const filter = sp.status ?? "";
   const decide = can(ctx.role, "employee.approve");
   const all = await listChanges(ctx);
+  await recordSensitiveAccess(ctx, { kind: "IDENTIFIERS", ref: "change-requests", count: all.length });
   const rows = all.filter((r) => (filter === "ALL" ? true : filter ? r.status === filter : r.status === "PENDING"));
   const pending = all.filter((r) => r.status === "PENDING");
   return (

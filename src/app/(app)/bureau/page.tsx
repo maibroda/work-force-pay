@@ -1,20 +1,24 @@
 import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
-import { listClients, PACKAGE_LABELS } from "@/server/services/bureau";
-import { fmtDate } from "@/lib/dates";
+import { listClients, PACKAGE_LABELS, staffTwoFactorStatus } from "@/server/services/bureau";
+import { fmtDate, iso } from "@/lib/dates";
 import { naira, num } from "@/lib/money";
 import { ActionButton } from "@/components/action-button";
 import { Empty, PageHeader, Section } from "@/components/page";
-import { StatusBadge } from "@/components/ui/badge";
+import { SmartForm } from "@/components/smart-form";
+import { Badge, StatusBadge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { enableBureauAction, switchOrganizationAction } from "@/app/actions/bureau";
+import { bringForwardStaffTwoFactorAction, enableBureauAction, switchOrganizationAction } from "@/app/actions/bureau";
+
+const STATE_BADGE = { ENROLLED: ["green", "On"], GRACE: ["amber", "Not set up yet"], BLOCKED: ["red", "Locked out until set up"], NOT_REQUIRED: ["gray", "—"] } as const;
 
 export default async function BureauPage() {
   const ctx = await requirePage("bureau.view");
   const { bureau, clients } = await listClients(ctx);
   const manage = can(ctx.role, "bureau.manage");
+  const tf = bureau.isBureau && !ctx.homeOrgId ? await staffTwoFactorStatus(ctx) : null;
 
   if (!bureau.isBureau)
     return (
@@ -86,6 +90,44 @@ export default async function BureauPage() {
         </Table>
         {!clients.length && <Empty>{manage ? "No clients yet. Onboard the first one above." : "You have not been given access to any client yet. Ask a bureau manager."}</Empty>}
       </Section>
+      {tf?.from && (
+        <Section
+          title="Staff two-factor sign-in"
+          description={`Compulsory for everyone who works for ${bureau.name}, in any role and in every client${tf.inForce ? " — in force since" : ", from"} ${iso(tf.from)}. ${tf.missing} of ${tf.rows.length} active user(s) haven't set it up${tf.missing && tf.inForce ? " and can reach nothing but My security" : ""}. The day can be brought forward but never put back.`}
+        >
+          {manage && (
+            <SmartForm
+              columns={3}
+              submitLabel="Bring the day forward"
+              resetOnSuccess={false}
+              action={bringForwardStaffTwoFactorAction}
+              fields={[{ name: "from", label: "Compulsory from", type: "date", defaultValue: iso(tf.from), required: true }]}
+            />
+          )}
+          <Table>
+            <THead>
+              <TR>
+                <TH>Name</TH>
+                <TH>Email</TH>
+                <TH>Role</TH>
+                <TH>Two-factor</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {tf.rows.map((u) => (
+                <TR key={u.id}>
+                  <TD>{u.name}</TD>
+                  <TD className="text-xs">{u.email}</TD>
+                  <TD className="text-xs">{u.role.replace(/_/g, " ")}</TD>
+                  <TD>
+                    <Badge tone={STATE_BADGE[u.state][0]}>{u.totpEnabled ? "On" : STATE_BADGE[u.state][1]}</Badge>
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </Section>
+      )}
     </>
   );
 }

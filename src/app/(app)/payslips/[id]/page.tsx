@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { getPayslip } from "@/server/services/payroll";
+import { recordSensitiveAccess } from "@/server/services/sensitive-access";
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/page";
 import { Payslip } from "@/components/payslip";
@@ -14,6 +15,7 @@ export default async function PayslipPage({ params }: { params: Promise<{ id: st
   if (!rec) notFound();
   if (ctx.role === "SUPERVISOR") notFound();
   if (ctx.role === "EMPLOYEE" && !["APPROVED", "LOCKED", "PAID"].includes(rec.run.status)) notFound();
+  await recordSensitiveAccess(ctx, { kind: "PAYSLIP", employeeId: rec.employeeId });
   const org = await db.organization.findUniqueOrThrow({ where: { id: ctx.orgId } });
   return (
     <>

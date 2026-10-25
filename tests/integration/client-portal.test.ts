@@ -120,8 +120,8 @@ describe("what the client's people can reach", () => {
     expect((await twoFactorStateFor({ userId: w.hrContact.userId, orgId: w.client.id, role: "CLIENT_HR" })).state).toBe("BLOCKED");
     await db.user.update({ where: { id: w.approver.userId }, data: { totpEnabled: true } });
     expect((await twoFactorStateFor({ userId: w.approver.userId, orgId: w.client.id, role: "CLIENT_APPROVER" })).state).toBe("ENROLLED");
-    // the bureau's own staff are still under the company's policy
-    expect((await twoFactorStateFor({ userId: w.founder.userId, orgId: w.t.org.id, role: "COMPANY_ADMIN" })).state).toBe("NOT_REQUIRED");
+    // the bureau's own staff are covered by the bureau's rule, with notice before it applies (see bureau-staff-two-factor.test.ts)
+    expect((await twoFactorStateFor({ userId: w.founder.userId, orgId: w.t.org.id, role: "COMPANY_ADMIN" })).state).toBe("GRACE");
   });
 
   it("sees the month's dates and inputs, and a payroll only once the bureau has approved it", async () => {

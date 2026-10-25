@@ -43,3 +43,20 @@ export function twoFactorReminder(state: TwoFactorState, enforceFrom: Date | nul
 
 /** Whole days until the start day (0 on the day itself). */
 export const daysUntilEnforced = (enforceFrom: Date, today: Date) => Math.round((enforceFrom.getTime() - today.getTime()) / 86_400_000);
+
+const STRICTNESS: Record<TwoFactorState, number> = { NOT_REQUIRED: 0, ENROLLED: 0, GRACE: 1, BLOCKED: 2 };
+
+/**
+ * A bureau's staff are all covered, whatever their role, from the bureau's start day. Someone who also falls under a rule of their own organization
+ * gets whichever of the two is stricter, and the earlier start day of the rules that cover them. Both states describe the same person, so if either says enrolled, they are.
+ */
+export function combineTwoFactor(
+  a: { state: TwoFactorState; enforceFrom: Date | null },
+  b: { state: TwoFactorState; enforceFrom: Date | null },
+): { state: TwoFactorState; enforceFrom: Date | null } {
+  const state: TwoFactorState =
+    a.state === "ENROLLED" || b.state === "ENROLLED" ? "ENROLLED" : STRICTNESS[a.state] >= STRICTNESS[b.state] ? a.state : b.state;
+  // a start day only counts for a rule that actually covers this person
+  const dates = [a, b].filter((x) => x.state !== "NOT_REQUIRED").map((x) => x.enforceFrom).filter((x): x is Date => !!x);
+  return { state, enforceFrom: dates.length ? new Date(Math.min(...dates.map((x) => x.getTime()))) : null };
+}

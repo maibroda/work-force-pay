@@ -1,5 +1,6 @@
 import { requirePage } from "@/lib/auth/session";
 import { listBatches, listTransactions } from "@/server/services/payments";
+import { recordSensitiveAccess } from "@/server/services/sensitive-access";
 import { naira } from "@/lib/money";
 import { fullName } from "@/lib/utils";
 import { FilterBar, FilterField, PageHeader, Section, Empty } from "@/components/page";
@@ -15,6 +16,7 @@ export default async function TransactionsPage({
   const ctx = await requirePage("payroll.view");
   const sp = await searchParams;
   const [batches, txns] = await Promise.all([listBatches(ctx), listTransactions(ctx, sp.batchId)]);
+  if (txns.length) await recordSensitiveAccess(ctx, { kind: "PAYMENTS", ref: "transactions", count: txns.length });
   return (
     <>
       <PageHeader title="Payment transactions" />

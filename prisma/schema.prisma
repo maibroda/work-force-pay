@@ -594,6 +594,9 @@ model Organization {
   /// A payroll bureau (ThreeRoots) serves client organizations. Each client is its own organization, so its data is isolated by construction;
   /// bureau staff are given access to the clients they work on and switch between them.
   isBureau                  Boolean                    @default(false)
+  /// The day two-factor sign-in becomes compulsory for every user of a bureau (any role), wherever they are working. Set when the bureau is set up
+  /// and only ever brought forward, never put back.
+  staffTwoFactorFrom        DateTime?                  @db.Date
   bureauOrganizationId      String?
   bureauOrganization        Organization?              @relation("BureauClients", fields: [bureauOrganizationId], references: [id])
   clientOrganizations       Organization[]             @relation("BureauClients")
