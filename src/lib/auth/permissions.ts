@@ -79,6 +79,7 @@ export const PERMISSIONS = [
   "bureau.manage", // onboard clients, set their terms, give staff access, and work in every client of the bureau
   "rules.manage", // put a statutory rule version forward for release to clients, publish a verified one, withdraw an unpublished one
   "rules.verify", // verify a proposed statutory rate: HR and Finance each, never the person who proposed it
+  "payslip.distribute", // download a payroll's payslips as PDFs and email them to employees
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -138,6 +139,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "self.security",
     "bureau.view",
     "rules.verify",
+    "payslip.distribute",
   ],
   OPERATIONS: [
     "dashboard.view",
@@ -181,6 +183,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "self.security",
     "bureau.view",
     "rules.manage",
+    "payslip.distribute",
   ],
   FINANCE: [
     ...READ_ALL,
@@ -200,6 +203,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "note.manage",
     "goods.receive",
     "rules.verify",
+    "payslip.distribute",
   ],
   AUDITOR: READ_ALL,
   SUPERVISOR: [

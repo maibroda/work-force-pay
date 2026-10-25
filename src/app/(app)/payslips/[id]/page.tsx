@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
+import { can } from "@/lib/auth/permissions";
 import { getPayslip } from "@/server/services/payroll";
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/page";
@@ -17,7 +18,19 @@ export default async function PayslipPage({ params }: { params: Promise<{ id: st
   return (
     <>
       <div className="no-print">
-        <PageHeader title={`Payslip — ${rec.employeeNumber}`} actions={<PrintButton />} />
+        <PageHeader
+          title={`Payslip — ${rec.employeeNumber}`}
+          actions={
+            <>
+              {(ctx.role === "EMPLOYEE" || can(ctx.role, "payslip.distribute")) && (
+                <a className="rounded border px-3 py-1.5 text-sm hover:bg-accent" href={`/api/payslips/${rec.id}/pdf`}>
+                  Download PDF
+                </a>
+              )}
+              <PrintButton />
+            </>
+          }
+        />
       </div>
       <Payslip rec={rec} orgName={org.name} />
     </>

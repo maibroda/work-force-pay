@@ -47,7 +47,7 @@ That is the one structural decision the rest depends on. Two ways to do it:
 | 3.5 Validations and variance report | Built | Critical/warning validations with Finance override, plus headcount, total and per-person variance against the previous payroll, each needing a written explanation before submission. |
 | 3.5 Reconciliation | Built | Bridge of headcount, gross and net from the previous payroll, with a recorded sign-off (required before submission if the organisation chooses). The ledger side comes later. |
 | 3.5 Locked is immutable, corrections as adjustments | Built | |
-| 3.6 Payslips | Partial | Payslip report with browser printing. No PDF generation, no password-protected PDFs, no portal delivery. |
+| 3.6 Payslips | Built (PDF; no password) | A PDF per employee (own earnings and deductions only, identifiers masked), downloadable singly or as a zip, with email delivery as an option per organization, once per payslip, recorded. PDF password protection was not asked for. |
 | 3.6 Register, summary, remittance schedules | Built | Payroll register, PAYE, pension, NSITF, ITF, NHF schedules, statutory remittance tracking. |
 | 3.6 Bank payment files per bank | Built (one generic layout) | Excel file with Name, Account Number, Bank Code, Amount, Payment Description from a locked payroll; refuses unusable details unless left out on purpose; every file recorded with a fingerprint. Bank-specific layouts only if a client's bank rejects the generic one. Bank codes are a starting list to confirm. |
 | 3.6 Management reports | Partial | Many schedules exist; cost by site, headcount movement and variance explanations need checking against the list. |

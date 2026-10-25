@@ -1086,6 +1086,16 @@ For a payroll outsourcing business (ThreeRoots). **Each client is its own organi
   Access is re-checked against the database on every request, so removing it takes effect at once; a client's own users can never reach the bureau or another client; and database rules stop a client being moved to another bureau or access crossing bureaus.
 - **Audited where it happens.** Entering a client, granting and removing access, and everything staff do inside a client are written to the client's own audit log under the person's own name, tagged with the bureau they came from. Because the same person is the same user in every client, maker-checker rules (the preparer can't approve) hold across clients.
 
+### Payslip PDFs
+
+Payroll → a payroll run (approved, locked or paid) → **Payslips** (`payslip.distribute`: company admin, payroll admin, finance, HR admin). An employee can also download their own from their payslip page once the payroll is approved.
+
+- **One PDF per employee**: the client's name, the pay period, the employee's details, earnings and deductions, net pay, days worked, work locations (for client sites), and the tax rule version the PAYE was calculated with; "prepared by" the bureau when there is one. **Only the employee's own earnings and deductions** appear: what the company pays on top (employer pension, ITF, NSITF, insurance) never does.
+  Account numbers, tax IDs and pension PINs are **masked to their last four characters**, since the file may be forwarded. Amounts are written "NGN 1,234.56" (the standard PDF fonts have no naira sign); accents are removed from names for the same reason.
+- **Manual delivery (the default):** *Download all (zip)* gives a PDF per employee named by employee number and month; a single payslip has *Download PDF* on its page. Every download is audited, which is the start of auditing reads of sensitive data.
+- **Email delivery (an option, off until someone with `settings.manage` switches it on):** *Email N payslips* sends each employee their own PDF as an attachment at the address on their record. The message itself carries no figures. No PDF password, as agreed; the email asks the employee to keep it private.
+  An employee with no address is reported and skipped (download theirs and give it another way). Each payslip is emailed **once**; *Resend* is per person. A send that fails is not recorded, so it is tried again. Every send is recorded (who, to which address, when, a fingerprint of the PDF) and the record can't be changed or deleted.
+
 ### ThreeRoots demo client and the acceptance checks
 
 The demo seed builds a fictional client of the ThreeRoots bureau, **Acme Facilities Ltd** (sign in as `founder@threeroots.test` / `officer@threeroots.test` / `reviewer@threeroots.test` / `hr@threeroots.test`, same demo password, then *Bureau → Clients → Work in this client*): onboarded with the bureau's rules,
