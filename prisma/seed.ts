@@ -1290,7 +1290,7 @@ async function main() {
   });
   const bureauUsers: Array<{ id: string; role: Role; name: string; email: string }> = [];
   for (const [email, name, role] of [
-    ["founder@threeroots.test", "Tolu Founder", "COMPANY_ADMIN"],
+    ["founder@threeroots.test", "Tunji Founder", "COMPANY_ADMIN"],
     ["officer@threeroots.test", "Ngozi Payroll Officer", "PAYROLL_ADMIN"],
     ["reviewer@threeroots.test", "Femi Payroll Reviewer", "FINANCE"],
     ["hr@threeroots.test", "Amaka HR", "HR_ADMIN"],
