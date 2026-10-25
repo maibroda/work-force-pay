@@ -1098,6 +1098,11 @@ Payroll → **Payroll Calendar**, in each client organization (a bureau's staff 
 - **The tracker** lists each input for the month: *received* (with how and from whom, and flagged if after the cut-off), *not applicable* (with why), or still expected, next to what already exists in the system for it as a cross-check. Inputs stop being tracked once the payroll is approved.
   A **log of missing or inconsistent items** records what had to be chased and how it was settled.
 - **Bureau → Due This Week** lists what is overdue or due in the next 7 days across the clients you work on.
+- **Email reminders** (the *Email reminders* section of the calendar page; **off for a client until someone with `settings.manage` switches it on**). On working days only:
+  - to the **client's contact** (the email on the engagement): the inputs still owed once the cut-off is within the lead time (default 2 days) or past, and the draft awaiting their approval as that deadline nears or passes;
+  - to the **team** (bureau managers, staff given the client, plus any extra addresses; for an organization that isn't a bureau's client, its own payroll admins and company admins): one digest of everything overdue or due soon.
+  - The same reminder is **never sent twice in a day** (an unalterable log records every send), a client is nudged at most 5 times a month for the same thing, and a send that fails is not logged so it is tried again. The page shows what would go out today, what was sent recently, and a *Send today's reminders now* button.
+  - Run it each morning with `GET /api/cron/payroll-reminders` and `Authorization: Bearer <CRON_SECRET>`, like the HR digest (Vercel: `{"crons":[{"path":"/api/cron/payroll-reminders","schedule":"0 7 * * 1-5"}]}`). Without `RESEND_API_KEY` the emails are only logged.
 
 ### Statutory rule library
 
