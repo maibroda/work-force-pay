@@ -117,6 +117,9 @@ export default async function RunPage({
                 <ActionButton action={generateRemittancesAction.bind(null, run.id)} variant="outline">
                   Generate remittances
                 </ActionButton>
+                <Link className="rounded border px-3 py-1.5 text-sm hover:bg-accent" href={`/payments/bank-file/${run.id}`}>
+                  Bank payment file
+                </Link>
               </>
             )}
           </>

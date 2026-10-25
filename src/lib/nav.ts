@@ -99,6 +99,7 @@ export const NAV: NavGroup[] = [
         section: "Payments",
       },
       { href: "/payments/transactions", label: "Payment Transactions", perm: "payroll.view" },
+      { href: "/payments/bank-codes", label: "Bank List & Codes", perm: "payment.manage" },
       { href: "/payments/reconciliation", label: "Bank Reconciliation", perm: "payroll.view" },
       { href: "/payments/remittance", label: "Statutory Remittance", perm: "payroll.view" },
       {

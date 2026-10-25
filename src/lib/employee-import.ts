@@ -220,7 +220,7 @@ export type ImportCheck = {
 /** Checks a whole file. `today` is YYYY-MM-DD. */
 export function checkImport(
   csv: string,
-  ref: { categories: Lookup[]; departments: Lookup[]; existing: ExistingPerson[]; today: string },
+  ref: { categories: Lookup[]; departments: Lookup[]; existing: ExistingPerson[]; today: string; /** Whether a bank name can be turned into a bank code for the payment file. */ knownBank?: (name: string) => boolean },
 ): ImportCheck {
   const empty = (fatal: string): ImportCheck => ({ fatal, headers: null, rows: [], summary: { total: 0, ok: 0, warnings: 0, errors: 0 } });
   const table = parseCsv(csv);
@@ -317,6 +317,7 @@ export function checkImport(
       if (!account && get("bankName")) warnings.push("Bank name without an account number.");
       if (account && !get("accountName")) warnings.push("Account number without an account name.");
     }
+    if (get("bankName") && ref.knownBank && !ref.knownBank(get("bankName"))) warnings.push(`Bank "${get("bankName")}" is not in the bank list, so this person can't go in the bank payment file until the list or the name is put right.`);
     if (!get("pensionPin") || !get("pfa")) warnings.push("Pension PIN or PFA is missing.");
     if (!get("taxId")) warnings.push("Tax ID is missing.");
 
