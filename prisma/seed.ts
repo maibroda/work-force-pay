@@ -1323,7 +1323,7 @@ async function main() {
   const demo = await buildDemoClient({ founder: staffCtx("COMPANY_ADMIN"), officer: staffCtx("PAYROLL_ADMIN"), reviewer: staffCtx("FINANCE"), hr: staffCtx("HR_ADMIN") });
   await finishDemoMonth(demo);
   // the demo approver signs in with the demo password (a real client would choose their own through the invitation link)
-  await db.user.update({ where: { id: demo.approver.userId }, data: { passwordHash: hash } });
+  for (const u of [demo.approver, demo.hrContact]) await db.user.update({ where: { id: u.userId }, data: { passwordHash: hash } });
 
   const counts = {
     employees: await db.employee.count({ where: { organizationId: org.id } }),

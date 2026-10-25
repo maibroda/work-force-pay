@@ -62,6 +62,11 @@ function snapshot(e: Record<string, unknown>, kind: ChangeKindName) {
 
 export async function requestChange(ctx: Ctx, employeeId: string, kind: ChangeKindName, raw: Record<string, unknown>, reason: string) {
   if (!isSelf(ctx, employeeId)) assertCan(ctx, "employee.manage");
+  return requestChangeCore(ctx, employeeId, kind, raw, reason);
+}
+
+/** Records a change request without checking who may ask: the caller does (staff, the employee themselves, or the client's HR contact in the portal). */
+export async function requestChangeCore(ctx: Ctx, employeeId: string, kind: ChangeKindName, raw: Record<string, unknown>, reason: string) {
   const emp = await loadEmployee(ctx, employeeId);
   if (GONE.includes(emp.status)) throw new BusinessError("This employee has left — their details can no longer be changed.");
   if (!reason || reason.trim().length < 5) throw new BusinessError("Say why the details are changing (at least a few words).");

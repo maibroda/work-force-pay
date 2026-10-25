@@ -53,12 +53,12 @@ That is the one structural decision the rest depends on. Two ways to do it:
 | 3.6 Management reports | Partial | Many schedules exist; cost by site, headcount movement and variance explanations need checking against the list. |
 | 3.6 Branded templates | Missing | |
 | 3.7 Compliance calendar, evidence, rule-change log | Partial | Remittances have due dates. No calendar, reminders or evidence upload. The rule-change log is built: the Statutory Rule Library records who proposed, who verified (HR and Finance), and when each version was published to which clients. |
-| 3.8 Client portal | Partial (approval, calendar, inputs view) | Client approver and HR contact roles with compulsory two-factor, invited by email, limited to their own organization; calendar and input status, payroll review and approve / send back with the separate client-approval record, enforced at the lock. Still to do: clients submitting inputs and employee changes, downloading reports and payslips, and the query log. |
+| 3.8 Client portal | Partial | Client approver and HR contact roles with compulsory two-factor, invited by email, limited to their own organization; calendar and input status; payroll review and approve / send back (enforced at the lock); a query log with response times; downloads of the register and payslips; employee bank/tax/pension changes asked for by the HR contact and approved by the bureau. Still to do: clients uploading monthly inputs as a file. |
 | 3.9 CRM and pipeline | Missing | A sales-commission design note exists (`docs/sales-commission-design.md`); no leads, stages, activity log or referral partners. |
 | 3.10 Pricing and proposals | Missing | |
 | 3.11 Payroll Health Check | Missing | |
 | 3.12 Billing and collections | **Largely built** | The finance work of Phases 1 to 5 covers invoicing, receipts, advances, credit/debit notes, ageing, statements, VAT/WHT, period close. What is new is subscription-style fees, MRR and churn. |
-| 3.13 Service desk | Partial | A data-breach register and data-access requests exist. Client query/issue log with SLA timers does not. |
+| 3.13 Service desk | Partial (queries built) | Client query log with threads, first-reply time, a 24-hour flag, email notifications and a bureau-wide open-queries view. Still to do: SLA timers beyond the first reply, escalation, and the incident register link. A data-breach register and data-access requests also exist. |
 | 3.14 Performance dashboard | Missing | |
 | 4 MFA for staff | Built | TOTP two-factor and session invalidation exist. Enforcement for all staff roles is a setting to confirm. |
 | 4 Audit log of changes | Built | Every service writes who, what, when and reason. |

@@ -605,6 +605,8 @@ model Organization {
   /// Whether a payroll needs the client's own sign-off, after the bureau's internal approval, before it can be locked.
   clientApprovalRequired    Boolean                    @default(false)
   clientApprovals           PayrollClientApproval[]
+  clientQueries             ClientQuery[]
+  clientQueryMessages       ClientQueryMessage[]
   calendarSetting           PayrollCalendarSetting?
   reminderSetting           PayrollReminderSetting?
   bankCodes                 BankCode[]
@@ -711,6 +713,53 @@ model PayrollCalendarSetting {
   expectedInputs      String[]     @default(["ATTENDANCE", "OVERTIME", "ALLOWANCES", "DEDUCTIONS", "LOANS", "JOINERS_LEAVERS"])
   updatedBy           String?
   updatedAt           DateTime     @updatedAt
+}
+
+enum QueryStatus {
+  OPEN
+  ANSWERED
+  CLOSED
+}
+
+/// A question or request from a client to the bureau, with a thread of messages. How quickly it was first answered is measured from it.
+model ClientQuery {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  number          String
+  subject         String
+  category        String
+  status          QueryStatus  @default(OPEN)
+  raisedBy        String
+  raisedByUserId  String
+  createdAt       DateTime     @default(now())
+  /// When the bureau first replied.
+  firstResponseAt DateTime?
+  closedAt        DateTime?
+  closedBy        String?
+  updatedAt       DateTime     @updatedAt
+
+  messages ClientQueryMessage[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status])
+}
+
+/// One message in a query's thread. Never edited or removed.
+model ClientQueryMessage {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  queryId        String
+  query          ClientQuery  @relation(fields: [queryId], references: [id])
+  /// CLIENT or BUREAU.
+  side           String
+  authorName     String
+  authorUserId   String
+  body           String
+  createdAt      DateTime     @default(now())
+
+  @@index([queryId, createdAt])
 }
 
 enum ClientDecision {
