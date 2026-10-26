@@ -83,6 +83,7 @@ function resolvers(orgId: string): Record<string, () => Promise<string | undefin
     "/portal/payroll/[runId]": () => first(db.payrollRun.findFirst({ where, select: { id: true } })),
     "/portal/inputs/[id]": () => first(db.clientInputBatch.findFirst({ where, select: { id: true } })),
     "/payroll/client-inputs/[id]": () => first(db.clientInputBatch.findFirst({ where, select: { id: true } })),
+    "/health-checks/[id]": () => first(db.healthCheck.findFirst({ where, select: { id: true } })),
     "/crm/proposals/[id]": () => first(db.proposal.findFirst({ where, select: { id: true } })),
     "/crm/leads/[id]": () => first(db.lead.findFirst({ where, select: { id: true } })),
     "/portal/queries/[id]": () => first(db.clientQuery.findFirst({ where, select: { id: true } })),

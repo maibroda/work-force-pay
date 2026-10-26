@@ -1326,7 +1326,7 @@ async function main() {
   await finishDemoMonth(demo);
   // the bureau's sales pipeline: a few partners, leads at every stage, a fortnight of outreach
   console.log("→ ThreeRoots sales pipeline: partners, leads, outreach");
-  await buildDemoPipeline({ sales: staffCtx("BUSINESS_DEV"), founder: staffCtx("COMPANY_ADMIN"), clientId: demo.client.id });
+  await buildDemoPipeline({ sales: staffCtx("BUSINESS_DEV"), founder: staffCtx("COMPANY_ADMIN"), officer: staffCtx("PAYROLL_ADMIN"), reviewer: staffCtx("FINANCE"), clientId: demo.client.id });
   // the demo approver signs in with the demo password (a real client would choose their own through the invitation link)
   for (const u of [demo.approver, demo.hrContact]) await db.user.update({ where: { id: u.userId }, data: { passwordHash: hash } });
 

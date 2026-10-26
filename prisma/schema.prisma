@@ -624,6 +624,9 @@ model Organization {
   pricingPackages           PricingPackage[]
   pricingAddOns             PricingAddOn[]
   proposals                 Proposal[]
+  healthChecks              HealthCheck[]
+  healthCheckItems          HealthCheckItem[]
+  healthCheckFindings       HealthCheckFinding[]
   calendarSetting           PayrollCalendarSetting?
   reminderSetting           PayrollReminderSetting?
   bankCodes                 BankCode[]
@@ -845,6 +848,7 @@ model Lead {
 
   stageChanges LeadStageChange[]
   proposals    Proposal[]
+  healthChecks HealthCheck[]
   activities   OutreachActivity[]
   payouts      ReferralPayout[]
 
@@ -1023,6 +1027,115 @@ model Proposal {
   @@unique([organizationId, number])
   @@index([leadId])
   @@index([organizationId, status])
+}
+
+// ─────────────────────────────── PAYROLL HEALTH CHECK ───────────────────────────────
+
+enum HealthCheckStatus {
+  IN_PROGRESS
+  IN_REVIEW
+  ISSUED
+  WITHDRAWN
+}
+
+/// What was found for one control. "In place" means the control was seen operating, with evidence; it is never a certification.
+enum ControlResponse {
+  NOT_ASSESSED
+  IN_PLACE
+  PARTLY
+  NOT_SEEN
+  NOT_APPLICABLE
+}
+
+enum FindingSeverity {
+  HIGH
+  MEDIUM
+  LOW
+  OBSERVATION
+}
+
+/// A limited review of a prospect's payroll process against a standard checklist. A second person reviews it before it is issued; once issued it
+/// can't change.
+model HealthCheck {
+  id               String            @id @default(cuid())
+  organizationId   String
+  organization     Organization      @relation(fields: [organizationId], references: [id])
+  leadId           String
+  lead             Lead              @relation(fields: [leadId], references: [id])
+  number           String
+  title            String
+  /// What was and wasn't looked at, and how much of it, in the assessor's words.
+  scopeNote        String?
+  periodReviewed   String?
+  employeesInScope Int?
+  /// The fee agreed for the review, noted by hand (it is not priced in the proposal tool).
+  feeQuoted        Decimal?          @db.Decimal(14, 2)
+  /// The version of the checklist the items were copied from.
+  templateVersion  String
+  status           HealthCheckStatus @default(IN_PROGRESS)
+  assessedBy       String
+  assessedByUserId String
+  conductedOn      DateTime?         @db.Date
+  submittedAt      DateTime?
+  reviewedBy       String?
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  reviewNote       String?
+  /// A short overall observation for the summary, in the reviewer's words.
+  headline         String?
+  issuedAt         DateTime?
+  withdrawnReason  String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  items    HealthCheckItem[]
+  findings HealthCheckFinding[]
+
+  @@unique([organizationId, number])
+  @@index([leadId])
+  @@index([organizationId, status])
+}
+
+model HealthCheckItem {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  checkId        String
+  check          HealthCheck     @relation(fields: [checkId], references: [id])
+  code           String
+  area           String
+  position       Int
+  question       String
+  guidance       String
+  response       ControlResponse @default(NOT_ASSESSED)
+  /// What was seen: the process evidence behind the response.
+  evidence       String?
+  note           String?
+  assessedAt     DateTime?
+
+  @@unique([checkId, code])
+  @@index([checkId])
+}
+
+model HealthCheckFinding {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  checkId        String
+  check          HealthCheck     @relation(fields: [checkId], references: [id])
+  number         Int
+  /// The control this is about, if it is about one.
+  itemCode       String?
+  area           String
+  title          String
+  description    String
+  severity       FindingSeverity
+  recommendation String
+  createdBy      String
+  createdAt      DateTime        @default(now())
+
+  @@unique([checkId, number])
+  @@index([checkId])
 }
 
 /// One run of a scheduled job (the reminders, the HR digest, ...), written by the job's own endpoint so the app can tell whether a scheduler is calling it.

@@ -92,6 +92,8 @@ export const PERMISSIONS = [
   "query.respond", // answer clients' queries and close them (bureau staff)
   "crm.view", // the bureau's sales pipeline, outreach log and referral partners (never payroll data)
   "crm.manage", // add and move leads, log outreach, keep referral partners, record commission paid, and make and send proposals
+  "healthcheck.view", // read the health checks of prospects' payroll processes and download their one-page summaries (never payroll data)
+  "healthcheck.manage", // carry out a health check: assess the controls, record findings, send it for review, review and issue it (never your own)
   "pricing.manage", // set the rate card (the bureau's costs, margin target, package prices and add-ons) and approve a proposal priced below the target margin
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
@@ -173,6 +175,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "self.security",
   ],
   PAYROLL_ADMIN: [
+    "healthcheck.view",
+    "healthcheck.manage",
     "dashboard.view",
     "employee.view",
     "employee.sensitive",
@@ -202,6 +206,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
   FINANCE: [
     ...READ_ALL,
+    "healthcheck.view",
+    "healthcheck.manage",
     "payroll.inputs.approve",
     "payroll.approve",
     "payroll.lock",
@@ -236,7 +242,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
   EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise"],
   // the bureau's sales person sees the CRM and nothing else: no payroll, employee, client or finance data
-  BUSINESS_DEV: ["crm.view", "crm.manage", "self.security"],
+  BUSINESS_DEV: ["crm.view", "crm.manage", "healthcheck.view", "self.security"],
   // clients' own people see only their portal
   CLIENT_APPROVER: ["portal.view", "portal.approve", "portal.query", "portal.download", "self.security"],
   CLIENT_HR: ["portal.view", "portal.query", "portal.download", "portal.changes", "portal.inputs", "self.security"],
