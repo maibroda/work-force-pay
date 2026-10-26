@@ -3,16 +3,20 @@ import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { BusinessError } from "@/server/services/_base";
 import { getLead, linkableClients, listPartners, pipelineOwners } from "@/server/services/crm";
+import { getRateCard, listProposals } from "@/server/services/proposals";
 import { CHANNEL_LABELS, OUTCOME_LABELS, SEGMENT_LABELS, SOURCE_LABELS, STAGES, STAGE_LABELS, type Stage } from "@/lib/crm";
 import { fmtDate, iso } from "@/lib/dates";
 import { naira } from "@/lib/money";
+import Link from "next/link";
 import { Empty, FormPanel, KV, PageHeader, Section } from "@/components/page";
 import { SmartForm } from "@/components/smart-form";
 import { Badge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { logLeadOutreachAction, moveLeadAction, updateLeadAction } from "@/app/actions/crm";
+import { createProposalAction } from "@/app/actions/proposals";
 import { crmGate } from "../../_gate";
-import { leadFields, outreachFields, STAGE_TONE } from "../../_fields";
+import { leadFields, outreachFields, proposalFields, STAGE_TONE } from "../../_fields";
+import { PROPOSAL_STATE_TONE } from "../../proposals/_tone";
 
 export default async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
   const ctx = await requirePage("crm.view");
@@ -25,7 +29,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   });
   if (!l) notFound();
   const manage = can(ctx.role, "crm.manage");
-  const [owners, partners, clients] = await Promise.all([pipelineOwners(ctx), listPartners(ctx), linkableClients(ctx)]);
+  const [owners, partners, clients, proposals, card] = await Promise.all([pipelineOwners(ctx), listPartners(ctx), linkableClients(ctx), listProposals(ctx, { leadId: id }), getRateCard(ctx)]);
   const stage = l.stage as Stage;
   const final = stage === "WON";
   const today = iso(new Date());
@@ -96,6 +100,52 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
             resetOnSuccess={false}
             action={updateLeadAction.bind(null, l.id)}
             fields={leadFields({ owners: owners.map((o) => ({ value: o.id, label: o.name })), partners: partners.map((p) => ({ value: p.id, label: p.name })), lead: { ...l, nextStepOn: l.nextStepOn } })}
+          />
+        </FormPanel>
+      )}
+
+      <Section title="Proposals" flush>
+        <Table>
+          <THead>
+            <TR>
+              <TH>No.</TH>
+              <TH>Package</TH>
+              <TH className="text-right">Monthly fee</TH>
+              <TH className="text-right">Margin</TH>
+              <TH>Status</TH>
+              <TH>Open until</TH>
+            </TR>
+          </THead>
+          <TBody>
+            {proposals.map((p) => (
+              <TR key={p.id}>
+                <TD className="font-mono text-xs">
+                  <Link className="text-primary underline" href={`/crm/proposals/${p.id}`}>
+                    {p.number}
+                  </Link>
+                </TD>
+                <TD className="text-xs">{p.packageKey.replace(/_/g, " ").toLowerCase()}, {p.headcount} staff</TD>
+                <TD className="text-right text-xs">{naira(p.monthlyFee)}</TD>
+                <TD className={`text-right text-xs ${p.belowTarget ? "font-medium text-red-700" : ""}`}>{Number(p.marginPct)}%</TD>
+                <TD>
+                  <Badge tone={PROPOSAL_STATE_TONE[p.state]}>{p.state.charAt(0) + p.state.slice(1).toLowerCase()}</Badge>
+                </TD>
+                <TD className="text-xs">{p.validUntil ? fmtDate(p.validUntil) : "—"}</TD>
+              </TR>
+            ))}
+          </TBody>
+        </Table>
+        {!proposals.length && <Empty>No proposal yet.</Empty>}
+      </Section>
+      {manage && stage !== "WON" && stage !== "LOST" && (
+        <FormPanel title="Make a proposal">
+          <p className="mb-3 text-xs text-muted-foreground">Priced from the rate card. It stays a draft until it is sent, and can&apos;t be sent while the rate card is unconfirmed or the price is below the target margin without approval.</p>
+          <SmartForm
+            columns={3}
+            submitLabel="Draft the proposal"
+            resetOnSuccess
+            action={createProposalAction.bind(null, l.id)}
+            fields={proposalFields({ packages: card.packages.map((x) => ({ key: x.key, name: x.name, active: x.active })), addOns: card.addOns, headcount: l.headcount, showHours: can(ctx.role, "pricing.manage") })}
           />
         </FormPanel>
       )}
