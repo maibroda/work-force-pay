@@ -21,7 +21,7 @@ export interface LoginState {
 }
 
 function redirectPath(role: User["role"]) {
-  return role === "EMPLOYEE" ? "/me" : role === "SUPERVISOR" ? "/supervisor" : role === "CLIENT_APPROVER" || role === "CLIENT_HR" ? "/portal" : "/";
+  return role === "EMPLOYEE" ? "/me" : role === "SUPERVISOR" ? "/supervisor" : role === "BUSINESS_DEV" ? "/crm" : role === "CLIENT_APPROVER" || role === "CLIENT_HR" ? "/portal" : "/";
 }
 
 async function completeLogin(user: User): Promise<never> {

@@ -13,6 +13,7 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 export default async function DashboardPage() {
   const session = await getSession();
   if (session && (session.role === "CLIENT_APPROVER" || session.role === "CLIENT_HR")) redirect("/portal");
+  if (session?.role === "BUSINESS_DEV") redirect("/crm");
   const ctx = await requirePage("dashboard.view");
   const [dash, act] = await Promise.all([dashboard(ctx), activationSummary(ctx)]);
   const run = dash.run;

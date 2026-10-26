@@ -49,6 +49,7 @@ npm run build && npm start
 | Operations    | ops@demosecurity.test        | clients, beats, deployment, movements, work register, uniform & kit stock |
 | HR Admin      | hr@demosecurity.test         | employee master, overrides, recruitment, contracts, employee relations, exits, HR policy, prepare settlements |
 | Auditor       | auditor@demosecurity.test    | read-only everything + audit trail                                   |
+| Sales (ThreeRoots bureau) | bd@threeroots.test | the sales pipeline, outreach and referral partners, and nothing else |
 | Supervisor    | supervisor@demosecurity.test | mobile "Today's work register" for his beats                         |
 | Employee      | emp25@demosecurity.test      | mobile self-service for EMP-000025                                   |
 | Super Admin   | superadmin@workforcepay.test | platform admin                                                       |
@@ -1119,6 +1120,18 @@ For a bureau's clients (`/portal`). A client's own people sign in to a portal th
 - **The bureau's decision** (*Payroll → Client Inputs*, `payroll.view` to see, `payroll.inputs.approve` to decide). **Accept** turns every row into an ordinary approved earning (overtime, allowance, bonus, other: `OtherEarning`) or deduction (`Deduction`, with the client's reference as its authority and the client's person as the requester), recording what each row became; it says so if the month has already been calculated and must be calculated again. It is refused if an employee has left since or the month is approved. **Send back** needs a reason, puts the tracker inputs back to *expected*, and emails the sender, who corrects the file and sends again. Both are audited, and the sender is emailed either way.
 - Overtime here is a *whole-month amount per employee* (the client works out hours × rate). The security-company overtime model (by site and contract) is not used for a bureau's clients. Loans are not accepted in the file; they have their own module.
 - Not yet: accepting or leaving out individual rows (a batch is accepted or sent back as a whole), and a pay-rule check of an amount against the employee's salary.
+
+### Sales CRM and pipeline
+
+The bureau's own sales pipeline (spec 3.9), in the bureau's own organization only: not in an ordinary company, and not while working inside a client. Permissions `crm.view` and `crm.manage`: the **Business Development Executive** role (`BUSINESS_DEV`, created on *Settings → Users* in a bureau only) and the founder. The sales role is given **nothing else**: no payroll, employee, client or finance data, and it lands on the pipeline when it signs in. The demo bureau has one: `bd@threeroots.test`.
+
+- **Leads** (*Sales → Leads*): company, segment (security and facilities, SME, other), headcount, decision-maker, source, expected monthly fee, owner, next step and date. Numbered `LD-00001`. A company can be in the pipeline only once (however it is spelt); a lost one is reopened rather than added again.
+- **Stages:** Qualified → Discovery → Proposal → Pilot → Won or Lost. Every move is recorded with who and why. Going back a stage, or reopening a lost lead, needs a note; **Lost needs a reason**; **Won needs the monthly fee and is final** (its fee and referral partner can't change afterwards, because commission depends on them). A won lead can be linked to the client it became. The database holds all of this too, and the stage history can't be changed or removed.
+- **Outreach** (*Sales → Outreach*): who was contacted, how and what came of it, dated up to 14 days back (never the future), and unalterable once logged. The **target is 10 qualified contacts a working day**; a contact counts when it reached a decision-maker (spoke to them, booked a meeting, or qualified them). A qualified first contact can be added to the pipeline in the same step.
+- **Referral partners** (*Sales → Referral Partners*): accountants and HR consultants, each with a commission rate (% of the lead's monthly fee) and a number of months. Commission is **earned when the referred lead is won** (for example 10% × a ₦75,000 monthly fee × 12 months = ₦90,000), paid in parts on the payout record, and shows what is still owed. A payout can't exceed what is owed, can only be on a won lead and only to the partner who referred it (the database checks that too), and a mistake is corrected by a negative entry with a reference, never an edit.
+- **Dashboard** (*Sales → Sales Pipeline*; this week, this month or the last 30 days): qualified contacts and attempts, per working day and days on target, discovery meetings, proposals, won and lost, conversion (won of won and lost), MRR won and in the open pipeline, the leads at each stage and outreach by person. These are what the log says happened, not forecasts; MRR is the monthly fee expected when a lead was won, and the real figure will come from billing (spec 3.12, not built).
+- **Not the full commission design.** Partner commission here is deliberately simple: earned on winning, on the expected fee, paid by hand. The fuller design for the guarding business in `docs/sales-commission-design.md` (pay on cash collected, plans, splits, clawbacks) is **not built**, and needs billing first.
+- Not yet: proposals and pricing (spec 3.10), which attach to a lead.
 
 ### Launch checklist
 

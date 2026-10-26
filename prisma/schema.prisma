@@ -28,6 +28,8 @@ enum Role {
   /// A client's own approver and HR contact, who use the client portal and nothing else. Always need two-factor sign-in.
   CLIENT_APPROVER
   CLIENT_HR
+  /// The bureau's sales person: the CRM, pipeline and proposals, and no payroll data.
+  BUSINESS_DEV
 }
 
 enum EmployeeStatus {
@@ -613,6 +615,11 @@ model Organization {
   clientInputBatches        ClientInputBatch[]
   clientInputRows           ClientInputRow[]
   launchChecks              LaunchCheck[]
+  leads                     Lead[]
+  leadStageChanges          LeadStageChange[]
+  outreachActivities        OutreachActivity[]
+  referralPartners          ReferralPartner[]
+  referralPayouts           ReferralPayout[]
   calendarSetting           PayrollCalendarSetting?
   reminderSetting           PayrollReminderSetting?
   bankCodes                 BankCode[]
@@ -725,6 +732,177 @@ enum QueryStatus {
   OPEN
   ANSWERED
   CLOSED
+}
+
+// ─────────────────────────────── SALES CRM (the bureau's own pipeline) ───────────────────────────────
+
+enum LeadStage {
+  QUALIFIED
+  DISCOVERY
+  PROPOSAL
+  PILOT
+  WON
+  LOST
+}
+
+enum LeadSegment {
+  SECURITY_FACILITIES
+  SME
+  OTHER
+}
+
+enum LeadSource {
+  OUTBOUND
+  INBOUND
+  REFERRAL
+  EVENT
+  OTHER
+}
+
+enum PartnerKind {
+  ACCOUNTANT
+  HR_CONSULTANT
+  OTHER
+}
+
+enum OutreachChannel {
+  CALL
+  EMAIL
+  WHATSAPP
+  LINKEDIN
+  MEETING
+  OTHER
+}
+
+enum OutreachOutcome {
+  NO_ANSWER
+  CONNECTED
+  MEETING_BOOKED
+  QUALIFIED
+  NOT_INTERESTED
+}
+
+/// Someone who sends the bureau business (an accountant, an HR consultant), and what they are paid when it comes.
+model ReferralPartner {
+  id               String       @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  name             String
+  kind             PartnerKind  @default(ACCOUNTANT)
+  contactName      String?
+  email            String?
+  phone            String?
+  /// Commission is this percentage of the lead's monthly fee, for this many months, once the lead is won.
+  commissionPct    Decimal      @default(0) @db.Decimal(5, 2)
+  commissionMonths Int          @default(12)
+  notes            String?
+  active           Boolean      @default(true)
+  createdAt        DateTime     @default(now())
+
+  leads   Lead[]
+  payouts ReferralPayout[]
+
+  @@unique([organizationId, name])
+}
+
+/// A prospect. Its stage changes are recorded; a won lead is final.
+model Lead {
+  id                   String           @id @default(cuid())
+  organizationId       String
+  organization         Organization     @relation(fields: [organizationId], references: [id])
+  number               String
+  company              String
+  segment              LeadSegment      @default(SME)
+  headcount            Int?
+  source               LeadSource       @default(OUTBOUND)
+  partnerId            String?
+  partner              ReferralPartner? @relation(fields: [partnerId], references: [id])
+  contactName          String
+  contactRole          String?
+  contactEmail         String?
+  contactPhone         String?
+  /// What the bureau expects to bill each month if it wins this.
+  expectedMrr          Decimal          @default(0) @db.Decimal(14, 2)
+  stage                LeadStage        @default(QUALIFIED)
+  stageChangedAt       DateTime         @default(now())
+  nextStep             String?
+  nextStepOn           DateTime?        @db.Date
+  ownerUserId          String
+  ownerName            String
+  lostReason           String?
+  wonAt                DateTime?
+  lostAt               DateTime?
+  /// The client organization this became, once it was onboarded.
+  clientOrganizationId String?
+  notes                String?
+  createdBy            String
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  stageChanges LeadStageChange[]
+  activities   OutreachActivity[]
+  payouts      ReferralPayout[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId, stage])
+}
+
+/// Every move of a lead between stages, with who and why. Never changed.
+model LeadStageChange {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  leadId         String
+  lead           Lead         @relation(fields: [leadId], references: [id])
+  fromStage      LeadStage?
+  toStage        LeadStage
+  note           String?
+  byName         String
+  byUserId       String
+  at             DateTime     @default(now())
+
+  @@index([leadId, at])
+  @@index([organizationId, toStage, at])
+}
+
+/// One attempt to reach someone: who, how, what came of it. Qualified contacts per working day is the measure.
+model OutreachActivity {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  leadId         String?
+  lead           Lead?           @relation(fields: [leadId], references: [id])
+  company        String
+  contactName    String?
+  channel        OutreachChannel
+  outcome        OutreachOutcome
+  note           String?
+  date           DateTime        @db.Date
+  byName         String
+  byUserId       String
+  createdAt      DateTime        @default(now())
+
+  @@index([organizationId, date])
+  @@index([leadId])
+}
+
+/// Commission actually paid to a referral partner.
+model ReferralPayout {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  partnerId      String
+  partner        ReferralPartner @relation(fields: [partnerId], references: [id])
+  leadId         String
+  lead           Lead            @relation(fields: [leadId], references: [id])
+  amount         Decimal         @db.Decimal(14, 2)
+  paidOn         DateTime        @db.Date
+  reference      String?
+  byName         String
+  createdAt      DateTime        @default(now())
+
+  @@index([partnerId])
+  @@index([leadId])
 }
 
 /// One run of a scheduled job (the reminders, the HR digest, ...), written by the job's own endpoint so the app can tell whether a scheduler is calling it.

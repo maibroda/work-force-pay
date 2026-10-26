@@ -28,6 +28,15 @@ export const NAV: NavGroup[] = [
     ],
   },
   {
+    title: "Sales",
+    items: [
+      { href: "/crm", label: "Sales Pipeline", perm: "crm.view", bureauOnly: true },
+      { href: "/crm/leads", label: "Leads", perm: "crm.view", bureauOnly: true },
+      { href: "/crm/outreach", label: "Outreach", perm: "crm.view", bureauOnly: true },
+      { href: "/crm/partners", label: "Referral Partners", perm: "crm.view", bureauOnly: true },
+    ],
+  },
+  {
     title: "Bureau",
     items: [
       { href: "/bureau", label: "Clients", perm: "bureau.view", bureauOnly: true },

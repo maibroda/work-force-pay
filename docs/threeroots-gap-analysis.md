@@ -54,7 +54,7 @@ That is the one structural decision the rest depends on. Two ways to do it:
 | 3.6 Branded templates | Missing | |
 | 3.7 Compliance calendar, evidence, rule-change log | Partial | Remittances have due dates. No calendar, reminders or evidence upload. The rule-change log is built: the Statutory Rule Library records who proposed, who verified (HR and Finance), and when each version was published to which clients. |
 | 3.8 Client portal | Partial | Client approver and HR contact roles with compulsory two-factor, invited by email, limited to their own organization; calendar and input status; payroll review and approve / send back (enforced at the lock); a query log with response times; downloads of the register and payslips; employee bank/tax/pension changes asked for by the HR contact and approved by the bureau. Clients send monthly inputs (overtime, allowances, bonuses, deductions) as a checked file that the bureau accepts or sends back. |
-| 3.9 CRM and pipeline | Missing | A sales-commission design note exists (`docs/sales-commission-design.md`); no leads, stages, activity log or referral partners. |
+| 3.9 CRM and pipeline | Built | Leads and stages (history kept; lost needs a reason, won needs a fee and is final), an unalterable outreach log with the 10 qualified contacts a working day target, referral partners with commission earned, paid and owed, and a sales dashboard. Partner commission is simple (earned on winning, on the expected fee, paid by hand); the fuller design in `docs/sales-commission-design.md` (pay on cash collected, splits, clawbacks) is not built and needs billing first. |
 | 3.10 Pricing and proposals | Missing | |
 | 3.11 Payroll Health Check | Missing | |
 | 3.12 Billing and collections | **Largely built** | The finance work of Phases 1 to 5 covers invoicing, receipts, advances, credit/debit notes, ageing, statements, VAT/WHT, period close. What is new is subscription-style fees, MRR and churn. |
@@ -78,7 +78,7 @@ The spec's roles do not match the existing ones (`COMPANY_ADMIN`, `HR_ADMIN`, `P
 | Payroll Officer (preparer) | `PAYROLL_ADMIN`: prepare, import, calculate; loses `payroll.approve` |
 | Payroll Reviewer (checker) | new role with `payroll.approve`, variance review |
 | Client Service Administrator | new role: onboarding, input tracker, queries, distribution |
-| Business Development Executive | new role: CRM only, no payroll permissions |
+| Business Development Executive | Built (`BUSINESS_DEV`): CRM only, no payroll permissions |
 | Client Approver / Client HR Contact | new portal roles, scoped to one organization |
 | Auditor | `AUDITOR` |
 

@@ -9,7 +9,8 @@ export type Role =
   | "SUPERVISOR"
   | "EMPLOYEE"
   | "CLIENT_APPROVER"
-  | "CLIENT_HR";
+  | "CLIENT_HR"
+  | "BUSINESS_DEV";
 
 export const PERMISSIONS = [
   "dashboard.view",
@@ -89,6 +90,8 @@ export const PERMISSIONS = [
   "portal.changes", // ask the bureau to change an employee's bank, tax or pension details (the client's HR contact)
   "portal.inputs", // send the month's overtime, allowances, bonuses and deductions as a file, and follow what happened to it (the client's HR contact)
   "query.respond", // answer clients' queries and close them (bureau staff)
+  "crm.view", // the bureau's sales pipeline, outreach log and referral partners (never payroll data)
+  "crm.manage", // add and move leads, log outreach, keep referral partners, record commission paid
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -231,6 +234,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "appraisal.review",
   ],
   EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise"],
+  // the bureau's sales person sees the CRM and nothing else: no payroll, employee, client or finance data
+  BUSINESS_DEV: ["crm.view", "crm.manage", "self.security"],
   // clients' own people see only their portal
   CLIENT_APPROVER: ["portal.view", "portal.approve", "portal.query", "portal.download", "self.security"],
   CLIENT_HR: ["portal.view", "portal.query", "portal.download", "portal.changes", "portal.inputs", "self.security"],
