@@ -63,6 +63,7 @@ export const userSchema = z.object({
     "AUDITOR",
     "SUPERVISOR",
     "EMPLOYEE",
+    "BUSINESS_DEV",
   ]),
   password: z.string().min(8, "Password must be at least 8 characters"),
   employeeId: z.string().optional(),
@@ -73,6 +74,8 @@ export async function createUser(ctx: Ctx, raw: z.input<typeof userSchema>) {
   const v = userSchema.parse(raw);
   const exists = await db.user.findUnique({ where: { email: v.email } });
   if (exists) throw new BusinessError("A user with this email already exists.");
+  if (v.role === "BUSINESS_DEV" && !(await db.organization.findFirst({ where: { id: ctx.orgId, isBureau: true }, select: { id: true } })))
+    throw new BusinessError("The business development role is for a payroll bureau's own sales people.");
   if (v.employeeId) {
     const e = await db.employee.findFirst({ where: { id: v.employeeId, organizationId: ctx.orgId } });
     if (!e) throw new BusinessError("Employee not found.");

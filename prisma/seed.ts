@@ -38,6 +38,7 @@ import {
 } from "../src/server/services/payroll";
 import { explainIssue } from "../src/server/services/payroll-controls";
 import { buildDemoClient, finishDemoMonth } from "./demo-client";
+import { buildDemoPipeline } from "./demo-crm";
 import { createPaymentBatches, generateRemittances, markBatchPaid } from "../src/server/services/payments";
 import { ensureDefaultChart } from "../src/server/services/accounting";
 import { applyForLeave, decideLeave } from "../src/server/services/leave";
@@ -1295,6 +1296,7 @@ async function main() {
     ["reviewer@threeroots.test", "Femi Payroll Reviewer", "FINANCE"],
     ["hr@threeroots.test", "Amaka HR", "HR_ADMIN"],
     ["auditor@threeroots.test", "Bayo Auditor", "AUDITOR"],
+    ["bd@threeroots.test", "Kemi Sales", "BUSINESS_DEV"],
   ] as const)
     bureauUsers.push(await db.user.create({ data: { organizationId: bureau.id, email, name, role, passwordHash: hash } }));
   await seedStatutory(bureau.id);
@@ -1322,6 +1324,9 @@ async function main() {
   };
   const demo = await buildDemoClient({ founder: staffCtx("COMPANY_ADMIN"), officer: staffCtx("PAYROLL_ADMIN"), reviewer: staffCtx("FINANCE"), hr: staffCtx("HR_ADMIN") });
   await finishDemoMonth(demo);
+  // the bureau's sales pipeline: a few partners, leads at every stage, a fortnight of outreach
+  console.log("→ ThreeRoots sales pipeline: partners, leads, outreach");
+  await buildDemoPipeline({ sales: staffCtx("BUSINESS_DEV"), founder: staffCtx("COMPANY_ADMIN"), clientId: demo.client.id });
   // the demo approver signs in with the demo password (a real client would choose their own through the invitation link)
   for (const u of [demo.approver, demo.hrContact]) await db.user.update({ where: { id: u.userId }, data: { passwordHash: hash } });
 
