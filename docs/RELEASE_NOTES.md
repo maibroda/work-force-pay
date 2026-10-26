@@ -2,17 +2,15 @@
 
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
-## Not yet merged (branch `health-check`)
+## Not yet merged (branch `exact-money-1`)
 
-- **Payroll Health Check** (spec 3.11). A 25-control checklist across five areas, answered with evidence, a findings log with severity and recommendations, review and issue by a second person, then frozen; a one-page summary PDF with the "limited review, not an audit or certification" disclaimer. Migration `20261104090000_health_check`.
-- **Project rules** (`CLAUDE.md`) and how the repository stands against them (`docs/rules-conformity.md`).
-- **Data dictionary** (`docs/data-dictionary.md`), generated from the schema, with a test that fails if it falls out of date.
-- **This file.**
+- **Exact money arithmetic, stage 1 of 5** (rule 2). A new shared utility, `src/lib/money-exact.ts`, holds money as whole kobo and does every percentage and proration in whole-number arithmetic, rounding half up once at the calculated line. It refuses amounts with more than two decimal places. **Nothing uses it yet: pay figures are unchanged.** The plan and the measurement behind it are in `docs/plans/exact-money.md`. No migration.
 
 ## Merged
 
 | PR | What | Migration |
 | --- | --- | --- |
+| #64 | **Payroll Health Check** (spec 3.11): a 25-control checklist answered with evidence, a findings log, review by a second person, frozen on issue, one-page summary PDF. Also the project rules (`CLAUDE.md`), `docs/rules-conformity.md`, the generated data dictionary (a test fails if it is stale) and this file. | `20261104090000_health_check` |
 | #63 | **Pricing and proposals** (spec 3.10): a rate card the founder must confirm, a delivery-cost calculator that gives the margin and the lowest fee that earns the target, proposals that attach to a lead, approval for a price below the target margin, sent proposals frozen, a PDF with no cost figures. Prices are placeholders until confirmed. | `20261103090000_pricing_proposals` |
 | #62 | **Sales CRM and pipeline** (spec 3.9) and a Business Development role that sees the CRM and nothing else: leads and stages, outreach log with the daily target, referral partners and commission, dashboard. | `20261102090000_sales_crm` |
 | #61 | **Launch checklist** for the bureau (rate tables verified, email, secrets, scheduler heartbeat, staff two-factor, client terms, and manual confirmations) and heartbeats on every scheduled job. | `20261101090000_launch_readiness` |
