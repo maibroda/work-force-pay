@@ -6,10 +6,12 @@ import type { Ctx } from "../src/lib/auth/context";
 import { isWorkingDay } from "../src/lib/payroll-reminders";
 import { createLead, createPartner, logOutreach, moveLead, recordPayout } from "../src/server/services/crm";
 import { approveBelowMargin, confirmRateCard, createProposal, sendProposal } from "../src/server/services/proposals";
+import { addFinding, assessItem, createHealthCheck, issueHealthCheck, submitForReview } from "../src/server/services/health-checks";
+import { db } from "../src/lib/db";
 
 const day = (offset: number) => new Date(Date.now() - offset * 86_400_000).toISOString().slice(0, 10);
 
-export async function buildDemoPipeline(o: { sales: Ctx; founder: Ctx; clientId: string }) {
+export async function buildDemoPipeline(o: { sales: Ctx; founder: Ctx; officer: Ctx; reviewer: Ctx; clientId: string }) {
   const { sales } = o;
   const ade = await createPartner(sales, { name: "Ade & Co Accountants", kind: "ACCOUNTANT", contactName: "Mr Ade Williams", email: "ade@adeco.test", commissionPct: 10, commissionMonths: 12 });
   const people = await createPartner(sales, { name: "PeopleFirst HR Consulting", kind: "HR_CONSULTANT", contactName: "Mrs Nkechi Obi", email: "nkechi@peoplefirst.test", commissionPct: 7.5, commissionMonths: 6 });
@@ -40,6 +42,25 @@ export async function buildDemoPipeline(o: { sales: Ctx; founder: Ctx; clientId:
   const pilot = await createProposal(sales, sunrise.id, { packageKey: "PAYROLL_COMPLIANCE", headcount: 35, termMonths: 6, discountPct: 10, discountReason: "Three-month pilot price" });
   await approveBelowMargin(o.founder, pilot.id, "Pilot price for three months; the fee goes to the list price if they continue");
   await sendProposal(sales, pilot.id);
+
+  // health checks: one carried out by the payroll officer, reviewed and issued by the finance reviewer; one still being worked on
+  const issued = await createHealthCheck(o.officer, guardian.id, { periodReviewed: "July to September 2026", employeesInScope: 120, scopeNote: "A walkthrough of the payroll process with the HR manager, and a sample of three employees traced from input to payslip." });
+  const seen = "Walked through it with the HR manager and saw the last two months' records";
+  const gaps: Record<string, { response: "PARTLY" | "NOT_SEEN"; evidence: string }> = {
+    "RC-02": { response: "NOT_SEEN", evidence: "Asked how bank changes are approved: the payroll clerk makes them on an emailed request, with no second approval" },
+    "IN-04": { response: "PARTLY", evidence: "The payroll clerk prepares and the HR manager approves, but the approver is not shown the changes from the previous month" },
+    "ST-04": { response: "PARTLY", evidence: "Proof of PAYE remittance was found for two of the last three months; the third could not be located" },
+  };
+  for (const i of await db.healthCheckItem.findMany({ where: { checkId: issued.id }, orderBy: { position: "asc" } }))
+    await assessItem(o.officer, i.id, gaps[i.code] ?? { response: "IN_PLACE", evidence: seen });
+  await addFinding(o.officer, issued.id, { itemCode: "RC-02", severity: "HIGH", title: "Changes to bank details are not independently approved", description: "A bank change is made on an emailed request and takes effect without a second person approving it or confirming it with the employee.", recommendation: "Confirm each bank change with the employee by phone or in person, and have a second person approve it before the next payroll." });
+  await addFinding(o.officer, issued.id, { itemCode: "IN-04", severity: "MEDIUM", title: "The approver is not shown what changed since last month", description: "Payroll is approved from the total only; movements against the previous month are not put in front of the approver.", recommendation: "Give the approver a one-page comparison with last month, with the large movements explained, before they approve." });
+  await addFinding(o.officer, issued.id, { itemCode: "ST-04", severity: "LOW", title: "One month's PAYE remittance proof could not be found", description: "Proof of payment was filed for two of the last three months.", recommendation: "Keep one folder per month for remittance proof, and file the receipt the day it is paid." });
+  await addFinding(o.officer, issued.id, { area: "REPORTING_AUDIT", severity: "OBSERVATION", title: "Payroll files are sent by email to the finance director", description: "The file is protected by a password sent in the same message.", recommendation: "Share payroll files through a controlled folder and send any password separately." });
+  await submitForReview(o.officer, issued.id);
+  await issueHealthCheck(o.reviewer, issued.id, { headline: "Approvals, calculations and statutory remittances were seen operating. Changes to bank details are not independently approved, and the approver is not shown month-on-month changes.", reviewNote: "Checked each answer against the evidence recorded" });
+  const working = await createHealthCheck(o.officer, lekki.id, { periodReviewed: "October 2026", employeesInScope: 45 });
+  for (const i of (await db.healthCheckItem.findMany({ where: { checkId: working.id }, orderBy: { position: "asc" }, take: 8 }))) await assessItem(o.officer, i.id, { response: "IN_PLACE", evidence: seen });
 
   // outreach over the last fortnight's working days: more on some days than others, so the target gauge has something to show
   const outcomes = ["CONNECTED", "NO_ANSWER", "NO_ANSWER", "CONNECTED", "MEETING_BOOKED", "NO_ANSWER", "NOT_INTERESTED", "CONNECTED", "NO_ANSWER", "QUALIFIED"] as const;

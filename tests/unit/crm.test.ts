@@ -119,10 +119,10 @@ describe("the sales summary", () => {
 
 describe("what a sales person can reach", () => {
   it("is the pipeline and their own security, and nothing else", () => {
-    expect([...ROLE_PERMISSIONS.BUSINESS_DEV].sort()).toEqual(["crm.manage", "crm.view", "self.security"]);
+    expect([...ROLE_PERMISSIONS.BUSINESS_DEV].sort()).toEqual(["crm.manage", "crm.view", "healthcheck.view", "self.security"]);
   });
   it("is never given payroll, employee, client or finance permissions", () => {
-    const other = PERMISSIONS.filter((p) => !["crm.view", "crm.manage", "self.security"].includes(p));
+    const other = PERMISSIONS.filter((p) => !["crm.view", "crm.manage", "healthcheck.view", "self.security"].includes(p));
     for (const p of other) expect(ROLE_PERMISSIONS.BUSINESS_DEV.includes(p), p).toBe(false);
   });
   it("is held only by the founder (everything) and the sales role among the staff roles", () => {

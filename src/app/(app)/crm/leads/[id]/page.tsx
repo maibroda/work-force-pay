@@ -14,6 +14,9 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { logLeadOutreachAction, moveLeadAction, updateLeadAction } from "@/app/actions/crm";
 import { createProposalAction } from "@/app/actions/proposals";
+import { createHealthCheckAction } from "@/app/actions/health-checks";
+import { listHealthChecks } from "@/server/services/health-checks";
+import { CHECK_STATUS_LABEL, CHECK_STATUS_TONE } from "../../../health-checks/_tone";
 import { crmGate } from "../../_gate";
 import { leadFields, outreachFields, proposalFields, STAGE_TONE } from "../../_fields";
 import { PROPOSAL_STATE_TONE } from "../../proposals/_tone";
@@ -29,7 +32,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   });
   if (!l) notFound();
   const manage = can(ctx.role, "crm.manage");
-  const [owners, partners, clients, proposals, card] = await Promise.all([pipelineOwners(ctx), listPartners(ctx), linkableClients(ctx), listProposals(ctx, { leadId: id }), getRateCard(ctx)]);
+  const [owners, partners, clients, proposals, card, checks] = await Promise.all([pipelineOwners(ctx), listPartners(ctx), linkableClients(ctx), listProposals(ctx, { leadId: id }), getRateCard(ctx), can(ctx.role, "healthcheck.view") ? listHealthChecks(ctx, { leadId: id }) : Promise.resolve([])]);
   const stage = l.stage as Stage;
   const final = stage === "WON";
   const today = iso(new Date());
@@ -146,6 +149,57 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
             resetOnSuccess
             action={createProposalAction.bind(null, l.id)}
             fields={proposalFields({ packages: card.packages.map((x) => ({ key: x.key, name: x.name, active: x.active })), addOns: card.addOns, headcount: l.headcount, showHours: can(ctx.role, "pricing.manage") })}
+          />
+        </FormPanel>
+      )}
+
+      {can(ctx.role, "healthcheck.view") && (
+        <Section title="Payroll health checks" flush>
+          <Table>
+            <THead>
+              <TR>
+                <TH>No.</TH>
+                <TH>Period</TH>
+                <TH className="text-right">Findings</TH>
+                <TH>Status</TH>
+                <TH>Issued</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {checks.map((k) => (
+                <TR key={k.id}>
+                  <TD className="font-mono text-xs">
+                    <Link className="text-primary underline" href={`/health-checks/${k.id}`}>
+                      {k.number}
+                    </Link>
+                  </TD>
+                  <TD className="text-xs">{k.periodReviewed ?? "—"}</TD>
+                  <TD className="text-right">{k._count.findings}</TD>
+                  <TD>
+                    <Badge tone={CHECK_STATUS_TONE[k.status]}>{CHECK_STATUS_LABEL[k.status]}</Badge>
+                  </TD>
+                  <TD className="text-xs">{k.issuedAt ? fmtDate(k.issuedAt) : "—"}</TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+          {!checks.length && <Empty>No health check yet.</Empty>}
+        </Section>
+      )}
+      {can(ctx.role, "healthcheck.manage") && (
+        <FormPanel title="Start a payroll health check">
+          <p className="mb-3 text-xs text-muted-foreground">A limited review of this prospect&apos;s payroll process against the standard checklist. A second person reviews it before it is issued.</p>
+          <SmartForm
+            columns={3}
+            submitLabel="Start the check"
+            resetOnSuccess
+            action={createHealthCheckAction.bind(null, l.id)}
+            fields={[
+              { name: "title", label: "Title", defaultValue: "Payroll Health Check" },
+              { name: "periodReviewed", label: "Period to review", placeholder: "e.g. July to September 2026" },
+              { name: "employeesInScope", label: "Employees in scope", type: "number", min: 1, defaultValue: l.headcount ?? undefined },
+              { name: "scopeNote", label: "What will and won't be looked at", type: "textarea", span: 3 },
+            ]}
           />
         </FormPanel>
       )}
