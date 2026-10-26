@@ -620,6 +620,10 @@ model Organization {
   outreachActivities        OutreachActivity[]
   referralPartners          ReferralPartner[]
   referralPayouts           ReferralPayout[]
+  pricingSetting            PricingSetting?
+  pricingPackages           PricingPackage[]
+  pricingAddOns             PricingAddOn[]
+  proposals                 Proposal[]
   calendarSetting           PayrollCalendarSetting?
   reminderSetting           PayrollReminderSetting?
   bankCodes                 BankCode[]
@@ -840,6 +844,7 @@ model Lead {
   updatedAt            DateTime         @updatedAt
 
   stageChanges LeadStageChange[]
+  proposals    Proposal[]
   activities   OutreachActivity[]
   payouts      ReferralPayout[]
 
@@ -903,6 +908,121 @@ model ReferralPayout {
 
   @@index([partnerId])
   @@index([leadId])
+}
+
+// ─────────────────────────────── PRICING AND PROPOSALS ───────────────────────────────
+
+/// The bureau's costs and targets: what delivering a client's payroll costs it, and the margin it aims for. Placeholders until a manager confirms them.
+model PricingSetting {
+  id                  String       @id @default(cuid())
+  organizationId      String       @unique
+  organization        Organization @relation(fields: [organizationId], references: [id])
+  /// What one hour of a payroll officer's time costs the bureau.
+  hourlyCost          Decimal      @db.Decimal(12, 2)
+  /// Software and support cost of serving one client, a fixed amount per month, plus an amount per employee.
+  softwareFixed       Decimal      @db.Decimal(12, 2)
+  softwarePerEmployee Decimal      @db.Decimal(12, 2)
+  /// Overhead loaded on top of labour and software, as a percentage.
+  overheadPct         Decimal      @db.Decimal(5, 2)
+  targetMarginPct     Decimal      @db.Decimal(5, 2)
+  vatRatePct          Decimal      @default(7.5) @db.Decimal(5, 2)
+  /// How many days a proposal stays open.
+  validityDays        Int          @default(30)
+  confirmedBy         String?
+  confirmedByUserId   String?
+  confirmedAt         DateTime?
+  updatedBy           String
+  updatedAt           DateTime     @updatedAt
+}
+
+/// What a package costs the client and what delivering it takes. Scope and responsibilities are the wording that goes on a proposal.
+model PricingPackage {
+  id                 String       @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id])
+  key                String
+  perEmployeeRate    Decimal      @db.Decimal(12, 2)
+  monthlyMinimum     Decimal      @db.Decimal(12, 2)
+  onboardingFee      Decimal      @db.Decimal(12, 2)
+  /// Hours of a payroll officer's time each month before counting employees, and minutes more for each employee.
+  baseHours          Decimal      @db.Decimal(8, 2)
+  minutesPerEmployee Decimal      @db.Decimal(8, 2)
+  scope              String
+  responsibilities   String
+  active             Boolean      @default(true)
+  updatedAt          DateTime     @updatedAt
+
+  @@unique([organizationId, key])
+}
+
+model PricingAddOn {
+  id                 String       @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id])
+  code               String
+  name               String
+  description        String?
+  monthlyFee         Decimal      @default(0) @db.Decimal(12, 2)
+  perEmployeeFee     Decimal      @default(0) @db.Decimal(12, 2)
+  onboardingFee      Decimal      @default(0) @db.Decimal(12, 2)
+  hours              Decimal      @default(0) @db.Decimal(8, 2)
+  minutesPerEmployee Decimal      @default(0) @db.Decimal(8, 2)
+  active             Boolean      @default(true)
+  updatedAt          DateTime     @updatedAt
+
+  @@unique([organizationId, code])
+}
+
+enum ProposalStatus {
+  DRAFT
+  APPROVED
+  SENT
+  ACCEPTED
+  DECLINED
+  SUPERSEDED
+  WITHDRAWN
+}
+
+/// An offer to a lead. What it says (the quote, with the rate card, scope and responsibilities as they were) is frozen when it is sent.
+model Proposal {
+  id               String         @id @default(cuid())
+  organizationId   String
+  organization     Organization   @relation(fields: [organizationId], references: [id])
+  leadId           String
+  lead             Lead           @relation(fields: [leadId], references: [id])
+  number           String
+  packageKey       String
+  headcount        Int
+  termMonths       Int
+  /// Extra delivery hours a month for what makes this client harder than the package assumes (several sites, shift allowances, ...).
+  extraHours       Decimal        @default(0) @db.Decimal(8, 2)
+  discountPct      Decimal        @default(0) @db.Decimal(5, 2)
+  discountReason   String?
+  addOnCodes       String[]
+  /// The whole quote as computed, with the wording that goes on the page.
+  quote            Json
+  monthlyFee       Decimal        @db.Decimal(14, 2)
+  onboardingFee    Decimal        @db.Decimal(14, 2)
+  marginPct        Decimal        @db.Decimal(7, 2)
+  belowTarget      Boolean        @default(false)
+  status           ProposalStatus @default(DRAFT)
+  approvedBy       String?
+  approvedByUserId String?
+  approvedAt       DateTime?
+  approvalNote     String?
+  validUntil       DateTime?      @db.Date
+  sentAt           DateTime?
+  sentBy           String?
+  decidedAt        DateTime?
+  decisionNote     String?
+  createdBy        String
+  createdByUserId  String
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([organizationId, number])
+  @@index([leadId])
+  @@index([organizationId, status])
 }
 
 /// One run of a scheduled job (the reminders, the HR digest, ...), written by the job's own endpoint so the app can tell whether a scheduler is calling it.

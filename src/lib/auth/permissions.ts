@@ -91,7 +91,8 @@ export const PERMISSIONS = [
   "portal.inputs", // send the month's overtime, allowances, bonuses and deductions as a file, and follow what happened to it (the client's HR contact)
   "query.respond", // answer clients' queries and close them (bureau staff)
   "crm.view", // the bureau's sales pipeline, outreach log and referral partners (never payroll data)
-  "crm.manage", // add and move leads, log outreach, keep referral partners, record commission paid
+  "crm.manage", // add and move leads, log outreach, keep referral partners, record commission paid, and make and send proposals
+  "pricing.manage", // set the rate card (the bureau's costs, margin target, package prices and add-ons) and approve a proposal priced below the target margin
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 

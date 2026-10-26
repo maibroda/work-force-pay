@@ -129,4 +129,9 @@ describe("what a sales person can reach", () => {
     const holders = Object.entries(ROLE_PERMISSIONS).filter(([, ps]) => ps.includes("crm.manage")).map(([r]) => r).sort();
     expect(holders).toEqual(["BUSINESS_DEV", "COMPANY_ADMIN", "SUPER_ADMIN"]);
   });
+  it("can make and send proposals but never set prices or approve a price below the target margin: that is the founder's", () => {
+    const owners = Object.entries(ROLE_PERMISSIONS).filter(([, ps]) => ps.includes("pricing.manage")).map(([r]) => r).sort();
+    expect(owners).toEqual(["COMPANY_ADMIN", "SUPER_ADMIN"]);
+    expect(ROLE_PERMISSIONS.BUSINESS_DEV.includes("pricing.manage")).toBe(false);
+  });
 });

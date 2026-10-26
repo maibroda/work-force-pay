@@ -5,6 +5,7 @@
 import type { Ctx } from "../src/lib/auth/context";
 import { isWorkingDay } from "../src/lib/payroll-reminders";
 import { createLead, createPartner, logOutreach, moveLead, recordPayout } from "../src/server/services/crm";
+import { approveBelowMargin, confirmRateCard, createProposal, sendProposal } from "../src/server/services/proposals";
 
 const day = (offset: number) => new Date(Date.now() - offset * 86_400_000).toISOString().slice(0, 10);
 
@@ -29,6 +30,16 @@ export async function buildDemoPipeline(o: { sales: Ctx; founder: Ctx; clientId:
   const north = await createLead(sales, { company: "Northgate Foods", segment: "SME", headcount: 80, contactName: "Mr Sam Okon", expectedMrr: 200000 });
   await moveLead(sales, north.id, { to: "DISCOVERY" });
   await moveLead(sales, north.id, { to: "LOST", lostReason: "Chose to keep payroll in-house for another year" });
+
+  // proposals: the demo bureau confirms its (illustrative) rate card so offers can go out; one is a draft below the target margin, one was
+  // priced below it, approved with a reason and sent
+  await confirmRateCard(o.founder, "Demo rate card: illustrative figures, confirmed for the demo only");
+  const offer = await createProposal(sales, guardian.id, { packageKey: "ENTERPRISE", headcount: 120, termMonths: 12, addOnCodes: ["REPORTS"] });
+  await sendProposal(sales, offer.id);
+  await createProposal(sales, lekki.id, { packageKey: "PAYROLL_COMPLIANCE", headcount: 45, termMonths: 12 });
+  const pilot = await createProposal(sales, sunrise.id, { packageKey: "PAYROLL_COMPLIANCE", headcount: 35, termMonths: 6, discountPct: 10, discountReason: "Three-month pilot price" });
+  await approveBelowMargin(o.founder, pilot.id, "Pilot price for three months; the fee goes to the list price if they continue");
+  await sendProposal(sales, pilot.id);
 
   // outreach over the last fortnight's working days: more on some days than others, so the target gauge has something to show
   const outcomes = ["CONNECTED", "NO_ANSWER", "NO_ANSWER", "CONNECTED", "MEETING_BOOKED", "NO_ANSWER", "NOT_INTERESTED", "CONNECTED", "NO_ANSWER", "QUALIFIED"] as const;

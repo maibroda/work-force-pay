@@ -65,3 +65,21 @@ export function outreachFields(o: { withCompany: boolean; today: string }): Fiel
     { name: "note", label: "Note", type: "textarea", span: 3 },
   ];
 }
+
+type Pkg = { key: string; name: string; active: boolean };
+type AddOn = { code: string; name: string; monthlyFee: number; perEmployeeFee: number; active: boolean };
+type ProposalDefaults = { packageKey: string; headcount: number; termMonths: number; addOnCodes: string[]; extraHours: unknown; discountPct: unknown; discountReason: string | null };
+
+/** A proposal's terms: the package, how many employees, the add-ons, and any discount. */
+export function proposalFields(o: { packages: Pkg[]; addOns: AddOn[]; headcount?: number | null; p?: ProposalDefaults; showHours: boolean }): Field[] {
+  const p = o.p;
+  return [
+    { name: "packageKey", label: "Package", type: "select", required: true, options: o.packages.filter((x) => x.active || x.key === p?.packageKey).map((x) => ({ value: x.key, label: x.name })), defaultValue: p?.packageKey },
+    { name: "headcount", label: "Employees", type: "number", required: true, min: 1, defaultValue: p?.headcount ?? o.headcount ?? undefined },
+    { name: "termMonths", label: "Term", type: "select", required: true, options: [{ value: "12", label: "12 months" }, { value: "6", label: "6 months" }], defaultValue: String(p?.termMonths ?? 12) },
+    ...o.addOns.filter((a) => a.active || p?.addOnCodes.includes(a.code)).map((a) => ({ name: `addon_${a.code}`, label: `Add: ${a.name}`, type: "checkbox" as const, defaultValue: p?.addOnCodes.includes(a.code) ?? false })),
+    ...(o.showHours ? ([{ name: "extraHours", label: "Extra delivery hours a month", type: "number", min: 0, defaultValue: Number(p?.extraHours ?? 0), help: "For what makes this client harder than the package assumes: several sites, shift allowances, ..." }] as Field[]) : []),
+    { name: "discountPct", label: "Discount (%)", type: "number", min: 0, max: 100, defaultValue: Number(p?.discountPct ?? 0) },
+    { name: "discountReason", label: "Why the discount", defaultValue: p?.discountReason ?? undefined, help: "Needed if there is one" },
+  ];
+}
