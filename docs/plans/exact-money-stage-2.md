@@ -1,6 +1,6 @@
 # Plan: exact money, stage 2 (PAYE and the pension summary)
 
-**Status: a plan for the founder's "go". Nothing in it has been built.** PAYE is a statutory module, so `CLAUDE.md` requires your "go" before I touch it. Stage 1 (`src/lib/money-exact.ts`, merged in #65) is the tool this stage uses.
+**Status: built on the founder's "go for stage 2", with questions 1 and 2 of section 7 answered: (1) yes, the `"2000.205"` pension-summary test case is replaced by a test that such a value is refused; (2) PAYE changes in place.** PAYE is a statutory module, so `CLAUDE.md` required your "go" before I touched it. Stage 1 (`src/lib/money-exact.ts`, merged in #65) is the tool this stage uses.
 
 **Rule it serves:** rule 2 (exact money, one half-up rounding rule). Rule 4 (tests first) governs the order of work.
 

@@ -2,14 +2,16 @@
 
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
-## Not yet merged (branch `exact-money-1`)
+## Not yet merged (branch `exact-money-2`)
 
-- **Exact money arithmetic, stage 1 of 5** (rule 2). A new shared utility, `src/lib/money-exact.ts`, holds money as whole kobo and does every percentage and proration in whole-number arithmetic, rounding half up once at the calculated line. It refuses amounts with more than two decimal places. **Nothing uses it yet: pay figures are unchanged.** The plan and the measurement behind it are in `docs/plans/exact-money.md`. No migration.
+- **Exact money arithmetic, stage 2 of 5: PAYE and the pension summary** (rule 2). PAYE is now worked in whole kobo: the slices of tax in each band are added as exact whole numbers and rounded half up **once**, when they become a month's PAYE. **A month's PAYE can now be ₦0.01 higher than before**, on about 1 in 290 employee-months (measured on synthetic data): wherever the exact tax ends in exactly half a kobo, the old arithmetic rounded it down. Nothing else about PAYE changes: same bands, reliefs, caps, exemptions and order of steps. An amount that is part-way through a kobo is now refused with a message instead of being rounded silently. The year-to-date pension on the employee screen is added in whole kobo. One new shared function, `roundRatio`, in `money-exact.ts`. No migration. The rest of the engine, the services and the bank file are unchanged (stages 3 and 4).
 
 ## Merged
 
 | PR | What | Migration |
 | --- | --- | --- |
+| #66 | Plan for exact money, stage 2 (document only). | none |
+| #65 | **Exact money arithmetic, stage 1**: `src/lib/money-exact.ts` and 39 tests, not yet used by the engine. | none |
 | #64 | **Payroll Health Check** (spec 3.11): a 25-control checklist answered with evidence, a findings log, review by a second person, frozen on issue, one-page summary PDF. Also the project rules (`CLAUDE.md`), `docs/rules-conformity.md`, the generated data dictionary (a test fails if it is stale) and this file. | `20261104090000_health_check` |
 | #63 | **Pricing and proposals** (spec 3.10): a rate card the founder must confirm, a delivery-cost calculator that gives the margin and the lowest fee that earns the target, proposals that attach to a lead, approval for a price below the target margin, sent proposals frozen, a PDF with no cost figures. Prices are placeholders until confirmed. | `20261103090000_pricing_proposals` |
 | #62 | **Sales CRM and pipeline** (spec 3.9) and a Business Development role that sees the CRM and nothing else: leads and stages, outreach log with the daily target, referral partners and commission, dashboard. | `20261102090000_sales_crm` |
