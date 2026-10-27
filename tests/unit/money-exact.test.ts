@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addKobo, asKobo, koboOrZero, koboToNumber, koboToString, MoneyError, mulDiv, mulPct, negKobo, pctToRate, RATE_SCALE, roundRatio, subKobo, sumKobo, toKobo } from "@/lib/money-exact";
+import { addKobo, asKobo, koboFromNaira, koboOrZero, koboToNumber, koboToString, MoneyError, mulDiv, mulPct, negKobo, pctToRate, RATE_SCALE, roundRatio, subKobo, sumKobo, toKobo } from "@/lib/money-exact";
 import { round2 } from "@/lib/money";
 
 const k = (naira: string) => toKobo(naira);
@@ -248,6 +248,27 @@ describe("rounding an exact ratio computed in big whole numbers (used where many
     expect(() => roundRatio(1n, 0n)).toThrow(MoneyError);
     expect(() => roundRatio(1n, -3n)).toThrow(MoneyError);
     expect(() => roundRatio(BigInt(Number.MAX_SAFE_INTEGER) + 1n, 1n)).toThrow(/too large/i);
+  });
+});
+
+describe("the temporary bridge from a naira number (until the services pass kobo)", () => {
+  it("reads a number that is a whole number of kobo", () => {
+    expect(koboFromNaira(84000)).toBe(8_400_000);
+    expect(koboFromNaira(0.05)).toBe(5);
+    expect(koboFromNaira(-1234.56)).toBe(-123_456);
+    expect(Object.is(koboFromNaira(-0), 0)).toBe(true);
+  });
+  it("takes floating-point dust left by earlier arithmetic as the kobo it was meant to be", () => {
+    expect(koboFromNaira(0.1 + 0.2)).toBe(30);
+    expect(koboFromNaira(84000.00000000001)).toBe(8_400_000);
+    expect(koboFromNaira(1234.5599999999999)).toBe(123_456);
+  });
+  it("refuses an amount part-way through a kobo, a number that is not finite, and one too large to hold", () => {
+    expect(() => koboFromNaira(84000.005)).toThrow(MoneyError);
+    expect(() => koboFromNaira(0.004, "The pension")).toThrow(/The pension/);
+    expect(() => koboFromNaira(Number.NaN)).toThrow(MoneyError);
+    expect(() => koboFromNaira(Number.POSITIVE_INFINITY)).toThrow(MoneyError);
+    expect(() => koboFromNaira(1e15)).toThrow(/too large/i);
   });
 });
 

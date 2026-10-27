@@ -1,7 +1,7 @@
 import {
   addKobo,
+  koboFromNaira as kobo,
   koboToNumber,
-  MoneyError,
   mulDiv,
   mulPct,
   pctToRate,
@@ -20,7 +20,7 @@ import {
  *
  * The arithmetic is exact: amounts are whole kobo, rates are whole units, and the slices of tax are added as exact whole numbers and rounded half up
  * ONCE, to the kobo, when they become a month's PAYE (see money-exact.ts). The inputs and results are still naira numbers, because the payroll engine
- * above this still passes numbers; `kobo()` below is the temporary bridge and goes when the engine itself works in kobo (stage 3 of docs/plans/exact-money.md).
+ * above this still passes numbers; `kobo()` below is the temporary bridge (koboFromNaira in money-exact.ts); it goes when the services pass kobo (stage 4 of docs/plans/exact-money.md).
  */
 export interface TaxBandDef {
   lowerBound: number;
@@ -76,19 +76,6 @@ export interface PayeResult {
   exemptionCode?: string;
   reliefBreakdown: Array<{ code: string; name: string; amount: number }>;
   ruleVersion: string;
-}
-
-/**
- * TEMPORARY BRIDGE. A naira number as whole kobo. Earlier floating-point arithmetic can leave dust (0.1 + 0.2 is 0.30000000000000004), so a number
- * within a thousandth of a kobo of a whole kobo is taken to be that kobo. Anything further away is a real part-kobo amount and is REFUSED, not rounded.
- */
-function kobo(naira: number, what: string): Kobo {
-  if (!Number.isFinite(naira)) throw new MoneyError(`${what} is not a number.`);
-  const scaled = naira * 100;
-  const whole = Math.round(scaled);
-  if (Math.abs(scaled - whole) > 0.001) throw new MoneyError(`${what} (${naira}) is not a whole number of kobo.`);
-  if (!Number.isSafeInteger(whole)) throw new MoneyError("That amount is too large to hold exactly.");
-  return (whole === 0 ? 0 : whole) as Kobo;
 }
 
 /** A percentage as exact rate units. Rates come from the database as Decimal, so their text is clean. */
