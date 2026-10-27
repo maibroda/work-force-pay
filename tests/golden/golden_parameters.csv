@@ -1,0 +1,12 @@
+key,value,unit,note
+days_in_month,30,days,Calendar-day proration basis. Confirm with client.
+hours_per_shift_day,8,hours,Used for the overtime hourly rate.
+basic_share_of_gross,0.5,ratio,NHF base share. Set per client pay structure.
+pensionable_share_of_gross,0.7,ratio,Basic plus housing plus transport share of gross. Set per client pay structure.
+employee_pension_rate,0.08,ratio,VERIFY with tax adviser.
+nhf_rate_on_basic,0.025,ratio,VERIFY with tax adviser.
+other_annual_relief,0,naira,Rent and other reliefs. Zero in these cases.
+min_takehome_share_of_gross,0.5,ratio,Policy example limiting loan and cooperative deductions. Client-specific.
+rounding_mode,half_up_to_kobo,text,Round each line to 2 decimals at the line where it is calculated.
+verified_by,,text,Tax adviser name. Must be filled before these values are treated as a standard.
+verified_on,,date,Date of adviser verification (YYYY-MM-DD).
