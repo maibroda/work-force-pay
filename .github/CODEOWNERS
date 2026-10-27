@@ -1,0 +1,65 @@
+# Critical files: a change needs review by both owners (CLAUDE.md rule 11).
+# The areas are the founder's: payroll, statutory, approvals, audit, auth, bank files, golden tests.
+# This repository does not have /src/payroll/, /src/statutory/ and so on; the paths below are where that code actually is.
+# Protection takes effect only where branch protection "Require review from Code Owners" is switched on, and only for owners with write access.
+
+# ── Payroll (pay, exact money) ──
+/src/lib/payroll/                          @maibroda @developeraideehem
+/src/lib/money-exact.ts                    @maibroda @developeraideehem
+/src/lib/exact-fraction.ts                 @maibroda @developeraideehem
+/src/lib/money.ts                          @maibroda @developeraideehem
+/src/lib/eos.ts                            @maibroda @developeraideehem
+/src/lib/loans.ts                          @maibroda @developeraideehem
+/src/lib/client-inputs.ts                  @maibroda @developeraideehem
+/src/server/services/payroll.ts            @maibroda @developeraideehem
+/src/server/services/inputs.ts             @maibroda @developeraideehem
+/src/server/services/client-inputs.ts      @maibroda @developeraideehem
+/src/server/services/settlements.ts        @maibroda @developeraideehem
+/src/server/services/loans.ts              @maibroda @developeraideehem
+/src/server/services/rates.ts              @maibroda @developeraideehem
+/src/server/services/deduction-rules.ts    @maibroda @developeraideehem
+/src/server/services/quick-payslip.ts      @maibroda @developeraideehem
+/eslint.config.mjs                         @maibroda @developeraideehem
+
+# ── Statutory (tax, pension, employer contributions, verification) ──
+/src/lib/tax-engine.ts                     @maibroda @developeraideehem
+/src/lib/pension-summary.ts                @maibroda @developeraideehem
+/src/lib/rule-verification.ts              @maibroda @developeraideehem
+/src/server/services/statutory.ts          @maibroda @developeraideehem
+/src/server/services/statutory-verification.ts @maibroda @developeraideehem
+/src/server/services/tax-engine.ts         @maibroda @developeraideehem
+/src/server/services/rule-library.ts       @maibroda @developeraideehem
+/src/app/actions/rule-library.ts           @maibroda @developeraideehem
+/src/app/actions/tax-engine.ts             @maibroda @developeraideehem
+
+# ── Approvals (payroll approval, client approval, maker-checker) ──
+/src/server/services/portal.ts             @maibroda @developeraideehem
+/src/server/services/bureau.ts             @maibroda @developeraideehem
+/src/app/actions/payroll.ts                @maibroda @developeraideehem
+/src/app/actions/portal.ts                 @maibroda @developeraideehem
+/src/app/actions/bureau.ts                 @maibroda @developeraideehem
+
+# ── Audit log ──
+/src/server/services/audit.ts              @maibroda @developeraideehem
+/src/server/services/auth-audit.ts         @maibroda @developeraideehem
+/prisma/migrations/20261030100000_audit_log_append_only/ @maibroda @developeraideehem
+
+# ── Authentication and access control ──
+/src/lib/auth/                             @maibroda @developeraideehem
+/src/lib/two-factor-policy.ts              @maibroda @developeraideehem
+/src/middleware.ts                         @maibroda @developeraideehem
+/src/server/services/security.ts           @maibroda @developeraideehem
+/src/server/services/users.ts              @maibroda @developeraideehem
+/src/app/actions/auth.ts                   @maibroda @developeraideehem
+
+# ── Bank files ──
+/src/lib/payment-file.ts                   @maibroda @developeraideehem
+/src/lib/bank-codes.ts                     @maibroda @developeraideehem
+/src/server/services/payment-file.ts       @maibroda @developeraideehem
+/src/server/services/payments.ts           @maibroda @developeraideehem
+/src/app/actions/payment-file.ts           @maibroda @developeraideehem
+/src/app/api/payments/                     @maibroda @developeraideehem
+
+# ── Golden tests and the engine baseline ──
+/tests/golden/                             @maibroda @developeraideehem
+/tests/characterization/                   @maibroda @developeraideehem
