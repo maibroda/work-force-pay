@@ -6,6 +6,8 @@
  * is listed as a problem rather than guessed at, and the file is not produced unless those people are deliberately left out. Money is in kobo.
  */
 import { resolveBank, type BankEntry } from "./bank-codes";
+import { Exact } from "./exact-fraction";
+import { koboToNumber, koboToString, sumKobo, type Kobo } from "./money-exact";
 
 export const PAYMENT_FILE_HEADERS = ["Name", "Account Number", "Bank Code", "Amount", "Payment Description"] as const;
 
@@ -15,7 +17,18 @@ export type FileRow = { transactionId: string; name: string; accountNumber: stri
 export type RowProblem = { transactionId: string; employeeNumber: string; name: string; problems: string[] };
 export type FileWarning = { transactionId: string; employeeNumber: string; name: string; message: string };
 
-const kobo = (n: number) => Math.round(n * 100);
+/**
+ * An amount in naira as whole kobo, rounded half up, once, by the shared rule. `exact` is false when the amount had digits below a kobo (the
+ * payroll never produces one, but a person can type one), so the row can say it was rounded. Null when it is not a number at all.
+ */
+function readAmount(n: number): { kobo: Kobo; exact: boolean } | null {
+  try {
+    const kobo = Exact.fromNumber(n).mul(Exact.int(100));
+    return { kobo: kobo.round(), exact: kobo.d === 1n };
+  } catch {
+    return null;
+  }
+}
 
 /** The name the bank will see: the account name when there is one (it has to match the account), otherwise the employee's. */
 const beneficiary = (l: PaymentLine) => (l.accountName?.trim() || l.name).replace(/\s+/g, " ").trim();
@@ -25,6 +38,7 @@ export function buildPaymentRows(lines: PaymentLine[], banks: BankEntry[], descr
   const problems: RowProblem[] = [];
   const warnings: FileWarning[] = [];
   const seen = new Map<string, string>();
+  const paid: Kobo[] = [];
   for (const l of lines) {
     const p: string[] = [];
     const account = (l.accountNumber ?? "").replace(/\s/g, "");
@@ -33,7 +47,9 @@ export function buildPaymentRows(lines: PaymentLine[], banks: BankEntry[], descr
     if (!l.bankName?.trim()) p.push("No bank name.");
     const bank = l.bankName ? resolveBank(l.bankName, banks) : null;
     if (l.bankName?.trim() && !bank) p.push(`Bank "${l.bankName}" is not in the bank list, or matches more than one bank. Correct the bank list or the employee's bank.`);
-    if (!(kobo(l.amount) > 0)) p.push("Nothing to pay.");
+    const amount = readAmount(l.amount);
+    if (!amount) p.push("The amount is not a number.");
+    else if (!(amount.kobo > 0)) p.push("Nothing to pay.");
     if (!beneficiary(l)) p.push("No name.");
     if (p.length) {
       problems.push({ transactionId: l.transactionId, employeeNumber: l.employeeNumber, name: l.name, problems: p });
@@ -42,7 +58,9 @@ export function buildPaymentRows(lines: PaymentLine[], banks: BankEntry[], descr
     const key = `${account}|${bank!.code}`;
     if (seen.has(key)) warnings.push({ transactionId: l.transactionId, employeeNumber: l.employeeNumber, name: l.name, message: `Same account as ${seen.get(key)}. Check it is not a duplicate payment.` });
     else seen.set(key, `${l.employeeNumber} ${l.name}`);
-    rows.push({ transactionId: l.transactionId, name: beneficiary(l), accountNumber: account, bankCode: bank!.code, amount: kobo(l.amount) / 100, description });
+    if (!amount!.exact) warnings.push({ transactionId: l.transactionId, employeeNumber: l.employeeNumber, name: l.name, message: `The amount ${l.amount} had digits below a kobo and was rounded to ${koboToString(amount!.kobo)}.` });
+    paid.push(amount!.kobo);
+    rows.push({ transactionId: l.transactionId, name: beneficiary(l), accountNumber: account, bankCode: bank!.code, amount: koboToNumber(amount!.kobo), description });
   }
-  return { rows, problems, warnings, total: rows.reduce((a, r) => a + kobo(r.amount), 0) / 100 };
+  return { rows, problems, warnings, total: koboToNumber(sumKobo(paid)) };
 }
