@@ -31,7 +31,7 @@ export type Rate = number & { readonly [rateBrand]: true };
 const MAX = Number.MAX_SAFE_INTEGER;
 const MAX_BIG = BigInt(MAX);
 /** Dividing a rate in ten-thousandths of a percent by this gives a plain multiplier: 100 (for %) × 10,000 (units per percent). */
-const RATE_SCALE = 1_000_000n;
+export const RATE_SCALE = 1_000_000n;
 
 const tooLarge = () => new MoneyError("That amount is too large to hold exactly.");
 
@@ -107,6 +107,15 @@ function roundDiv(numerator: bigint, denominator: bigint): bigint {
 /** A percentage of an amount, rounded half up to the kobo. 70% of ₦50,002.45 is ₦35,001.715, which rounds to ₦35,001.72. */
 export function mulPct(amount: Kobo, rate: Rate): Kobo {
   return fit(roundDiv(BigInt(amount) * BigInt(rate), RATE_SCALE)) as Kobo;
+}
+
+/**
+ * For a calculation that adds many exact parts before it rounds (the slices of PAYE): a ratio of two big whole numbers, rounded half up to the kobo,
+ * once. The same rule as every other line, so there is still only one place money is rounded. The denominator must be above zero.
+ */
+export function roundRatio(numerator: bigint, denominator: bigint): Kobo {
+  if (denominator <= 0n) throw new MoneyError("The number to divide by must be a whole number above zero.");
+  return fit(roundDiv(numerator, denominator)) as Kobo;
 }
 
 /** An amount times a whole number over another whole number, rounded half up to the kobo: days paid over days in the month. */
