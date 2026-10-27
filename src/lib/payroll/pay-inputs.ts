@@ -16,6 +16,9 @@ const ZERO = 0 as Kobo;
 /** A number a person TYPED, taken to the kobo, half up, once (it can have any number of decimals). */
 const typedKobo = (naira: number): Kobo => Exact.fromNumber(naira).mul(HUNDRED).round();
 
+/** A number a person typed, as naira taken to the kobo, half up, once (what the database would store). */
+export const typedAmount = (naira: number): number => koboToNumber(typedKobo(naira));
+
 // ─────────────────────────────── Overtime ───────────────────────────────
 
 /** Overtime pay: hours × the hourly rate, rounded half up to the kobo once. */
