@@ -2,14 +2,16 @@
 
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
-## Not yet merged (branch `exact-money-2`)
+## Not yet merged (branch `exact-money-3a`)
 
-- **Exact money arithmetic, stage 2 of 5: PAYE and the pension summary** (rule 2). PAYE is now worked in whole kobo: the slices of tax in each band are added as exact whole numbers and rounded half up **once**, when they become a month's PAYE. **A month's PAYE can now be ₦0.01 higher than before**, on about 1 in 290 employee-months (measured on synthetic data): wherever the exact tax ends in exactly half a kobo, the old arithmetic rounded it down. Nothing else about PAYE changes: same bands, reliefs, caps, exemptions and order of steps. An amount that is part-way through a kobo is now refused with a message instead of being rounded silently. The year-to-date pension on the employee screen is added in whole kobo. One new shared function, `roundRatio`, in `money-exact.ts`. No migration. The rest of the engine, the services and the bank file are unchanged (stages 3 and 4).
+- **Exact money arithmetic, stage 3a of 5: the pieces under the engine** (rule 2). A new exact-fraction type (`src/lib/exact-fraction.ts`) holds amounts that are not yet rounded, so that nothing is lost between steps. Salary-component formulas are now worked in exact fractions: `0.1 + 0.2` is `0.3`, and `ROUND()` in a formula rounds half up to the kobo (**a negative value at exactly half now goes away from zero: -0.125 becomes -0.13, it was -0.12**). Salary components are worked as exact fractions (`computeComponentsExact`; `computeComponents` keeps its numbers-in, numbers-out shape), and the **70:30 split now rounds half up**: an agreed rate of ₦50,002.45 at 70% gives the operative ₦35,001.72 (it was ₦35,001.71), about 1 agreed rate in 220 at 70%. **The payroll engine itself is unchanged in this step**: on 30,000 synthetic employee-months (2.27 million figures) and on the 352 seeded payroll records, the old and new engines give identical figures. A characterization test now records what the engine produces (300 synthetic scenarios, 22,646 figures) and fails if any figure changes without being listed and explained. The engine is about twice as slow per employee (3,000 employees in 1.9 s against 0.9 s). No migration.
 
 ## Merged
 
 | PR | What | Migration |
 | --- | --- | --- |
+| #68 | Plan for exact money, stage 3 (document only). | none |
+| #67 | **Exact money arithmetic, stage 2**: PAYE and the employee year-to-date pension in whole kobo. A month's PAYE can be ₦0.01 higher where the exact tax ends in half a kobo (about 1 in 290 synthetic months; 1 of 352 seeded records). | none |
 | #66 | Plan for exact money, stage 2 (document only). | none |
 | #65 | **Exact money arithmetic, stage 1**: `src/lib/money-exact.ts` and 39 tests, not yet used by the engine. | none |
 | #64 | **Payroll Health Check** (spec 3.11): a 25-control checklist answered with evidence, a findings log, review by a second person, frozen on issue, one-page summary PDF. Also the project rules (`CLAUDE.md`), `docs/rules-conformity.md`, the generated data dictionary (a test fails if it is stale) and this file. | `20261104090000_health_check` |
