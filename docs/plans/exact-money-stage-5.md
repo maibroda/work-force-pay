@@ -1,6 +1,6 @@
 # Plan: exact money, stage 5 (tidy-up and a guard so it stays that way)
 
-**Status: a plan for the founder's "go". Nothing in it has been built.** It is small and changes no pay figure, but it adds an ESLint rule, which is a change to the lint configuration, so `CLAUDE.md` says to tell you first.
+**Status: built on the founder's "go for stage 5".** The "go" did not answer the questions of section 4, so I took my recommendations: the ESLint rule in `eslint.config.mjs` is added; `round2` is forbidden in the pay-path files; appraisal scores stay on the exceptions list; phase 6 (the sales and finance tools) is not part of this stage. Original status: a plan for the founder's "go". It is small and changes no pay figure, but it adds an ESLint rule, which is a change to the lint configuration, so `CLAUDE.md` says to tell you first.
 
 **Rule it serves:** rule 2 ("put the rule in ONE shared utility") and rule 10 (do not change CI settings without telling you; the lint rule is not a CI setting, but CI runs `npm run lint`, so it applies there).
 
