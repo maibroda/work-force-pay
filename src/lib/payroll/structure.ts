@@ -1,5 +1,7 @@
+import { Exact } from "../exact-fraction";
 import { round2 } from "../money";
-import { evaluateFormula } from "./formula";
+import { koboFromNaira, koboToNumber, mulPct, pctToRate, RATE_SCALE, subKobo, type Kobo } from "../money-exact";
+import { evaluateFormulaExact } from "./formula";
 
 export type CalcType = "PERCENTAGE" | "FIXED_AMOUNT" | "FORMULA";
 
@@ -98,10 +100,57 @@ export function validateStructure(s: {
   return errors;
 }
 
+/** A component's amount before rounding: an exact fraction counted in KOBO. */
+export interface ExactComponent {
+  code: string;
+  name: string;
+  amount: Exact;
+  taxable: boolean;
+  pensionable: boolean;
+  overridden: boolean;
+}
+
 /**
- * Compute the full-month amount of every component for a given monthly operative gross,
- * then scale by `factor` (paid days / basis days). Employee overrides replace the base
- * definition for that employee only — the structure itself is never modified.
+ * Compute the full-month amount of every component for a given monthly operative gross, then scale by `factor` (paid days / basis days, as an exact
+ * fraction). Employee overrides replace the base definition for that employee only — the structure itself is never modified.
+ * Nothing is rounded here: each amount is an exact fraction of kobo, so that amounts from different sites can be added before the payslip line is
+ * rounded once (`amount.round()`). Formulas work in naira and see the FULL-month value of the components before them.
+ */
+export function computeComponentsExact(
+  structure: StructureDef,
+  monthlyGross: Kobo,
+  factor: Exact,
+  overrides: ComponentOverride[] = [],
+  extraVars: Record<string, Exact> = {},
+): ExactComponent[] {
+  const ordered = [...structure.components].filter((c) => c.active).sort((a, b) => a.sortOrder - b.sortOrder);
+  const vars: Record<string, Exact> = { GROSS: Exact.ratio(monthlyGross, 100), ...extraVars };
+  const out: ExactComponent[] = [];
+  for (const base of ordered) {
+    const ov = overrides.find((o) => o.componentCode === base.code);
+    const c = ov
+      ? { ...base, calcType: ov.calcType, percentage: ov.percentage, fixedAmount: ov.fixedAmount }
+      : base;
+    let full = Exact.int(0); // kobo
+    if (c.calcType === "PERCENTAGE") full = Exact.ratio(BigInt(monthlyGross) * BigInt(pctToRate(String(c.percentage ?? 0))), RATE_SCALE);
+    else if (c.calcType === "FIXED_AMOUNT") full = Exact.int(koboFromNaira(c.fixedAmount ?? 0, `The ${c.code} fixed amount`));
+    else if (c.calcType === "FORMULA") full = evaluateFormulaExact(c.formula ?? "0", vars).mul(Exact.int(100));
+    vars[c.code.toUpperCase()] = full.div(Exact.int(100));
+    out.push({
+      code: c.code,
+      name: c.name,
+      amount: full.mul(factor),
+      taxable: c.taxable,
+      pensionable: c.pensionable,
+      overridden: Boolean(ov),
+    });
+  }
+  return out;
+}
+
+/**
+ * The same, for callers that work in naira numbers (the structure page, tests, and the engine until it moves to exact values).
+ * `round = false` gives the unrounded amount as the nearest number, for that last caller only.
  */
 export function computeComponents(
   structure: StructureDef,
@@ -111,33 +160,22 @@ export function computeComponents(
   extraVars: Record<string, number> = {},
   round = true,
 ): ComponentAmount[] {
-  const ordered = [...structure.components].filter((c) => c.active).sort((a, b) => a.sortOrder - b.sortOrder);
-  const vars: Record<string, number> = { GROSS: monthlyGross, ...extraVars };
-  const out: ComponentAmount[] = [];
-  for (const base of ordered) {
-    const ov = overrides.find((o) => o.componentCode === base.code);
-    const c = ov
-      ? { ...base, calcType: ov.calcType, percentage: ov.percentage, fixedAmount: ov.fixedAmount }
-      : base;
-    let full = 0;
-    if (c.calcType === "PERCENTAGE") full = (monthlyGross * (c.percentage ?? 0)) / 100;
-    else if (c.calcType === "FIXED_AMOUNT") full = c.fixedAmount ?? 0;
-    else if (c.calcType === "FORMULA") full = evaluateFormula(c.formula ?? "0", vars);
-    vars[c.code.toUpperCase()] = full;
-    out.push({
-      code: c.code,
-      name: c.name,
-      amount: round ? round2(full * factor) : full * factor,
-      taxable: c.taxable,
-      pensionable: c.pensionable,
-      overridden: Boolean(ov),
-    });
-  }
-  return out;
+  const extra: Record<string, Exact> = {};
+  for (const [name, v] of Object.entries(extraVars)) extra[name] = Exact.fromNumber(v);
+  const exact = computeComponentsExact(structure, koboFromNaira(monthlyGross, "The monthly gross"), Exact.fromNumber(factor), overrides, extra);
+  return exact.map((c) => ({
+    code: c.code,
+    name: c.name,
+    amount: round ? koboToNumber(c.amount.round()) : c.amount.toNumber() / 100,
+    taxable: c.taxable,
+    pensionable: c.pensionable,
+    overridden: c.overridden,
+  }));
 }
 
-/** 70:30 sharing — the operative's share of the client's agreed rate. */
+/** 70:30 sharing — the operative's share of the client's agreed rate, rounded half up to the kobo; management gets the rest. */
 export function splitAgreedRate(agreedRate: number, operativeSharePct: number) {
-  const operativeGross = round2((agreedRate * operativeSharePct) / 100);
-  return { operativeGross, managementShare: round2(agreedRate - operativeGross) };
+  const agreed = koboFromNaira(agreedRate, "The agreed rate");
+  const operative = mulPct(agreed, pctToRate(String(operativeSharePct)));
+  return { operativeGross: koboToNumber(operative), managementShare: koboToNumber(subKobo(agreed, operative)) };
 }
