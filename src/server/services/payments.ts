@@ -1,5 +1,6 @@
 import type { Ctx } from "@/lib/auth/context";
 import { num, round2 } from "@/lib/money";
+import { totalOf } from "@/lib/payroll/pay-inputs";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { nextNumber } from "./numbering";
@@ -40,7 +41,7 @@ export async function createPaymentBatches(ctx: Ctx, runId: string) {
           runId,
           batchNumber,
           bankName: bank,
-          totalAmount: round2(list.reduce((a, r) => a + num(r.netPay), 0)),
+          totalAmount: totalOf(list.map((r) => num(r.netPay))),
           count: list.length,
           createdBy: ctx.name,
           transactions: {

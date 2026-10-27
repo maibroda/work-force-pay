@@ -27,6 +27,34 @@ import { explainIssue } from "@/server/services/payroll-controls";
 
 /** Runs in order against the seeded, OPEN September 2026 payroll. */
 describe("September 2026 payroll (seeded)", () => {
+  // Overtime pay is exact. Each entry is created and then removed, so the seeded payroll the tests below rely on is left as it was.
+  async function enterOvertime(date: string, extra: { hours: number; rate: number; amount?: number }) {
+    const ctx = await ctxFor("PAYROLL_ADMIN");
+    const sep = await periodFor(ctx, 2026, 9);
+    const emp = await employeeByNumber(ctx, "EMP-000003"); // Victoria Island
+    const beat = await beatByName(ctx, "Victoria Island Branch");
+    return createOvertime(ctx, { employeeId: emp.id, beatId: beat.id, periodId: sep.id, date, approvalReference: "TEST-EXACT", ...extra });
+  }
+
+  it("overtime pay is hours × rate rounded half up: 0.5 hour at ₦256.21 is ₦128.105, stored as ₦128.11 (it was ₦128.10)", async () => {
+    const ot = await enterOvertime("2026-09-23", { hours: 0.5, rate: 256.21 });
+    try {
+      expect(num(ot.amount)).toBe(128.11);
+    } finally {
+      await db.overtime.delete({ where: { id: ot.id } });
+    }
+  });
+
+  it("an entered overtime amount one kobo away is accepted (the calculated amount is stored); two kobo away is refused", async () => {
+    const ot = await enterOvertime("2026-09-24", { hours: 0.5, rate: 256.21, amount: 128.1 });
+    try {
+      expect(num(ot.amount)).toBe(128.11);
+    } finally {
+      await db.overtime.delete({ where: { id: ot.id } });
+    }
+    await expect(enterOvertime("2026-09-25", { hours: 0.5, rate: 256.21, amount: 128.13 })).rejects.toThrow(/does not match/);
+  });
+
   it("#14 / #15 payroll retrieves every location worked and the payslip shows all four", async () => {
     const ctx = await ctxFor("PAYROLL_ADMIN");
     const sep = await periodFor(ctx, 2026, 9);
