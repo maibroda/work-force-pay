@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 import type { Ctx } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { iso } from "@/lib/dates";
+import { totalOf } from "@/lib/payroll/pay-inputs";
 import { checkInputs, INPUT_TYPE_LABELS, isDeduction, TRACKER_KIND, type CheckedItem, type ExistingInput, type InputCheck, type InputEmployee, type InputType } from "@/lib/client-inputs";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
@@ -88,8 +89,8 @@ export async function submitClientInputs(ctx: Ctx, input: { periodId: string; cs
   const late = !!cutoff && iso(new Date()) > cutoff;
   const fileName = input.fileName.trim().slice(0, 200) || "inputs.csv";
   const note = input.note?.trim() || null;
-  const earningsTotal = items.filter((i) => !isDeduction(i.type)).reduce((a, i) => a + i.amount, 0);
-  const deductionsTotal = items.filter((i) => isDeduction(i.type)).reduce((a, i) => a + i.amount, 0);
+  const earningsTotal = totalOf(items.filter((i) => !isDeduction(i.type)).map((i) => i.amount));
+  const deductionsTotal = totalOf(items.filter((i) => isDeduction(i.type)).map((i) => i.amount));
 
   const batch = await db.$transaction(
     async (tx) => {
@@ -106,8 +107,8 @@ export async function submitClientInputs(ctx: Ctx, input: { periodId: string; cs
           checksum,
           rowCount: items.length,
           warningCount: check.rows.filter((r) => r.item && r.warnings.length).length,
-          earningsTotal: Math.round(earningsTotal * 100) / 100,
-          deductionsTotal: Math.round(deductionsTotal * 100) / 100,
+          earningsTotal,
+          deductionsTotal,
           late,
           note,
           markedKinds: expected.map((e) => e.kind),

@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import type { Ctx } from "@/lib/auth/context";
 import { daysInMonth, eachDay, iso, monthEnd, monthStart, periodName } from "@/lib/dates";
-import { num, round2 } from "@/lib/money";
+import { num } from "@/lib/money";
+import { roundPlaces } from "@/lib/money-exact";
 import { percentOfAmount, totalOf } from "@/lib/payroll/pay-inputs";
 import { fullName } from "@/lib/utils";
 import {
@@ -600,7 +601,7 @@ function recordRow(
         beat: s.beatName,
         client: s.clientName,
         paidDays: s.paidDays,
-        factor: round2(s.factor * 10000) / 10000,
+        factor: roundPlaces(s.factor, 4),
         agreedRate: s.rate.agreedRate,
         sharePct: s.rate.operativeSharePct,
         monthlyGross: s.rate.monthlyGross,

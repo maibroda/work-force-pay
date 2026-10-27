@@ -2,6 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { naira } from "@/lib/money";
+import { roundPlaces } from "@/lib/money-exact";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/input";
 
@@ -34,7 +35,7 @@ export function QuickPayslipForm({ initial, structures }: { initial: QuickValues
   const [v, setV] = useState<QuickValues>(initial);
   const set = (k: keyof QuickValues, value: string) => setV((p) => ({ ...p, [k]: value }));
   const pct = (s: string) => Number(s) || 0;
-  const other = Math.round((100 - pct(v.basicPct) - pct(v.housingPct) - pct(v.transportPct)) * 10000) / 10000;
+  const other = roundPlaces(100 - pct(v.basicPct) - pct(v.housingPct) - pct(v.transportPct), 4);
   const gross = Number(v.gross) || 0;
   const amountOf = (p: number) => (gross * p) / 100;
 

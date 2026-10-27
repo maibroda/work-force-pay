@@ -6,7 +6,8 @@
 import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { d } from "@/lib/dates";
-import { num, round2 } from "@/lib/money";
+import { num } from "@/lib/money";
+import { roundPlaces } from "@/lib/money-exact";
 import { distributeOthers, quickPayslip, quickProblems, type QuickComponent } from "@/lib/payroll/quick-payslip";
 import { validateStructure, type ComponentDef } from "@/lib/payroll/structure";
 import { assertCan, BusinessError, db } from "./_base";
@@ -52,7 +53,7 @@ export async function quickPayslipPresets(ctx: Ctx) {
       if (s.isPartial || validateStructure({ isPartial: false, components: comps }).length || comps.some((c) => c.active && c.calcType !== "PERCENTAGE")) return null;
       const pct = (code: string) => comps.find((c) => c.active && c.code === code)?.percentage ?? 0;
       const others = comps.filter((c) => c.active && !["BASIC", "HOUSING", "TRANSPORT"].includes(c.code));
-      return { id: s.id, name: s.name, isDefault: s.isDefault, basicPct: pct("BASIC"), housingPct: pct("HOUSING"), transportPct: pct("TRANSPORT"), othersPct: round2(others.reduce((a, c) => a + (c.percentage ?? 0), 0)), others: others.map((c) => ({ code: c.code, name: c.name, weight: c.percentage ?? 0, taxable: c.taxable, pensionable: c.pensionable })) };
+      return { id: s.id, name: s.name, isDefault: s.isDefault, basicPct: pct("BASIC"), housingPct: pct("HOUSING"), transportPct: pct("TRANSPORT"), othersPct: roundPlaces(others.reduce((a, c) => a + (c.percentage ?? 0), 0), 2), others: others.map((c) => ({ code: c.code, name: c.name, weight: c.percentage ?? 0, taxable: c.taxable, pensionable: c.pensionable })) };
     })
     .filter((x): x is NonNullable<typeof x> => !!x);
   const fallback = structures.find((s) => s.isDefault) ?? structures[0];
@@ -64,9 +65,9 @@ export async function buildQuickPayslip(ctx: Ctx, raw: QuickParams) {
   const v = quickSchema.parse(raw);
   const payDate = v.payDate ? d(v.payDate) : new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
   if (Number.isNaN(payDate.getTime())) throw new BusinessError("The pay date isn't a valid date.");
-  const otherPct = round2(100 - v.basicPct - v.housingPct - v.transportPct);
+  const otherPct = roundPlaces(100 - v.basicPct - v.housingPct - v.transportPct, 2);
   if ([v.basicPct, v.housingPct, v.transportPct].some((p) => !Number.isFinite(p) || p < 0)) throw new BusinessError("A percentage can't be negative.");
-  if (otherPct < -0.0001) throw new BusinessError(`Basic, Housing and Transport add up to ${round2(v.basicPct + v.housingPct + v.transportPct)}%, which is more than 100%.`);
+  if (otherPct < -0.0001) throw new BusinessError(`Basic, Housing and Transport add up to ${roundPlaces(v.basicPct + v.housingPct + v.transportPct, 2)}%, which is more than 100%.`);
 
   const [tax, pension, org, presets] = await Promise.all([
     taxRuleFor(db, ctx.orgId, payDate),

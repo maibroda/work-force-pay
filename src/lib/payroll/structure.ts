@@ -1,6 +1,5 @@
 import { Exact } from "../exact-fraction";
-import { round2 } from "../money";
-import { koboFromNaira, koboToNumber, mulPct, pctToRate, RATE_SCALE, subKobo, type Kobo } from "../money-exact";
+import { koboFromNaira, koboToNumber, mulPct, pctToRate, RATE_SCALE, roundPlaces, subKobo, type Kobo } from "../money-exact";
 import { evaluateFormulaExact } from "./formula";
 
 export type CalcType = "PERCENTAGE" | "FIXED_AMOUNT" | "FORMULA";
@@ -63,10 +62,11 @@ export const STRUCTURE_TOTAL_ERROR = "Salary structure percentages must total 10
 export function percentageTotal(
   components: Pick<ComponentDef, "calcType" | "percentage" | "active">[],
 ): number {
-  return round2(
+  return roundPlaces(
     components
       .filter((c) => c.active && c.calcType === "PERCENTAGE")
       .reduce((a, c) => a + (c.percentage ?? 0), 0),
+    2,
   );
 }
 
