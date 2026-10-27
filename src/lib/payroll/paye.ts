@@ -118,9 +118,33 @@ export function taxOnBands(annualChargeable: number, bands: TaxBandDef[]): numbe
   return koboToNumber(roundRatio(units, RATE_SCALE));
 }
 
-export function computePaye(input: PayeInput, rule: TaxRuleDef): PayeResult {
-  const regular = kobo(input.monthlyRegularTaxable, "Regular taxable pay");
-  const irregular = kobo(input.monthlyIrregularTaxable, "One-off taxable pay");
+/** The same inputs as whole kobo: what the payroll engine passes. */
+export interface PayeInputKobo {
+  regularTaxable: Kobo;
+  irregularTaxable: Kobo;
+  employeePension: Kobo;
+  basic: Kobo;
+  annualRent?: Kobo | null;
+  nhfMonthly?: Kobo;
+  nhisMonthly?: Kobo;
+}
+
+export interface PayeResultKobo {
+  paye: Kobo;
+  annualGross: Kobo;
+  annualReliefs: Kobo;
+  annualChargeable: Kobo;
+  annualTax: Kobo;
+  exempt: boolean;
+  exemptionCode?: string;
+  reliefBreakdown: Array<{ code: string; name: string; amount: Kobo }>;
+  ruleVersion: string;
+}
+
+/** PAYE worked entirely in whole kobo (see the note at the top of the file). The payroll engine calls this. */
+export function computePayeKobo(input: PayeInputKobo, rule: TaxRuleDef): PayeResultKobo {
+  const regular = input.regularTaxable;
+  const irregular = input.irregularTaxable;
   const annualRegular = mulDiv(regular, 12, 1);
   const annualGross = addKobo(annualRegular, irregular);
   const ruleVersion = `${rule.code}@${rule.version}`;
@@ -128,11 +152,11 @@ export function computePaye(input: PayeInput, rule: TaxRuleDef): PayeResult {
   const exemption = rule.exemptions.find((x) => x.active && annualGross <= kobo(x.annualGrossCeiling, "An exemption ceiling"));
   if (exemption && annualGross > 0) {
     return {
-      paye: 0,
-      annualGross: koboToNumber(annualGross),
-      annualReliefs: 0,
-      annualChargeable: 0,
-      annualTax: 0,
+      paye: 0 as Kobo,
+      annualGross,
+      annualReliefs: 0 as Kobo,
+      annualChargeable: 0 as Kobo,
+      annualTax: 0 as Kobo,
       exempt: true,
       exemptionCode: exemption.code,
       reliefBreakdown: [],
@@ -140,7 +164,7 @@ export function computePaye(input: PayeInput, rule: TaxRuleDef): PayeResult {
     };
   }
 
-  const reliefBreakdown: PayeResult["reliefBreakdown"] = [];
+  const reliefBreakdown: PayeResultKobo["reliefBreakdown"] = [];
   const reliefKobo: Kobo[] = [];
   for (const r of rule.reliefs.filter((x) => x.active)) {
     let amt: Kobo;
@@ -152,20 +176,20 @@ export function computePaye(input: PayeInput, rule: TaxRuleDef): PayeResult {
         amt = kobo(r.amount ?? 0, `The ${r.code} relief amount`);
         break;
       case "PERCENT_OF_RENT_CAPPED":
-        amt = mulPct(kobo(input.annualRent ?? 0, "The annual rent"), rateOf(r.rate ?? 0));
+        amt = mulPct(input.annualRent ?? (0 as Kobo), rateOf(r.rate ?? 0));
         break;
       case "EMPLOYEE_PENSION":
-        amt = mulDiv(kobo(input.monthlyEmployeePension, "The employee pension"), 12, 1);
+        amt = mulDiv(input.employeePension, 12, 1);
         break;
       case "NHF":
         // An NHF amount actually deducted wins; otherwise the relief is the rate on a year of basic pay, rounded on its own line.
         amt =
           input.nhfMonthly !== undefined && input.nhfMonthly !== null
-            ? mulDiv(kobo(input.nhfMonthly, "The NHF deduction"), 12, 1)
-            : mulPct(mulDiv(kobo(input.monthlyBasic, "Basic pay"), 12, 1), rateOf(r.rate ?? 0));
+            ? mulDiv(input.nhfMonthly, 12, 1)
+            : mulPct(mulDiv(input.basic, 12, 1), rateOf(r.rate ?? 0));
         break;
       case "NHIS":
-        amt = mulDiv(kobo(input.nhisMonthly ?? 0, "The NHIS deduction"), 12, 1);
+        amt = mulDiv(input.nhisMonthly ?? (0 as Kobo), 12, 1);
         break;
     }
     if (r.cap !== null && r.cap !== undefined) {
@@ -173,7 +197,7 @@ export function computePaye(input: PayeInput, rule: TaxRuleDef): PayeResult {
       if (cap < amt) amt = cap;
     }
     if (amt > 0) {
-      reliefBreakdown.push({ code: r.code, name: r.name, amount: koboToNumber(amt) });
+      reliefBreakdown.push({ code: r.code, name: r.name, amount: amt });
       reliefKobo.push(amt);
     }
   }
@@ -188,15 +212,48 @@ export function computePaye(input: PayeInput, rule: TaxRuleDef): PayeResult {
   const monthly = monthlyUnits <= 0n ? (0 as Kobo) : roundRatio(monthlyUnits, 12n * RATE_SCALE);
 
   return {
-    paye: koboToNumber(monthly),
-    annualGross: koboToNumber(annualGross),
-    annualReliefs: koboToNumber(annualReliefs),
-    annualChargeable: koboToNumber(addKobo(regularChargeable, irregular)),
-    annualTax: koboToNumber(roundRatio(withIrregularUnits, RATE_SCALE)),
+    paye: monthly,
+    annualGross,
+    annualReliefs,
+    annualChargeable: addKobo(regularChargeable, irregular),
+    annualTax: roundRatio(withIrregularUnits, RATE_SCALE),
     exempt: false,
     reliefBreakdown,
     ruleVersion,
   };
+}
+
+/** A kobo result as the naira numbers the screens, the services and the old callers expect. */
+export function payeResultToNaira(r: PayeResultKobo): PayeResult {
+  return {
+    paye: koboToNumber(r.paye),
+    annualGross: koboToNumber(r.annualGross),
+    annualReliefs: koboToNumber(r.annualReliefs),
+    annualChargeable: koboToNumber(r.annualChargeable),
+    annualTax: koboToNumber(r.annualTax),
+    exempt: r.exempt,
+    ...(r.exemptionCode === undefined ? {} : { exemptionCode: r.exemptionCode }),
+    reliefBreakdown: r.reliefBreakdown.map((x) => ({ code: x.code, name: x.name, amount: koboToNumber(x.amount) })),
+    ruleVersion: r.ruleVersion,
+  };
+}
+
+/** PAYE for callers that still pass naira numbers (the services, tests): the bridge, the kobo core, and back. */
+export function computePaye(input: PayeInput, rule: TaxRuleDef): PayeResult {
+  return payeResultToNaira(
+    computePayeKobo(
+      {
+        regularTaxable: kobo(input.monthlyRegularTaxable, "Regular taxable pay"),
+        irregularTaxable: kobo(input.monthlyIrregularTaxable, "One-off taxable pay"),
+        employeePension: kobo(input.monthlyEmployeePension, "The employee pension"),
+        basic: kobo(input.monthlyBasic, "Basic pay"),
+        annualRent: kobo(input.annualRent ?? 0, "The annual rent"),
+        nhfMonthly: input.nhfMonthly === undefined || input.nhfMonthly === null ? undefined : kobo(input.nhfMonthly, "The NHF deduction"),
+        nhisMonthly: kobo(input.nhisMonthly ?? 0, "The NHIS deduction"),
+      },
+      rule,
+    ),
+  );
 }
 
 /** Nigeria Tax Act 2025 — personal income tax schedule applicable from 1 January 2026 (seed data). */

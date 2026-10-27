@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { computePaye, NTA_2025_BANDS, taxOnBands, type PayeInput, type TaxRuleDef } from "@/lib/payroll/paye";
-import { MoneyError } from "@/lib/money-exact";
+import { computePaye, computePayeKobo, NTA_2025_BANDS, payeResultToNaira, taxOnBands, type PayeInput, type TaxRuleDef } from "@/lib/payroll/paye";
+import { asKobo, MoneyError } from "@/lib/money-exact";
 
 /**
  * PAYE worked in whole kobo. Every expected figure below was worked by hand (the working is beside it) and, for the grid, by an independent
@@ -202,5 +202,33 @@ describe("PAYE speed", () => {
       paye({ ...common, monthlyRegularTaxable: Math.round((reg + 500) * 100) / 100, monthlyIrregularTaxable: 0 });
     }
     expect(Date.now() - started).toBeLessThan(5000);
+  });
+});
+
+describe("PAYE in whole kobo (the core the payroll engine calls)", () => {
+  it("gives the same figures as the naira version, as whole kobo: the rent-relief tie, 15,540.255 → 1,554,026 kobo", () => {
+    const k = computePayeKobo(
+      { regularTaxable: asKobo(20_000_182), irregularTaxable: asKobo(0), employeePension: asKobo(640_006), basic: asKobo(0), annualRent: asKobo(140_000_362) },
+      RULE,
+    );
+    expect(k.paye).toBe(1_554_026);
+    expect(k.annualReliefs).toBe(35_680_144); // 76,800.72 pension + 280,000.72 rent relief
+    expect(k.reliefBreakdown.map((x) => [x.code, x.amount])).toEqual([["PENSION", 7_680_072], ["RENT", 28_000_072]]);
+    expect(k.exempt).toBe(false);
+    expect(k.ruleVersion).toBe("NTA@test");
+    const n = payeResultToNaira(k);
+    expect(n).toEqual(paye({ monthlyRegularTaxable: 200_001.82, monthlyEmployeePension: 6_400.06, annualRent: 1_400_003.62 }));
+  });
+  it("an exempt earner and a zero month", () => {
+    const e = computePayeKobo({ regularTaxable: asKobo(7_000_000), irregularTaxable: asKobo(0), employeePension: asKobo(0), basic: asKobo(0) }, RULE);
+    expect(e).toMatchObject({ paye: 0, exempt: true, exemptionCode: "MIN_WAGE", annualGross: 84_000_000 });
+    expect(computePayeKobo({ regularTaxable: asKobo(0), irregularTaxable: asKobo(0), employeePension: asKobo(0), basic: asKobo(0) }, RULE)).toMatchObject({ paye: 0, exempt: false });
+  });
+  it("the NHF and NHIS amounts, when given, are used as given × 12", () => {
+    const r = computePayeKobo(
+      { regularTaxable: asKobo(15_000_000), irregularTaxable: asKobo(0), employeePension: asKobo(0), basic: asKobo(9_999_900), nhfMonthly: asKobo(200_025), nhisMonthly: asKobo(100_055) },
+      { ...RULE, reliefs: [{ code: "NHIS", name: "H", type: "NHIS", active: true }, { code: "NHF", name: "N", type: "NHF", rate: 2.5, active: true }] },
+    );
+    expect(r.reliefBreakdown.map((x) => [x.code, x.amount])).toEqual([["NHIS", 1_200_660], ["NHF", 2_400_300]]);
   });
 });
