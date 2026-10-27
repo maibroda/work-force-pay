@@ -870,7 +870,7 @@ export async function buildReport(
       };
     }
     case "audit": {
-      const recs = await listAudit(ctx, { q: p.q, entity: p.entity, take: 1000 });
+      const recs = await listAudit(ctx, { q: p.q, entity: p.entity, security: p.kind === "security", take: 1000 });
       const columns: Col[] = [
         { key: "time", label: "Date / time" },
         { key: "user", label: "User" },
