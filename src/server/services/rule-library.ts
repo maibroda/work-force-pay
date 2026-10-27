@@ -22,7 +22,7 @@ const dayBefore = (d: Date) => new Date(d.getTime() - 86400000);
 // ─────────────────────────────── The master rule and its fingerprint ───────────────────────────────
 
 type MasterTax = Prisma.TaxRuleGetPayload<{ include: { bands: true; reliefs: true; exemptions: true } }>;
-type Master = { kind: "TAX"; row: MasterTax } | { kind: "PENSION"; row: Prisma.PensionRuleGetPayload<object> } | { kind: "EMPLOYER_COST"; row: Prisma.EmployerCostRuleGetPayload<object> };
+export type Master = { kind: "TAX"; row: MasterTax } | { kind: "PENSION"; row: Prisma.PensionRuleGetPayload<object> } | { kind: "EMPLOYER_COST"; row: Prisma.EmployerCostRuleGetPayload<object> };
 
 async function loadMaster(client: Tx | typeof db, bureauId: string, kind: RuleKindName, ruleId: string): Promise<Master | null> {
   if (kind === "TAX") {
@@ -38,7 +38,7 @@ async function loadMaster(client: Tx | typeof db, bureauId: string, kind: RuleKi
 }
 
 /** Everything that decides what a rule does, and nothing that merely records its life (end dates, timestamps, ids). */
-function fingerprintOf(m: Master): string {
+export function fingerprintOf(m: Master): string {
   let body: unknown;
   if (m.kind === "TAX") {
     const r = m.row;
@@ -65,7 +65,7 @@ function fingerprintOf(m: Master): string {
   return createHash("sha256").update(JSON.stringify([m.kind, body])).digest("hex");
 }
 
-const labelOf = (m: Master) => (m.kind === "TAX" ? `PAYE ${m.row.code} v${m.row.version}` : m.kind === "PENSION" ? `Pension v${m.row.version}` : `Employer contributions v${m.row.version}`);
+export const labelOf = (m: Master) => (m.kind === "TAX" ? `PAYE ${m.row.code} v${m.row.version}` : m.kind === "PENSION" ? `Pension v${m.row.version}` : `Employer contributions v${m.row.version}`);
 
 async function bureauOf(ctx: Ctx) {
   const org = await db.organization.findUnique({ where: { id: ctx.homeOrgId ?? ctx.orgId } });

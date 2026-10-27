@@ -23,6 +23,7 @@ import { CLIENT_MISMATCH, LOCATION_MISMATCH } from "./operations";
 import { submissionBlockers, varianceIssues } from "./payroll-controls";
 import { loadRateBook } from "./rates";
 import { employerCostRuleFor, payrollRuleFor, pensionRuleFor, taxRuleFor } from "./statutory";
+import { enforceVerifiedRules } from "./statutory-verification";
 
 const FROZEN_STATUSES = ["APPROVED", "LOCKED", "PAID", "CLOSED"] as const;
 const EXITED = ["TERMINATED", "RESIGNED", "EXITED"];
@@ -287,6 +288,7 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
     throw new BusinessError(
       `Payroll for ${period.name} is ${period.status.toLowerCase()} and cannot be recalculated. Use a supplementary payroll for corrections.`,
     );
+  await enforceVerifiedRules(ctx, period.endDate, "calculate"); // rule 3: not on a statutory rule HR and Finance have not verified
 
   let run = await currentRun(ctx, periodId);
   const a = await assemble(ctx, period, { runId: run?.id });
@@ -953,6 +955,7 @@ export async function submitForApproval(ctx: Ctx, runId: string) {
   const run = await getRun(ctx, runId);
   if (run.status !== "CALCULATED")
     throw new BusinessError("Only a calculated payroll can be submitted for approval.");
+  await enforceVerifiedRules(ctx, run.period.endDate, "submit");
   const blockers = await submissionBlockers(ctx.orgId, run);
   if (blockers.length) throw new BusinessError(`This payroll can't be submitted yet. ${blockers.join(" ")}`);
   await db.payrollRun.update({
@@ -972,6 +975,7 @@ export async function approveRun(ctx: Ctx, runId: string) {
     throw new BusinessError("Payroll must be submitted for approval first.");
   if (run.preparedByUserIds.includes(ctx.userId) || run.submittedByUserId === ctx.userId)
     throw new BusinessError("You prepared or submitted this payroll, so someone else has to approve it.");
+  await enforceVerifiedRules(ctx, run.period.endDate, "approve");
   const critical = await openCriticalCount(runId);
   if (critical)
     throw new BusinessError(
@@ -1030,6 +1034,7 @@ export async function lockRun(ctx: Ctx, runId: string) {
   assertCan(ctx, "payroll.lock");
   const run = await getRun(ctx, runId);
   if (run.status !== "APPROVED") throw new BusinessError("Only an approved payroll can be locked.");
+  await enforceVerifiedRules(ctx, run.period.endDate, "lock");
   if (run.type === "REGULAR" && (await db.organization.findUnique({ where: { id: ctx.orgId }, select: { clientApprovalRequired: true } }))?.clientApprovalRequired) {
     const last = await db.payrollClientApproval.findFirst({ where: { runId }, orderBy: [{ createdAt: "desc" }, { id: "desc" }] });
     if (!last || last.decision !== "APPROVED" || last.calculationCount !== run.calculationCount)
@@ -1117,6 +1122,7 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
     throw new BusinessError(
       "Supplementary payroll is only for locked periods — recalculate the open payroll instead.",
     );
+  await enforceVerifiedRules(ctx, period.endDate, "supplementary");
   const base = await currentRun(ctx, periodId);
   const a = await assemble(ctx, period, { supplementary: true });
   const rows: Array<{ emp: Assembled["employees"][number]; res: EngineResult }> = [];
