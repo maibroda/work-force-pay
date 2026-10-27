@@ -1,9 +1,26 @@
-import { round2 } from "../money";
+import {
+  addKobo,
+  koboToNumber,
+  MoneyError,
+  mulDiv,
+  mulPct,
+  pctToRate,
+  RATE_SCALE,
+  roundRatio,
+  subKobo,
+  sumKobo,
+  type Kobo,
+  type Rate,
+} from "../money-exact";
 
 /**
  * Versioned PAYE rule engine. Tax rules are data (TaxRule / TaxBand / TaxRelief / TaxExemption);
  * nothing here hard-codes rates. The seed loads the Nigeria Tax Act 2025 regime (effective 1 Jan 2026).
  * Tax rules MUST be verified against current Nigerian law and official NRS guidance before production use.
+ *
+ * The arithmetic is exact: amounts are whole kobo, rates are whole units, and the slices of tax are added as exact whole numbers and rounded half up
+ * ONCE, to the kobo, when they become a month's PAYE (see money-exact.ts). The inputs and results are still naira numbers, because the payroll engine
+ * above this still passes numbers; `kobo()` below is the temporary bridge and goes when the engine itself works in kobo (stage 3 of docs/plans/exact-money.md).
  */
 export interface TaxBandDef {
   lowerBound: number;
@@ -61,81 +78,137 @@ export interface PayeResult {
   ruleVersion: string;
 }
 
-/** Progressive tax on an annual chargeable income. */
-export function taxOnBands(annualChargeable: number, bands: TaxBandDef[]): number {
-  if (annualChargeable <= 0) return 0;
-  let tax = 0;
-  const sorted = [...bands].sort((a, b) => a.lowerBound - b.lowerBound);
-  for (const b of sorted) {
-    if (annualChargeable <= b.lowerBound) break;
-    const top = b.upperBound === null ? annualChargeable : Math.min(annualChargeable, b.upperBound);
-    tax += (top - b.lowerBound) * (b.rate / 100);
+/**
+ * TEMPORARY BRIDGE. A naira number as whole kobo. Earlier floating-point arithmetic can leave dust (0.1 + 0.2 is 0.30000000000000004), so a number
+ * within a thousandth of a kobo of a whole kobo is taken to be that kobo. Anything further away is a real part-kobo amount and is REFUSED, not rounded.
+ */
+function kobo(naira: number, what: string): Kobo {
+  if (!Number.isFinite(naira)) throw new MoneyError(`${what} is not a number.`);
+  const scaled = naira * 100;
+  const whole = Math.round(scaled);
+  if (Math.abs(scaled - whole) > 0.001) throw new MoneyError(`${what} (${naira}) is not a whole number of kobo.`);
+  if (!Number.isSafeInteger(whole)) throw new MoneyError("That amount is too large to hold exactly.");
+  return (whole === 0 ? 0 : whole) as Kobo;
+}
+
+/** A percentage as exact rate units. Rates come from the database as Decimal, so their text is clean. */
+const rateOf = (pct: number): Rate => pctToRate(String(pct));
+
+interface ExactBand {
+  lower: bigint; // kobo
+  upper: bigint | null; // kobo
+  rate: bigint; // rate units
+}
+
+function exactBands(bands: TaxBandDef[]): ExactBand[] {
+  return [...bands]
+    .sort((a, b) => a.lowerBound - b.lowerBound)
+    .map((b) => ({
+      lower: BigInt(kobo(b.lowerBound, "A band's lower limit")),
+      upper: b.upperBound === null ? null : BigInt(kobo(b.upperBound, "A band's upper limit")),
+      rate: BigInt(rateOf(b.rate)),
+    }));
+}
+
+/**
+ * Exact tax on an annual chargeable income, as kobo × rate units (divide by RATE_SCALE for kobo). Nothing is rounded here; the caller rounds once.
+ * An income at or below zero has no tax.
+ */
+function bandTaxUnits(chargeable: bigint, bands: ExactBand[]): bigint {
+  if (chargeable <= 0n) return 0n;
+  let total = 0n;
+  for (const b of bands) {
+    if (chargeable <= b.lower) break;
+    const top = b.upper === null || chargeable < b.upper ? chargeable : b.upper;
+    total += (top - b.lower) * b.rate;
   }
-  return tax;
+  return total;
+}
+
+/** Progressive tax on an annual chargeable income, rounded half up to the kobo once. */
+export function taxOnBands(annualChargeable: number, bands: TaxBandDef[]): number {
+  const units = bandTaxUnits(BigInt(kobo(annualChargeable, "The chargeable income")), exactBands(bands));
+  return koboToNumber(roundRatio(units, RATE_SCALE));
 }
 
 export function computePaye(input: PayeInput, rule: TaxRuleDef): PayeResult {
-  const annualRegular = input.monthlyRegularTaxable * 12;
-  const annualIrregular = input.monthlyIrregularTaxable;
-  const annualGross = annualRegular + annualIrregular;
+  const regular = kobo(input.monthlyRegularTaxable, "Regular taxable pay");
+  const irregular = kobo(input.monthlyIrregularTaxable, "One-off taxable pay");
+  const annualRegular = mulDiv(regular, 12, 1);
+  const annualGross = addKobo(annualRegular, irregular);
+  const ruleVersion = `${rule.code}@${rule.version}`;
 
-  const exemption = rule.exemptions.find((x) => x.active && annualGross <= x.annualGrossCeiling);
+  const exemption = rule.exemptions.find((x) => x.active && annualGross <= kobo(x.annualGrossCeiling, "An exemption ceiling"));
   if (exemption && annualGross > 0) {
     return {
       paye: 0,
-      annualGross: round2(annualGross),
+      annualGross: koboToNumber(annualGross),
       annualReliefs: 0,
       annualChargeable: 0,
       annualTax: 0,
       exempt: true,
       exemptionCode: exemption.code,
       reliefBreakdown: [],
-      ruleVersion: `${rule.code}@${rule.version}`,
+      ruleVersion,
     };
   }
 
   const reliefBreakdown: PayeResult["reliefBreakdown"] = [];
+  const reliefKobo: Kobo[] = [];
   for (const r of rule.reliefs.filter((x) => x.active)) {
-    let amt = 0;
+    let amt: Kobo;
     switch (r.type) {
       case "PERCENT_OF_GROSS":
-        amt = (annualRegular * (r.rate ?? 0)) / 100;
+        amt = mulPct(annualRegular, rateOf(r.rate ?? 0));
         break;
       case "FIXED_ANNUAL":
-        amt = r.amount ?? 0;
+        amt = kobo(r.amount ?? 0, `The ${r.code} relief amount`);
         break;
       case "PERCENT_OF_RENT_CAPPED":
-        amt = ((input.annualRent ?? 0) * (r.rate ?? 0)) / 100;
+        amt = mulPct(kobo(input.annualRent ?? 0, "The annual rent"), rateOf(r.rate ?? 0));
         break;
       case "EMPLOYEE_PENSION":
-        amt = input.monthlyEmployeePension * 12;
+        amt = mulDiv(kobo(input.monthlyEmployeePension, "The employee pension"), 12, 1);
         break;
       case "NHF":
-        amt = (input.nhfMonthly ?? (input.monthlyBasic * (r.rate ?? 0)) / 100) * 12;
+        // An NHF amount actually deducted wins; otherwise the relief is the rate on a year of basic pay, rounded on its own line.
+        amt =
+          input.nhfMonthly !== undefined && input.nhfMonthly !== null
+            ? mulDiv(kobo(input.nhfMonthly, "The NHF deduction"), 12, 1)
+            : mulPct(mulDiv(kobo(input.monthlyBasic, "Basic pay"), 12, 1), rateOf(r.rate ?? 0));
         break;
       case "NHIS":
-        amt = (input.nhisMonthly ?? 0) * 12;
+        amt = mulDiv(kobo(input.nhisMonthly ?? 0, "The NHIS deduction"), 12, 1);
         break;
     }
-    if (r.cap !== null && r.cap !== undefined) amt = Math.min(amt, r.cap);
-    if (amt > 0) reliefBreakdown.push({ code: r.code, name: r.name, amount: round2(amt) });
+    if (r.cap !== null && r.cap !== undefined) {
+      const cap = kobo(r.cap, `The ${r.code} relief cap`);
+      if (cap < amt) amt = cap;
+    }
+    if (amt > 0) {
+      reliefBreakdown.push({ code: r.code, name: r.name, amount: koboToNumber(amt) });
+      reliefKobo.push(amt);
+    }
   }
-  const annualReliefs = reliefBreakdown.reduce((a, r) => a + r.amount, 0);
-  const regularChargeable = Math.max(0, annualRegular - annualReliefs);
-  const regularTax = taxOnBands(regularChargeable, rule.bands);
+  const annualReliefs = sumKobo(reliefKobo);
+  const regularChargeable = annualRegular > annualReliefs ? subKobo(annualRegular, annualReliefs) : (0 as Kobo);
+  const bands = exactBands(rule.bands);
+  const regularUnits = bandTaxUnits(BigInt(regularChargeable), bands);
   // Non-recurring income is taxed at the marginal rate on top of annualised regular income.
-  const withIrregular = taxOnBands(regularChargeable + annualIrregular, rule.bands);
-  const monthly = regularTax / 12 + (withIrregular - regularTax);
+  const withIrregularUnits = bandTaxUnits(BigInt(regularChargeable) + BigInt(irregular), bands);
+  // Monthly PAYE = regular tax ÷ 12 + the one-off tax, all kept exact and rounded once.
+  const monthlyUnits = regularUnits + 12n * (withIrregularUnits - regularUnits);
+  const monthly = monthlyUnits <= 0n ? (0 as Kobo) : roundRatio(monthlyUnits, 12n * RATE_SCALE);
 
   return {
-    paye: round2(Math.max(0, monthly)),
-    annualGross: round2(annualGross),
-    annualReliefs: round2(annualReliefs),
-    annualChargeable: round2(regularChargeable + annualIrregular),
-    annualTax: round2(regularTax + (withIrregular - regularTax)),
+    paye: koboToNumber(monthly),
+    annualGross: koboToNumber(annualGross),
+    annualReliefs: koboToNumber(annualReliefs),
+    annualChargeable: koboToNumber(addKobo(regularChargeable, irregular)),
+    annualTax: koboToNumber(roundRatio(withIrregularUnits, RATE_SCALE)),
     exempt: false,
     reliefBreakdown,
-    ruleVersion: `${rule.code}@${rule.version}`,
+    ruleVersion,
   };
 }
 
