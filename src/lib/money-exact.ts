@@ -62,6 +62,20 @@ export function toKobo(value: unknown): Kobo {
   return fit(m[1] === "-" ? -abs : abs) as Kobo;
 }
 
+/**
+ * TEMPORARY BRIDGE for code that still passes naira as a plain number. Earlier floating-point arithmetic can leave dust (0.1 + 0.2 is
+ * 0.30000000000000004), so a number within a thousandth of a kobo of a whole kobo is taken to be that kobo. Anything further away is a real
+ * part-kobo amount and is REFUSED, not rounded. It goes when the services pass kobo (stage 4 of docs/plans/exact-money.md).
+ */
+export function koboFromNaira(naira: number, what = "That amount"): Kobo {
+  if (!Number.isFinite(naira)) throw new MoneyError(`${what} is not a number.`);
+  const scaled = naira * 100;
+  const wholeKobo = Math.round(scaled);
+  if (Math.abs(scaled - wholeKobo) > 0.001) throw new MoneyError(`${what} (${naira}) is not a whole number of kobo.`);
+  if (!Number.isSafeInteger(wholeKobo)) throw tooLarge();
+  return (wholeKobo === 0 ? 0 : wholeKobo) as Kobo;
+}
+
 /** A missing value (an empty optional amount in the database) as zero kobo; anything present must still be a clean amount. */
 export function koboOrZero(value: unknown): Kobo {
   return value === null || value === undefined ? (0 as Kobo) : toKobo(value);

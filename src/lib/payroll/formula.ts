@@ -3,8 +3,14 @@
  * Supports numbers, + - * / ( ), unary minus, identifiers (e.g. GROSS, BASIC, RATE, DAYS)
  * and the functions MIN(a,b,...), MAX(a,b,...), ROUND(x).
  * No `eval` — tokens are parsed with a small recursive-descent parser.
+ *
+ * The arithmetic is exact: every number in a formula, and every variable, is an exact fraction (see exact-fraction.ts), so 0.1 + 0.2 is 0.3 and
+ * a third times three is one. Formulas work in NAIRA. ROUND(x) takes a value to the kobo, half up (half away from zero for a negative one), by the
+ * same shared rule as every other line.
  */
-type Token = { t: "num"; v: number } | { t: "id"; v: string } | { t: "op"; v: string };
+import { Exact } from "../exact-fraction";
+
+type Token = { t: "num"; v: Exact } | { t: "id"; v: string } | { t: "op"; v: string };
 
 function tokenize(src: string): Token[] {
   const out: Token[] = [];
@@ -18,9 +24,14 @@ function tokenize(src: string): Token[] {
     if (/[0-9.]/.test(c)) {
       let j = i;
       while (j < src.length && /[0-9.]/.test(src[j])) j++;
-      const n = Number(src.slice(i, j));
-      if (!Number.isFinite(n)) throw new Error(`Invalid number near "${src.slice(i, j)}"`);
-      out.push({ t: "num", v: n });
+      const text = src.slice(i, j);
+      let v: Exact;
+      try {
+        v = Exact.decimal(text);
+      } catch {
+        throw new Error(`Invalid number near "${text}"`);
+      }
+      out.push({ t: "num", v });
       i = j;
       continue;
     }
@@ -41,7 +52,11 @@ function tokenize(src: string): Token[] {
   return out;
 }
 
-export function evaluateFormula(formula: string, vars: Record<string, number>): number {
+const HUNDRED = Exact.int(100);
+const NOT_FINITE = "Formula did not produce a finite number";
+
+/** Evaluate a formula with exact fractions: variables in, an exact result out. Variable names are upper case. */
+export function evaluateFormulaExact(formula: string, vars: Record<string, Exact>): Exact {
   const tokens = tokenize(formula);
   let pos = 0;
   const peek = () => tokens[pos];
@@ -51,38 +66,38 @@ export function evaluateFormula(formula: string, vars: Record<string, number>): 
     if (!tk || tk.t !== "op" || tk.v !== v) throw new Error(`Expected "${v}" in formula`);
   };
 
-  function expr(): number {
+  function expr(): Exact {
     let left = term();
     while (peek() && peek().t === "op" && (peek().v === "+" || peek().v === "-")) {
       const op = take().v;
       const right = term();
-      left = op === "+" ? left + right : left - right;
+      left = op === "+" ? left.add(right) : left.sub(right);
     }
     return left;
   }
-  function term(): number {
+  function term(): Exact {
     let left = factor();
     while (peek() && peek().t === "op" && (peek().v === "*" || peek().v === "/")) {
       const op = take().v;
       const right = factor();
-      if (op === "/" && right === 0) throw new Error("Division by zero in formula");
-      left = op === "*" ? left * right : left / right;
+      if (op === "/" && right.isZero()) throw new Error("Division by zero in formula");
+      left = op === "*" ? left.mul(right) : left.div(right);
     }
     return left;
   }
-  function factor(): number {
+  function factor(): Exact {
     const tk = take();
     if (!tk) throw new Error("Unexpected end of formula");
-    let value: number;
+    let value: Exact;
     if (tk.t === "num") value = tk.v;
-    else if (tk.t === "op" && tk.v === "-") value = -factor();
+    else if (tk.t === "op" && tk.v === "-") value = factor().neg();
     else if (tk.t === "op" && tk.v === "(") {
       value = expr();
       expectOp(")");
     } else if (tk.t === "id") {
       if (peek() && peek().t === "op" && peek().v === "(") {
         take();
-        const args: number[] = [];
+        const args: Exact[] = [];
         if (!(peek() && peek().t === "op" && peek().v === ")")) {
           args.push(expr());
           while (peek() && peek().t === "op" && peek().v === ",") {
@@ -91,10 +106,12 @@ export function evaluateFormula(formula: string, vars: Record<string, number>): 
           }
         }
         expectOp(")");
-        if (tk.v === "MIN") value = Math.min(...args);
-        else if (tk.v === "MAX") value = Math.max(...args);
-        else if (tk.v === "ROUND") value = Math.round(args[0] * 100) / 100;
-        else throw new Error(`Unknown function ${tk.v}`);
+        if (tk.v === "MIN" || tk.v === "MAX" || tk.v === "ROUND") {
+          if (args.length === 0) throw new Error(NOT_FINITE);
+          if (tk.v === "MIN") value = Exact.min(...args);
+          else if (tk.v === "MAX") value = Exact.max(...args);
+          else value = Exact.ratio(args[0].mul(HUNDRED).round(), 100); // to the kobo, half up
+        } else throw new Error(`Unknown function ${tk.v}`);
       } else {
         if (!(tk.v in vars)) throw new Error(`Unknown variable ${tk.v} in formula`);
         value = vars[tk.v];
@@ -103,15 +120,24 @@ export function evaluateFormula(formula: string, vars: Record<string, number>): 
     // postfix percent: 10% => 0.10
     if (peek() && peek().t === "op" && peek().v === "%") {
       take();
-      value = value / 100;
+      value = value.div(HUNDRED);
     }
     return value;
   }
 
   const result = expr();
   if (pos !== tokens.length) throw new Error("Unexpected trailing tokens in formula");
-  if (!Number.isFinite(result)) throw new Error("Formula did not produce a finite number");
   return result;
+}
+
+/** The same, for callers that have plain numbers (screens, validation, tests): numbers in, the nearest number out. */
+export function evaluateFormula(formula: string, vars: Record<string, number>): number {
+  const exact: Record<string, Exact> = {};
+  for (const [name, v] of Object.entries(vars)) {
+    if (!Number.isFinite(v)) throw new Error(NOT_FINITE);
+    exact[name] = Exact.fromNumber(v);
+  }
+  return evaluateFormulaExact(formula, exact).toNumber();
 }
 
 export function validateFormula(formula: string, allowedVars: string[]): string | null {
