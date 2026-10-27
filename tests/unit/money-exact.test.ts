@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addKobo, asKobo, koboFromNaira, koboOrZero, koboToNumber, koboToString, MoneyError, mulDiv, mulPct, negKobo, pctToRate, RATE_SCALE, roundRatio, subKobo, sumKobo, toKobo } from "@/lib/money-exact";
+import { addKobo, asKobo, koboFromNaira, koboOrZero, koboToNumber, koboToString, MoneyError, mulDiv, mulPct, negKobo, pctToRate, RATE_SCALE, roundPlaces, roundRatio, subKobo, sumKobo, toKobo } from "@/lib/money-exact";
 import { round2 } from "@/lib/money";
 
 const k = (naira: string) => toKobo(naira);
@@ -248,6 +248,46 @@ describe("rounding an exact ratio computed in big whole numbers (used where many
     expect(() => roundRatio(1n, 0n)).toThrow(MoneyError);
     expect(() => roundRatio(1n, -3n)).toThrow(MoneyError);
     expect(() => roundRatio(BigInt(Number.MAX_SAFE_INTEGER) + 1n, 1n)).toThrow(/too large/i);
+  });
+});
+
+describe("roundPlaces: the one place a plain number that is NOT money is rounded (a percentage, an hour count, a score)", () => {
+  it("rounds half up, reading the number as the decimal it was written as: 2.675 → 2.68, 1.005 → 1.01 (floating point gives 2.67 and 1.00)", () => {
+    expect(roundPlaces(2.675, 2)).toBe(2.68);
+    expect(roundPlaces(1.005, 2)).toBe(1.01);
+    expect(roundPlaces(1.0049, 2)).toBe(1);
+    expect(roundPlaces(0.125, 2)).toBe(0.13);
+  });
+  it("a negative goes away from zero at exactly half, as every other line does: -0.125 → -0.13", () => {
+    expect(roundPlaces(-0.125, 2)).toBe(-0.13);
+    expect(roundPlaces(-0.124, 2)).toBe(-0.12);
+    expect(Object.is(roundPlaces(-0.001, 2), 0)).toBe(true);
+  });
+  it("works for any number of places, including none and four: 0.5 → 1, 33.33335 → 33.3334, 100 stays 100", () => {
+    expect(roundPlaces(0.5, 0)).toBe(1);
+    expect(roundPlaces(1.4999, 0)).toBe(1);
+    expect(roundPlaces(33.33335, 4)).toBe(33.3334);
+    expect(roundPlaces(33.33333, 4)).toBe(33.3333);
+    expect(roundPlaces(100, 2)).toBe(100);
+    expect(roundPlaces(12345.6789, 6)).toBe(12345.6789);
+  });
+  it("reads a number written with an exponent: 1e-7 to four places is 0, 1.5e-4 to four places is 0.0002", () => {
+    expect(roundPlaces(1e-7, 4)).toBe(0);
+    expect(roundPlaces(1.5e-4, 4)).toBe(0.0002);
+  });
+  it("agrees with an independent calculation on a spread of three-decimal numbers", () => {
+    for (let k = -50_000; k <= 50_000; k += 7) {
+      const n = Number((k / 1000).toFixed(3)); // exactly three decimals, as text
+      const want = k >= 0 ? Math.floor((k + 5) / 10) : -Math.floor((-k + 5) / 10); // k thousandths → hundredths, half away from zero
+      expect(Math.round(roundPlaces(n, 2) * 100), `${n}`).toBe(want === 0 ? 0 : want);
+    }
+  });
+  it("refuses what is not a number, a bad number of places, and a result too large to hold", () => {
+    expect(() => roundPlaces(Number.NaN, 2)).toThrow(MoneyError);
+    expect(() => roundPlaces(Number.POSITIVE_INFINITY, 2)).toThrow(MoneyError);
+    expect(() => roundPlaces(1.5, -1)).toThrow(MoneyError);
+    expect(() => roundPlaces(1.5, 2.5)).toThrow(MoneyError);
+    expect(() => roundPlaces(1e21, 2)).toThrow(/too large/i);
   });
 });
 

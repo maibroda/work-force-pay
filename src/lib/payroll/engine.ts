@@ -17,7 +17,6 @@
  * rounded: the payslip line. The engine's inputs and results are still naira numbers because the services above it pass numbers; `kobo()` is the
  * temporary bridge (it refuses an amount that is part-way through a kobo) and goes when the services pass kobo (stage 4 of docs/plans/exact-money.md).
  */
-import { round2 } from "../money"; // hours worked only; no money is rounded with it
 import { Exact } from "../exact-fraction";
 import { iso } from "../dates";
 import {
@@ -28,6 +27,7 @@ import {
   mulPct,
   pctToRate,
   RATE_SCALE,
+  roundPlaces,
   subKobo,
   sumKobo,
   type Kobo,
@@ -281,7 +281,7 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
   const paidDaysList = days.filter((x) => PAID_STATUSES.includes(x.status));
   const daysAbsent = days.filter((x) => x.status === "ABSENT").length;
   const suspensionDays = days.filter((x) => x.status === "SUSPENDED").length;
-  const overtimeHours = round2((input.overtime ?? []).reduce((a, o) => a + o.hours, 0));
+  const overtimeHours = roundPlaces((input.overtime ?? []).reduce((a, o) => a + o.hours, 0), 2);
   const employeeRate = rateOf(input.pension.employeeRate);
   const employerRate = rateOf(input.pension.employerRate);
   const cost = input.employerCostRule

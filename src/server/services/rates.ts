@@ -1,5 +1,5 @@
 import { isEffective } from "@/lib/dates";
-import { num, round2 } from "@/lib/money";
+import { num } from "@/lib/money";
 import type { RateInfo, WorkDay } from "@/lib/payroll/engine";
 import { splitAgreedRate, type StructureDef } from "@/lib/payroll/structure";
 import type { Tx } from "./_base";
@@ -85,7 +85,7 @@ export async function loadRateBook(
         source: "EMPLOYEE_PAY_RATE",
         agreedRate: cr ? num(cr.agreedRate) : null,
         operativeSharePct: cr ? share : null,
-        monthlyGross: round2(num(pr.monthlyGross)),
+        monthlyGross: num(pr.monthlyGross),
         structure,
       };
     }

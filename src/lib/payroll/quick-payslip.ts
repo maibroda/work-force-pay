@@ -74,13 +74,16 @@ export function quickProblems(input: { monthlyGross: number; components: Pick<Qu
  */
 export function distributeOthers(otherPct: number, weights: Array<{ code: string; name: string; weight: number; taxable: boolean; pensionable: boolean }>): QuickComponent[] {
   const live = weights.filter((w) => w.weight > 0);
-  const total = live.reduce((s, w) => s + w.weight, 0);
-  if (!live.length || total <= 0) return [{ code: "OTHER", name: "Other allowances", pct: otherPct, taxable: true, pensionable: false }];
-  let used = 0;
+  const total = live.reduce((s, w) => s.add(Exact.fromNumber(w.weight)), Exact.int(0));
+  if (!live.length || total.cmp(Exact.int(0)) <= 0) return [{ code: "OTHER", name: "Other allowances", pct: otherPct, taxable: true, pensionable: false }];
+  // Each share is taken to four decimals, half up, exactly; the last takes what is left so the shares always add up to the share given.
+  const toFourDecimals = (e: Exact) => Exact.ratio(e.mul(Exact.int(10_000)).round(), 10_000);
+  const other = Exact.fromNumber(otherPct);
+  let used = Exact.int(0);
   return live.map((w, i) => {
-    const pct = i === live.length - 1 ? Math.round((otherPct - used) * 10000) / 10000 : Math.round(((otherPct * w.weight) / total) * 10000) / 10000;
-    used += pct;
-    return { code: w.code, name: w.name, pct, taxable: w.taxable, pensionable: w.pensionable };
+    const share = i === live.length - 1 ? toFourDecimals(other.sub(used)) : toFourDecimals(other.mul(Exact.fromNumber(w.weight)).div(total));
+    used = used.add(share);
+    return { code: w.code, name: w.name, pct: share.toNumber(), taxable: w.taxable, pensionable: w.pensionable };
   });
 }
 

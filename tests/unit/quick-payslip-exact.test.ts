@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MoneyError } from "@/lib/money-exact";
 import { NTA_2025_BANDS, type TaxRuleDef } from "@/lib/payroll/paye";
-import { quickPayslip, type QuickComponent } from "@/lib/payroll/quick-payslip";
+import { distributeOthers, quickPayslip, type QuickComponent } from "@/lib/payroll/quick-payslip";
 
 /** The quick payslip in exact arithmetic. Expected figures are worked by hand; each tie ends in exactly half a kobo and goes UP. */
 const rule: TaxRuleDef = {
@@ -35,6 +35,31 @@ describe("quick payslip ties round half up", () => {
       const s = slip(gross, [comp("BASIC", 33.33), comp("HOUSING", 33.33), comp("TRANSPORT", 16.67), comp("OTHER", 16.67, false)]);
       expect(Math.round(s.earnings.reduce((a, e) => a + e.amount, 0) * 100)).toBe(Math.round(gross * 100));
     }
+  });
+});
+
+describe("splitting the 'other allowances' share by the structure's weights is exact", () => {
+  const w = (code: string, weight: number) => ({ code, name: code, weight, taxable: true, pensionable: false });
+  it("each share is taken to four decimals, half up, and the last takes the rest: 10.0001 over two equal weights is 5.0001 and 5.0000", () => {
+    const parts = distributeOthers(10.0001, [w("A", 1), w("B", 1)]);
+    expect(parts.map((p) => p.pct)).toEqual([5.0001, 5]);
+    expect(Math.round(parts.reduce((a, p) => a + p.pct, 0) * 10000)).toBe(100001);
+  });
+  it("the shares always add up to exactly the share given, whatever the weights", () => {
+    let seed = 5;
+    for (let i = 0; i < 300; i++) {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      const other = (1 + (seed % 90_000)) / 1000;
+      const parts = distributeOthers(other, [w("A", 20), w("B", 13.5), w("C", 2.5), w("D", 5), w("E", 15)]);
+      expect(Math.round(parts.reduce((a, p) => a + p.pct, 0) * 10000), `${other}`).toBe(Math.round(other * 10000));
+    }
+  });
+  it("with no weights, or weights that add to nothing, the whole share goes to one 'Other allowances' line", () => {
+    expect(distributeOthers(40, [])).toEqual([{ code: "OTHER", name: "Other allowances", pct: 40, taxable: true, pensionable: false }]);
+    expect(distributeOthers(40, [w("A", 0)])).toHaveLength(1);
+  });
+  it("keeps the usual split: 40% over weights 20, 15 and 5 is 20, 15 and 5", () => {
+    expect(distributeOthers(40, [w("A", 20), w("B", 15), w("C", 5)]).map((p) => p.pct)).toEqual([20, 15, 5]);
   });
 });
 

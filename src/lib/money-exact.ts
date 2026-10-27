@@ -154,3 +154,23 @@ export function sumKobo(values: readonly Kobo[]): Kobo {
 export const addKobo = (a: Kobo, b: Kobo): Kobo => sumKobo([a, b]);
 export const subKobo = (a: Kobo, b: Kobo): Kobo => sumKobo([a, negKobo(b)]);
 export const negKobo = (a: Kobo): Kobo => (a === 0 ? 0 : -a) as Kobo;
+
+// ─────────────────────────────── Numbers that are not money ───────────────────────────────
+
+/**
+ * A plain number that is NOT money (a percentage, an hour count, a score) rounded half up to some decimal places, once, by the same shared rule
+ * (half away from zero for a negative). The number is read as the decimal it was written as, so 1.005 to two places is 1.01 (floating point gives 1.00).
+ * This is the one place such a number is rounded; money has its own functions above.
+ */
+export function roundPlaces(value: number, places: number): number {
+  if (!Number.isInteger(places) || places < 0 || places > 12) throw new MoneyError("The number of decimal places must be a whole number from 0 to 12.");
+  if (!Number.isFinite(value)) throw new MoneyError("That isn't a number.");
+  const m = /^(-?)(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/i.exec(String(value));
+  if (!m) throw new MoneyError("That isn't a number.");
+  const fraction = m[3] ?? "";
+  const shift = fraction.length - Number(m[4] ?? 0); // how many decimal places the digits have
+  const digits = BigInt(`${m[2]}${fraction}`);
+  const numerator = (m[1] === "-" ? -digits : digits) * 10n ** BigInt(places);
+  const scaled = shift >= 0 ? roundDiv(numerator, 10n ** BigInt(shift)) : numerator * 10n ** BigInt(-shift);
+  return fit(scaled) / 10 ** places;
+}

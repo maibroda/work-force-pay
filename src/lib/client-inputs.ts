@@ -7,6 +7,7 @@
  * it and sends it again); a warning is something the bureau will want to look at but does not stop it.
  */
 import { csvField, parseCsv } from "./employee-import";
+import { totalOf } from "./payroll/pay-inputs";
 
 export const MAX_INPUT_ROWS = 1000;
 /** Above this a row is flagged as unusually large; above the limit it is refused as a likely typing slip. */
@@ -168,7 +169,6 @@ const LEFT = new Set(["TERMINATED", "RESIGNED", "EXITED", "INACTIVE"]);
 /** "emp 000001", "EMP000001" and "EMP-000001" are the same number. */
 const numberKey = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
 const money = (n: number) => `₦${n.toLocaleString("en-NG", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
-const r2 = (n: number) => Math.round(n * 100) / 100;
 
 export function checkInputs(csv: string, ref: { employees: InputEmployee[]; existing: ExistingInput[] }): InputCheck {
   const empty = (fatal: string): InputCheck => ({ fatal, headers: null, rows: [], summary: { total: 0, ok: 0, warnings: 0, errors: 0, earnings: 0, deductions: 0 } });
@@ -243,7 +243,7 @@ export function checkInputs(csv: string, ref: { employees: InputEmployee[]; exis
   });
 
   const good = rows.filter((r) => r.item);
-  const sum = (deduction: boolean) => r2(good.filter((r) => isDeduction(r.item!.type) === deduction).reduce((a, r) => a + r.item!.amount, 0));
+  const sum = (deduction: boolean) => totalOf(good.filter((r) => isDeduction(r.item!.type) === deduction).map((r) => r.item!.amount));
   return {
     fatal: null,
     headers,

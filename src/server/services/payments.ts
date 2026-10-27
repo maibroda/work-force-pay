@@ -1,5 +1,5 @@
 import type { Ctx } from "@/lib/auth/context";
-import { num, round2 } from "@/lib/money";
+import { num } from "@/lib/money";
 import { totalOf } from "@/lib/payroll/pay-inputs";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
@@ -181,14 +181,14 @@ export async function generateRemittances(ctx: Ctx, runId: string) {
   const existing = await db.statutoryRemittance.count({ where: { runId } });
   if (existing) throw new BusinessError("Remittances already generated for this run.");
   const records = await db.payrollRecord.findMany({ where: { runId } });
-  const paye = round2(records.reduce((a, r) => a + num(r.paye), 0));
+  const paye = totalOf(records.map((r) => num(r.paye)));
   const byPfa = new Map<string, { ee: number; er: number; n: number }>();
   for (const r of records) {
     if (!num(r.employeePension) && !num(r.employerPension)) continue;
     const k = r.pfa ?? "PFA NOT SPECIFIED";
     const cur = byPfa.get(k) ?? { ee: 0, er: 0, n: 0 };
-    cur.ee += num(r.employeePension);
-    cur.er += num(r.employerPension);
+    cur.ee = totalOf([cur.ee, num(r.employeePension)]);
+    cur.er = totalOf([cur.er, num(r.employerPension)]);
     cur.n += 1;
     byPfa.set(k, cur);
   }
@@ -198,7 +198,7 @@ export async function generateRemittances(ctx: Ctx, runId: string) {
       const withAmt = allocations.filter((a) => num(a[field]) > 0);
       return {
         field,
-        total: round2(withAmt.reduce((a, r) => a + num(r[field]), 0)),
+        total: totalOf(withAmt.map((r) => num(r[field]))),
         headcount: new Set(withAmt.map((a) => a.employeeId)).size,
       };
     })
@@ -223,9 +223,9 @@ export async function generateRemittances(ctx: Ctx, runId: string) {
           runId,
           type: "PENSION",
           payee: pfa,
-          employeeAmount: round2(v.ee),
-          employerAmount: round2(v.er),
-          totalAmount: round2(v.ee + v.er),
+          employeeAmount: v.ee,
+          employerAmount: v.er,
+          totalAmount: totalOf([v.ee, v.er]),
           headcount: v.n,
         },
       });
