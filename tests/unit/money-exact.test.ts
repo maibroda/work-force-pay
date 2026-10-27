@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addKobo, asKobo, koboOrZero, koboToNumber, koboToString, MoneyError, mulDiv, mulPct, negKobo, pctToRate, subKobo, sumKobo, toKobo } from "@/lib/money-exact";
+import { addKobo, asKobo, koboOrZero, koboToNumber, koboToString, MoneyError, mulDiv, mulPct, negKobo, pctToRate, RATE_SCALE, roundRatio, subKobo, sumKobo, toKobo } from "@/lib/money-exact";
 import { round2 } from "@/lib/money";
 
 const k = (naira: string) => toKobo(naira);
@@ -222,6 +222,32 @@ describe("adding up", () => {
     expect(out(subKobo(k("1.00"), k("1.01")))).toBe("-0.01");
     expect(() => sumKobo([asKobo(Number.MAX_SAFE_INTEGER), asKobo(1)])).toThrow(/too large/i);
     expect(() => addKobo(asKobo(Number.MAX_SAFE_INTEGER), asKobo(1))).toThrow(/too large/i);
+  });
+});
+
+describe("rounding an exact ratio computed in big whole numbers (used where many exact parts are added before one rounding)", () => {
+  it("rounds half up to the kobo, once", () => {
+    expect(out(roundRatio(5n, 2n))).toBe("0.03"); // 2.5 kobo
+    expect(out(roundRatio(4n, 3n))).toBe("0.01"); // 1.33
+    expect(out(roundRatio(7n, 3n))).toBe("0.02"); // 2.33
+    expect(out(roundRatio(1n, 2n))).toBe("0.01"); // half a kobo goes up
+    expect(out(roundRatio(0n, 7n))).toBe("0.00");
+  });
+  it("rounds a negative on its size, so it mirrors the positive, and never gives negative zero", () => {
+    expect(out(roundRatio(-5n, 2n))).toBe("-0.03");
+    expect(out(roundRatio(-1n, 2n))).toBe("-0.01");
+    expect(Object.is(roundRatio(-1n, 3n), 0)).toBe(true);
+  });
+  it("agrees with the percentage rule: an amount times a rate over RATE_SCALE is mulPct", () => {
+    const amount = k("50002.45");
+    const rate = pctToRate("70");
+    expect(roundRatio(BigInt(amount) * BigInt(rate), RATE_SCALE)).toBe(mulPct(amount, rate));
+    expect(out(roundRatio(BigInt(amount) * BigInt(rate), RATE_SCALE))).toBe("35001.72");
+  });
+  it("refuses a denominator that is not above zero, and a result too large to hold", () => {
+    expect(() => roundRatio(1n, 0n)).toThrow(MoneyError);
+    expect(() => roundRatio(1n, -3n)).toThrow(MoneyError);
+    expect(() => roundRatio(BigInt(Number.MAX_SAFE_INTEGER) + 1n, 1n)).toThrow(/too large/i);
   });
 });
 

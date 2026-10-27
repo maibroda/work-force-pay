@@ -15,7 +15,24 @@ describe("employeePensionYtd", () => {
     expect(employeePensionYtd([], 2026)).toBe(0);
   });
 
-  it("copes with the decimal and string values the database returns, and rounds to kobo", () => {
-    expect(employeePensionYtd([slip(2026, "1000.10"), slip(2026, "2000.205"), slip(2026, null)], 2026)).toBe(3000.31);
+  it("copes with the decimal and string values the database returns, and with a missing one", () => {
+    expect(employeePensionYtd([slip(2026, "1000.10"), slip(2026, "2000.21"), slip(2026, null)], 2026)).toBe(3000.31);
+  });
+
+  it("refuses a value with digits below a kobo (the database cannot hold one) instead of rounding it silently", () => {
+    expect(() => employeePensionYtd([slip(2026, "1000.10"), slip(2026, "2000.205")], 2026)).toThrow(/two decimal places/i);
+  });
+
+  it("adds a stored Decimal through its own text, and a long year of slips exactly", () => {
+    const decimalLike = { toFixed: () => "12345.67", toNumber: () => 12345.67 };
+    expect(employeePensionYtd([slip(2026, decimalLike)], 2026)).toBe(12345.67);
+    const year = Array.from({ length: 3000 }, () => slip(2026, "12345.67"));
+    expect(employeePensionYtd(year, 2026)).toBe(37_037_010);
+    expect(employeePensionYtd([slip(2026, "-0.01"), slip(2026, "0.03")], 2026)).toBe(0.02);
+  });
+
+  it("refuses a value that is not an amount, rather than counting it as zero", () => {
+    expect(() => employeePensionYtd([slip(2026, "abc")], 2026)).toThrow(/amount/i);
+    expect(() => employeePensionYtd([slip(2026, Number.NaN)], 2026)).toThrow(/amount/i);
   });
 });
