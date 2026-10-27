@@ -1,5 +1,6 @@
 "use server";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import type { User } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
@@ -9,10 +10,17 @@ import {
   getSession,
   verifyLoginChallenge,
 } from "@/lib/auth/session";
-import { authenticate } from "@/server/services/users";
+import { authenticate, completeSignIn } from "@/server/services/users";
 import * as security from "@/server/services/security";
 import { logAudit } from "@/server/services/audit";
+import type { AuthMeta } from "@/server/services/auth-audit";
 import { act } from "./_run";
+
+/** Where the request came from, for the audit of failed sign-ins (the address header is the same one the session uses). */
+async function requestMeta(): Promise<AuthMeta> {
+  const h = await headers();
+  return { ip: h.get("x-forwarded-for"), userAgent: h.get("user-agent") };
+}
 
 export interface LoginState {
   error?: string;
@@ -44,7 +52,7 @@ const LOCKED_OR_INVALID =
 export async function loginAction(_prev: LoginState | undefined, form: FormData): Promise<LoginState> {
   const email = String(form.get("email") ?? "");
   const password = String(form.get("password") ?? "");
-  const user = await authenticate(email, password);
+  const user = await authenticate(email, password, await requestMeta());
   if (!user) return { error: LOCKED_OR_INVALID };
   if (user.totpEnabled) return { needsTotp: true, challenge: await createLoginChallenge(user.id) };
   return completeLogin(user);
@@ -58,8 +66,9 @@ export async function verifyTotpLoginAction(
   const code = String(form.get("code") ?? "").replace(/\s+/g, "");
   const userId = await verifyLoginChallenge(challenge);
   if (!userId) return { error: "Your sign-in session expired — please start again." };
-  const ok = await security.verifyTotpLogin(userId, code);
+  const ok = await security.verifyTotpLogin(userId, code, await requestMeta());
   if (!ok) return { error: "Incorrect code.", needsTotp: true, challenge };
+  await completeSignIn(userId); // the whole sign-in has now succeeded: clear the failure count and lock
   const user = await db.user.findUniqueOrThrow({ where: { id: userId } });
   return completeLogin(user);
 }
@@ -83,7 +92,7 @@ export async function requestPasswordResetAction(
   form: FormData,
 ): Promise<SimpleState> {
   const email = String(form.get("email") ?? "");
-  await security.requestPasswordReset(email);
+  await security.requestPasswordReset(email, await requestMeta());
   // Always the same response — never reveals whether the email exists.
   return { ok: true };
 }
@@ -93,10 +102,13 @@ export async function resetPasswordAction(
   form: FormData,
 ): Promise<SimpleState> {
   try {
-    await security.resetPassword({
-      token: String(form.get("token") ?? ""),
-      password: String(form.get("password") ?? ""),
-    });
+    await security.resetPassword(
+      {
+        token: String(form.get("token") ?? ""),
+        password: String(form.get("password") ?? ""),
+      },
+      await requestMeta(),
+    );
   } catch (e) {
     return { error: (e as Error).message };
   }
