@@ -91,9 +91,6 @@ describe("components: every kind, and the things that must not change", () => {
     const s: StructureDef = { ...STD, components: [{ ...STD.components[1], active: false }, STD.components[2], STD.components[0]] };
     expect(computeComponents(s, 84000, 1).map((c) => c.code)).toEqual(["BASIC", "TRANSPORT"]);
   });
-  it("round = false gives the unrounded amount in naira, for callers not yet moved to exact fractions", () => {
-    expect(computeComponents(STD, 50000.25, 1, [], {}, false).find((c) => c.code === "BASIC")!.amount).toBe(5000.025);
-  });
   it("extra variables reach the formulas", () => {
     const s: StructureDef = { ...MIXED, components: [{ ...base, code: "PER_DAY", name: "Per day", calcType: "FORMULA", formula: "GROSS / DAYS", sortOrder: 0 } as ComponentDef] };
     expect(computeComponents(s, 90000, 1, [], { DAYS: 30 }).find((c) => c.code === "PER_DAY")!.amount).toBe(3000);

@@ -11,15 +11,36 @@
  *    and never reduces net pay. Employer pension is funded from the management share.
  *  • PAYE comes from the versioned tax rule passed in.
  */
-import { round2 } from "../money";
+/*
+ * Arithmetic: every amount is whole kobo and every rate a whole number of units (money-exact.ts). Amounts that are not yet rounded (a salary component
+ * before the days are added up across sites, a client billing) are exact fractions (exact-fraction.ts) and are rounded ONCE, where they have always been
+ * rounded: the payslip line. The engine's inputs and results are still naira numbers because the services above it pass numbers; `kobo()` is the
+ * temporary bridge (it refuses an amount that is part-way through a kobo) and goes when the services pass kobo (stage 4 of docs/plans/exact-money.md).
+ */
+import { round2 } from "../money"; // hours worked only; no money is rounded with it
+import { Exact } from "../exact-fraction";
 import { iso } from "../dates";
 import {
-  computeComponents,
+  addKobo,
+  koboFromNaira as kobo,
+  koboToNumber,
+  MoneyError,
+  mulPct,
+  pctToRate,
+  RATE_SCALE,
+  subKobo,
+  sumKobo,
+  type Kobo,
+  type Rate,
+} from "../money-exact";
+import {
+  computeComponentsExact,
   type ComponentAmount,
   type ComponentOverride,
+  type ExactComponent,
   type StructureDef,
 } from "./structure";
-import { computePaye, type PayeResult, type TaxRuleDef } from "./paye";
+import { computePayeKobo, payeResultToNaira, type PayeResult, type PayeResultKobo, type TaxRuleDef } from "./paye";
 
 export type AttendanceStatus = "PRESENT" | "LATE" | "ABSENT" | "LEAVE" | "OFF" | "SUSPENDED";
 export const PAID_STATUSES: AttendanceStatus[] = ["PRESENT", "LATE", "LEAVE", "OFF"];
@@ -208,6 +229,52 @@ export interface EngineResult {
 export const DEDUCTION_AUTHORITY_ERROR =
   "Deduction cannot be processed because approval/reference documentation is missing.";
 
+/** One site's amounts while the calculation runs: whole kobo, plus the exact (unrounded) pieces that are added across sites before rounding. */
+interface SegmentWork {
+  seg: Segment;
+  comps: ExactComponent[];
+  rawGross: Exact;
+  gross: Kobo;
+  pensionable: Kobo;
+  clientBilling: Kobo;
+  managementShare: Kobo;
+  itf: Kobo;
+  nsitf: Kobo;
+  nhfMedical: Kobo;
+  insurance: Kobo;
+  uniformKits: Kobo;
+  recruitmentTraining: Kobo;
+  leaveReliever: Kobo;
+  outsourcingLeaveAllowance: Kobo;
+}
+
+/** One beat's amounts while the calculation runs, in whole kobo. */
+interface AllocationWork {
+  clientId: string | null;
+  contractId: string | null;
+  beatId: string | null;
+  days: number;
+  grossAmount: Kobo;
+  overtimeAmount: Kobo;
+  employerPension: Kobo;
+  clientBilling: Kobo;
+  managementShare: Kobo;
+  itf: Kobo;
+  nsitf: Kobo;
+  nhfMedical: Kobo;
+  insurance: Kobo;
+  uniformKits: Kobo;
+  recruitmentTraining: Kobo;
+  leaveReliever: Kobo;
+  outsourcingLeaveAllowance: Kobo;
+  businessCosts: Kobo;
+  netAmount: Kobo;
+}
+
+const ZERO = 0 as Kobo;
+const rateOf = (pct: number): Rate => pctToRate(String(pct));
+const sumExact = (xs: Exact[]) => xs.reduce((a, b) => a.add(b), Exact.int(0));
+
 export function calculateEmployeePayroll(input: EngineInput): EngineResult {
   const overrides = input.overrides ?? [];
   const days = [...input.days].sort((a, b) => a.date.getTime() - b.date.getTime());
@@ -215,6 +282,20 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
   const daysAbsent = days.filter((x) => x.status === "ABSENT").length;
   const suspensionDays = days.filter((x) => x.status === "SUSPENDED").length;
   const overtimeHours = round2((input.overtime ?? []).reduce((a, o) => a + o.hours, 0));
+  const employeeRate = rateOf(input.pension.employeeRate);
+  const employerRate = rateOf(input.pension.employerRate);
+  const cost = input.employerCostRule
+    ? {
+        itf: rateOf(input.employerCostRule.itfPct),
+        nsitf: rateOf(input.employerCostRule.nsitfPct),
+        nhfMedical: input.employerCostRule.nhfMedicalPct ? rateOf(input.employerCostRule.nhfMedicalPct) : null,
+        insurance: rateOf(input.employerCostRule.insurancePct),
+        uniformKits: rateOf(input.employerCostRule.uniformKitsPct),
+        recruitmentTraining: rateOf(input.employerCostRule.recruitmentTrainingPct),
+        leaveReliever: rateOf(input.employerCostRule.leaveRelieverPct),
+        outsourcingLeaveAllowance: rateOf(input.employerCostRule.outsourcingLeaveAllowancePct),
+      }
+    : null;
 
   // ── 1. Build segments from actual work records (beat × rate) ──
   const segMap = new Map<string, Segment>();
@@ -267,27 +348,38 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
   const divisor = Math.max(input.basisDays, totalPaid); // never pay more than one full month
 
   // ── 2. Components per segment (prorated) ──
-  let billedRaw = 0;
-  let billedGrossRaw = 0;
+  // Components are carried as exact fractions and only rounded once the sites are added (step 3), as they always have been.
+  let billedRaw = Exact.int(0);
+  let billedGrossRaw = Exact.int(0);
+  const works: SegmentWork[] = [];
   for (const seg of segments) {
-    seg.factor = input.adjustmentsOnly ? 0 : seg.paidDays / divisor;
-    seg.components = computeComponents(
-      seg.rate.structure,
-      seg.rate.monthlyGross,
-      seg.factor,
-      overrides,
-      {},
-      false,
-    );
-    const rawGross = seg.components.reduce((a, c) => a + c.amount, 0);
-    seg.gross = round2(rawGross);
-    seg.pensionable = round2(seg.components.filter((c) => c.pensionable).reduce((a, c) => a + c.amount, 0));
+    seg.factor = input.adjustmentsOnly ? 0 : seg.paidDays / divisor; // for display only
+    const factor = input.adjustmentsOnly || divisor === 0 ? Exact.int(0) : Exact.ratio(seg.paidDays, divisor);
+    const comps = computeComponentsExact(seg.rate.structure, kobo(seg.rate.monthlyGross, "The monthly gross"), factor, overrides, {});
+    const rawGross = sumExact(comps.map((c) => c.amount));
+    const w: SegmentWork = {
+      seg,
+      comps,
+      rawGross,
+      gross: rawGross.round(),
+      pensionable: sumExact(comps.filter((c) => c.pensionable).map((c) => c.amount)).round(),
+      clientBilling: ZERO,
+      managementShare: ZERO,
+      itf: ZERO,
+      nsitf: ZERO,
+      nhfMedical: ZERO,
+      insurance: ZERO,
+      uniformKits: ZERO,
+      recruitmentTraining: ZERO,
+      leaveReliever: ZERO,
+      outsourcingLeaveAllowance: ZERO,
+    };
     if (seg.rate.agreedRate !== null) {
-      const rawBilling = seg.rate.agreedRate * seg.factor;
-      seg.clientBilling = round2(rawBilling);
-      seg.managementShare = round2(rawBilling - rawGross);
-      billedRaw += rawBilling;
-      billedGrossRaw += rawGross;
+      const rawBilling = Exact.int(kobo(seg.rate.agreedRate, "The agreed rate")).mul(factor);
+      w.clientBilling = rawBilling.round();
+      w.managementShare = rawBilling.sub(rawGross).round();
+      billedRaw = billedRaw.add(rawBilling);
+      billedGrossRaw = billedGrossRaw.add(rawGross);
     }
     // ── Guarding / outsourcing employer add-on costs (ITF, NSITF, insurance, …) ──
     // ITF and NSITF-ECA are % of gross salary; the rest are % of (management fee less pension
@@ -296,98 +388,84 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
     // No contract (pay-rate / back-office pay) never carries these costs, regardless of what a
     // misconfigured resolver might return.
     seg.businessLine = seg.contractId ? (input.businessLineFor?.(seg.contractId) ?? null) : null;
-    const ecr = input.employerCostRule;
-    if (seg.businessLine && ecr) {
-      const segEmployerPension = round2((seg.pensionable * input.pension.employerRate) / 100);
-      seg.itf = round2((seg.gross * ecr.itfPct) / 100);
-      seg.nsitf = round2((seg.gross * ecr.nsitfPct) / 100);
-      seg.nhfMedical = ecr.nhfMedicalPct ? round2((seg.gross * ecr.nhfMedicalPct) / 100) : 0;
-      const statBase = Math.max(
-        0,
-        round2(seg.managementShare - segEmployerPension - seg.itf - seg.nsitf - seg.nhfMedical),
-      );
-      seg.insurance = round2((statBase * ecr.insurancePct) / 100);
-      seg.recruitmentTraining = round2((statBase * ecr.recruitmentTrainingPct) / 100);
-      seg.leaveReliever = round2((statBase * ecr.leaveRelieverPct) / 100);
-      if (seg.businessLine === "GUARDING") seg.uniformKits = round2((statBase * ecr.uniformKitsPct) / 100);
+    if (seg.businessLine && cost) {
+      const segEmployerPension = mulPct(w.pensionable, employerRate);
+      w.itf = mulPct(w.gross, cost.itf);
+      w.nsitf = mulPct(w.gross, cost.nsitf);
+      w.nhfMedical = cost.nhfMedical ? mulPct(w.gross, cost.nhfMedical) : ZERO;
+      const left = subKobo(subKobo(subKobo(subKobo(w.managementShare, segEmployerPension), w.itf), w.nsitf), w.nhfMedical);
+      const statBase = left > 0 ? left : ZERO;
+      w.insurance = mulPct(statBase, cost.insurance);
+      w.recruitmentTraining = mulPct(statBase, cost.recruitmentTraining);
+      w.leaveReliever = mulPct(statBase, cost.leaveReliever);
+      if (seg.businessLine === "GUARDING") w.uniformKits = mulPct(statBase, cost.uniformKits);
       if (seg.businessLine === "OUTSOURCING") {
-        const segBasic = seg.components.find((c) => c.code === "BASIC")?.amount ?? 0;
-        seg.outsourcingLeaveAllowance = round2((segBasic * ecr.outsourcingLeaveAllowancePct) / 100);
+        // The leave allowance is a share of the site's Basic BEFORE it is rounded, as it always was.
+        const segBasic = comps.find((c) => c.code === "BASIC")?.amount ?? Exact.int(0);
+        w.outsourcingLeaveAllowance = segBasic.mul(Exact.ratio(BigInt(cost.outsourcingLeaveAllowance), RATE_SCALE)).round();
       }
     }
+    works.push(w);
   }
 
   // ── 3. Aggregate components by code ──
-  const compMap = new Map<string, ComponentAmount>();
-  for (const seg of segments) {
-    for (const c of seg.components) {
+  const compMap = new Map<string, ExactComponent>();
+  for (const w of works) {
+    for (const c of w.comps) {
       const prev = compMap.get(c.code);
-      if (prev) {
-        prev.amount = prev.amount + c.amount;
-        prev.overridden = prev.overridden || c.overridden;
-      } else compMap.set(c.code, { ...c });
+      if (prev) compMap.set(c.code, { ...prev, amount: prev.amount.add(c.amount), overridden: prev.overridden || c.overridden });
+      else compMap.set(c.code, { ...c });
     }
   }
-  const components = [...compMap.values()].map((c) => ({ ...c, amount: round2(c.amount) }));
-  for (const seg of segments)
-    seg.components = seg.components.map((c) => ({ ...c, amount: round2(c.amount) }));
-  const earnedGross = round2(components.reduce((a, c) => a + c.amount, 0));
-  const hasOverride = components.some((c) => c.overridden);
+  const compLines = [...compMap.values()].map((c) => ({ code: c.code, name: c.name, taxable: c.taxable, pensionable: c.pensionable, overridden: c.overridden, kobo: c.amount.round() }));
+  const components: ComponentAmount[] = compLines.map((c) => ({
+    code: c.code,
+    name: c.name,
+    amount: koboToNumber(c.kobo),
+    taxable: c.taxable,
+    pensionable: c.pensionable,
+    overridden: c.overridden,
+  }));
+  const earnedGross = sumKobo(compLines.map((c) => c.kobo));
+  const hasOverride = compLines.some((c) => c.overridden);
 
   // ── 4. Overtime, arrears, other earnings ──
-  const overtimeAmount = round2((input.overtime ?? []).reduce((a, o) => a + o.amount, 0));
-  const arrearsAmount = round2((input.arrears ?? []).reduce((a, x) => a + x.grossImpact, 0));
-  const arrearsPensionable = round2((input.arrears ?? []).reduce((a, x) => a + x.pensionableImpact, 0));
+  const overtimeAmount = sumKobo((input.overtime ?? []).map((o) => kobo(o.amount, "An overtime amount")));
+  const arrearsAmount = sumKobo((input.arrears ?? []).map((x) => kobo(x.grossImpact, "An arrears amount")));
+  const arrearsPensionable = sumKobo((input.arrears ?? []).map((x) => kobo(x.pensionableImpact, "An arrears pensionable amount")));
   const otherList = input.otherEarnings ?? [];
-  const otherEarnings = round2(otherList.reduce((a, x) => a + x.amount, 0));
-  const otherTaxable = round2(otherList.filter((x) => x.taxable).reduce((a, x) => a + x.amount, 0));
-  const totalEarnings = round2(earnedGross + overtimeAmount + arrearsAmount + otherEarnings);
+  const otherKobo = otherList.map((x) => ({ x, kobo: kobo(x.amount, `The ${x.name} amount`) }));
+  const otherEarnings = sumKobo(otherKobo.map((o) => o.kobo));
+  const otherTaxable = sumKobo(otherKobo.filter((o) => o.x.taxable).map((o) => o.kobo));
+  const totalEarnings = sumKobo([earnedGross, overtimeAmount, arrearsAmount, otherEarnings]);
 
   // ── 5. Pension ──
-  const pensionBase = round2(
-    components.filter((c) => c.pensionable).reduce((a, c) => a + c.amount, 0) + arrearsPensionable,
-  );
-  const employeePension = round2((pensionBase * input.pension.employeeRate) / 100);
-  const employerPension = round2((pensionBase * input.pension.employerRate) / 100);
+  const pensionBase = sumKobo([...compLines.filter((c) => c.pensionable).map((c) => c.kobo), arrearsPensionable]);
+  const employeePension = mulPct(pensionBase, employeeRate);
+  const employerPension = mulPct(pensionBase, employerRate);
 
   // ── 6. PAYE ──
-  const regularTaxable = round2(components.filter((c) => c.taxable).reduce((a, c) => a + c.amount, 0));
-  const irregularTaxable = round2(overtimeAmount + arrearsAmount + otherTaxable);
-  const basic = components.find((c) => c.code === "BASIC")?.amount ?? 0;
-  let paye: PayeResult;
+  const regularTaxable = sumKobo(compLines.filter((c) => c.taxable).map((c) => c.kobo));
+  const irregularTaxable = sumKobo([overtimeAmount, arrearsAmount, otherTaxable]);
+  const basic = compLines.find((c) => c.code === "BASIC")?.kobo ?? ZERO;
+  const annualRent = kobo(input.annualRent ?? 0, "The annual rent");
+  let payeK: PayeResultKobo;
   if (input.payeBase) {
     // Supplementary: tax only the increment over what the locked payroll already taxed.
     const b = input.payeBase;
     const common = {
-      monthlyEmployeePension: b.employeePension,
-      monthlyBasic: b.basic,
-      annualRent: input.annualRent ?? 0,
+      employeePension: kobo(b.employeePension, "The earlier pension"),
+      basic: kobo(b.basic, "The earlier basic pay"),
+      annualRent,
     };
-    const before = computePaye(
-      { ...common, monthlyRegularTaxable: b.regularTaxable, monthlyIrregularTaxable: 0 },
-      input.taxRule,
-    );
-    const after = computePaye(
-      {
-        ...common,
-        monthlyRegularTaxable: b.regularTaxable + regularTaxable,
-        monthlyIrregularTaxable: irregularTaxable,
-      },
-      input.taxRule,
-    );
-    paye = { ...after, paye: round2(Math.max(0, after.paye - before.paye)) };
+    const earlier = kobo(b.regularTaxable, "The earlier taxable pay");
+    const before = computePayeKobo({ ...common, regularTaxable: earlier, irregularTaxable: ZERO }, input.taxRule);
+    const after = computePayeKobo({ ...common, regularTaxable: addKobo(earlier, regularTaxable), irregularTaxable }, input.taxRule);
+    payeK = { ...after, paye: after.paye > before.paye ? subKobo(after.paye, before.paye) : ZERO };
   } else {
-    paye = computePaye(
-      {
-        monthlyRegularTaxable: regularTaxable,
-        monthlyIrregularTaxable: irregularTaxable,
-        monthlyEmployeePension: employeePension,
-        monthlyBasic: basic,
-        annualRent: input.annualRent ?? 0,
-      },
-      input.taxRule,
-    );
+    payeK = computePayeKobo({ regularTaxable, irregularTaxable, employeePension, basic, annualRent }, input.taxRule);
   }
+  const paye: PayeResult = payeResultToNaira(payeK);
 
   // ── 7. Approved deductions (documented authority required) ──
   const rejectedDeductions: EngineResult["rejectedDeductions"] = [];
@@ -398,190 +476,211 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
     }
     return true;
   });
-  const otherDeductions = round2(accepted.reduce((a, x) => a + x.amount, 0));
-  const totalDeductions = round2(paye.paye + employeePension + otherDeductions);
-  const netPay = round2(totalEarnings - totalDeductions);
+  const acceptedKobo = accepted.map((x) => ({ x, kobo: kobo(x.amount, "A deduction amount") }));
+  const otherDeductions = sumKobo(acceptedKobo.map((a) => a.kobo));
+  const totalDeductions = sumKobo([payeK.paye, employeePension, otherDeductions]);
+  const netPay = subKobo(totalEarnings, totalDeductions);
 
-  const clientBilling = round2(billedRaw);
-  const managementShare = round2(billedRaw - billedGrossRaw);
+  const clientBilling = billedRaw.round();
+  const managementShare = billedRaw.sub(billedGrossRaw).round();
 
   // ── 7b. Guarding / outsourcing employer add-on costs, summed from segments ──
-  const sumSeg = (f: (s: Segment) => number) => round2(segments.reduce((a, s) => a + f(s), 0));
-  const itfAmount = sumSeg((s) => s.itf);
-  const nsitfAmount = sumSeg((s) => s.nsitf);
-  const nhfMedicalAmount = sumSeg((s) => s.nhfMedical);
-  const insuranceAmount = sumSeg((s) => s.insurance);
-  const uniformKitsAmount = sumSeg((s) => s.uniformKits);
-  const recruitmentTrainingAmount = sumSeg((s) => s.recruitmentTraining);
-  const leaveRelieverAmount = sumSeg((s) => s.leaveReliever);
-  const outsourcingLeaveAllowanceAmount = sumSeg((s) => s.outsourcingLeaveAllowance);
-  const totalEmployerAddOns = round2(
-    itfAmount +
-      nsitfAmount +
-      nhfMedicalAmount +
-      insuranceAmount +
-      uniformKitsAmount +
-      recruitmentTrainingAmount +
-      leaveRelieverAmount +
-      outsourcingLeaveAllowanceAmount,
-  );
+  const sumSeg = (f: (w: SegmentWork) => Kobo) => sumKobo(works.map(f));
+  const itfAmount = sumSeg((w) => w.itf);
+  const nsitfAmount = sumSeg((w) => w.nsitf);
+  const nhfMedicalAmount = sumSeg((w) => w.nhfMedical);
+  const insuranceAmount = sumSeg((w) => w.insurance);
+  const uniformKitsAmount = sumSeg((w) => w.uniformKits);
+  const recruitmentTrainingAmount = sumSeg((w) => w.recruitmentTraining);
+  const leaveRelieverAmount = sumSeg((w) => w.leaveReliever);
+  const outsourcingLeaveAllowanceAmount = sumSeg((w) => w.outsourcingLeaveAllowance);
+  const totalEmployerAddOns = sumKobo([
+    itfAmount,
+    nsitfAmount,
+    nhfMedicalAmount,
+    insuranceAmount,
+    uniformKitsAmount,
+    recruitmentTrainingAmount,
+    leaveRelieverAmount,
+    outsourcingLeaveAllowanceAmount,
+  ]);
   const paidLines = segments.filter((s) => s.businessLine);
   const businessLine: RecordBusinessLine = !paidLines.length
     ? "BACK_OFFICE"
     : paidLines.every((s) => s.businessLine === paidLines[0].businessLine)
       ? paidLines[0].businessLine!
       : "MIXED";
-  const employerCost = round2(totalEarnings + employerPension + totalEmployerAddOns);
+  const employerCost = sumKobo([totalEarnings, employerPension, totalEmployerAddOns]);
 
   // ── 8. Payslip lines ──
   const lines: PayrollLine[] = [
     ...components.map((c) => ({ type: "EARNING" as const, code: c.code, name: c.name, amount: c.amount })),
   ];
   if (overtimeAmount)
-    lines.push({ type: "EARNING", code: "OVERTIME", name: "Overtime", amount: overtimeAmount });
-  if (arrearsAmount) lines.push({ type: "EARNING", code: "ARREARS", name: "Arrears", amount: arrearsAmount });
-  for (const o of otherList)
-    lines.push({ type: "EARNING", code: "OTHER", name: o.name, amount: round2(o.amount) });
+    lines.push({ type: "EARNING", code: "OVERTIME", name: "Overtime", amount: koboToNumber(overtimeAmount) });
+  if (arrearsAmount) lines.push({ type: "EARNING", code: "ARREARS", name: "Arrears", amount: koboToNumber(arrearsAmount) });
+  for (const o of otherKobo)
+    lines.push({ type: "EARNING", code: "OTHER", name: o.x.name, amount: koboToNumber(o.kobo) });
   lines.push({ type: "DEDUCTION", code: "PAYE", name: "PAYE", amount: paye.paye });
-  lines.push({ type: "DEDUCTION", code: "PENSION_EE", name: "Employee Pension", amount: employeePension });
-  for (const x of accepted)
+  lines.push({ type: "DEDUCTION", code: "PENSION_EE", name: "Employee Pension", amount: koboToNumber(employeePension) });
+  for (const a of acceptedKobo)
     lines.push({
       type: "DEDUCTION",
-      code: x.type,
-      name: `${labelDeduction(x.type)} — ${x.reason}`,
-      amount: round2(x.amount),
+      code: a.x.type,
+      name: `${labelDeduction(a.x.type)} — ${a.x.reason}`,
+      amount: koboToNumber(a.kobo),
     });
-  lines.push({ type: "EMPLOYER", code: "PENSION_ER", name: "Employer Pension", amount: employerPension });
+  lines.push({ type: "EMPLOYER", code: "PENSION_ER", name: "Employer Pension", amount: koboToNumber(employerPension) });
   if (itfAmount)
-    lines.push({ type: "EMPLOYER", code: "ITF", name: "ITF (Industrial Training Fund)", amount: itfAmount });
-  if (nsitfAmount) lines.push({ type: "EMPLOYER", code: "NSITF", name: "NSITF-ECA", amount: nsitfAmount });
+    lines.push({ type: "EMPLOYER", code: "ITF", name: "ITF (Industrial Training Fund)", amount: koboToNumber(itfAmount) });
+  if (nsitfAmount) lines.push({ type: "EMPLOYER", code: "NSITF", name: "NSITF-ECA", amount: koboToNumber(nsitfAmount) });
   if (nhfMedicalAmount)
-    lines.push({ type: "EMPLOYER", code: "NHF_MEDICAL", name: "NHF / Medical", amount: nhfMedicalAmount });
+    lines.push({ type: "EMPLOYER", code: "NHF_MEDICAL", name: "NHF / Medical", amount: koboToNumber(nhfMedicalAmount) });
   if (insuranceAmount)
-    lines.push({ type: "EMPLOYER", code: "INSURANCE", name: "Insurance", amount: insuranceAmount });
+    lines.push({ type: "EMPLOYER", code: "INSURANCE", name: "Insurance", amount: koboToNumber(insuranceAmount) });
   if (uniformKitsAmount)
-    lines.push({ type: "EMPLOYER", code: "UNIFORM_KITS", name: "Uniform & Kits", amount: uniformKitsAmount });
+    lines.push({ type: "EMPLOYER", code: "UNIFORM_KITS", name: "Uniform & Kits", amount: koboToNumber(uniformKitsAmount) });
   if (recruitmentTrainingAmount)
     lines.push({
       type: "EMPLOYER",
       code: "RECRUITMENT_TRAINING",
       name: "Recruitment, Training & Vetting",
-      amount: recruitmentTrainingAmount,
+      amount: koboToNumber(recruitmentTrainingAmount),
     });
   if (leaveRelieverAmount)
     lines.push({
       type: "EMPLOYER",
       code: "LEAVE_RELIEVER",
       name: "Annual Leave Reliever",
-      amount: leaveRelieverAmount,
+      amount: koboToNumber(leaveRelieverAmount),
     });
   if (outsourcingLeaveAllowanceAmount)
     lines.push({
       type: "EMPLOYER",
       code: "OUTSOURCING_LEAVE_ALLOWANCE",
       name: "Outsourcing Leave Allowance",
-      amount: outsourcingLeaveAllowanceAmount,
+      amount: koboToNumber(outsourcingLeaveAllowanceAmount),
     });
 
   // ── 9. Locations worked (for payslip) ──
   const locations = buildLocationRanges(days);
 
   // ── 10. Allocation by client / contract / beat ──
-  const allocMap = new Map<string, Allocation>();
+  const allocMap = new Map<string, AllocationWork>();
   const allocKey = (b: string | null) => b ?? "NONE";
-  for (const s of segments) {
+  const newAllocation = (clientId: string | null, contractId: string | null, beatId: string | null): AllocationWork => ({
+    clientId,
+    contractId,
+    beatId,
+    days: 0,
+    grossAmount: ZERO,
+    overtimeAmount: ZERO,
+    employerPension: ZERO,
+    clientBilling: ZERO,
+    managementShare: ZERO,
+    itf: ZERO,
+    nsitf: ZERO,
+    nhfMedical: ZERO,
+    insurance: ZERO,
+    uniformKits: ZERO,
+    recruitmentTraining: ZERO,
+    leaveReliever: ZERO,
+    outsourcingLeaveAllowance: ZERO,
+    businessCosts: ZERO,
+    netAmount: ZERO,
+  });
+  for (const w of works) {
+    const s = w.seg;
     const k = allocKey(s.beatId);
-    const a = allocMap.get(k) ?? {
-      clientId: s.clientId,
-      contractId: s.contractId,
-      beatId: s.beatId,
-      days: 0,
-      grossAmount: 0,
-      overtimeAmount: 0,
-      employerPension: 0,
-      clientBilling: 0,
-      managementShare: 0,
-      itf: 0,
-      nsitf: 0,
-      nhfMedical: 0,
-      insurance: 0,
-      uniformKits: 0,
-      recruitmentTraining: 0,
-      leaveReliever: 0,
-      outsourcingLeaveAllowance: 0,
-      businessCosts: 0,
-      netAmount: 0,
-    };
+    const a = allocMap.get(k) ?? newAllocation(s.clientId, s.contractId, s.beatId);
     a.days += s.paidDays;
-    a.grossAmount = round2(a.grossAmount + s.gross);
-    a.employerPension = round2(a.employerPension + (s.pensionable * input.pension.employerRate) / 100);
-    a.clientBilling = round2(a.clientBilling + s.clientBilling);
-    a.managementShare = round2(a.managementShare + s.managementShare);
-    a.itf = round2(a.itf + s.itf);
-    a.nsitf = round2(a.nsitf + s.nsitf);
-    a.nhfMedical = round2(a.nhfMedical + s.nhfMedical);
-    a.insurance = round2(a.insurance + s.insurance);
-    a.uniformKits = round2(a.uniformKits + s.uniformKits);
-    a.recruitmentTraining = round2(a.recruitmentTraining + s.recruitmentTraining);
-    a.leaveReliever = round2(a.leaveReliever + s.leaveReliever);
-    a.outsourcingLeaveAllowance = round2(a.outsourcingLeaveAllowance + s.outsourcingLeaveAllowance);
-    a.businessCosts = round2(
-      a.itf +
-        a.nsitf +
-        a.nhfMedical +
-        a.insurance +
-        a.uniformKits +
-        a.recruitmentTraining +
-        a.leaveReliever +
-        a.outsourcingLeaveAllowance,
-    );
+    a.grossAmount = addKobo(a.grossAmount, w.gross);
+    // The running employer pension is rounded after each site is added, as it always was.
+    a.employerPension = Exact.int(a.employerPension).add(Exact.ratio(BigInt(w.pensionable) * BigInt(employerRate), RATE_SCALE)).round();
+    a.clientBilling = addKobo(a.clientBilling, w.clientBilling);
+    a.managementShare = addKobo(a.managementShare, w.managementShare);
+    a.itf = addKobo(a.itf, w.itf);
+    a.nsitf = addKobo(a.nsitf, w.nsitf);
+    a.nhfMedical = addKobo(a.nhfMedical, w.nhfMedical);
+    a.insurance = addKobo(a.insurance, w.insurance);
+    a.uniformKits = addKobo(a.uniformKits, w.uniformKits);
+    a.recruitmentTraining = addKobo(a.recruitmentTraining, w.recruitmentTraining);
+    a.leaveReliever = addKobo(a.leaveReliever, w.leaveReliever);
+    a.outsourcingLeaveAllowance = addKobo(a.outsourcingLeaveAllowance, w.outsourcingLeaveAllowance);
+    a.businessCosts = sumKobo([a.itf, a.nsitf, a.nhfMedical, a.insurance, a.uniformKits, a.recruitmentTraining, a.leaveReliever, a.outsourcingLeaveAllowance]);
     allocMap.set(k, a);
   }
   for (const o of input.overtime ?? []) {
     const k = allocKey(o.beatId);
-    const a = allocMap.get(k) ?? {
-      clientId: o.clientId,
-      contractId: o.contractId,
-      beatId: o.beatId,
-      days: 0,
-      grossAmount: 0,
-      overtimeAmount: 0,
-      employerPension: 0,
-      clientBilling: 0,
-      managementShare: 0,
-      itf: 0,
-      nsitf: 0,
-      nhfMedical: 0,
-      insurance: 0,
-      uniformKits: 0,
-      recruitmentTraining: 0,
-      leaveReliever: 0,
-      outsourcingLeaveAllowance: 0,
-      businessCosts: 0,
-      netAmount: 0,
-    };
-    a.overtimeAmount = round2(a.overtimeAmount + o.amount);
+    const a = allocMap.get(k) ?? newAllocation(o.clientId, o.contractId, o.beatId);
+    a.overtimeAmount = addKobo(a.overtimeAmount, kobo(o.amount, "An overtime amount"));
     allocMap.set(k, a);
   }
-  const allocations = [...allocMap.values()];
+  const allocationWork = [...allocMap.values()];
   // Arrears / other earnings go to the primary (most days) allocation.
-  const extra = round2(arrearsAmount + otherEarnings);
-  if (extra && allocations.length) {
-    const primary = allocations.reduce((p, c) => (c.days > p.days ? c : p));
-    primary.grossAmount = round2(primary.grossAmount + extra);
-    const arrEr = round2((arrearsPensionable * input.pension.employerRate) / 100);
-    primary.employerPension = round2(primary.employerPension + arrEr);
+  const extra = addKobo(arrearsAmount, otherEarnings);
+  if (extra && allocationWork.length) {
+    const primary = allocationWork.reduce((p, c) => (c.days > p.days ? c : p));
+    primary.grossAmount = addKobo(primary.grossAmount, extra);
+    primary.employerPension = addKobo(primary.employerPension, mulPct(arrearsPensionable, employerRate));
   }
   // Net pay distributed pro-rata to (gross + overtime) so beat totals reconcile to the record.
-  const allocBase = allocations.reduce((a, x) => a + x.grossAmount + x.overtimeAmount, 0);
-  let distributed = 0;
-  allocations.forEach((a, i) => {
-    if (i === allocations.length - 1) a.netAmount = round2(netPay - distributed);
+  const weight = (a: AllocationWork) => addKobo(a.grossAmount, a.overtimeAmount);
+  const allocBase = sumKobo(allocationWork.map(weight));
+  let distributed: Kobo = ZERO;
+  allocationWork.forEach((a, i) => {
+    if (i === allocationWork.length - 1) a.netAmount = subKobo(netPay, distributed);
     else {
-      a.netAmount = allocBase ? round2((netPay * (a.grossAmount + a.overtimeAmount)) / allocBase) : 0;
-      distributed = round2(distributed + a.netAmount);
+      a.netAmount = allocBase ? Exact.ratio(BigInt(netPay) * BigInt(weight(a)), BigInt(allocBase)).round() : ZERO;
+      distributed = addKobo(distributed, a.netAmount);
     }
   });
+  const allocations: Allocation[] = allocationWork.map((a) => ({
+    clientId: a.clientId,
+    contractId: a.contractId,
+    beatId: a.beatId,
+    days: a.days,
+    grossAmount: koboToNumber(a.grossAmount),
+    overtimeAmount: koboToNumber(a.overtimeAmount),
+    employerPension: koboToNumber(a.employerPension),
+    clientBilling: koboToNumber(a.clientBilling),
+    managementShare: koboToNumber(a.managementShare),
+    itf: koboToNumber(a.itf),
+    nsitf: koboToNumber(a.nsitf),
+    nhfMedical: koboToNumber(a.nhfMedical),
+    insurance: koboToNumber(a.insurance),
+    uniformKits: koboToNumber(a.uniformKits),
+    recruitmentTraining: koboToNumber(a.recruitmentTraining),
+    leaveReliever: koboToNumber(a.leaveReliever),
+    outsourcingLeaveAllowance: koboToNumber(a.outsourcingLeaveAllowance),
+    businessCosts: koboToNumber(a.businessCosts),
+    netAmount: koboToNumber(a.netAmount),
+  }));
+
+  // The sites' amounts, as the naira numbers the result has always carried.
+  for (const w of works) {
+    const s = w.seg;
+    s.components = w.comps.map((c) => ({
+      code: c.code,
+      name: c.name,
+      amount: koboToNumber(c.amount.round()),
+      taxable: c.taxable,
+      pensionable: c.pensionable,
+      overridden: c.overridden,
+    }));
+    s.gross = koboToNumber(w.gross);
+    s.pensionable = koboToNumber(w.pensionable);
+    s.clientBilling = koboToNumber(w.clientBilling);
+    s.managementShare = koboToNumber(w.managementShare);
+    s.itf = koboToNumber(w.itf);
+    s.nsitf = koboToNumber(w.nsitf);
+    s.nhfMedical = koboToNumber(w.nhfMedical);
+    s.insurance = koboToNumber(w.insurance);
+    s.uniformKits = koboToNumber(w.uniformKits);
+    s.recruitmentTraining = koboToNumber(w.recruitmentTraining);
+    s.leaveReliever = koboToNumber(w.leaveReliever);
+    s.outsourcingLeaveAllowance = koboToNumber(w.outsourcingLeaveAllowance);
+  }
 
   const primarySeg = segments.reduce<Segment | null>((p, c) => (!p || c.paidDays > p.paidDays ? c : p), null);
 
@@ -592,34 +691,34 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
     suspensionDays,
     overtimeHours,
     monthlyGross: primarySeg?.rate.monthlyGross ?? 0,
-    earnedGross,
+    earnedGross: koboToNumber(earnedGross),
     components,
-    overtimeAmount,
-    arrearsAmount,
-    otherEarnings,
-    totalEarnings,
-    pensionBase,
-    employeePension,
-    employerPension,
-    taxableIncome: round2(regularTaxable + irregularTaxable),
+    overtimeAmount: koboToNumber(overtimeAmount),
+    arrearsAmount: koboToNumber(arrearsAmount),
+    otherEarnings: koboToNumber(otherEarnings),
+    totalEarnings: koboToNumber(totalEarnings),
+    pensionBase: koboToNumber(pensionBase),
+    employeePension: koboToNumber(employeePension),
+    employerPension: koboToNumber(employerPension),
+    taxableIncome: koboToNumber(addKobo(regularTaxable, irregularTaxable)),
     paye,
-    otherDeductions,
+    otherDeductions: koboToNumber(otherDeductions),
     rejectedDeductions,
-    totalDeductions,
-    netPay,
-    clientBilling,
-    managementShare,
-    employerCost,
+    totalDeductions: koboToNumber(totalDeductions),
+    netPay: koboToNumber(netPay),
+    clientBilling: koboToNumber(clientBilling),
+    managementShare: koboToNumber(managementShare),
+    employerCost: koboToNumber(employerCost),
     businessLine,
-    itfAmount,
-    nsitfAmount,
-    nhfMedicalAmount,
-    insuranceAmount,
-    uniformKitsAmount,
-    recruitmentTrainingAmount,
-    leaveRelieverAmount,
-    outsourcingLeaveAllowanceAmount,
-    totalEmployerAddOns,
+    itfAmount: koboToNumber(itfAmount),
+    nsitfAmount: koboToNumber(nsitfAmount),
+    nhfMedicalAmount: koboToNumber(nhfMedicalAmount),
+    insuranceAmount: koboToNumber(insuranceAmount),
+    uniformKitsAmount: koboToNumber(uniformKitsAmount),
+    recruitmentTrainingAmount: koboToNumber(recruitmentTrainingAmount),
+    leaveRelieverAmount: koboToNumber(leaveRelieverAmount),
+    outsourcingLeaveAllowanceAmount: koboToNumber(outsourcingLeaveAllowanceAmount),
+    totalEmployerAddOns: koboToNumber(totalEmployerAddOns),
     hasOverride,
     lines,
     segments,
@@ -660,12 +759,21 @@ function labelDeduction(t: string): string {
     .join(" ");
 }
 
-/** Hourly overtime rate derived from the operative gross when a client schedule gives no rate. */
+/**
+ * Hourly overtime rate derived from the operative gross when a client schedule gives no rate: gross ÷ days ÷ hours × multiplier, worked exactly and
+ * rounded once, half up, to the kobo. The multiplier can have at most four decimal places.
+ */
 export function overtimeHourlyRate(
   monthlyGross: number,
   basisDays: number,
   hoursPerDay: number,
   multiplier: number,
 ) {
-  return round2((monthlyGross / basisDays / hoursPerDay) * multiplier);
+  const m = Exact.fromNumber(multiplier);
+  if (m.mul(Exact.int(10_000)).d !== 1n) throw new MoneyError("The overtime multiplier can have at most four decimal places.");
+  const hourly = Exact.int(kobo(monthlyGross, "The monthly gross"))
+    .div(Exact.fromNumber(basisDays))
+    .div(Exact.fromNumber(hoursPerDay))
+    .mul(m);
+  return koboToNumber(hourly.round());
 }
