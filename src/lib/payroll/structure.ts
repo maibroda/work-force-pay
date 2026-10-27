@@ -148,17 +148,13 @@ export function computeComponentsExact(
   return out;
 }
 
-/**
- * The same, for callers that work in naira numbers (the structure page, tests, and the engine until it moves to exact values).
- * `round = false` gives the unrounded amount as the nearest number, for that last caller only.
- */
+/** The same, for callers that work in naira numbers (the structure page, tests): each amount rounded half up to the kobo. */
 export function computeComponents(
   structure: StructureDef,
   monthlyGross: number,
   factor: number,
   overrides: ComponentOverride[] = [],
   extraVars: Record<string, number> = {},
-  round = true,
 ): ComponentAmount[] {
   const extra: Record<string, Exact> = {};
   for (const [name, v] of Object.entries(extraVars)) extra[name] = Exact.fromNumber(v);
@@ -166,7 +162,7 @@ export function computeComponents(
   return exact.map((c) => ({
     code: c.code,
     name: c.name,
-    amount: round ? koboToNumber(c.amount.round()) : c.amount.toNumber() / 100,
+    amount: koboToNumber(c.amount.round()),
     taxable: c.taxable,
     pensionable: c.pensionable,
     overridden: c.overridden,

@@ -2,14 +2,15 @@
 
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
-## Not yet merged (branch `exact-money-3a`)
+## Not yet merged (branch `exact-money-3b`)
 
-- **Exact money arithmetic, stage 3a of 5: the pieces under the engine** (rule 2). A new exact-fraction type (`src/lib/exact-fraction.ts`) holds amounts that are not yet rounded, so that nothing is lost between steps. Salary-component formulas are now worked in exact fractions: `0.1 + 0.2` is `0.3`, and `ROUND()` in a formula rounds half up to the kobo (**a negative value at exactly half now goes away from zero: -0.125 becomes -0.13, it was -0.12**). Salary components are worked as exact fractions (`computeComponentsExact`; `computeComponents` keeps its numbers-in, numbers-out shape), and the **70:30 split now rounds half up**: an agreed rate of ₦50,002.45 at 70% gives the operative ₦35,001.72 (it was ₦35,001.71), about 1 agreed rate in 220 at 70%. **The payroll engine itself is unchanged in this step**: on 30,000 synthetic employee-months (2.27 million figures) and on the 352 seeded payroll records, the old and new engines give identical figures. A characterization test now records what the engine produces (300 synthetic scenarios, 22,646 figures) and fails if any figure changes without being listed and explained. The engine is about twice as slow per employee (3,000 employees in 1.9 s against 0.9 s). No migration.
+- **Exact money arithmetic, stage 3b of 5: the payroll engine** (rule 2, option A). The engine, the quick payslip and the overtime hourly rate now work in whole kobo and exact fractions. The late rounding is kept exactly as it was: salary components are carried unrounded, added across sites, and rounded once at the payslip line. Nothing about the rules changes: same steps, same sites, same pension, deduction and add-on cost rules. **What changes is the kobo at exact ties, and only on employer-side lines in what I measured**: on 30,000 synthetic employee-months (2,273,323 figures) 790 months had a difference in 2,377 figures (0.1%), the largest being 1 kobo, and every one was employer pension, uniform and kits, ITF, NSITF or insurance, or a total built from them. No employee-facing figure (components, PAYE, net pay) moved in that sample, and the 352 seeded payroll records are identical. An overtime, arrears, other-pay or deduction amount, or a gross, that is part-way through a kobo is now refused with a message instead of being rounded silently. The engine's results and inputs are still naira numbers (the services move in stage 4). No migration.
 
 ## Merged
 
 | PR | What | Migration |
 | --- | --- | --- |
+| #69 | **Exact money arithmetic, stage 3a**: an exact-fraction type, formulas, salary components and the 70:30 split in exact arithmetic (a rate of ₦50,002.45 at 70% now gives the operative ₦35,001.72); a characterization test of the engine. The engine itself was unchanged. | none |
 | #68 | Plan for exact money, stage 3 (document only). | none |
 | #67 | **Exact money arithmetic, stage 2**: PAYE and the employee year-to-date pension in whole kobo. A month's PAYE can be ₦0.01 higher where the exact tax ends in half a kobo (about 1 in 290 synthetic months; 1 of 352 seeded records). | none |
 | #66 | Plan for exact money, stage 2 (document only). | none |

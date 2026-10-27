@@ -1,5 +1,6 @@
-import { round2 } from "../money";
-import { computePaye, type PayeResult, type TaxRuleDef } from "./paye";
+import { Exact } from "../exact-fraction";
+import { addKobo, koboFromNaira, koboToNumber, mulPct, pctToRate, roundRatio, subKobo, sumKobo, type Kobo } from "../money-exact";
+import { computePayeKobo, payeResultToNaira, type PayeResult, type TaxRuleDef } from "./paye";
 
 /**
  * A quick payslip: given a monthly gross salary and how it splits into Basic, Housing, Transport and other allowances,
@@ -83,40 +84,51 @@ export function distributeOthers(otherPct: number, weights: Array<{ code: string
   });
 }
 
+const HUNDRED = Exact.int(100);
+/** A typed amount in naira, taken to the kobo, half up, once. (A person can type any number of decimals; the payslip works in whole kobo.) */
+const typedKobo = (naira: number): Kobo => Exact.fromNumber(naira).mul(HUNDRED).round();
+
 export function quickPayslip(input: QuickInput): QuickPayslip {
-  const gross = round2(input.monthlyGross);
+  const gross = typedKobo(input.monthlyGross);
+  const employeeRate = pctToRate(String(input.employeeRate));
+  const employerRate = pctToRate(String(input.employerRate));
   // Each allowance is its share of the gross to the kobo; the last one takes the rounding, so the lines always add up to the gross.
-  let used = 0;
+  let used = 0 as Kobo;
+  const amounts: Kobo[] = [];
   const earnings: QuickEarning[] = input.components.map((c, i) => {
-    const amount = i === input.components.length - 1 ? round2(gross - used) : round2((gross * c.pct) / 100);
-    used = round2(used + amount);
-    return { code: c.code, name: c.name, pct: c.pct, amount, taxable: c.taxable, pensionable: c.pensionable };
+    // A typed percentage can have any number of decimals, so it is read as an exact fraction rather than as a rate unit.
+    const amount: Kobo = i === input.components.length - 1 ? subKobo(gross, used) : Exact.int(gross).mul(Exact.fromNumber(c.pct)).div(HUNDRED).round();
+    used = addKobo(used, amount);
+    amounts.push(amount);
+    return { code: c.code, name: c.name, pct: c.pct, amount: koboToNumber(amount), taxable: c.taxable, pensionable: c.pensionable };
   });
 
-  const pensionBase = round2(earnings.filter((e) => e.pensionable).reduce((s, e) => s + e.amount, 0));
-  const employeePension = round2((pensionBase * input.employeeRate) / 100);
-  const employerPension = round2((pensionBase * input.employerRate) / 100);
-  const taxableEarnings = round2(earnings.filter((e) => e.taxable).reduce((s, e) => s + e.amount, 0));
-  const basic = earnings.find((e) => e.code === "BASIC")?.amount ?? 0;
-  const paye = computePaye(
-    { monthlyRegularTaxable: taxableEarnings, monthlyIrregularTaxable: 0, monthlyEmployeePension: employeePension, monthlyBasic: basic, annualRent: input.annualRent ?? 0 },
+  const pensionBase = sumKobo(amounts.filter((_, i) => input.components[i].pensionable));
+  const employeePension = mulPct(pensionBase, employeeRate);
+  const employerPension = mulPct(pensionBase, employerRate);
+  const taxableEarnings = sumKobo(amounts.filter((_, i) => input.components[i].taxable));
+  const basicIndex = input.components.findIndex((c) => c.code === "BASIC");
+  const basic = basicIndex >= 0 ? amounts[basicIndex] : (0 as Kobo);
+  const paye = computePayeKobo(
+    { regularTaxable: taxableEarnings, irregularTaxable: 0 as Kobo, employeePension, basic, annualRent: koboFromNaira(input.annualRent ?? 0, "The annual rent") },
     input.taxRule,
   );
-  const otherDeductions = (input.otherDeductions ?? []).filter((d) => cents(d.amount) > 0).map((d) => ({ name: d.name, amount: round2(d.amount) }));
-  const totalDeductions = round2(paye.paye + employeePension + otherDeductions.reduce((s, d) => s + d.amount, 0));
-  const netPay = round2(gross - totalDeductions);
+  const deductions = (input.otherDeductions ?? []).filter((d) => cents(d.amount) > 0).map((d) => ({ name: d.name, kobo: typedKobo(d.amount) }));
+  const totalDeductions = sumKobo([paye.paye, employeePension, ...deductions.map((d) => d.kobo)]);
+  const netPay = subKobo(gross, totalDeductions);
   return {
     earnings,
-    gross,
-    pensionBase,
-    employeePension,
-    employerPension,
-    taxableEarnings,
-    paye,
-    otherDeductions,
-    totalDeductions,
-    netPay,
-    employerCost: round2(gross + employerPension),
-    netPct: gross > 0 ? round2((netPay / gross) * 100) : 0,
+    gross: koboToNumber(gross),
+    pensionBase: koboToNumber(pensionBase),
+    employeePension: koboToNumber(employeePension),
+    employerPension: koboToNumber(employerPension),
+    taxableEarnings: koboToNumber(taxableEarnings),
+    paye: payeResultToNaira(paye),
+    otherDeductions: deductions.map((d) => ({ name: d.name, amount: koboToNumber(d.kobo) })),
+    totalDeductions: koboToNumber(totalDeductions),
+    netPay: koboToNumber(netPay),
+    employerCost: koboToNumber(addKobo(gross, employerPension)),
+    // Net pay as a share of the gross, to two decimals, half up: net × 10,000 ÷ gross is hundredths of a percent.
+    netPct: gross > 0 ? koboToNumber(roundRatio(BigInt(netPay) * 10_000n, BigInt(gross))) : 0,
   };
 }

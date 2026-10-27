@@ -1,1 +1,152 @@
-{}
+{
+ "S006|allocation1.businessCosts": {
+  "old": 20528.28,
+  "new": 20528.29,
+  "why": "the sum of this beat's eight add-on costs (one site per beat here): 20528.29"
+ },
+ "S006|employerCost": {
+  "old": 322635.8,
+  "new": 322635.81,
+  "why": "total earnings + employer pension + employer add-on costs: 322635.81"
+ },
+ "S006|insuranceAmount": {
+  "old": 6777.11,
+  "new": 6777.1,
+  "why": "the sum of the sites' insurance figures: 6777.10"
+ },
+ "S006|itfAmount": {
+  "old": 2478.56,
+  "new": 2478.57,
+  "why": "the sum of the sites' itf figures: 2478.57"
+ },
+ "S006|nsitfAmount": {
+  "old": 2478.56,
+  "new": 2478.57,
+  "why": "the sum of the sites' nsitf figures: 2478.57"
+ },
+ "S006|segment1.insurance": {
+  "old": 2941.4,
+  "new": 2941.39,
+  "why": "7.5% of 39218.58 (management fee less employer pension, ITF, NSITF and NHF/medical) is 2941.3935: 2941.39"
+ },
+ "S006|segment1.itf": {
+  "old": 1075.74,
+  "new": 1075.75,
+  "why": "1% of this site's gross 107574.50 is 1075.745, exactly half a kobo, so half up goes up: 1075.75"
+ },
+ "S006|segment1.nsitf": {
+  "old": 1075.74,
+  "new": 1075.75,
+  "why": "1% of this site's gross 107574.50 is 1075.745, exactly half a kobo, so half up goes up: 1075.75"
+ },
+ "S006|totalEmployerAddOns": {
+  "old": 57278.12,
+  "new": 57278.13,
+  "why": "the sum of the eight add-on totals: 57278.13"
+ },
+ "S070|allocation0.employerPension": {
+  "old": 8791.09,
+  "new": 8791.1,
+  "why": "This beat has one site, with pensionable pay 87,910.95. Employer pension 10% of it is 8,791.095, exactly half a kobo, so half up gives 8,791.10 (the old arithmetic gave 8,791.09)"
+ },
+ "S084|allocation2.businessCosts": {
+  "old": 24239.66,
+  "new": 24239.67,
+  "why": "the sum of this beat's eight add-on costs (one site per beat here): 24239.67"
+ },
+ "S084|employerCost": {
+  "old": 204912.14,
+  "new": 204912.15,
+  "why": "total earnings + employer pension + employer add-on costs: 204912.15"
+ },
+ "S084|segment2.uniformKits": {
+  "old": 8433.25,
+  "new": 8433.26,
+  "why": "25% of 33733.02 (management fee less employer pension, ITF, NSITF and NHF/medical) is 8433.2550, exactly half a kobo, so half up goes up: 8433.26"
+ },
+ "S084|totalEmployerAddOns": {
+  "old": 39062.92,
+  "new": 39062.93,
+  "why": "the sum of the eight add-on totals: 39062.93"
+ },
+ "S084|uniformKitsAmount": {
+  "old": 13301.91,
+  "new": 13301.92,
+  "why": "the sum of the sites' uniformKits figures: 13301.92"
+ },
+ "S145|allocation0.businessCosts": {
+  "old": 3405.28,
+  "new": 3405.29,
+  "why": "the sum of this beat's eight add-on costs (one site per beat here): 3405.29"
+ },
+ "S145|employerCost": {
+  "old": 312434.09,
+  "new": 312434.1,
+  "why": "total earnings + employer pension + employer add-on costs: 312434.10"
+ },
+ "S145|segment0.uniformKits": {
+  "old": 1238.97,
+  "new": 1238.98,
+  "why": "25% of 4955.90 (management fee less employer pension, ITF, NSITF and NHF/medical) is 1238.9750, exactly half a kobo, so half up goes up: 1238.98"
+ },
+ "S145|totalEmployerAddOns": {
+  "old": 66589.22,
+  "new": 66589.23,
+  "why": "the sum of the eight add-on totals: 66589.23"
+ },
+ "S145|uniformKitsAmount": {
+  "old": 24259.13,
+  "new": 24259.14,
+  "why": "the sum of the sites' uniformKits figures: 24259.14"
+ },
+ "S151|employerCost": {
+  "old": 263331.41,
+  "new": 263331.42,
+  "why": "total earnings + employer pension + employer add-on costs: 263331.42"
+ },
+ "S151|employerPension": {
+  "old": 9635.92,
+  "new": 9635.93,
+  "why": "10% of the pensionable base 96359.25 is 9635.9250, exactly half a kobo, so half up goes up: 9635.93"
+ },
+ "S170|employerCost": {
+  "old": 356289.63,
+  "new": 356289.64,
+  "why": "total earnings + employer pension + employer add-on costs: 356289.64"
+ },
+ "S170|employerPension": {
+  "old": 17065.06,
+  "new": 17065.07,
+  "why": "10% of the pensionable base 170650.65 is 17065.0650, exactly half a kobo, so half up goes up: 17065.07"
+ },
+ "S260|allocation0.employerPension": {
+  "old": 8791.09,
+  "new": 8791.1,
+  "why": "This beat has one site, with pensionable pay 87,910.95. Employer pension 10% of it is 8,791.095, exactly half a kobo, so half up gives 8,791.10 (the old arithmetic gave 8,791.09)"
+ },
+ "S274|allocation2.businessCosts": {
+  "old": 24239.66,
+  "new": 24239.67,
+  "why": "the sum of this beat's eight add-on costs (one site per beat here): 24239.67"
+ },
+ "S274|employerCost": {
+  "old": 204912.14,
+  "new": 204912.15,
+  "why": "total earnings + employer pension + employer add-on costs: 204912.15"
+ },
+ "S274|segment2.uniformKits": {
+  "old": 8433.25,
+  "new": 8433.26,
+  "why": "25% of 33733.02 (management fee less employer pension, ITF, NSITF and NHF/medical) is 8433.2550, exactly half a kobo, so half up goes up: 8433.26"
+ },
+ "S274|totalEmployerAddOns": {
+  "old": 39062.92,
+  "new": 39062.93,
+  "why": "the sum of the eight add-on totals: 39062.93"
+ },
+ "S274|uniformKitsAmount": {
+  "old": 13301.91,
+  "new": 13301.92,
+  "why": "the sum of the sites' uniformKits figures: 13301.92"
+ }
+}
