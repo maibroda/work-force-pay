@@ -4,6 +4,8 @@ import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { getRunDetail, listRecords } from "@/server/services/payroll";
 import { reconciliationFor } from "@/server/services/payroll-controls";
+import { statutoryStatus } from "@/server/services/statutory-verification";
+import { StatutoryNotice } from "@/components/statutory-notice";
 import { ReconciliationPanel } from "./reconciliation-panel";
 import { PayslipDelivery } from "./payslip-delivery";
 import { ClientApprovalPanel } from "./client-approval-panel";
@@ -56,6 +58,7 @@ export default async function RunPage({
   const run = await getRunDetail(ctx, id);
   if (!run) notFound();
   const records = await listRecords(ctx, id, sp.q);
+  const statutory = await statutoryStatus(ctx, run.periodId);
   const recon = run.type === "REGULAR" ? await reconciliationFor(ctx, id) : null;
   const controlPolicy = recon && can(ctx.role, "settings.manage") ? { policy: recon.policy, reconciliationRequired: recon.reconciliationRequired } : null;
   const mine = run.preparedByUserIds.includes(ctx.userId) || run.submittedByUserId === ctx.userId;
@@ -127,6 +130,7 @@ export default async function RunPage({
           </>
         }
       />
+      <StatutoryNotice status={statutory} />
       <p className="text-xs text-muted-foreground">
         Prepared by {run.calculatedBy ?? "—"}
         {run.submittedBy ? ` · submitted by ${run.submittedBy} on ${fmtDate(run.submittedAt)}` : ""}

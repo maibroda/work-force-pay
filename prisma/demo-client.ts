@@ -16,6 +16,7 @@ import { createPaymentBatches, generateRemittances } from "../src/server/service
 import { INPUT_KINDS } from "../src/lib/payroll-calendar";
 import { clientApproveRun, inviteClientUser, setClientApprovalRequired } from "../src/server/services/portal";
 import { raiseQuery, replyToQuery } from "../src/server/services/client-queries";
+import { proposeRelease, publishRelease, verifyRelease } from "../src/server/services/rule-library";
 
 /** Bureau staff, as they are in the bureau's own organization. */
 export type DemoStaff = { founder: Ctx; officer: Ctx; reviewer: Ctx; hr: Ctx };
@@ -46,6 +47,25 @@ export function demoEmployeesCsv(): string {
 
 const grossFor = (i: number) => ((i + 1) % 6 === 0 ? 450000 : 150000 + (i % 7) * 50000);
 
+/**
+ * Puts the bureau's own PAYE, pension and employer-contribution rules in force on the date through the Statutory Rule Library, as the bureau must before a
+ * client goes live (rule 3): each proposed, signed by HR and by Finance (neither the proposer), and published to its clients. The bureau needs at least one
+ * client to publish to.
+ */
+export async function verifyBureauRules(staff: DemoStaff, bureauId: string, on = "2026-10-31") {
+  const day = new Date(`${on}T00:00:00Z`);
+  const inForce = { effectiveFrom: { lte: day }, OR: [{ effectiveTo: null }, { effectiveTo: { gte: day } }] };
+  const tax = await db.taxRule.findFirstOrThrow({ where: { organizationId: bureauId, ...inForce }, orderBy: { effectiveFrom: "desc" } });
+  const pension = await db.pensionRule.findFirstOrThrow({ where: { organizationId: bureauId, ...inForce }, orderBy: { effectiveFrom: "desc" } });
+  const employer = await db.employerCostRule.findFirstOrThrow({ where: { organizationId: bureauId, ...inForce }, orderBy: { effectiveFrom: "desc" } });
+  for (const [kind, ruleId] of [["TAX", tax.id], ["PENSION", pension.id], ["EMPLOYER_COST", employer.id]] as const) {
+    const rel = await proposeRelease(staff.officer, { kind, ruleId, summary: "Checked against the current schedule", source: "Nigeria Tax Act 2025 and Pension Reform Act schedules" } as never);
+    await verifyRelease(staff.hr, rel.id, "Checked every figure against the published schedule");
+    await verifyRelease(staff.reviewer, rel.id, "Agrees with the published schedule");
+    await publishRelease(staff.officer, rel.id);
+  }
+}
+
 export async function buildDemoClient(staff: DemoStaff, opts: { name?: string; code?: string } = {}) {
   const bureauId = staff.founder.orgId;
   const { client } = await onboardClient(staff.founder, {
@@ -66,6 +86,9 @@ export async function buildDemoClient(staff: DemoStaff, opts: { name?: string; c
   } as never);
   // the people who work on this client; the founder reaches every client without a grant
   for (const s of [staff.officer, staff.reviewer, staff.hr]) await grantAccess(staff.founder, s.userId, client.id);
+  // this is a production client, so its payroll is gated: the bureau's statutory rules are put through the library first, then the engagement goes live
+  await verifyBureauRules(staff, bureauId);
+  await db.clientEngagement.update({ where: { clientOrganizationId: client.id }, data: { status: "ACTIVE" } });
   const as = (c: Ctx): Ctx => ({ ...c, orgId: client.id, homeOrgId: bureauId });
   const [founder, officer, reviewer, hr] = [staff.founder, staff.officer, staff.reviewer, staff.hr].map(as);
 
