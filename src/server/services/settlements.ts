@@ -14,7 +14,9 @@ import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { iso } from "@/lib/dates";
 import { computeSettlementLines, settlementTotals } from "@/lib/eos";
-import { num, round2 } from "@/lib/money";
+import { Exact } from "@/lib/exact-fraction";
+import { num } from "@/lib/money";
+import { koboFromNaira } from "@/lib/money-exact";
 import { assertCan, BusinessError, db, toJson, type Tx } from "./_base";
 import { logAudit } from "./audit";
 import { eosPolicyOf, getHrPolicy } from "./hr-policy";
@@ -39,7 +41,7 @@ async function payReference(
 ) {
   const notes: string[] = [];
   let monthlyGross = 0;
-  let basicShare = 1;
+  let basicShare: Exact = Exact.int(1);
   let source = "";
   if (ov.monthlyGrossOverride) {
     monthlyGross = ov.monthlyGrossOverride;
@@ -61,7 +63,7 @@ async function payReference(
         (l) => l.type === "EARNING" && l.code === "BASIC",
       );
       const earned = num(rec.earnedGross);
-      if (basic && earned > 0) basicShare = num(basic.amount) / earned;
+      if (basic && earned > 0) basicShare = Exact.ratio(koboFromNaira(num(basic.amount), "Basic pay"), koboFromNaira(earned, "Earned gross"));
       else notes.push("Basic pay couldn't be read from the latest payslip — gross is used for basic-based formulas.");
       source = `Latest payroll (${rec.run.period.name}) contractual gross`;
     } else {
@@ -85,7 +87,7 @@ async function payReference(
     throw new BusinessError("No pay reference was found for this employee — enter their monthly gross pay manually.");
   if (ov.monthlyBasicOverride) {
     if (ov.monthlyBasicOverride > monthlyGross) throw new BusinessError("Basic pay can't exceed gross pay.");
-    basicShare = ov.monthlyBasicOverride / monthlyGross;
+    basicShare = Exact.fromNumber(ov.monthlyBasicOverride).div(Exact.fromNumber(monthlyGross));
     source += "; basic entered manually";
   }
   return { monthlyGross, basicShare, source, notes };
@@ -146,7 +148,7 @@ export async function prepareSettlement(
   );
   const trace = toJson({
     overrides: ov,
-    payBasis: { source: pay.source, monthlyGross: pay.monthlyGross, basicShare: round2(pay.basicShare * 10000) / 10000 },
+    payBasis: { source: pay.source, monthlyGross: pay.monthlyGross, basicShare: Number(pay.basicShare.mul(Exact.int(10000)).round()) / 10000 },
     rules: eosPolicy,
     notes: [...pay.notes, ...res.notes],
   });

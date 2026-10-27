@@ -116,6 +116,14 @@ export class Exact {
     return roundRatio(this.n, this.d);
   }
 
+  /** This value, counted in KOBO, rounded UP to a whole number of kobo (a ceiling): any remainder, however small, adds a kobo. */
+  ceil(): Kobo {
+    let q = this.n / this.d; // truncates towards zero, which is already the ceiling for a negative value
+    if (this.n > 0n && this.n % this.d !== 0n) q += 1n;
+    if (q > BigInt(Number.MAX_SAFE_INTEGER) || q < -BigInt(Number.MAX_SAFE_INTEGER)) throw new MoneyError("That amount is too large to hold exactly.");
+    return (q === 0n ? 0 : Number(q)) as Kobo;
+  }
+
   /**
    * The nearest plain number. FOR DISPLAY AND FOR CALLERS NOT YET MOVED TO EXACT VALUES: never feed it back into a calculation.
    */

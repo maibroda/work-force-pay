@@ -84,6 +84,26 @@ describe("Exact: the final rounding to a whole kobo uses the one shared rule", (
   });
 });
 
+describe("Exact: rounding UP to a whole number of kobo (the loan instalment rule)", () => {
+  it("rounds any remainder up, and leaves an exact division alone", () => {
+    expect(koboToString(x(1, 3).ceil())).toBe("0.01"); // a third of a kobo → 1 kobo
+    expect(koboToString(x(10_000_000, 3).ceil())).toBe("33333.34"); // 100,000 naira ÷ 3 → 33,333.34
+    expect(koboToString(x(12_000_000, 12).ceil())).toBe("10000.00"); // exactly divisible: no extra kobo
+    expect(koboToString(Exact.int(26_297_678).ceil())).toBe("262976.78"); // a whole number of kobo stays itself
+    expect(koboToString(x(0).ceil())).toBe("0.00");
+  });
+  it("is not fooled by a value that is a hair above a whole kobo: 26,297,678 plus a billionth rounds up", () => {
+    expect(Exact.int(26_297_678).add(x(1, 1_000_000_000)).ceil()).toBe(26_297_679);
+  });
+  it("rounds a negative towards zero's other side, the way a ceiling does: -2.5 kobo is -2", () => {
+    expect(x(-5, 2).ceil()).toBe(-2);
+    expect(Object.is(x(-1, 3).ceil(), 0)).toBe(true);
+  });
+  it("refuses a result too large to hold exactly", () => {
+    expect(() => Exact.int(BigInt(Number.MAX_SAFE_INTEGER) + 1n).ceil()).toThrow(/too large/i);
+  });
+});
+
 describe("Exact: turning a value into a plain number (display and old callers only)", () => {
   it("gives the nearest number: 1/3 is 0.3333333333333333, 23/200 is 0.115, 7 is 7", () => {
     expect(x(1, 3).toNumber()).toBe(1 / 3);

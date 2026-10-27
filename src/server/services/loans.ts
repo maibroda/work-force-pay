@@ -11,7 +11,8 @@ import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { d } from "@/lib/dates";
 import { checkLoanLimits, installmentFor, loanPosition, monthIndex, nextMonth } from "@/lib/loans";
-import { num, round2 } from "@/lib/money";
+import { num } from "@/lib/money";
+import { totalOf, typedAmount } from "@/lib/payroll/pay-inputs";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { postLoanCashRepayment, postLoanDisbursement, postLoanWriteOff } from "./gl-posting";
@@ -117,8 +118,8 @@ export async function requestLoan(ctx: Ctx, raw: z.input<typeof loanSchema>) {
     if (gross === null)
       throw new BusinessError(`${emp.employeeNumber} has no payroll history or personal pay rate yet, so the affordability limits can't be checked — they can borrow after their first payroll.`);
     const others = await withPositions(await loadWithInstallments(ctx.orgId, { employeeId: emp.id, type: v.type, status: { in: ["PENDING_APPROVAL", "ACTIVE"] } }));
-    const existingOutstanding = others.reduce((s, l) => s + (l.status === "PENDING_APPROVAL" ? num(l.principal) : l.outstanding), 0);
-    const existingInstallments = others.filter((l) => l.status === "PENDING_APPROVAL" || l.outstanding > 0).reduce((s, l) => s + num(l.installmentAmount), 0);
+    const existingOutstanding = totalOf(others.map((l) => (l.status === "PENDING_APPROVAL" ? num(l.principal) : l.outstanding)));
+    const existingInstallments = totalOf(others.filter((l) => l.status === "PENDING_APPROVAL" || l.outstanding > 0).map((l) => num(l.installmentAmount)));
     const breach = checkLoanLimits({ type: v.type, principal: v.principal, installment, monthlyGross: gross, existingOutstanding, existingInstallments }, limits);
     if (breach) throw new BusinessError(breach);
   }
@@ -234,7 +235,7 @@ export async function scheduleInstallments(ctx: Ctx, periodId: string) {
           organizationId: ctx.orgId,
           employeeId: loan.employeeId,
           deductionType: loan.type,
-          amount: round2(amount),
+          amount,
           periodId,
           reason: `${loan.loanNumber} ${loan.type === "SALARY_ADVANCE" ? "advance recovery" : `instalment ${n} of ${loan.installmentCount}`}`,
           authorityReference: loan.loanNumber,
@@ -244,13 +245,13 @@ export async function scheduleInstallments(ctx: Ctx, periodId: string) {
         },
       });
       await tx.loanInstallment.create({
-        data: { organizationId: ctx.orgId, loanId: loan.id, kind: "PAYROLL", amount: round2(amount), deductionId: ded.id, periodId, createdBy: ctx.name },
+        data: { organizationId: ctx.orgId, loanId: loan.id, kind: "PAYROLL", amount, deductionId: ded.id, periodId, createdBy: ctx.name },
       });
     }
     if (toCreate.length)
-      await logAudit(ctx, { action: "LOAN_SCHEDULE", entity: "PayrollPeriod", entityId: periodId, newValue: { period: period.name, scheduled: toCreate.length, total: round2(toCreate.reduce((s, x) => s + x.amount, 0)) } }, tx);
+      await logAudit(ctx, { action: "LOAN_SCHEDULE", entity: "PayrollPeriod", entityId: periodId, newValue: { period: period.name, scheduled: toCreate.length, total: totalOf(toCreate.map((x) => x.amount)) } }, tx);
   });
-  return { periodName: period.name, scheduled: toCreate.length, total: round2(toCreate.reduce((s, x) => s + x.amount, 0)), skipped };
+  return { periodName: period.name, scheduled: toCreate.length, total: totalOf(toCreate.map((x) => x.amount)), skipped };
 }
 
 export const cashSchema = z.object({
@@ -266,19 +267,21 @@ export async function recordCashRepayment(ctx: Ctx, id: string, raw: z.input<typ
   const [loan] = await withPositions(await loadWithInstallments(ctx.orgId, { id }));
   if (!loan) throw new BusinessError("Loan not found.");
   if (loan.status !== "ACTIVE") throw new BusinessError(`This ${label(loan)} is ${loan.status.replace(/_/g, " ").toLowerCase()}.`);
-  if (v.amount > loan.unscheduled + 0.005)
+  // A typed amount is taken to the kobo first (half up, as the database would store it); that is what must not exceed what is owed.
+  const amount = typedAmount(v.amount);
+  if (amount > loan.unscheduled)
     throw new BusinessError(
       loan.unscheduled === 0 && loan.outstanding > 0
         ? "The whole balance is already queued in payroll — nothing is left to pay in cash."
-        : `Only ${round2(loan.unscheduled)} is outstanding and not already queued in payroll.`,
+        : `Only ${loan.unscheduled} is outstanding and not already queued in payroll.`,
     );
   const paidOn = v.paidOn ? d(v.paidOn) : todayUtc();
   return db.$transaction(async (tx) => {
     const inst = await tx.loanInstallment.create({
-      data: { organizationId: ctx.orgId, loanId: id, kind: "CASH", amount: round2(v.amount), paidOn, reference: v.reference ?? null, createdBy: ctx.name },
+      data: { organizationId: ctx.orgId, loanId: id, kind: "CASH", amount, paidOn, reference: v.reference ?? null, createdBy: ctx.name },
     });
-    await postLoanCashRepayment(ctx, tx, loan, round2(v.amount), paidOn);
-    await logAudit(ctx, { action: "LOAN_CASH_REPAYMENT", entity: "Employee", entityId: loan.employeeId, newValue: { loanNumber: loan.loanNumber, amount: v.amount } }, tx);
+    await postLoanCashRepayment(ctx, tx, loan, amount, paidOn);
+    await logAudit(ctx, { action: "LOAN_CASH_REPAYMENT", entity: "Employee", entityId: loan.employeeId, newValue: { loanNumber: loan.loanNumber, amount } }, tx);
     return inst;
   });
 }
@@ -342,10 +345,10 @@ export async function loansSummary(ctx: Ctx) {
   const active = loans.filter((l) => l.status === "ACTIVE" && l.outstanding > 0);
   return {
     pending: loans.filter((l) => l.status === "PENDING_APPROVAL").length,
-    pendingValue: round2(loans.filter((l) => l.status === "PENDING_APPROVAL").reduce((s, l) => s + num(l.principal), 0)),
+    pendingValue: totalOf(loans.filter((l) => l.status === "PENDING_APPROVAL").map((l) => num(l.principal))),
     active: active.length,
-    outstanding: round2(active.reduce((s, l) => s + l.outstanding, 0)),
-    queuedInPayroll: round2(active.reduce((s, l) => s + l.scheduled, 0)),
+    outstanding: totalOf(active.map((l) => l.outstanding)),
+    queuedInPayroll: totalOf(active.map((l) => l.scheduled)),
     holdersWhoLeft: new Set(active.filter((l) => GONE.includes(l.employee.status)).map((l) => l.employeeId)).size,
   };
 }
@@ -366,7 +369,7 @@ export async function loansOwedByLeavers(orgId: string) {
     if (!GONE.includes(l.employee.status) || l.outstanding <= 0) continue;
     const e = byEmployee.get(l.employeeId) ?? { employee: l.employee, loans: 0, outstanding: 0 };
     e.loans += 1;
-    e.outstanding = round2(e.outstanding + l.outstanding);
+    e.outstanding = totalOf([e.outstanding, l.outstanding]);
     byEmployee.set(l.employeeId, e);
   }
   return [...byEmployee.values()];
