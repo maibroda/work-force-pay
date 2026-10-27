@@ -1,9 +1,10 @@
 import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { d, daysInMonth } from "@/lib/dates";
-import { num, round2 } from "@/lib/money";
+import { num } from "@/lib/money";
 import { DEDUCTION_AUTHORITY_ERROR, overtimeHourlyRate } from "@/lib/payroll/engine";
-import { computePaye } from "@/lib/payroll/paye";
+import { Exact } from "@/lib/exact-fraction";
+import { arrearsDifference, arrearsImpacts, correctedAmountFor, minus, overtimeAmountAcceptable, overtimePay, pensionableShareFromPercentages, pensionableShareOf } from "@/lib/payroll/pay-inputs";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { assertPeriodEditable, deploymentOn } from "./operations";
@@ -107,8 +108,8 @@ export async function createOvertime(ctx: Ctx, raw: z.input<typeof overtimeSchem
       rules.overtimeMultiplier,
     );
   }
-  const expected = round2(v.hours * rate);
-  if (v.amount !== undefined && Math.abs(v.amount - expected) > 0.01)
+  const expected = overtimePay(v.hours, rate);
+  if (v.amount !== undefined && !overtimeAmountAcceptable(v.amount, expected))
     throw new BusinessError(
       `Overtime amount ${v.amount} does not match the configured calculation (${v.hours}h × ${rate} = ${expected}).`,
     );
@@ -338,16 +339,15 @@ export async function createArrears(ctx: Ctx, raw: z.input<typeof arrearsSchema>
   });
   let originalAmount: number;
   let correctedAmount: number;
-  let pensionableRatio: number;
+  let pensionableShare: Exact;
   if (v.correctedMonthlyGross !== undefined) {
     if (!rec)
       throw new BusinessError(
         `No payroll record exists for ${emp.employeeNumber} in ${period.name}; enter original and corrected amounts instead.`,
       );
     originalAmount = num(rec.earnedGross);
-    const factor = num(rec.monthlyGross) ? num(rec.earnedGross) / num(rec.monthlyGross) : 0;
-    correctedAmount = round2(v.correctedMonthlyGross * factor);
-    pensionableRatio = num(rec.earnedGross) ? num(rec.pensionBase) / num(rec.earnedGross) : 0;
+    correctedAmount = correctedAmountFor(v.correctedMonthlyGross, num(rec.earnedGross), num(rec.monthlyGross));
+    pensionableShare = pensionableShareOf(num(rec.pensionBase), num(rec.earnedGross));
   } else {
     if (v.originalAmount === undefined || v.correctedAmount === undefined)
       throw new BusinessError(
@@ -357,45 +357,26 @@ export async function createArrears(ctx: Ctx, raw: z.input<typeof arrearsSchema>
     correctedAmount = v.correctedAmount;
     const book = await loadRateBook(db, ctx.orgId, period.startDate, period.endDate, 70);
     const std = book.defaultStructure;
-    const pct =
-      std?.components
-        .filter((c) => c.pensionable && c.calcType === "PERCENTAGE")
-        .reduce((a, c) => a + (c.percentage ?? 0), 0) ?? 39;
-    pensionableRatio = rec && num(rec.earnedGross) ? num(rec.pensionBase) / num(rec.earnedGross) : pct / 100;
+    const pcts = std ? std.components.filter((c) => c.pensionable && c.calcType === "PERCENTAGE").map((c) => c.percentage ?? 0) : [39];
+    pensionableShare = rec && num(rec.earnedGross) ? pensionableShareOf(num(rec.pensionBase), num(rec.earnedGross)) : pensionableShareFromPercentages(pcts);
   }
-  const difference = round2(correctedAmount - originalAmount);
+  const difference = arrearsDifference(originalAmount, correctedAmount);
   if (difference === 0)
     throw new BusinessError("Corrected amount equals the original amount — there are no arrears.");
-  const pensionableImpact = round2(difference * pensionableRatio);
   const [pension, tax] = await Promise.all([
     pensionRuleFor(db, ctx.orgId, period.endDate),
     taxRuleFor(db, ctx.orgId, period.endDate),
   ]);
-  const pensionImpact = round2((pensionableImpact * pension.employeeRate) / 100);
   // Tax impact estimate: marginal tax on the arrears over the employee's regular income for that period.
-  const regular = rec
-    ? num(rec.taxableIncome) - num(rec.overtimeAmount) - num(rec.arrearsAmount)
-    : originalAmount;
-  const base = computePaye(
-    {
-      monthlyRegularTaxable: regular,
-      monthlyIrregularTaxable: 0,
-      monthlyEmployeePension: rec ? num(rec.employeePension) : 0,
-      monthlyBasic: 0,
-    },
-    tax.def,
-  );
-  const withArr = computePaye(
-    {
-      monthlyRegularTaxable: regular,
-      monthlyIrregularTaxable: difference,
-      monthlyEmployeePension: rec ? num(rec.employeePension) : 0,
-      monthlyBasic: 0,
-    },
-    tax.def,
-  );
-  const taxImpact = round2(withArr.paye - base.paye);
-  const netImpact = round2(difference - taxImpact - pensionImpact);
+  const regular = rec ? minus(num(rec.taxableIncome), num(rec.overtimeAmount), num(rec.arrearsAmount)) : originalAmount;
+  const { pensionableImpact, pensionImpact, taxImpact, netImpact } = arrearsImpacts({
+    difference,
+    pensionableShare,
+    employeePensionRatePct: pension.employeeRate,
+    regularTaxable: regular,
+    employeePension: rec ? num(rec.employeePension) : 0,
+    taxRule: tax.def,
+  });
 
   const a = await db.arrears.create({
     data: {

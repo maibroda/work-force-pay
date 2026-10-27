@@ -85,4 +85,33 @@ describe("building the payment rows", () => {
     const r = buildPaymentRows([line({ transactionId: "a", amount: 0.1 }), line({ transactionId: "b", accountNumber: "1111111111", amount: 0.2 })], DEFAULT_BANKS, "x");
     expect(r.total).toBe(0.3);
   });
+
+  it("rounds an amount with digits below a kobo half up, once, and says so: 95,200.505 → 95,200.51 (it was 95,200.50)", () => {
+    const r = buildPaymentRows([line({ amount: 95200.505 })], DEFAULT_BANKS, "x");
+    expect(r.problems).toEqual([]);
+    expect(r.rows[0].amount).toBe(95200.51);
+    expect(r.total).toBe(95200.51);
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0].message).toMatch(/95200\.505.*95200\.51|rounded/i);
+  });
+
+  it("rounds down below the half and stays quiet about nothing: 95,200.504 → 95,200.50; a normal amount raises no warning", () => {
+    expect(buildPaymentRows([line({ amount: 95200.504 })], DEFAULT_BANKS, "x").rows[0].amount).toBe(95200.5);
+    expect(buildPaymentRows([line({ amount: 95200.5 })], DEFAULT_BANKS, "x").warnings).toEqual([]);
+  });
+
+  it("an amount that rounds to nothing, or is not a number, is listed as a problem rather than paid", () => {
+    const r = buildPaymentRows([line({ transactionId: "a", amount: 0.004 }), line({ transactionId: "b", accountNumber: "2222222222", amount: Number.NaN })], DEFAULT_BANKS, "x");
+    expect(r.rows).toEqual([]);
+    expect(r.problems.map((p) => [p.transactionId, p.problems[0]])).toEqual([["a", "Nothing to pay."], ["b", "The amount is not a number."]]);
+  });
+
+  it("the total is the sum of the rounded rows, to the kobo, however many", () => {
+    // 300 amounts of 1,234.565 + i/100 naira, each exactly half a kobo: each rounds up to 123,457 + i kobo
+    const lines = Array.from({ length: 300 }, (_, i) => line({ transactionId: `t${i}`, employeeNumber: `E${i}`, accountNumber: String(1000000000 + i), amount: Number(((123456.5 + i) / 100).toFixed(3)) }));
+    const r = buildPaymentRows(lines, DEFAULT_BANKS, "x");
+    expect(r.rows).toHaveLength(300);
+    // 300 × 123,457 + (0 + 1 + … + 299) = 37,037,100 + 44,850 kobo
+    expect(Math.round(r.total * 100)).toBe(37_081_950);
+  });
 });

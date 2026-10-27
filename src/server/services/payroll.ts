@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import type { Ctx } from "@/lib/auth/context";
 import { daysInMonth, eachDay, iso, monthEnd, monthStart, periodName } from "@/lib/dates";
 import { num, round2 } from "@/lib/money";
+import { percentOfAmount, totalOf } from "@/lib/payroll/pay-inputs";
 import { fullName } from "@/lib/utils";
 import {
   calculateEmployeePayroll,
@@ -249,7 +250,7 @@ function recurringDeductionsFor(
     type: r.code,
     amount:
       r.calcType === "PERCENTAGE_OF_GROSS"
-        ? round2((totalEarnings * num(r.percentage)) / 100)
+        ? percentOfAmount(totalEarnings, num(r.percentage))
         : num(r.fixedAmount),
     authorityReference: r.code,
     reason: r.reason,
@@ -615,7 +616,7 @@ function recordRow(
 }
 
 function summarize(list: EngineResult[]) {
-  const s = (f: (r: EngineResult) => number) => round2(list.reduce((a, r) => a + f(r), 0));
+  const s = (f: (r: EngineResult) => number) => totalOf(list.map(f));
   return {
     employeeCount: list.length,
     totalGross: s((r) => r.totalEarnings),
