@@ -1,4 +1,5 @@
 import type { Ctx } from "@/lib/auth/context";
+import { SECURITY_ACTIONS } from "@/lib/auth/login-guard";
 import { db, toJson, type Tx } from "./_base";
 
 export interface AuditEntry {
@@ -30,11 +31,12 @@ export async function logAudit(ctx: Ctx, entry: AuditEntry, tx: Tx = db) {
 
 export async function listAudit(
   ctx: Ctx,
-  filter: { entity?: string; action?: string; q?: string; take?: number } = {},
+  filter: { entity?: string; action?: string; q?: string; security?: boolean; take?: number } = {},
 ) {
   return db.auditLog.findMany({
     where: {
       organizationId: ctx.orgId,
+      ...(filter.security ? { action: { in: [...SECURITY_ACTIONS] } } : {}),
       ...(filter.entity ? { entity: filter.entity } : {}),
       ...(filter.action ? { action: { contains: filter.action, mode: "insensitive" } } : {}),
       ...(filter.q

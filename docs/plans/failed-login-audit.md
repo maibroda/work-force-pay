@@ -1,6 +1,6 @@
 # Plan: audit failed logins and wrong two-factor codes (and close a two-factor guessing hole)
 
-**Status: a plan for the founder's "go". Nothing in it has been built.** Part A changes how sign-in works, and `CLAUDE.md` says a change to authentication, and a likely security weakness, must be reported to you before I fix anything. This is the third item on your priority list.
+**Status: approved by the founder ("A and B, my recommendations") and built on branch `failed-login-audit`; the answers taken were 1 yes (A first), 2 application log only, 3 same allowance (5 total, 15 minutes), 4 IP limits left until the host is chosen.** Part A changes how sign-in works, and `CLAUDE.md` says a change to authentication, and a likely security weakness, must be reported to you before I fix anything. This is the third item on your priority list.
 
 **Rule it serves:** rule 5 ("Security events are logged: logins, failures, approvals, exports, role changes, bank-detail changes, settings changes"; "MFA required for approve, export, settings and administrator roles"). It also touches rule 6 (never write secrets into logs) and rule 15 (honesty).
 

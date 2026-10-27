@@ -11,6 +11,8 @@ import { d, iso } from "@/lib/dates";
 import { twoFactorState } from "@/lib/two-factor-policy";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
+import { countLoginFailure, logUnknownAccount, logUnknownResetToken, recordAuthEvent, type AuthMeta } from "./auth-audit";
+import { isLocked } from "@/lib/auth/login-guard";
 import { todayUtc } from "./hr-policy";
 
 const RESET_TOKEN_TTL_MINUTES = 30;
@@ -24,9 +26,16 @@ function hashToken(token: string) {
 // ─────────────────────────────── Password reset ───────────────────────────────
 
 /** Always resolves — never reveals whether the email belongs to an account. */
-export async function requestPasswordReset(email: string) {
+export async function requestPasswordReset(email: string, meta: AuthMeta = {}) {
   const user = await db.user.findUnique({ where: { email: email.toLowerCase().trim() } });
-  if (!user || !user.active) return;
+  if (!user) {
+    logUnknownAccount("Password reset requested for an unknown account", email, meta);
+    return;
+  }
+  if (!user.active) {
+    await recordAuthEvent(user, "PASSWORD_RESET_REQUESTED", "ACCOUNT_INACTIVE", meta);
+    return;
+  }
   const token = crypto.randomBytes(32).toString("base64url");
   await db.passwordResetToken.create({
     data: {
@@ -36,6 +45,7 @@ export async function requestPasswordReset(email: string) {
       expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MINUTES * 60_000),
     },
   });
+  await recordAuthEvent(user, "PASSWORD_RESET_REQUESTED", null, meta);
   const resetUrl = `${process.env.APP_URL ?? "http://localhost:3000"}/reset-password?token=${token}`;
   await sendEmail({
     to: user.email,
@@ -66,14 +76,21 @@ export const resetPasswordSchema = z.object({
 });
 
 /** Consumes a single-use reset token, sets the new password, and logs out every existing session. */
-export async function resetPassword(raw: z.input<typeof resetPasswordSchema>) {
+export async function resetPassword(raw: z.input<typeof resetPasswordSchema>, meta: AuthMeta = {}) {
   const v = resetPasswordSchema.parse(raw);
   const record = await db.passwordResetToken.findUnique({
     where: { tokenHash: hashToken(v.token) },
     include: { user: true },
   });
-  if (!record || record.usedAt || record.expiresAt < new Date())
+  // The caller always gets the same message; the audit log (or, for a token nobody issued, the application log) records which it was.
+  if (!record) {
+    logUnknownResetToken(meta);
     throw new BusinessError("This reset link is invalid or has expired — request a new one.");
+  }
+  if (record.usedAt || record.expiresAt < new Date()) {
+    await recordAuthEvent(record.user, "PASSWORD_RESET_FAILED", record.usedAt ? "TOKEN_USED" : "TOKEN_EXPIRED", meta);
+    throw new BusinessError("This reset link is invalid or has expired — request a new one.");
+  }
   const passwordHash = await bcrypt.hash(v.password, 10);
   await db.$transaction([
     db.user.update({
@@ -104,7 +121,10 @@ export async function changeOwnPassword(ctx: Ctx, currentPassword: string, newPa
   if (newPassword.length < 8) throw new BusinessError("Password must be at least 8 characters.");
   const user = await db.user.findUniqueOrThrow({ where: { id: ctx.userId } });
   const ok = await bcrypt.compare(currentPassword, user.passwordHash);
-  if (!ok) throw new BusinessError("Current password is incorrect.");
+  if (!ok) {
+    await recordAuthEvent(user, "PASSWORD_CHANGE_FAILED", "WRONG_CURRENT_PASSWORD", { ip: ctx.ip });
+    throw new BusinessError("Current password is incorrect.");
+  }
   await db.user.update({
     where: { id: ctx.userId },
     data: { passwordHash: await bcrypt.hash(newPassword, 10), sessionVersion: { increment: 1 } },
@@ -180,8 +200,10 @@ export async function disableTotp(ctx: Ctx, code: string) {
   const user = await db.user.findUniqueOrThrow({ where: { id: ctx.userId } });
   if (!user.totpEnabled || !user.totpSecret)
     throw new BusinessError("Two-factor authentication is not enabled.");
-  if (totpFor(ctx.email, user.totpSecret).validate({ token: code, window: 1 }) === null)
+  if (totpFor(ctx.email, user.totpSecret).validate({ token: code, window: 1 }) === null) {
+    await recordAuthEvent(user, "TOTP_DISABLE_FAILED", "WRONG_CODE", { ip: ctx.ip });
     throw new BusinessError("Incorrect code.");
+  }
   await db.user.update({
     where: { id: ctx.userId },
     data: { totpEnabled: false, totpSecret: null, totpVerifiedAt: null, backupCodes: [] },
@@ -189,10 +211,22 @@ export async function disableTotp(ctx: Ctx, code: string) {
   await logAudit(ctx, { action: "TOTP_DISABLED", entity: "User", entityId: ctx.userId });
 }
 
-/** Login-time verification — accepts the current TOTP code or a single-use backup code. */
-export async function verifyTotpLogin(userId: string, code: string): Promise<boolean> {
+/**
+ * Login-time verification — accepts the current TOTP code or a single-use backup code.
+ * A wrong code counts on the same counter as a wrong password (five in total lock the account for 15 minutes), a locked or switched-off
+ * account is refused even with the right code, and every wrong code is recorded. Success does not clear the count: `completeSignIn` does.
+ */
+export async function verifyTotpLogin(userId: string, code: string, meta: AuthMeta = {}): Promise<boolean> {
   const user = await db.user.findUnique({ where: { id: userId } });
   if (!user || !user.totpEnabled || !user.totpSecret) return false;
+  if (!user.active) {
+    await recordAuthEvent(user, "TOTP_FAILED", "ACCOUNT_INACTIVE", meta, { step: "TOTP" });
+    return false;
+  }
+  if (isLocked(user.lockedUntil, new Date())) {
+    await recordAuthEvent(user, "TOTP_FAILED", "ACCOUNT_LOCKED", meta, { step: "TOTP" });
+    return false;
+  }
   if (totpFor(user.email, user.totpSecret).validate({ token: code, window: 1 }) !== null) return true;
   for (const hash of user.backupCodes) {
     if (await bcrypt.compare(code, hash)) {
@@ -207,6 +241,7 @@ export async function verifyTotpLogin(userId: string, code: string): Promise<boo
       return true;
     }
   }
+  await countLoginFailure(user, "TOTP", "WRONG_CODE", meta);
   return false;
 }
 

@@ -119,9 +119,17 @@ export default async function ReportPage({
           </>
         )}
         {type === "audit" && (
-          <FilterField label="Search">
-            <Input name="q" defaultValue={sp.q} placeholder="user, entity id, reason" />
-          </FilterField>
+          <>
+            <FilterField label="Show">
+              <Select name="kind" defaultValue={sp.kind ?? ""}>
+                <option value="">All changes</option>
+                <option value="security">Security events (sign-ins, failures, locks, passwords, two-factor)</option>
+              </Select>
+            </FilterField>
+            <FilterField label="Search">
+              <Input name="q" defaultValue={sp.q} placeholder="user, entity id, reason" />
+            </FilterField>
+          </>
         )}
       </FilterBar>
       <Section title={`${report.rows.filter((r) => !r._total).length} row(s)`} flush>

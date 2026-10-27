@@ -3,48 +3,42 @@ import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
-
-const MAX_FAILED_ATTEMPTS = 5;
-const LOCKOUT_MINUTES = 15;
+import { countLoginFailure, logUnknownAccount, recordAuthEvent, type AuthMeta } from "./auth-audit";
+import { isLocked } from "@/lib/auth/login-guard";
 
 /**
- * Returns null uniformly for "no such user", "wrong password", AND "account locked" — a locked
- * account never distinguishes itself from a bad password, so failed attempts can't be used to
- * enumerate which emails have accounts.
+ * Returns null uniformly for "no such user", "wrong password", "account locked" AND "account switched off" — none distinguishes
+ * itself from a bad password, so failed attempts can't be used to enumerate which emails have accounts.
+ * Every failure is recorded (audit log for a real account, application log for an unknown email).
+ * For an account with two-factor on, a correct password does NOT clear the failure count: only the whole sign-in succeeding does
+ * (`completeSignIn`), so wrong codes cannot be interleaved with right passwords to dodge the lock.
  */
-export async function authenticate(email: string, password: string) {
+export async function authenticate(email: string, password: string, meta: AuthMeta = {}) {
   const user = await db.user.findUnique({ where: { email: email.toLowerCase().trim() } });
-  if (!user || !user.active) return null;
-  if (user.lockedUntil && user.lockedUntil > new Date()) return null;
-  const ok = await bcrypt.compare(password, user.passwordHash);
-  if (!ok) {
-    const attempts = user.failedLoginAttempts + 1;
-    const locking = attempts >= MAX_FAILED_ATTEMPTS;
-    await db.user.update({
-      where: { id: user.id },
-      data: {
-        failedLoginAttempts: locking ? 0 : attempts,
-        lockedUntil: locking ? new Date(Date.now() + LOCKOUT_MINUTES * 60_000) : null,
-      },
-    });
-    if (locking)
-      await logAudit(
-        {
-          userId: user.id,
-          orgId: user.organizationId,
-          role: user.role,
-          name: user.name,
-          email: user.email,
-        },
-        { action: "ACCOUNT_LOCKED", entity: "User", entityId: user.id, newValue: { attempts } },
-      );
+  if (!user) {
+    logUnknownAccount("Sign-in attempt for an unknown account", email, meta);
     return null;
   }
-  await db.user.update({
-    where: { id: user.id },
-    data: { lastLoginAt: new Date(), failedLoginAttempts: 0, lockedUntil: null },
-  });
+  if (!user.active) {
+    await recordAuthEvent(user, "LOGIN_FAILED", "ACCOUNT_INACTIVE", meta, { step: "PASSWORD" });
+    return null;
+  }
+  if (isLocked(user.lockedUntil, new Date())) {
+    await recordAuthEvent(user, "LOGIN_FAILED", "ACCOUNT_LOCKED", meta, { step: "PASSWORD" });
+    return null;
+  }
+  const ok = await bcrypt.compare(password, user.passwordHash);
+  if (!ok) {
+    await countLoginFailure(user, "PASSWORD", "WRONG_PASSWORD", meta);
+    return null;
+  }
+  if (!user.totpEnabled) await completeSignIn(user.id);
   return user;
+}
+
+/** The whole sign-in has succeeded (password, and the two-factor code where it is on): clear the failure count and the lock, note the time. */
+export async function completeSignIn(userId: string) {
+  await db.user.update({ where: { id: userId }, data: { lastLoginAt: new Date(), failedLoginAttempts: 0, lockedUntil: null } });
 }
 
 export const userSchema = z.object({
