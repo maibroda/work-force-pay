@@ -141,7 +141,7 @@ describe("what the app can see for itself", () => {
     const w = await world();
     const p = await launchProgress(w.founder);
     expect(p.ready).toBe(false);
-    expect(p.total).toBe(10);
+    expect(p.total).toBe(11); // ten, plus the audit seal item added with the tamper-evident audit log
   });
 });
 
@@ -183,7 +183,7 @@ describe("what a person confirms", () => {
     await expect(launchChecklist(admin)).rejects.toThrow(/payroll bureau/);
     // a bureau member working inside a client still sees the bureau's list
     const inClient = { ...w.founder, orgId: w.client.id, homeOrgId: w.t.org.id };
-    expect((await launchChecklist(inClient, new Date(), GOOD_ENV)).total).toBe(10);
+    expect((await launchChecklist(inClient, new Date(), GOOD_ENV)).total).toBe(11);
   });
 });
 

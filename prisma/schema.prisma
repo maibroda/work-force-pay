@@ -572,6 +572,7 @@ model Organization {
   paymentTxns               PaymentTransaction[]
   remittances               StatutoryRemittance[]
   auditLogs                 AuditLog[]
+  auditSeals                AuditSeal[]
   leavePolicy               LeavePolicy?
   leaveRequests             LeaveRequest[]
   glAccounts                GlAccount[]
@@ -3893,11 +3894,33 @@ model AuditLog {
   reason         String?
   metadata       Json?
   createdAt      DateTime     @default(now())
+  /// The tamper-evidence seal (see AuditSeal); absent for a few minutes after the row is written.
+  seal           AuditSeal?
 
   @@index([organizationId, createdAt])
   @@index([organizationId, entity, entityId])
 }
 
+/// One seal per audit row (rule 5: tamper-evident): SHA-256 of the row's canonical content, chained to the previous seal of the same organization
+/// by an HMAC under AUDIT_SEAL_KEY. Append-only at the database. docs/plans/tamper-evident-audit-log.md.
+model AuditSeal {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  /// 1, 2, 3 ... per organization; unique, so two sealers at once cannot both succeed.
+  seq            Int
+  auditLogId     String       @unique
+  auditLog       AuditLog     @relation(fields: [auditLogId], references: [id], onDelete: Restrict)
+  contentHash    String
+  prevHash       String
+  chainHash      String
+  sealedAt       DateTime     @default(now())
+  /// Sealed long after the row was written (the log's history from before sealing began).
+  sealedLate     Boolean      @default(false)
+
+  @@unique([organizationId, seq])
+  @@index([organizationId, sealedAt])
+}
 
 // ─────────────────────────────── LEAVE ───────────────────────────────
 

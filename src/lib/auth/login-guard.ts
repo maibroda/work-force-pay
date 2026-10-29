@@ -51,4 +51,9 @@ export const SECURITY_ACTIONS = [
   "TOTP_DISABLE_FAILED",
   "TOTP_BACKUP_CODE_USED",
   "TWO_FACTOR_RESET",
+  // the audit log's own integrity (docs/plans/tamper-evident-audit-log.md)
+  "AUDIT_INTEGRITY_FAILED",
+  "AUDIT_INTEGRITY_CHECK",
+  "AUDIT_REDACTION",
+  "AUDIT_ANCHOR_SENT",
 ] as const;
