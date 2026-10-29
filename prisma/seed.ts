@@ -166,8 +166,8 @@ async function seedStatutory(orgId: string) {
       code: "NG-PAYE-NTA2025",
       name: "Nigeria PAYE — Nigeria Tax Act 2025",
       version: "2026.1",
-      // PAYE filing dates and penalty: the founder's starting values (his PAYE seed file), NOT verified by the tax adviser
-      payeDueDay: 10,
+      // PAYE filing dates and penalty: the founder's starting values (due on the 7th of the next month), NOT verified by the tax adviser
+      payeDueDay: 7,
       annualReturnMonth: 1,
       annualReturnDay: 31,
       latePenaltyPct: 10,

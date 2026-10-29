@@ -105,8 +105,8 @@ describe("effective dates that overlap", () => {
 });
 
 describe("the default filing dates and penalty (supplied by the founder, NOT verified by the tax adviser)", () => {
-  it("are the values in the founder's own PAYE seed file: the 10th of the next month, 31 January, 10%", () => {
-    expect(FOUNDER_FILING_DEFAULTS).toEqual({ dueDay: 10, annualReturnMonth: 1, annualReturnDay: 31, latePenaltyPct: 10 });
+  it("are the values in the founder's own PAYE seed file: the 7th of the next month, 31 January, 10%", () => {
+    expect(FOUNDER_FILING_DEFAULTS).toEqual({ dueDay: 7, annualReturnMonth: 1, annualReturnDay: 31, latePenaltyPct: 10 });
     expect(validateTiming(FOUNDER_FILING_DEFAULTS)).toEqual([]);
   });
   it("are proposed only when the rule has none of its own: any value already set is kept as it is", () => {
