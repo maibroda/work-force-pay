@@ -112,16 +112,16 @@ export function monthEndDue(year: number, month: number): string {
 }
 
 /**
- * Due date, lateness and penalty for a remittance line. PAYE follows the tax rule's filing dates (see payeDueInfo). The employee's NHF contribution is
- * remitted to the appropriate authority by the END OF THE PAY MONTH (the founder's rule; to be confirmed by the tax adviser) and carries no penalty here.
- * `line.type` is "PAYE", "NHF" (the employee NHF line) or anything else, which gets no date.
+ * Due date, lateness and penalty for a remittance line. PAYE follows the tax rule's filing dates (see payeDueInfo). The employee's NHF contribution and the
+ * PENSION remittance are remitted by the END OF THE PAY MONTH (the founder's rule, 2026-10-29; to be confirmed by the tax adviser) and carry no penalty here.
+ * `line.type` is "PAYE", "NHF" (the employee NHF line), "PENSION", or anything else, which gets no date.
  */
 export function remittanceDueInfo(
   line: { type: string; status: string; totalAmount: number; period: { year: number; month: number } },
   timing: PayeTiming | null,
   today: string,
 ): DueInfo {
-  if (line.type !== "NHF") return payeDueInfo(line, timing, today);
+  if (line.type !== "NHF" && line.type !== "PENSION") return payeDueInfo(line, timing, today);
   const dueDate = monthEndDue(line.period.year, line.period.month);
   const late = line.status !== "PAID" && toMs(today) > toMs(dueDate);
   return { dueDate, overdue: late, daysLate: late ? Math.round((toMs(today) - toMs(dueDate)) / DAY_MS) : 0, penalty: null };
