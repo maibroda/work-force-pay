@@ -5872,6 +5872,15 @@ model CrmOpportunity {
   ownerName            String
   /// The lead this deal came from, if it came from one.
   fromLeadId           String?
+  /// What happens next on this deal; required every time it moves.
+  nextStep             String?
+  lostReason           CrmLostReason?
+  lostReasonDetail     String?
+  competitor           String?
+  wonAt                DateTime?
+  lostAt               DateTime?
+  /// When the deal entered its current stage (days in stage on the board).
+  stageEnteredAt       DateTime           @default(now())
   status               CrmRecordStatus    @default(ACTIVE)
   lastActivityAt       DateTime           @default(now())
   voidedAt             DateTime?
@@ -5921,4 +5930,14 @@ model CrmAssignmentRule {
   createdAt      DateTime          @default(now())
 
   @@unique([organizationId, kind, keyNorm])
+}
+
+enum CrmLostReason {
+  PRICE
+  QUALITY
+  RELATIONSHIP
+  INCUMBENT_RETAINED
+  NO_DECISION
+  BUDGET
+  OTHER
 }
