@@ -131,3 +131,18 @@ describe("the employee NHF is remitted by the end of the pay month", () => {
     expect(remittanceDueInfo(line("PAID"), null, "2028-03-01").overdue).toBe(false);
   });
 });
+
+describe("the pension remittance is due at the end of the pay month too (founder, 2026-10-29)", () => {
+  const line = (status: string, type = "PENSION") => ({ type, status, totalAmount: 250000, period: { year: 2027, month: 11 } });
+  it("has the last day of the pay month as its due date, is late from the next day, and carries no penalty", () => {
+    expect(remittanceDueInfo(line("PENDING"), null, "2027-11-30")).toEqual({ dueDate: "2027-11-30", overdue: false, daysLate: 0, penalty: null });
+    expect(remittanceDueInfo(line("PENDING"), null, "2027-12-03")).toEqual({ dueDate: "2027-11-30", overdue: true, daysLate: 3, penalty: null });
+    expect(remittanceDueInfo(line("PAID"), null, "2028-03-01").overdue).toBe(false);
+  });
+  it("does not depend on the PAYE tax rule's dates, and leaves the other kinds of remittance without a date", () => {
+    const paye = { dueDay: 10, annualReturnMonth: 1, annualReturnDay: 31, latePenaltyPct: 10 };
+    expect(remittanceDueInfo(line("PENDING"), paye, "2027-12-03").penalty).toBeNull();
+    expect(remittanceDueInfo(line("PENDING", "ITF"), null, "2028-03-01")).toEqual({ dueDate: null, overdue: false, daysLate: 0, penalty: null });
+    expect(remittanceDueInfo(line("PENDING", "PAYE"), paye, "2027-12-05").dueDate).toBe("2027-12-10"); // PAYE still follows its rule
+  });
+});

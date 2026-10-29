@@ -293,7 +293,7 @@ export async function listRemittances(ctx: Ctx, opts: { runId?: string; type?: s
 
 /**
  * Due date, lateness and penalty of PAYE remittance lines, from the tax rule each payroll was calculated under (its filing dates are rule data).
- * A rule with no due day gives no date, and nothing is ever overdue. Other kinds of remittance get nothing.
+ * A rule with no due day gives no date, and nothing is ever overdue. Pension lines and the employee NHF line are due at the end of the pay month. Other kinds of remittance get nothing.
  */
 export async function remittanceTiming(
   ctx: Ctx,
@@ -302,6 +302,9 @@ export async function remittanceTiming(
 ): Promise<Map<string, DueInfo>> {
   const out = new Map<string, DueInfo>();
   const paye = rows.filter((r) => r.type === "PAYE");
+  // pension lines are due at the end of the pay month, whatever the tax rule says
+  for (const r of rows.filter((x) => x.type === "PENSION"))
+    out.set(r.id, remittanceDueInfo({ type: "PENSION", status: r.status, totalAmount: num(r.totalAmount as never), period: r.run.period }, null, today));
   // the employee's NHF is due at the end of the pay month whatever the tax rule says
   for (const r of rows.filter((x) => x.type === "NHF_MEDICAL" && x.payee === NHF_EMPLOYEE_PAYEE))
     out.set(r.id, remittanceDueInfo({ type: "NHF", status: r.status, totalAmount: num(r.totalAmount as never), period: r.run.period }, null, today));
