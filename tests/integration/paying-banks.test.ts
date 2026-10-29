@@ -135,7 +135,7 @@ describe("paying banks: the file", () => {
     expect(s.rows[0]).toEqual(["DebitAccountNo", "CreditAccountNo", "CreditBankCode", "BeneficiaryName", "Narration", "Amount"]);
     expect(s.rows).toHaveLength(3);
     const r = s.rows.find((x) => x[1] === "0123456789")!;
-    expect(r).toEqual(["3000000001", "0123456789", "221", "STAFF NUMBER1", "Salary October 2026", 100000.5]);
+    expect(r).toEqual(["3000000001", "0123456789", "221", "STAFF NUMBER1", "PAYMENT FOR OCTOBER 2026", 100000.5]);
     expect(typeof r[0]).toBe("string");
     expect(f.fileName).toBe("first-bank-payment-October-2026.xlsx");
     // the record names the bank, the list version and the headers the file used
@@ -148,7 +148,7 @@ describe("paying banks: the file", () => {
     const f = await exportPaymentFile(w.fin, w.run.id, { payingBankId: access.id }); // Access's template has no debit account, so none is needed
     const s = await sheet(f.buffer);
     expect(s.rows[0]).toEqual(["Beneficiary name", "bank code", "account number", "amount", "narration"]);
-    expect(s.rows.find((x) => x[2] === "0123456789")).toEqual(["STAFF NUMBER1", "039", "0123456789", 100000.5, "Salary October 2026"]);
+    expect(s.rows.find((x) => x[2] === "0123456789")).toEqual(["STAFF NUMBER1", "039", "0123456789", 100000.5, "PAYMENT FOR OCTOBER 2026"]);
     expect(f.fileName).toBe("access-bank-payment-October-2026.xlsx");
     expect(f.record).toMatchObject({ codeSetVersion: 1, layoutHeaders: "Beneficiary name|bank code|account number|amount|narration" });
   });

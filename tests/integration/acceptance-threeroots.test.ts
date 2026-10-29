@@ -218,7 +218,7 @@ describe("5. Payslips, register, bank file and remittance schedule export correc
       const row = ws.getRow(i).values as unknown[];
       expect(String(row[2])).toMatch(/^\d{10}$/);
       expect(String(row[3])).toMatch(/^\d{3}$/);
-      expect(row[5]).toBe("Salary October 2026");
+      expect(row[5]).toBe("PAYMENT FOR OCTOBER 2026");
       total += row[4] as number;
     }
     expect(total).toBeCloseTo(Number(run.totalNet), 2);

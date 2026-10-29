@@ -95,7 +95,8 @@ export async function paymentFilePreview(ctx: Ctx, runId: string, opts: { paying
   }));
   const using = opts.payingBankId ? await payingBankForFile(ctx, opts.payingBankId) : null;
   const banks = using ? [] : (await bankList(db, ctx.orgId)).filter((b) => b.active);
-  const description = `${run.type === "SUPPLEMENTARY" ? "Salary adjustment" : "Salary"} ${run.period.name}`;
+  // the narration on every row names the month the payment is for, in capitals
+  const description = `PAYMENT FOR ${run.period.name.toUpperCase()}${run.type === "SUPPLEMENTARY" ? " (ADJUSTMENT)" : ""}`;
   const built = buildPaymentRows(lines, banks as BankEntry[], description, using?.lookup);
   const alreadyPaid = run.status === "PAID" || (await db.paymentBatch.count({ where: { runId, status: "PAID" } })) > 0;
   const blockers = [...(using?.blockers ?? [])];

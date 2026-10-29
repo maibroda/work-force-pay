@@ -54,7 +54,7 @@ describe("the bank payment file", () => {
     expect(p.problems).toEqual([]);
     expect(p.rows).toHaveLength(3);
     expect(p.total).toBe(295200.75);
-    expect(p.description).toBe("Salary October 2026");
+    expect(p.description).toBe("PAYMENT FOR OCTOBER 2026");
 
     const f = await exportPaymentFile(w.fin, w.run.id);
     expect(f.fileName).toBe("bank-payment-October-2026.xlsx");
@@ -65,7 +65,7 @@ describe("the bank payment file", () => {
     expect(ws.rowCount).toBe(4);
     const rows = [2, 3, 4].map((i) => (ws.getRow(i).values as unknown[]).slice(1));
     const gt = rows.find((r) => r[2] === "058")!;
-    expect(gt).toEqual(["STAFF NUMBER1", "0123456789", "058", 95200.5, "Salary October 2026"]); // leading zero survives; amount is a number
+    expect(gt).toEqual(["STAFF NUMBER1", "0123456789", "058", 95200.5, "PAYMENT FOR OCTOBER 2026"]); // leading zero survives; amount is a number
     expect(typeof gt[1]).toBe("string");
     expect(rows.find((r) => r[2] === "033")?.[0]).toBe("Staff Number3"); // no account name: the employee's
     expect(rows.reduce((a, r) => a + (r[3] as number), 0)).toBeCloseTo(295200.75, 2);
@@ -116,6 +116,15 @@ describe("the bank payment file", () => {
     await expect(paymentFilePreview(x.t.ctx("FINANCE", null, 2), w.run.id)).rejects.toThrow(/Payroll run not found/); // another organization's run
     await markBatchPaid(x.fin, x.batches[0].id);
     await expect(exportPaymentFile(x.fin, x.run.id)).rejects.toThrow(/already been marked paid/);
+  });
+
+  it("puts the month the payment is for in capitals in every narration, and marks an adjustment", async () => {
+    const w = await world([{ bank: "GTBank", account: "0123456789", net: 1000 }]);
+    expect((await paymentFilePreview(w.fin, w.run.id)).description).toBe("PAYMENT FOR OCTOBER 2026");
+    await db.payrollRun.update({ where: { id: w.run.id }, data: { type: "SUPPLEMENTARY" } });
+    const p = await paymentFilePreview(w.fin, w.run.id);
+    expect(p.description).toBe("PAYMENT FOR OCTOBER 2026 (ADJUSTMENT)");
+    expect(p.rows[0].description).toBe("PAYMENT FOR OCTOBER 2026 (ADJUSTMENT)");
   });
 
   it("warns, without dropping anyone, when two people share an account", async () => {
