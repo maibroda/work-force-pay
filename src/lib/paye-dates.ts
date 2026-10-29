@@ -93,11 +93,11 @@ export function overlappingVersion<T extends { effectiveFrom: Date; effectiveTo:
 }
 
 /**
- * The starting values for a rule's filing dates and penalty: the 10th of the next month, 31 January, 10%. They come from the founder's own PAYE seed file
- * ("published summaries", marked there as unverified) and have NOT been verified by the tax adviser. They are only a starting point: they are proposed when a
+ * The starting values for a rule's filing dates and penalty: the 7th of the next month (the founder, 2026-10-29; his PAYE seed file had the 10th), 31 January, 10%.
+ * They come from the founder and have NOT been verified by the tax adviser. They are only a starting point: they are proposed when a
  * rule has none of its own, shown as such, and can be changed or cleared in the new-version form. A rule only counts as verified once HR and Finance sign it.
  */
-export const FOUNDER_FILING_DEFAULTS: PayeTiming = { dueDay: 10, annualReturnMonth: 1, annualReturnDay: 31, latePenaltyPct: 10 };
+export const FOUNDER_FILING_DEFAULTS: PayeTiming = { dueDay: 7, annualReturnMonth: 1, annualReturnDay: 31, latePenaltyPct: 10 };
 
 /** The timing to put in a new-version form: the rule's own values if it has any, otherwise the founder's starting values (`proposed` says which). */
 export function filingDefaultsFor(current: PayeTiming): PayeTiming & { proposed: boolean } {
