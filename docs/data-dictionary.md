@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-165 tables and 125 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+166 tables and 125 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -51,6 +51,7 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | paymentTxns | → PaymentTransaction[] |  |  |
 | remittances | → StatutoryRemittance[] |  |  |
 | auditLogs | → AuditLog[] |  |  |
+| auditSeals | → AuditSeal[] |  |  |
 | leavePolicy | → LeavePolicy |  |  |
 | leaveRequests | → LeaveRequest[] |  |  |
 | glAccounts | → GlAccount[] |  |  |
@@ -2907,6 +2908,25 @@ One imported bank statement line. Positive amount = money in, negative = money o
 | reason | String |  |  |
 | metadata | Json |  |  |
 | createdAt | DateTime |  |  |
+| seal | → AuditSeal |  | The tamper-evidence seal (see AuditSeal); absent for a few minutes after the row is written. |
+
+### AuditSeal
+
+One seal per audit row (rule 5: tamper-evident): SHA-256 of the row's canonical content, chained to the previous seal of the same organization by an HMAC under AUDIT_SEAL_KEY. Append-only at the database. docs/plans/tamper-evident-audit-log.md.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| seq | Int | yes | 1, 2, 3 ... per organization; unique, so two sealers at once cannot both succeed. |
+| auditLogId | String | yes | (unique) |
+| auditLog | → AuditLog |  |  |
+| contentHash | String | yes |  |
+| prevHash | String | yes |  |
+| chainHash | String | yes |  |
+| sealedAt | DateTime |  |  |
+| sealedLate | Boolean |  | Sealed long after the row was written (the log's history from before sealing began). |
 
 ### LeavePolicy
 

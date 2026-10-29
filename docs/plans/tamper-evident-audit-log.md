@@ -1,6 +1,8 @@
 # Plan: a tamper-evident audit log
 
-**Status: a plan for the founder's "go". Nothing in it has been built.** It touches the audit module, needs a migration, a new secret and a scheduled job, so `CLAUDE.md` says it waits for your "go" (rules 5, 7, 10, 14).
+**Status: built on branch `paye-by-state` (with plan #81), with the recommendations taken: sealing job, `AUDIT_SEAL_KEY` from the environment, one chain per organization, existing rows sealed late, the redaction rule of 3.5, weekly head to everyone who can view the audit log, the screen for the same people. Differences from the plan: (1) after the first run the sealer only looks at rows from just before the last sealed one (15 minutes), because scanning the whole log every minute took 6.6 minutes to seal 100,000 entries; an older unsealed entry is therefore NOT sealed quietly, it shows as "stalled" until someone seals everything on purpose, which then shows it as back-dated; (2) a declared redaction carries a keyed proof, so an entry inserted by an attacker cannot excuse an edit; (3) four audit actions join the Security events filter.**
+
+*Original status:* a plan for the founder's "go". Nothing in it had been built. It touches the audit module, needs a migration, a new secret and a scheduled job, so `CLAUDE.md` says it waits for your "go" (rules 5, 7, 10, 14).
 
 **Rule it serves:** rule 5: "Audit log is append-only and tamper-evident; no application role can update or delete entries." Today the first half is done (a database trigger refuses any change or delete, tested) and the second is not: `docs/rules-conformity.md` records that the log has no hash chain or signature, so an altered or removed row would not be detectable. This is the next item after the three on your priority list.
 
