@@ -54,7 +54,8 @@ describe("paying banks: setting one up", () => {
     expect(f.latest).toMatchObject({ version: 1, entryCount: 651, blockedCount: 14 });
     expect(f.hasLayout).toBe(true);
     expect(a.latest?.blockedCount).toBe(6);
-    expect(a.hasLayout).toBe(false); // Access Bank's upload template has not been supplied
+    expect(a.hasLayout).toBe(true);
+    expect(a.layout?.columns.map((c) => c.header)).toEqual(["Beneficiary name", "bank code", "account number", "amount", "narration"]); // Access Bank's template as supplied
     expect(f.latest?.sourceSha256).toMatch(/^[0-9a-f]{64}$/);
     expect(await db.auditLog.count({ where: { organizationId: t.org.id, action: { in: ["PAYING_BANK_CREATE", "BANK_CODE_SET_IMPORT"] } } })).toBe(4);
     await expect(createPayingBank(fin, { name: "first bank" })).rejects.toThrow(/already/);
@@ -115,8 +116,7 @@ describe("paying banks: the file", () => {
   it("uses each bank's own code for the same employee bank: Stanbic is 039 for Access and 221 for First Bank", async () => {
     const w = await world(staff);
     const first = await createPayingBank(w.fin, { name: "First Bank", builtIn: "FIRST_BANK", debitAccountNumber: "3000000001" });
-    const access = await createPayingBank(w.fin, { name: "Access Bank", builtIn: "ACCESS_BANK", debitAccountNumber: "3000000002" });
-    await savePayingBank(w.fin, { id: access.id, layoutText: "DebitAccount = DEBIT_ACCOUNT\nAccount = CREDIT_ACCOUNT\nBank = BANK_CODE\nName = BENEFICIARY_NAME\nAmount = AMOUNT\nNarration = NARRATION" });
+    const access = await createPayingBank(w.fin, { name: "Access Bank", builtIn: "ACCESS_BANK" });
     const pf = await paymentFilePreview(w.fin, w.run.id, { payingBankId: first.id });
     const pa = await paymentFilePreview(w.fin, w.run.id, { payingBankId: access.id });
     expect(pf.problems).toEqual([]);
@@ -140,6 +140,17 @@ describe("paying banks: the file", () => {
     expect(f.fileName).toBe("first-bank-payment-October-2026.xlsx");
     // the record names the bank, the list version and the headers the file used
     expect(f.record).toMatchObject({ payingBankId: first.id, codeSetVersion: 1, layoutHeaders: "DebitAccountNo|CreditAccountNo|CreditBankCode|BeneficiaryName|Narration|Amount" });
+  });
+
+  it("writes Access Bank's five headers in its order, with no debit account, text accounts and codes, and a numeric amount", async () => {
+    const w = await world(staff);
+    const access = await createPayingBank(w.fin, { name: "Access Bank", builtIn: "ACCESS_BANK" });
+    const f = await exportPaymentFile(w.fin, w.run.id, { payingBankId: access.id }); // Access's template has no debit account, so none is needed
+    const s = await sheet(f.buffer);
+    expect(s.rows[0]).toEqual(["Beneficiary name", "bank code", "account number", "amount", "narration"]);
+    expect(s.rows.find((x) => x[2] === "0123456789")).toEqual(["STAFF NUMBER1", "039", "0123456789", 100000.5, "Salary October 2026"]);
+    expect(f.fileName).toBe("access-bank-payment-October-2026.xlsx");
+    expect(f.record).toMatchObject({ codeSetVersion: 1, layoutHeaders: "Beneficiary name|bank code|account number|amount|narration" });
   });
 
   it("keeps the version a past file used when a newer list arrives", async () => {
@@ -168,8 +179,8 @@ describe("paying banks: the file", () => {
 
   it("refuses, saying why, when the bank has no layout, no debit account, an inactive profile, too long a narration or too many rows", async () => {
     const w = await world(staff);
-    const access = await createPayingBank(w.fin, { name: "Access Bank", builtIn: "ACCESS_BANK" });
-    await expect(exportPaymentFile(w.fin, w.run.id, { payingBankId: access.id })).rejects.toThrow(/upload template.*not been set up/i);
+    const unset = await createPayingBank(w.fin, { name: "Some Other Bank" }); // a bank whose upload template is not known yet
+    await expect(exportPaymentFile(w.fin, w.run.id, { payingBankId: unset.id })).rejects.toThrow(/upload template.*not been set up/i);
 
     const first = await createPayingBank(w.fin, { name: "First Bank", builtIn: "FIRST_BANK" });
     await expect(exportPaymentFile(w.fin, w.run.id, { payingBankId: first.id })).rejects.toThrow(/debit account/i);

@@ -8,12 +8,12 @@ import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { normalizeBankName } from "@/lib/bank-codes";
 import { BUILT_IN_CODE_LISTS, type BuiltInListKey } from "@/lib/bank-code-lists";
-import { addKnownAliases, FIRST_BANK_LAYOUT, parseCodeList, parseLayoutText, resolveInList, validateLayout, type ParsedCode, type PayingLayout } from "@/lib/paying-bank";
+import { ACCESS_BANK_LAYOUT, addKnownAliases, FIRST_BANK_LAYOUT, parseCodeList, parseLayoutText, resolveInList, validateLayout, type ParsedCode, type PayingLayout } from "@/lib/paying-bank";
 import type { BankLookup } from "@/lib/payment-file";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
 
-const BUILT_IN_LAYOUTS: Partial<Record<BuiltInListKey, PayingLayout>> = { FIRST_BANK: FIRST_BANK_LAYOUT };
+const BUILT_IN_LAYOUTS: Partial<Record<BuiltInListKey, PayingLayout>> = { ACCESS_BANK: ACCESS_BANK_LAYOUT, FIRST_BANK: FIRST_BANK_LAYOUT };
 
 const account = z.string().trim().regex(/^\d{10}$/, "The debit account number must be 10 digits.");
 

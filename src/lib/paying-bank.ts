@@ -132,6 +132,21 @@ export const FIRST_BANK_LAYOUT: PayingLayout = {
   maxRows: null,
 };
 
+/** Access Bank's upload template as supplied (a screenshot of its header row): five columns, bank code BEFORE account number, no debit account. */
+export const ACCESS_BANK_LAYOUT: PayingLayout = {
+  fileType: "XLSX",
+  sheetName: "Sheet1",
+  columns: [
+    { header: "Beneficiary name", source: "BENEFICIARY_NAME" },
+    { header: "bank code", source: "BANK_CODE" },
+    { header: "account number", source: "CREDIT_ACCOUNT" },
+    { header: "amount", source: "AMOUNT" },
+    { header: "narration", source: "NARRATION" },
+  ],
+  narrationMax: null,
+  maxRows: null,
+};
+
 /** The generic layout the app has always produced. */
 export const GENERIC_LAYOUT: PayingLayout = {
   fileType: "XLSX",

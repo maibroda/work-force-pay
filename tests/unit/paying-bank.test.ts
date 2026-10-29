@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { BUILT_IN_CODE_LISTS } from "@/lib/bank-code-lists";
 import {
+  ACCESS_BANK_LAYOUT,
   addKnownAliases,
   FIRST_BANK_LAYOUT,
   GENERIC_LAYOUT,
@@ -136,6 +137,14 @@ describe("file layouts, as data", () => {
     expect(validateLayout(FIRST_BANK_LAYOUT)).toEqual([]);
     expect(validateLayout(GENERIC_LAYOUT)).toEqual([]);
     expect(GENERIC_LAYOUT.columns.map((c) => c.header)).toEqual(["Name", "Account Number", "Bank Code", "Amount", "Payment Description"]);
+  });
+
+  it("Access Bank's layout is exactly the five headers of its upload template, in order: bank code BEFORE account number, and no debit account", () => {
+    expect(ACCESS_BANK_LAYOUT.columns.map((c) => c.header)).toEqual(["Beneficiary name", "bank code", "account number", "amount", "narration"]);
+    expect(validateLayout(ACCESS_BANK_LAYOUT)).toEqual([]);
+    const cells = layoutCells(ACCESS_BANK_LAYOUT, [{ transactionId: "t1", name: "STAFF ONE", accountNumber: "0123456789", bankCode: "039", amount: 95200.5, description: "Salary October 2026" }], null);
+    expect(cells.body).toEqual([["STAFF ONE", "039", "0123456789", 95200.5, "Salary October 2026"]]);
+    expect(cells.textColumns).toEqual([1, 2]);
   });
 
   it("builds First Bank's rows: the debit account on every row, accounts and codes as text (leading zeros kept), the amount as a number", () => {
