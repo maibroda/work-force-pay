@@ -1383,8 +1383,10 @@ model PayingBank {
   createdBy          String
   createdAt          DateTime     @default(now())
 
-  codeSets BankCodeSet[]
-  exports  PaymentFileExport[]
+  codeSets     BankCodeSet[]
+  exports      PaymentFileExport[]
+  employees    Employee[]
+  transactions PaymentTransaction[]
 
   @@unique([organizationId, name])
 }
@@ -1861,6 +1863,9 @@ model Employee {
   importBatch        EmployeeImportBatch? @relation(fields: [importBatchId], references: [id])
   clientInputRows    ClientInputRow[]
   employeeNumber     String
+  /// The paying bank this person's salary is paid from. Empty = the organization's default paying bank. It is copied onto the payment when the payment batches are made.
+  payingBankId       String?
+  payingBank         PayingBank?          @relation(fields: [payingBankId], references: [id])
   firstName          String
   middleName         String?
   lastName           String
@@ -3395,6 +3400,9 @@ model PaymentTransaction {
   bankName       String?
   accountNumber  String?
   accountName    String?
+  /// The paying bank this payment is made from, fixed when the batches are made. Empty = the default paying bank.
+  payingBankId   String?
+  payingBank     PayingBank?   @relation(fields: [payingBankId], references: [id])
   status         PaymentStatus @default(PENDING)
   bankReference  String?
   reconciled     Boolean       @default(false)
