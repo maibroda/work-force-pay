@@ -31,8 +31,10 @@ describe("the sales module switch", () => {
     await expect(updateSalesSetting(w.repA, { enabled: true })).rejects.toThrow(/permission/);
     await updateSalesSetting(w.admin, { enabled: true, mode: "SIMPLE" });
     expect(await getSalesSetting(w.admin)).toMatchObject({ enabled: true, mode: "SIMPLE" });
+    await expect(createLead(w.repA, lead)).rejects.toThrow(/simple mode/i); // in simple mode enquiries go straight to deals
+    await updateSalesSetting(w.admin, { mode: "CLASSIC" });
     await createLead(w.repA, lead); // now it works
-    expect(await db.auditLog.count({ where: { organizationId: w.t.org.id, action: "SALES_SETTING_UPDATE" } })).toBe(1);
+    expect(await db.auditLog.count({ where: { organizationId: w.t.org.id, action: "SALES_SETTING_UPDATE" } })).toBe(2); // switched on, then back to classic mode
     // switching it off again stops everything, and keeps what was entered
     await updateSalesSetting(w.admin, { enabled: false });
     await expect(listLeads(w.admin)).rejects.toThrow(/switched off/);

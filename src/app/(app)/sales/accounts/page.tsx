@@ -92,6 +92,7 @@ export default async function SalesAccountsPage() {
               { name: "source", label: "Source", type: "select", options: [{ value: "", label: "—" }, ...SOURCES.map((s) => ({ value: s, label: label(s) }))] },
               { name: "rcNumber", label: "RC number" },
               { name: "emailDomain", label: "Company email domain (for example acme.com)" },
+              { name: "createAnyway", label: "Create anyway if it looks like a duplicate", type: "checkbox" },
             ]}
           />
         </Section>
