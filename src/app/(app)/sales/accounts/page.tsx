@@ -51,7 +51,11 @@ export default async function SalesAccountsPage() {
             <TBody>
               {accounts.map((a) => (
                 <TR key={a.id}>
-                  <TD>{a.name}</TD>
+                  <TD>
+                    <Link className="underline" href={`/sales/accounts/${a.id}`}>
+                      {a.name}
+                    </Link>
+                  </TD>
                   <TD>
                     <Badge tone={a.accountType === "CLIENT" ? "green" : undefined}>{label(a.accountType)}</Badge>
                   </TD>
