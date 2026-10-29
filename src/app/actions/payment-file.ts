@@ -62,3 +62,14 @@ export async function assignPayingBankAction(v: V) {
     ["/payments/paying-banks", "/payments/bank-file"],
   );
 }
+
+export async function confirmBlockedEntryAction(v: V) {
+  return act(
+    "payment.manage",
+    async (ctx) => {
+      const set = await pb.confirmBlockedEntry(ctx, String(v.payingBankId), String(v.entryId), { code: String(v.code ?? ""), note: String(v.note ?? "") });
+      return { message: `Code applied. Saved as version ${set.version}.` };
+    },
+    ["/payments/paying-banks", "/payments/bank-file"],
+  );
+}

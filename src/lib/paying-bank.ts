@@ -116,7 +116,7 @@ export interface PayingLayout {
   maxRows: number | null;
 }
 
-/** First Bank's upload template, exactly as supplied: six headers, no sample row. Amount and narration rules are the founder's to confirm. */
+/** First Bank's upload template, exactly as supplied: six headers, no sample row. Limits as given by the founder (2026-10-29): narration 25 characters, 1,000 rows a file; amounts to two decimals. */
 export const FIRST_BANK_LAYOUT: PayingLayout = {
   fileType: "XLSX",
   sheetName: "Sheet1",
@@ -128,8 +128,8 @@ export const FIRST_BANK_LAYOUT: PayingLayout = {
     { header: "Narration", source: "NARRATION" },
     { header: "Amount", source: "AMOUNT" },
   ],
-  narrationMax: null,
-  maxRows: null,
+  narrationMax: 25,
+  maxRows: 1000,
 };
 
 /** Access Bank's upload template as supplied (a screenshot of its header row): five columns, bank code BEFORE account number, no debit account. */
@@ -143,9 +143,27 @@ export const ACCESS_BANK_LAYOUT: PayingLayout = {
     { header: "amount", source: "AMOUNT" },
     { header: "narration", source: "NARRATION" },
   ],
-  narrationMax: null,
-  maxRows: null,
+  narrationMax: 25,
+  maxRows: 1000,
 };
+
+const MONTH_NAMES = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
+
+/**
+ * The narration on every row of a bank file: `PAYMENT FOR <MONTH YEAR>` in capitals (an adjustment run adds ` (ADJUSTMENT)`). When the bank limits the narration and the
+ * full text is too long (September is 26 characters against a limit of 25), the month is cut to its three letters (`PAYMENT FOR SEP 2026`, an adjustment `... ADJ`);
+ * if even that does not fit, a problem is returned and the file is not made, rather than a narration being cut off mid-word.
+ */
+export function narrationFor(periodName: string, adjustment: boolean, max: number | null): { text: string } | { problem: string } {
+  const name = periodName.trim().toUpperCase().replace(/\s+/g, " ");
+  const full = `PAYMENT FOR ${name}${adjustment ? " (ADJUSTMENT)" : ""}`;
+  if (max === null || full.length <= max) return { text: full };
+  const [first, ...rest] = name.split(" ");
+  const short = MONTH_NAMES.includes(first) ? [first.slice(0, 3), ...rest].join(" ") : null;
+  const tries = short ? (adjustment ? [`PAYMENT FOR ${short} (ADJ)`, `PAYMENT FOR ${short} ADJ`] : [`PAYMENT FOR ${short}`]) : [];
+  const fit = tries.find((t) => t.length <= max);
+  return fit ? { text: fit } : { problem: `The narration "${full}" is ${full.length} characters and cannot be shortened to fit the bank's limit of ${max} characters.` };
+}
 
 /** The generic layout the app has always produced. */
 export const GENERIC_LAYOUT: PayingLayout = {
