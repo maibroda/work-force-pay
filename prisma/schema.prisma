@@ -630,6 +630,8 @@ model Organization {
   calendarSetting           PayrollCalendarSetting?
   reminderSetting           PayrollReminderSetting?
   bankCodes                 BankCode[]
+  payingBanks               PayingBank[]
+  bankCodeSets              BankCodeSet[]
   payslipSetting            PayslipSetting?
   payslipDeliveries         PayslipDelivery[]
   paymentFileExports        PaymentFileExport[]
@@ -1356,8 +1358,71 @@ model PaymentFileExport {
   createdBy       String
   createdByUserId String
   createdAt       DateTime     @default(now())
+  /// The bank this file was made for, the version of ITS code list the codes came from, and the layout's headers: so a file can always be traced to the list it used.
+  payingBankId    String?
+  payingBank      PayingBank?  @relation(fields: [payingBankId], references: [id])
+  codeSetVersion  Int?
+  layoutHeaders   String?
 
   @@index([organizationId, runId, createdAt])
+}
+
+/// A bank a client pays salaries FROM. It has its own list of bank codes (a bank's codes are valid only on its own list) and its own upload file layout, both as data,
+/// so adding a bank needs no code. docs/plans/paying-bank-files.md.
+model PayingBank {
+  id                 String       @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id])
+  name               String
+  /// The upload file's layout (columns and where each comes from). Null until the bank's upload template is known: such a bank cannot make a file.
+  layout             Json?
+  /// The company's own account at this bank that the payroll is paid from (some layouts put it on every row).
+  debitAccountNumber String?
+  active             Boolean      @default(true)
+  isDefault          Boolean      @default(false)
+  createdBy          String
+  createdAt          DateTime     @default(now())
+
+  codeSets BankCodeSet[]
+  exports  PaymentFileExport[]
+
+  @@unique([organizationId, name])
+}
+
+/// One imported version of a paying bank's code list. Never edited: a newer list from the bank is a new version, and a file records the version it used.
+model BankCodeSet {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  payingBankId   String
+  payingBank     PayingBank   @relation(fields: [payingBankId], references: [id])
+  version        Int
+  /// The file name, or the name of the list supplied with the app.
+  sourceName     String
+  /// SHA-256 of the list's text, so the list used can be proved.
+  sourceSha256   String
+  entryCount     Int
+  blockedCount   Int
+  importedBy     String
+  importedAt     DateTime     @default(now())
+
+  entries PayingBankCode[]
+
+  @@unique([payingBankId, version])
+}
+
+/// One bank on a paying bank's list. A blocked entry (a test bank, a code shared by two banks, a bank under two codes, a code that lost a leading zero) is never put in a file.
+model PayingBankCode {
+  id            String      @id @default(cuid())
+  codeSetId     String
+  codeSet       BankCodeSet @relation(fields: [codeSetId], references: [id])
+  name          String
+  code          String
+  aliases       String[]    @default([])
+  blocked       Boolean     @default(false)
+  blockedReason String?
+
+  @@index([codeSetId, code])
 }
 
 /// Whether, and to whom, payroll deadline reminders are emailed for a client. Off until someone switches it on.

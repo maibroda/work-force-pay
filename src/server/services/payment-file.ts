@@ -10,9 +10,11 @@ import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { DEFAULT_BANKS, normalizeBankName, resolveBank, type BankEntry } from "@/lib/bank-codes";
 import { num } from "@/lib/money";
-import { buildPaymentRows, PAYMENT_FILE_HEADERS, type PaymentLine } from "@/lib/payment-file";
+import { GENERIC_LAYOUT, layoutCells, type FileRowLike, type PayingLayout } from "@/lib/paying-bank";
+import { buildPaymentRows, type PaymentLine } from "@/lib/payment-file";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
+import { payingBankForFile } from "./paying-banks";
 
 // ─────────────────────────────── Bank codes ───────────────────────────────
 
@@ -72,8 +74,11 @@ async function loadRun(ctx: Ctx, runId: string) {
   return run;
 }
 
-/** What the file would contain, and who cannot be in it, without producing anything. */
-export async function paymentFilePreview(ctx: Ctx, runId: string) {
+/**
+ * What the file would contain, and who cannot be in it, without producing anything. With a paying bank, the bank codes come from THAT bank's own list and the file
+ * follows that bank's layout; `blockers` says what stops a file being made for it (no layout yet, no debit account, a narration or row count over its limit).
+ */
+export async function paymentFilePreview(ctx: Ctx, runId: string, opts: { payingBankId?: string | null } = {}) {
   assertCan(ctx, "payment.manage");
   const run = await loadRun(ctx, runId);
   if (!["LOCKED", "PAID"].includes(run.status)) throw new BusinessError("A bank payment file is made from a locked payroll.");
@@ -88,26 +93,44 @@ export async function paymentFilePreview(ctx: Ctx, runId: string) {
     accountName: t.accountName,
     amount: num(t.amount),
   }));
-  const banks = (await bankList(db, ctx.orgId)).filter((b) => b.active);
+  const using = opts.payingBankId ? await payingBankForFile(ctx, opts.payingBankId) : null;
+  const banks = using ? [] : (await bankList(db, ctx.orgId)).filter((b) => b.active);
   const description = `${run.type === "SUPPLEMENTARY" ? "Salary adjustment" : "Salary"} ${run.period.name}`;
-  const built = buildPaymentRows(lines, banks as BankEntry[], description);
+  const built = buildPaymentRows(lines, banks as BankEntry[], description, using?.lookup);
   const alreadyPaid = run.status === "PAID" || (await db.paymentBatch.count({ where: { runId, status: "PAID" } })) > 0;
-  return { run, description, ...built, payable: txns.length, alreadyPaid };
+  const blockers = [...(using?.blockers ?? [])];
+  const layout = using?.layout ?? null;
+  if (layout?.narrationMax && description.length > layout.narrationMax)
+    blockers.push(`The narration "${description}" is ${description.length} characters; ${using!.bank.name} accepts at most ${layout.narrationMax} characters.`);
+  if (layout?.maxRows && built.rows.length > layout.maxRows)
+    blockers.push(`${using!.bank.name} accepts at most ${layout.maxRows} row${layout.maxRows === 1 ? "" : "s"} in one file; this one has ${built.rows.length}.`);
+  return { run, description, ...built, payable: txns.length, alreadyPaid, payingBank: using && { id: using.bank.id, name: using.bank.name, codeSetVersion: using.codeSetVersion, layout, debitAccountNumber: using.bank.debitAccountNumber }, blockers };
 }
 
-async function workbook(rows: { name: string; accountNumber: string; bankCode: string; amount: number; description: string }[]): Promise<Buffer> {
+type FileResult = { buffer: Buffer; contentType: string; extension: "xlsx" | "csv" };
+
+const csvCell = (v: string | number) => (typeof v === "number" ? v.toFixed(2) : /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+
+/** Writes the rows to the bank's layout. Account numbers and bank codes are text, so a leading zero survives; amounts are numbers with two decimals. */
+async function writeFile(layout: PayingLayout, rows: FileRowLike[], debitAccount: string | null): Promise<FileResult> {
+  const cells = layoutCells(layout, rows, debitAccount);
+  if (layout.fileType === "CSV") {
+    const text = [cells.header, ...cells.body].map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
+    return { buffer: Buffer.from(text, "utf8"), contentType: "text/csv; charset=utf-8", extension: "csv" };
+  }
   const wb = new ExcelJS.Workbook();
   wb.creator = "WorkforcePay";
-  const ws = wb.addWorksheet("Payments");
-  ws.addRow([...PAYMENT_FILE_HEADERS]);
+  const ws = wb.addWorksheet(layout.sheetName || "Sheet1");
+  ws.addRow(cells.header);
   ws.getRow(1).font = { bold: true };
-  ws.columns = [{ width: 36 }, { width: 18 }, { width: 12 }, { width: 16 }, { width: 34 }];
-  // account numbers and bank codes are text, so a leading zero survives; amounts are numbers with two decimals
-  ws.getColumn(2).numFmt = "@";
-  ws.getColumn(3).numFmt = "@";
-  ws.getColumn(4).numFmt = "#,##0.00";
-  for (const r of rows) ws.addRow([r.name, r.accountNumber, r.bankCode, r.amount, r.description]);
-  return Buffer.from(await wb.xlsx.writeBuffer());
+  layout.columns.forEach((c, i) => {
+    const col = ws.getColumn(i + 1);
+    col.width = Math.max(14, c.header.length + 4, c.source === "BENEFICIARY_NAME" || c.source === "NARRATION" ? 34 : 0);
+    if (cells.textColumns.includes(i)) col.numFmt = "@";
+    if (c.source === "AMOUNT") col.numFmt = "#,##0.00";
+  });
+  for (const r of cells.body) ws.addRow(r);
+  return { buffer: Buffer.from(await wb.xlsx.writeBuffer()), contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", extension: "xlsx" };
 }
 
 const safeName = (s: string) => s.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -116,28 +139,34 @@ const safeName = (s: string) => s.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/
  * Produces the file. If anyone's details cannot be used the file is refused, unless `leaveOutProblems` says to pay them separately,
  * in which case they are named on the record of the export.
  */
-export async function exportPaymentFile(ctx: Ctx, runId: string, opts: { leaveOutProblems?: boolean } = {}) {
+export async function exportPaymentFile(ctx: Ctx, runId: string, opts: { leaveOutProblems?: boolean; payingBankId?: string | null } = {}) {
   assertCan(ctx, "payment.manage");
-  const p = await paymentFilePreview(ctx, runId);
+  const p = await paymentFilePreview(ctx, runId, { payingBankId: opts.payingBankId });
+  if (p.blockers.length) throw new BusinessError(p.blockers[0]);
   if (p.alreadyPaid) throw new BusinessError("This payroll has already been marked paid, so a payment file is not made again.");
   if (p.problems.length && !opts.leaveOutProblems)
     throw new BusinessError(`${p.problems.length} employee(s) cannot go in the file (${p.problems.slice(0, 3).map((x) => x.employeeNumber).join(", ")}${p.problems.length > 3 ? ", …" : ""}). Put their details right, or choose to leave them out and pay them separately.`);
   if (!p.rows.length) throw new BusinessError("There is nobody to pay in this file.");
-  const buffer = await workbook(p.rows);
+  const layout = p.payingBank?.layout ?? GENERIC_LAYOUT;
+  const debit = p.payingBank?.debitAccountNumber ?? null;
+  const file = await writeFile(layout, p.rows, debit);
+  const buffer = file.buffer;
   const checksum = createHash("sha256").update(buffer).digest("hex");
-  const fileName = `bank-payment-${safeName(p.run.period.name)}${p.run.type === "SUPPLEMENTARY" ? `-adjustment-${p.run.runNumber}` : ""}.xlsx`;
+  const prefix = p.payingBank ? `${safeName(p.payingBank.name).toLowerCase()}-payment` : "bank-payment";
+  const fileName = `${prefix}-${safeName(p.run.period.name)}${p.run.type === "SUPPLEMENTARY" ? `-adjustment-${p.run.runNumber}` : ""}.${file.extension}`;
   const excluded = p.problems.map((x) => ({ employeeNumber: x.employeeNumber, name: x.name, problems: x.problems }));
   const record = await db.paymentFileExport.create({
-    data: { organizationId: ctx.orgId, runId, fileName, rowCount: p.rows.length, totalAmount: p.total, excluded, checksum, createdBy: ctx.name, createdByUserId: ctx.userId },
+    data: { organizationId: ctx.orgId, runId, fileName, rowCount: p.rows.length, totalAmount: p.total, excluded, checksum, createdBy: ctx.name, createdByUserId: ctx.userId,
+      payingBankId: p.payingBank?.id ?? null, codeSetVersion: p.payingBank?.codeSetVersion ?? null, layoutHeaders: p.payingBank ? layout.columns.map((c) => c.header).join("|") : null },
   });
   await logAudit(ctx, {
     action: "PAYMENT_FILE_EXPORT",
     entity: "PayrollRun",
     entityId: runId,
-    newValue: { fileName, rows: p.rows.length, total: p.total, excluded: excluded.length, checksum: checksum.slice(0, 16) },
+    newValue: { fileName, payingBank: p.payingBank?.name ?? null, codeListVersion: p.payingBank?.codeSetVersion ?? null, rows: p.rows.length, total: p.total, excluded: excluded.length, checksum: checksum.slice(0, 16) },
     reason: excluded.length ? `Left out ${excluded.length} employee(s) whose details could not be used: ${excluded.map((x) => x.employeeNumber).join(", ")}` : undefined,
   });
-  return { buffer, fileName, record };
+  return { buffer, fileName, record, contentType: file.contentType };
 }
 
 export async function listExports(ctx: Ctx, runId: string) {

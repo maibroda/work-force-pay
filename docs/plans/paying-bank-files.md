@@ -1,6 +1,6 @@
 # Plan: payment files for the bank the client pays from (Access Bank, First Bank, and more)
 
-**Status: a plan for the founder's "go". Nothing in it has been built.** It changes the bank payment file (a critical module, `CLAUDE.md` rule 11), adds tables (a migration, rule 7) and decides where money is sent, so it waits for your "go".
+**Status: built on branch `paying-bank-files` (not yet merged); the founder's answers in section 5 are still open.** It changes the bank payment file (a critical module, `CLAUDE.md` rule 11), adds tables (a migration, rule 7) and decides where money is sent, so it waits for your "go".
 
 **Rules it serves:** rule 13 (Nigerian bank file formats), rule 5 (bank details, exports and approvals), rule 15 (honesty: this plan says what is not known).
 
@@ -17,8 +17,8 @@ You sent: `BankCode - ACCESS BANK.pdf` (11 pages), `BankCode - FIRST BANK.pdf` (
 | List | Problem | What the plan does |
 | --- | --- | --- |
 | Access | `039_` is **"NIBSS TEST BANK"** | Never payable: such entries are marked blocked |
-| Access | `A43` belongs to both Blooms MFB and Corestep MFB; `D92` to both Jessefield MFB and Jubilee Life Mortgage Bank; "BLOOMS MFB" is listed twice | A code that points to two banks is **blocked** until the bank says which |
-| First Bank | Four codes have only 2 digits (95 BOLDMFB, 62 COOPFUND MFB, 99 MINT MFB, 61 MODEL MFB), probably with a leading zero lost | Blocked until confirmed; I will not add a zero by guessing |
+| Access | `A43` belongs to both Blooms MFB and Corestep MFB; `D92` to both Jessefield MFB and Jubilee Life Mortgage Bank; Blooms MFB is also listed under `E43` (two codes) | A code that points to two banks, and a bank under two codes, are **blocked** until the bank says which (6 Access entries in all) |
+| First Bank | Four codes have only 2 digits (95 BOLDMFB, 62 COOPFUND MFB, 99 MINT MFB, 61 MODEL MFB), probably with a leading zero lost; five names are listed under two codes each (Nexim 405/024, FortisMobile 308/840, M-KUDI 313/837, ZenithMobile 322/842, MoneyBox 325/843) | All 14 entries blocked until confirmed; I will not add a zero or pick a code by guessing |
 | Both | The PDFs carry no date | The import records the file and its fingerprint; you tell me how current they are |
 | Both | Heritage Bank (`030`) in our current list is on neither list; Access (Diamond) `063` is only on Access's | They are not payable through these profiles; flagged |
 
@@ -50,7 +50,7 @@ One bank code list per organization (`BankCode`: name, code, aliases), a generic
 2. **First Bank's format details** the template does not show: is `Amount` plain (for example `150000.50`, no thousands separator), is there a narration length limit or banned characters, must account numbers be text, is one debit account per file the rule, and is there a limit on rows per file?
 3. **Which bank each client pays from:** one paying bank per payroll, or can one payroll be paid from more than one bank (split by employee)? And a client with accounts at both banks?
 4. **Who chooses the paying bank**: the bureau officer at export (preselected from the client's setting), or fixed per client?
-5. **The blocked entries**: please confirm with each bank the owner of Access `A43` and `D92`, and the true codes for First Bank's four short ones; until then they stay blocked.
+5. **The blocked entries**: please confirm with each bank the owner of Access `A43` and `D92` and the true code of Blooms MFB (`A43` or `E43`), and for First Bank the true codes of its four short ones and which of the two codes each of the five double-listed names has; until then they stay blocked.
 6. **How current are the two lists**, and which bank is next (GTBank, Zenith, UBA)?
 7. **Existing data:** the generic CBN list stays as a profile for clients who just want the generic file.
 
@@ -59,3 +59,11 @@ One bank code list per organization (`BankCode`: name, code, aliases), a generic
 - **A wrong code sends salary to the wrong bank.** Hence per-bank lists, blocked ambiguous entries, and listing a problem instead of guessing. The bank's own upload screen may also validate the name against the account; keep that step.
 - I will not fix the lists' errors myself (no added zeros, no choosing between two owners of a code), enter any account number, or send a file to a bank. The file is for a person to upload.
 - Extraction from a PDF can in principle miss a row; I matched every name to a code by position and the counts agree (471 and 651, no row without a partner apart from page footers). Spot-check a few banks you use.
+
+## 7. What was built (branch `paying-bank-files`)
+
+- **Migration `20261105150000_paying_banks`** (reversible, round-tripped on the test database in a rolled-back transaction): tables `PayingBank`, `BankCodeSet` (one row per imported version, with the file name and SHA-256) and `PayingBankCode`; three nullable columns on `PaymentFileExport` (paying bank, list version, the headers used). Nothing existing is rewritten; with no paying bank chosen the general file is made exactly as before.
+- **Lists:** the two lists you supplied ship with the app (`src/lib/bank-code-lists.ts`, kept identical to `docs/bank-codes/*.csv` by a test) and are loaded as version 1 when a paying bank is started from them. A newer list is pasted as CSV and becomes the next version; earlier versions and the files made from them are untouched. Blocked entries are found on import (test entry, code shared by two banks, bank under two codes, code under 3 characters) and never go in a file.
+- **Layouts:** First Bank's six columns are loaded with the bank. **Access Bank has no layout, because no Access upload template was supplied**: its list is loaded, but a file for it is refused with a clear message until its columns are given on the Paying Banks page. Any other bank is added with data only (name, list, one column per line `Header = SOURCE`, file type, sheet name, optional narration and row limits).
+- **Export:** the bank-file page chooses the paying bank (or the general file); each employee's bank is matched only against that bank's own list; Stanbic IBTC is `039` on Access's list and `221` on First Bank's. A file is refused while the bank is switched off, has no layout or no list, lacks a debit account its layout needs, or breaks a narration or row limit. The record of the export names the bank, the list version and the headers, and the audit entry carries the same.
+- **Not decided by me (section 5 still open):** First Bank's amount, narration and row-limit rules (none are enforced until you give them), one paying bank per payroll (the page makes one file for one bank), and who chooses the bank (the officer, at export).
