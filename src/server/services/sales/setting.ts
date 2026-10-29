@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { assertCan, db } from "../_base";
 import { logAudit } from "../audit";
+import { ensureDefaultPipelines } from "./pipelines";
 
 export const settingSchema = z.object({ enabled: z.boolean().optional(), mode: z.enum(["CLASSIC", "SIMPLE"]).optional() });
 
@@ -23,6 +24,7 @@ export async function updateSalesSetting(ctx: Ctx, raw: z.input<typeof settingSc
     create: { organizationId: ctx.orgId, ...next, updatedBy: ctx.name },
     update: { ...next, updatedBy: ctx.name },
   });
+  if (next.enabled) await ensureDefaultPipelines(ctx.orgId); // the starting New business pipeline, created once
   await logAudit(ctx, { action: "SALES_SETTING_UPDATE", entity: "CrmSetting", entityId: ctx.orgId, oldValue: before, newValue: next });
   return next;
 }

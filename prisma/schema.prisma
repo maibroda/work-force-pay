@@ -635,6 +635,10 @@ model Organization {
   crmContacts               CrmContact[]
   crmLeads                  CrmLead[]
   crmConsents               CrmConsent[]
+  crmPipelines              CrmPipeline[]
+  crmOpportunities          CrmOpportunity[]
+  crmStageHistory           CrmStageHistory[]
+  crmAssignmentRules        CrmAssignmentRule[]
   payslipSetting            PayslipSetting?
   payslipDeliveries         PayslipDelivery[]
   paymentFileExports        PaymentFileExport[]
@@ -5617,13 +5621,16 @@ enum CrmChannel {
 
 /// Whether the sales module is on for an organization (off until a company administrator switches it on) and how enquiries are handled.
 model CrmSetting {
-  id             String       @id @default(cuid())
-  organizationId String       @unique
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  enabled        Boolean      @default(false)
-  mode           CrmMode      @default(CLASSIC)
-  updatedBy      String
-  updatedAt      DateTime     @updatedAt
+  id               String              @id @default(cuid())
+  organizationId   String              @unique
+  organization     Organization        @relation(fields: [organizationId], references: [id])
+  enabled          Boolean             @default(false)
+  mode             CrmMode             @default(CLASSIC)
+  /// How new leads with no owner given (created by a manager) are assigned, and where round robin has got to.
+  assignmentMethod CrmAssignmentMethod @default(NONE)
+  assignmentCursor Int                 @default(0)
+  updatedBy        String
+  updatedAt        DateTime            @updatedAt
 }
 
 /// A company the organization sells to or serves, as the sales side sees it. It links to the real Client only when a won deal is handed over.
@@ -5650,6 +5657,10 @@ model CrmAccount {
   emailDomain     String?
   /// The existing Client this became, set only at handover.
   clientId        String?
+  /// Set when this account was merged into another (it is then voided).
+  mergedIntoId    String?
+  mergedInto      CrmAccount?     @relation("CrmAccountMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom      CrmAccount[]    @relation("CrmAccountMerge")
   status          CrmRecordStatus @default(ACTIVE)
   voidedAt        DateTime?
   voidedBy        String?
@@ -5658,7 +5669,8 @@ model CrmAccount {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  contacts CrmContact[]
+  contacts      CrmContact[]
+  opportunities CrmOpportunity[]
 
   @@index([organizationId, ownerUserId, status])
   @@index([organizationId, normalizedName])
@@ -5682,6 +5694,10 @@ model CrmContact {
   ownerUserId    String
   ownerName      String
   status         CrmRecordStatus  @default(ACTIVE)
+  /// Set when this contact was merged into another (it is then voided; its consent history is read through the survivor).
+  mergedIntoId   String?
+  mergedInto     CrmContact?      @relation("CrmContactMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom     CrmContact[]     @relation("CrmContactMerge")
   voidedAt       DateTime?
   voidedBy       String?
   voidReason     String?
@@ -5689,7 +5705,8 @@ model CrmContact {
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
-  consents CrmConsent[]
+  consents      CrmConsent[]
+  opportunities CrmOpportunity[]
 
   @@index([organizationId, ownerUserId, status])
   @@index([organizationId, phoneE164])
@@ -5699,37 +5716,38 @@ model CrmContact {
 
 /// An enquiry not yet known to be real. Becomes an account and contact (and a deal) when converted (a later phase).
 model CrmLead {
-  id                 String             @id @default(cuid())
-  organizationId     String
-  organization       Organization       @relation(fields: [organizationId], references: [id])
-  number             String
-  companyName        String
-  contactName        String?
-  jobTitle           String?
-  phoneE164          String?
-  email              String?
-  industry           String?
-  state              String?
-  lga                String?
-  address            String?
-  source             CrmSource          @default(OTHER)
-  sourceDetail       String?
-  estimatedGuards    Int?
-  serviceInterest    CrmServiceInterest @default(OTHER)
-  status             CrmLeadStatus      @default(NEW)
-  unqualifiedReason  String?
-  ownerUserId        String
-  ownerName          String
-  convertedAccountId String?
-  convertedContactId String?
-  convertedAt        DateTime?
-  convertedBy        String?
-  voidedAt           DateTime?
-  voidedBy           String?
-  voidReason         String?
-  createdBy          String
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  id                     String             @id @default(cuid())
+  organizationId         String
+  organization           Organization       @relation(fields: [organizationId], references: [id])
+  number                 String
+  companyName            String
+  contactName            String?
+  jobTitle               String?
+  phoneE164              String?
+  email                  String?
+  industry               String?
+  state                  String?
+  lga                    String?
+  address                String?
+  source                 CrmSource          @default(OTHER)
+  sourceDetail           String?
+  estimatedGuards        Int?
+  serviceInterest        CrmServiceInterest @default(OTHER)
+  status                 CrmLeadStatus      @default(NEW)
+  unqualifiedReason      String?
+  ownerUserId            String
+  ownerName              String
+  convertedAccountId     String?
+  convertedContactId     String?
+  convertedOpportunityId String?
+  convertedAt            DateTime?
+  convertedBy            String?
+  voidedAt               DateTime?
+  voidedBy               String?
+  voidReason             String?
+  createdBy              String
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
 
   consents CrmConsent[]
 
@@ -5762,4 +5780,145 @@ model CrmConsent {
   @@index([contactId, purpose, seq])
   @@index([leadId, purpose, seq])
   @@index([organizationId])
+}
+
+enum CrmPipelineKind {
+  NEW_BUSINESS
+  RENEWAL
+  RATE_REVIEW
+  EXPANSION
+}
+
+enum CrmStageType {
+  OPEN
+  WON
+  LOST
+}
+
+enum CrmAssignmentMethod {
+  NONE
+  ROUND_ROBIN
+  BY_STATE
+  BY_SERVICE
+}
+
+enum CrmAssignmentKind {
+  STATE
+  SERVICE
+}
+
+/// A sales process (new business, later renewal and rate review) made of stages. Each organization has its own copy; the starting stages and probabilities are editable defaults.
+model CrmPipeline {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  name           String
+  kind           CrmPipelineKind
+  isDefault      Boolean         @default(false)
+  sortOrder      Int             @default(0)
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+
+  stages        CrmStage[]
+  opportunities CrmOpportunity[]
+
+  @@unique([organizationId, name])
+}
+
+model CrmStage {
+  id                 String       @id @default(cuid())
+  pipelineId         String
+  pipeline           CrmPipeline  @relation(fields: [pipelineId], references: [id])
+  name               String
+  sortOrder          Int
+  stageType          CrmStageType @default(OPEN)
+  /// 0 to 100: what a deal entering this stage is given as its probability.
+  defaultProbability Int
+  /// Field keys that must be filled before a deal may enter this stage (enforced from the board phase).
+  requiredFields     Json         @default("[]")
+  /// Days without activity after which a card on this stage is flagged.
+  rottingDays        Int?
+  active             Boolean      @default(true)
+
+  opportunities CrmOpportunity[]
+
+  @@index([pipelineId, sortOrder])
+}
+
+/// A specific bid for a client business: "24/7 guarding, 3 sites, 18 guards". Its monthly value is a money amount (Decimal 16,2, whole kobo).
+model CrmOpportunity {
+  id                   String             @id @default(cuid())
+  organizationId       String
+  organization         Organization       @relation(fields: [organizationId], references: [id])
+  accountId            String
+  account              CrmAccount         @relation(fields: [accountId], references: [id])
+  primaryContactId     String?
+  primaryContact       CrmContact?        @relation(fields: [primaryContactId], references: [id])
+  pipelineId           String
+  pipeline             CrmPipeline        @relation(fields: [pipelineId], references: [id])
+  stageId              String
+  stage                CrmStage           @relation(fields: [stageId], references: [id])
+  name                 String
+  serviceType          CrmServiceInterest @default(OTHER)
+  monthlyContractValue Decimal            @default(0) @db.Decimal(16, 2)
+  /// 0 to 100; starts as the stage default and the owner may change it.
+  probability          Int
+  expectedCloseDate    DateTime?          @db.Date
+  expectedStartDate    DateTime?          @db.Date
+  contractTermMonths   Int?
+  source               CrmSource?
+  sourceDetail         String?
+  ownerUserId          String
+  ownerName            String
+  /// The lead this deal came from, if it came from one.
+  fromLeadId           String?
+  status               CrmRecordStatus    @default(ACTIVE)
+  lastActivityAt       DateTime           @default(now())
+  voidedAt             DateTime?
+  voidedBy             String?
+  voidReason           String?
+  createdBy            String
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  history CrmStageHistory[]
+
+  @@index([organizationId, ownerUserId, status])
+  @@index([organizationId, stageId])
+  @@index([accountId])
+}
+
+/// Every move of a deal between stages, with who and when. Never changed (the database refuses it).
+model CrmStageHistory {
+  id                  String         @id @default(cuid())
+  organizationId      String
+  organization        Organization   @relation(fields: [organizationId], references: [id])
+  opportunityId       String
+  opportunity         CrmOpportunity @relation(fields: [opportunityId], references: [id])
+  fromStageId         String?
+  toStageId           String
+  changedBy           String
+  changedByUserId     String
+  changedAt           DateTime       @default(now())
+  daysInPreviousStage Int?
+
+  @@index([opportunityId, changedAt])
+  @@index([organizationId, toStageId, changedAt])
+}
+
+/// Leads in this state (or wanting this service) go to this person.
+model CrmAssignmentRule {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  kind           CrmAssignmentKind
+  key            String
+  /// The key in lower case with single spaces, so "Lagos" and "lagos" are the same rule.
+  keyNorm        String
+  userId         String
+  userName       String
+  createdBy      String
+  createdAt      DateTime          @default(now())
+
+  @@unique([organizationId, kind, keyNorm])
 }

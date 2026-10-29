@@ -10,7 +10,8 @@ import { normalizeNgPhone } from "@/lib/sales/phone";
 import { BusinessError, db, type Tx } from "../_base";
 import { logAudit } from "../audit";
 import { nextNumber } from "../numbering";
-import { ownerFilter, requireSales, resolveOwner } from "./access";
+import { ownerFilter, requireSales, resolveOwner, seesAll } from "./access";
+import { pickOwner } from "./assignment";
 
 const text = (max = 200) =>
   z
@@ -236,16 +237,22 @@ export async function createLead(ctx: Ctx, raw: z.input<typeof leadSchema>) {
   await requireSales(ctx, "sales.manage");
   const v = leadSchema.parse(raw);
   if (v.status === "UNQUALIFIED" && !v.unqualifiedReason) throw new BusinessError("Say why the lead is unqualified.");
-  const owner = await resolveOwner(ctx, v.ownerUserId);
+  const mode = await db.crmSetting.findUnique({ where: { organizationId: ctx.orgId }, select: { mode: true } });
+  if (mode?.mode === "SIMPLE") throw new BusinessError("In simple mode enquiries go straight to deals, so leads are not used: add a deal on an account instead.");
+  const named = v.ownerUserId ? await resolveOwner(ctx, v.ownerUserId) : null;
   const { phone: _p, ownerUserId: _o, ...rest } = v;
   void [_p, _o];
   const phoneE164 = phoneOf("Phone number", v.phone);
   return db.$transaction(async (tx) => {
+    // a manager who names no owner gets the organization's assignment method; a sales person always owns what they add
+    const picked = !named && seesAll(ctx) ? await pickOwner(ctx, tx, { state: v.state, serviceInterest: v.serviceInterest ?? "OTHER" }) : null;
+    const owner = named ?? (picked ? { ownerUserId: picked.ownerUserId, ownerName: picked.ownerName } : { ownerUserId: ctx.userId, ownerName: ctx.name });
     const number = await nextNumber(tx, ctx.orgId, "SALES_LEAD");
     const l = await tx.crmLead.create({
       data: { organizationId: ctx.orgId, number, ...rest, phoneE164, source: v.source ?? "OTHER", serviceInterest: v.serviceInterest ?? "OTHER", status: v.status ?? "NEW", ...owner, createdBy: ctx.name },
     });
     await logAudit(ctx, { action: "SALES_LEAD_CREATE", entity: "CrmLead", entityId: l.id, newValue: { number, fields: fieldNames(v) } }, tx);
+    if (picked) await logAudit(ctx, { action: "SALES_LEAD_ASSIGN", entity: "CrmLead", entityId: l.id, newValue: { method: picked.via, ownerUserId: picked.ownerUserId } }, tx);
     return l;
   });
 }

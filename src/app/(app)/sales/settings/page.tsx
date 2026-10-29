@@ -1,13 +1,24 @@
 import { requirePage } from "@/lib/auth/session";
+import { can, ROLE_PERMISSIONS, type Role } from "@/lib/auth/permissions";
+import { db } from "@/lib/db";
+import { getAssignment } from "@/server/services/sales/assignment";
 import { getSalesSetting } from "@/server/services/sales/setting";
+import { ActionButton } from "@/components/action-button";
 import { PageHeader, Section } from "@/components/page";
 import { SmartForm } from "@/components/smart-form";
 import { Badge } from "@/components/ui/badge";
-import { saveSalesSettingAction } from "@/app/actions/sales";
+import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
+import { removeAssignmentRuleAction, saveSalesSettingAction, setAssignmentMethodAction, setAssignmentRuleAction } from "@/app/actions/sales";
+
+const SERVICES = ["GUARDING", "CLEANING", "FACILITY", "STAFFING", "OTHER"];
+const label = (s: string) => s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, " ");
 
 export default async function SalesSettingsPage() {
   const ctx = await requirePage("sales.configure");
   const s = await getSalesSetting(ctx);
+  const assignment = await getAssignment(ctx);
+  const salesRoles = (Object.keys(ROLE_PERMISSIONS) as Role[]).filter((r) => can(r, "sales.manage"));
+  const people = await db.user.findMany({ where: { organizationId: ctx.orgId, active: true, role: { in: salesRoles as never } }, orderBy: { name: "asc" }, select: { id: true, name: true } });
   return (
     <>
       <PageHeader
@@ -19,7 +30,7 @@ export default async function SalesSettingsPage() {
       </Section>
       <Section
         title="Switch and mode"
-        description="Classic: every enquiry is a lead first, and a real one is converted into an account, contact and deal. Simple: enquiries go straight to deals (for a small team where every enquiry is real)."
+        description="Classic: every enquiry is a lead first, and a real one is converted into an account, contact and deal. Simple: enquiries go straight to deals (for a small team where every enquiry is real); leads are then not used."
       >
         <SmartForm
           columns={2}
@@ -40,6 +51,75 @@ export default async function SalesSettingsPage() {
           ]}
         />
       </Section>
+
+      {s.enabled && (
+        <>
+          <Section
+            title="Who new leads go to"
+            description="Applies when a manager adds a lead without naming an owner (and, later, to imported leads). A sales person always owns what they add themselves. Where no rule fits, the person adding it keeps it. Every assignment is recorded."
+          >
+            <SmartForm
+              columns={2}
+              submitLabel="Save method"
+              action={setAssignmentMethodAction}
+              fields={[
+                {
+                  name: "method",
+                  label: "Method",
+                  type: "select",
+                  defaultValue: assignment.method,
+                  options: [
+                    { value: "NONE", label: "None: the person adding it keeps it" },
+                    { value: "ROUND_ROBIN", label: "Round robin: each active sales person in turn" },
+                    { value: "BY_STATE", label: "By the lead's state (rules below)" },
+                    { value: "BY_SERVICE", label: "By the service wanted (rules below)" },
+                  ],
+                },
+              ]}
+            />
+          </Section>
+          <Section title={`${assignment.rules.length} assignment rule(s)`} flush>
+            <Table>
+              <THead>
+                <TR>
+                  <TH>When</TH>
+                  <TH>Goes to</TH>
+                  <TH />
+                </TR>
+              </THead>
+              <TBody>
+                {assignment.rules.map((r) => (
+                  <TR key={r.id}>
+                    <TD>
+                      {r.kind === "STATE" ? "State" : "Service"}: {r.kind === "STATE" ? r.key : label(r.key)}
+                    </TD>
+                    <TD>{r.userName}</TD>
+                    <TD>
+                      <ActionButton action={removeAssignmentRuleAction.bind(null, r.id)} confirm="Remove this rule?" variant="outline">
+                        Remove
+                      </ActionButton>
+                    </TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+            {!assignment.rules.length && <p className="px-4 py-4 text-sm text-muted-foreground">No rules yet.</p>}
+          </Section>
+          <Section title="Add or change a rule" description="A rule for a state or service that already has one replaces it. State names are not case sensitive.">
+            <SmartForm
+              columns={3}
+              submitLabel="Save rule"
+              resetOnSuccess
+              action={setAssignmentRuleAction}
+              fields={[
+                { name: "kind", label: "Rule is about", type: "select", defaultValue: "STATE", options: [{ value: "STATE", label: "A state (type it below)" }, { value: "SERVICE", label: "A service (type it exactly: " + SERVICES.join(", ") + ")" }] },
+                { name: "key", label: "State, or service in capitals", required: true },
+                { name: "userId", label: "Goes to", type: "select", required: true, options: [{ value: "", label: "— choose —" }, ...people.map((p) => ({ value: p.id, label: p.name }))] },
+              ]}
+            />
+          </Section>
+        </>
+      )}
     </>
   );
 }
