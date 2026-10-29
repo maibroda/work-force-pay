@@ -70,7 +70,8 @@ export async function moveOpportunity(ctx: Ctx, id: string, raw: z.input<typeof 
       primaryContactId: deal.primaryContactId,
       accountContactCount,
       lostReason: v.lostReason ?? deal.lostReason,
-      hasQuote: null,
+      // a quote counts once it has been sent to the client (a draft does not), or accepted
+      hasQuote: (await tx.crmQuote.count({ where: { opportunityId: id, organizationId: ctx.orgId, status: { in: ["SENT", "ACCEPTED"] } } })) > 0,
     });
     if (missing.length) throw new BusinessError(`To move this deal to "${stage.name}" you still need: ${missing.join("; ")}.`);
 
