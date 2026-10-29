@@ -107,6 +107,7 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
           accountNumber: e.accountNumber,
           accountName: e.accountName,
           taxId: e.taxId,
+          stateOfResidence: e.stateOfResidence,
           pensionPin: e.pensionPin,
           pfa: e.pfa,
           declaredAnnualRent: money(e.annualRent),

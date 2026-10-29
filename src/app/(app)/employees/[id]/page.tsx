@@ -129,6 +129,7 @@ export default async function EmployeePage({
                 ["Phone", e.phone],
                 ["Email", e.email],
                 ["Address", e.address],
+                ["State of residence (PAYE)", e.stateOfResidence ?? "— not recorded"],
                 ["Employment date", fmtDate(e.employmentDate)],
                 ["Exit date", fmtDate(e.exitDate)],
                 ["Department", e.department?.name],

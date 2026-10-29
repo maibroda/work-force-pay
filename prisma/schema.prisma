@@ -1804,6 +1804,8 @@ model Employee {
   phone              String?
   email              String?
   address            String?
+  /// The state PAYE is due to (one of the 36 states or FCT, under its proper name). Copied onto each payroll record when it is calculated.
+  stateOfResidence   String?
   employmentDate     DateTime             @db.Date
   exitDate           DateTime?            @db.Date
   /// Set when the personal details were removed after the retention period (the record, employee number and pay figures stay).
@@ -2941,6 +2943,8 @@ model PayrollRecord {
   pensionPin                      String?
   pfa                             String?
   taxId                           String?
+  /// Copy of the employee's state of residence when the payroll was calculated, so a locked payroll never changes if the employee moves (like pfa).
+  payeState                       String?
   basisDays                       Int
   daysWorked                      Decimal      @db.Decimal(6, 2)
   daysAbsent                      Int          @default(0)
@@ -3201,6 +3205,14 @@ model TaxRule {
   effectiveTo    DateTime?    @db.Date
   active         Boolean      @default(true)
   createdAt      DateTime     @default(now())
+  /// PAYE filing dates and the late penalty are RULE DATA, set from the tax adviser's verified values and never assumed. Blank = not set.
+  /// Day of the month after the pay month on which PAYE is due (1 to 28).
+  payeDueDay        Int?
+  /// The annual return is due on this month and day of the year after the tax year.
+  annualReturnMonth Int?
+  annualReturnDay   Int?
+  /// Percentage of unremitted PAYE charged when late (interest is not modelled).
+  latePenaltyPct    Decimal? @db.Decimal(6, 3)
 
   bands      TaxBand[]
   reliefs    TaxRelief[]
@@ -3885,6 +3897,7 @@ model AuditLog {
   @@index([organizationId, createdAt])
   @@index([organizationId, entity, entityId])
 }
+
 
 // ─────────────────────────────── LEAVE ───────────────────────────────
 

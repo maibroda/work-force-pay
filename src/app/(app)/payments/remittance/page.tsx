@@ -1,12 +1,12 @@
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
-import { listRemittances, REMITTANCE_TYPE_LABELS } from "@/server/services/payments";
+import { listRemittances, remittanceTiming, REMITTANCE_TYPE_LABELS } from "@/server/services/payments";
 import { listRuns } from "@/server/services/payroll";
 import { naira } from "@/lib/money";
 import { FilterBar, FilterField, PageHeader, Section, Stat, StatGrid, Empty } from "@/components/page";
 import { ActionButton } from "@/components/action-button";
 import { Select } from "@/components/ui/input";
-import { StatusBadge } from "@/components/ui/badge";
+import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { generateRemittancesAction, markRemittedAction } from "@/app/actions/payroll";
 
@@ -19,6 +19,7 @@ export default async function RemittancePage({
   const sp = await searchParams;
   const [allRows, runs] = await Promise.all([listRemittances(ctx), listRuns(ctx)]);
   const rows = sp.type ? allRows.filter((r) => r.type === sp.type) : allRows;
+  const due = await remittanceTiming(ctx, rows);
   const done = new Set(allRows.map((r) => r.runId));
   const ready = runs.filter((r) => ["LOCKED", "PAID"].includes(r.status) && !done.has(r.id));
   const manage = can(ctx.role, "payment.manage");
@@ -74,6 +75,7 @@ export default async function RemittancePage({
               <TH className="text-right">Employee</TH>
               <TH className="text-right">Employer</TH>
               <TH className="text-right">Total</TH>
+              <TH>Due</TH>
               <TH>Reference</TH>
               <TH>Status</TH>
               <TH />
@@ -91,6 +93,23 @@ export default async function RemittancePage({
                 <TD className="text-right">{naira(r.employeeAmount)}</TD>
                 <TD className="text-right">{naira(r.employerAmount)}</TD>
                 <TD className="text-right font-medium">{naira(r.totalAmount)}</TD>
+                <TD className="text-xs">
+                  {r.type !== "PAYE" ? (
+                    "—"
+                  ) : !due.get(r.id)?.dueDate ? (
+                    <span className="text-muted-foreground">not set in the tax rule</span>
+                  ) : (
+                    <>
+                      {due.get(r.id)!.dueDate}
+                      {due.get(r.id)!.overdue && (
+                        <div>
+                          <Badge tone="red">{due.get(r.id)!.daysLate} day(s) late</Badge>
+                          {due.get(r.id)!.penalty ? <span className="ml-1">penalty {naira(due.get(r.id)!.penalty!)}</span> : null}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </TD>
                 <TD className="text-xs">{r.reference ?? "—"}</TD>
                 <TD>
                   <StatusBadge status={r.status} />
