@@ -1309,6 +1309,8 @@ One per organization — every number a buyer might want to change without a cod
 | noticePayEnabled | Boolean |  |  |
 | noticeRecoveryEnabled | Boolean |  |  |
 | noticePayTaxable | Boolean |  |  |
+| auditAlertEmails | String[] |  | Extra addresses (for example an outside auditor), on top of everyone who can view the audit log, or instead of them when the next field is false. |
+| auditAlertIncludeEveryone | Boolean |  |  |
 | loanMaxGrossMultiple | Decimal |  |  |
 | loanMaxDeductionPct | Int |  |  |
 | advanceMaxGrossPct | Int |  |  |
@@ -2393,6 +2395,7 @@ Recurring payroll deductions applied automatically on every REGULAR run — dist
 | maxOvertimeHoursPerMonth | Decimal |  |  |
 | maxDeductionPctOfGross | Decimal |  |  |
 | backOfficeChargePct | Decimal |  | Overhead allocation used in Contract Profitability — % of contract revenue charged as back-office cost. |
+| requirePayeState | Boolean |  | A worker with PAYE and no state of residence is a warning (false, the default) or a CRITICAL finding that blocks approval until fixed or overridden with a reason (true). |
 | effectiveFrom | DateTime | yes |  |
 | effectiveTo | DateTime |  |  |
 | createdAt | DateTime |  |  |
