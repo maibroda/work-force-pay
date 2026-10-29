@@ -1070,6 +1070,7 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | phone | String |  |  |
 | email | String |  |  |
 | address | String |  |  |
+| stateOfResidence | String |  | The state PAYE is due to (one of the 36 states or FCT, under its proper name). Copied onto each payroll record when it is calculated. |
 | employmentDate | DateTime | yes |  |
 | exitDate | DateTime |  |  |
 | anonymizedAt | DateTime |  | Set when the personal details were removed after the retention period (the record, employee number and pay figures stay). |
@@ -2069,6 +2070,7 @@ Operational source of truth for WHERE an employee worked on each day.
 | pensionPin | String |  |  |
 | pfa | String |  |  |
 | taxId | String |  |  |
+| payeState | String |  | Copy of the employee's state of residence when the payroll was calculated, so a locked payroll never changes if the employee moves (like pfa). |
 | basisDays | Int | yes |  |
 | daysWorked | Decimal | yes |  |
 | daysAbsent | Int |  |  |
@@ -2313,6 +2315,10 @@ Recurring payroll deductions applied automatically on every REGULAR run — dist
 | effectiveTo | DateTime |  |  |
 | active | Boolean |  |  |
 | createdAt | DateTime |  |  |
+| payeDueDay | Int |  | PAYE filing dates and the late penalty are RULE DATA, set from the tax adviser's verified values and never assumed. Blank = not set. Day of the month after the pay month on which PAYE is due (1 to 28). |
+| annualReturnMonth | Int |  | The annual return is due on this month and day of the year after the tax year. |
+| annualReturnDay | Int |  |  |
+| latePenaltyPct | Decimal |  | Percentage of unremitted PAYE charged when late (interest is not modelled). |
 | bands | → TaxBand[] |  |  |
 | reliefs | → TaxRelief[] |  |  |
 | exemptions | → TaxExemption[] |  |  |
