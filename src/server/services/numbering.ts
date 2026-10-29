@@ -38,6 +38,7 @@ const DEFAULTS: Record<string, { prefix: string; digits: number }> = {
   CLIENT_INPUT: { prefix: "INP", digits: 5 },
   LEAD: { prefix: "LD", digits: 5 },
   SALES_LEAD: { prefix: "SL", digits: 5 },
+  SALES_QUOTE: { prefix: "SQ", digits: 5 },
   PROPOSAL: { prefix: "PR", digits: 5 },
   HEALTH_CHECK: { prefix: "HC", digits: 5 },
   DEBIT_NOTE: { prefix: "DN", digits: 6 },
