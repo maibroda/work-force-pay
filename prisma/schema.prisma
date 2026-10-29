@@ -1805,6 +1805,10 @@ model Employee {
   phone              String?
   email              String?
   address            String?
+  /// Has chosen to contribute to the National Housing Fund (voluntary: 2.5% of basic pay, remitted by the end of the month). Off unless chosen.
+  nhfContributes     Boolean              @default(false)
+  /// The day they chose it; cleared when they stop.
+  nhfOptedInOn       DateTime?            @db.Date
   /// The state PAYE is due to (one of the 36 states or FCT, under its proper name). Copied onto each payroll record when it is calculated.
   stateOfResidence   String?
   employmentDate     DateTime             @db.Date
@@ -3288,6 +3292,8 @@ model PayrollRule {
   backOfficeChargePct      Decimal        @default(15) @db.Decimal(5, 2)
   /// A worker with PAYE and no state of residence is a warning (false, the default) or a CRITICAL finding that blocks approval until fixed or overridden with a reason (true).
   requirePayeState         Boolean        @default(false)
+  /// The rate of the VOLUNTARY NHF (National Housing Fund) contribution, as a % of BASIC pay: 2.5 by the founder's rule (the tax adviser confirms it). It is taken only from employees who have chosen to contribute (Employee.nhfContributes), as its own deduction line, and is allowed against PAYE at the amount taken. 0 = none.
+  nhfEmployeeRatePct       Decimal        @default(2.5) @db.Decimal(5, 3)
   effectiveFrom            DateTime       @db.Date
   effectiveTo              DateTime?      @db.Date
   createdAt                DateTime       @default(now())

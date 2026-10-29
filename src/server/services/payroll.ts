@@ -369,6 +369,7 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
         employerRate: a.pension.employerRate,
         version: a.pension.version,
       },
+      nhfEmployeeRatePct: emp.nhfContributes ? a.rules.nhfEmployeeRatePct : 0, // voluntary: only an employee who chose it
       taxRule: a.tax.def,
       annualRent: emp.annualRent ? num(emp.annualRent) : 0,
     });

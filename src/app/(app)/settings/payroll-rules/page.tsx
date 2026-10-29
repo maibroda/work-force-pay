@@ -31,6 +31,7 @@ export default async function PayrollRulesPage() {
               <TH>Max OT hrs/month</TH>
               <TH>Max deductions % of earnings</TH>
               <TH>Back office charge %</TH>
+              <TH>NHF rate (voluntary)</TH>
               <TH>State of residence</TH>
               <TH>Effective</TH>
             </TR>
@@ -48,6 +49,7 @@ export default async function PayrollRulesPage() {
                 <TD>{num(x.maxOvertimeHoursPerMonth)}</TD>
                 <TD>{num(x.maxDeductionPctOfGross)}%</TD>
                 <TD>{num(x.backOfficeChargePct)}%</TD>
+                <TD>{num(x.nhfEmployeeRatePct) > 0 ? `${num(x.nhfEmployeeRatePct)}% of basic` : <span className="text-muted-foreground text-xs">not offered</span>}</TD>
                 <TD>{x.requirePayeState ? <Badge tone="amber">required to approve</Badge> : <span className="text-muted-foreground text-xs">warning only</span>}</TD>
                 <TD>
                   {fmtDate(x.effectiveFrom)} →{" "}
@@ -118,6 +120,15 @@ export default async function PayrollRulesPage() {
                 min: 0,
                 max: 100,
                 defaultValue: num(r.backOfficeChargePct),
+              },
+              {
+                name: "nhfEmployeeRatePct",
+                label: "NHF contribution rate % of basic pay (voluntary)",
+                type: "number",
+                min: 0,
+                max: 100,
+                defaultValue: num(r.nhfEmployeeRatePct),
+                help: "The National Housing Fund is voluntary: this rate (2.5 as shipped) is taken ONLY from employees marked as contributing, as its own deduction, and is remitted by the end of the month. Set 0 to stop offering it.",
               },
               {
                 name: "requirePayeState",

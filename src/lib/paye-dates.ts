@@ -104,3 +104,25 @@ export function filingDefaultsFor(current: PayeTiming): PayeTiming & { proposed:
   const hasAny = current.dueDay !== null || current.annualReturnMonth !== null || current.annualReturnDay !== null || current.latePenaltyPct !== null;
   return hasAny ? { ...current, proposed: false } : { ...FOUNDER_FILING_DEFAULTS, proposed: true };
 }
+
+/** The last day (YYYY-MM-DD) of a month. */
+export function monthEndDue(year: number, month: number): string {
+  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return `${year}-${pad(month)}-${pad(last)}`;
+}
+
+/**
+ * Due date, lateness and penalty for a remittance line. PAYE follows the tax rule's filing dates (see payeDueInfo). The employee's NHF contribution is
+ * remitted to the appropriate authority by the END OF THE PAY MONTH (the founder's rule; to be confirmed by the tax adviser) and carries no penalty here.
+ * `line.type` is "PAYE", "NHF" (the employee NHF line) or anything else, which gets no date.
+ */
+export function remittanceDueInfo(
+  line: { type: string; status: string; totalAmount: number; period: { year: number; month: number } },
+  timing: PayeTiming | null,
+  today: string,
+): DueInfo {
+  if (line.type !== "NHF") return payeDueInfo(line, timing, today);
+  const dueDate = monthEndDue(line.period.year, line.period.month);
+  const late = line.status !== "PAID" && toMs(today) > toMs(dueDate);
+  return { dueDate, overdue: late, daysLate: late ? Math.round((toMs(today) - toMs(dueDate)) / DAY_MS) : 0, penalty: null };
+}
