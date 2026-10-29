@@ -166,6 +166,11 @@ async function seedStatutory(orgId: string) {
       code: "NG-PAYE-NTA2025",
       name: "Nigeria PAYE — Nigeria Tax Act 2025",
       version: "2026.1",
+      // PAYE filing dates and penalty: the founder's starting values (his PAYE seed file), NOT verified by the tax adviser
+      payeDueDay: 10,
+      annualReturnMonth: 1,
+      annualReturnDay: 31,
+      latePenaltyPct: 10,
       legalBasis:
         "Nigeria Tax Act 2025, personal income tax schedule effective 1 January 2026. Consolidated Relief Allowance abolished; rent relief 20% of annual rent capped at ₦500,000; pension contributions deductible. VERIFY against current law and NRS guidance before production use.",
       effectiveFrom: d("2026-01-01"),

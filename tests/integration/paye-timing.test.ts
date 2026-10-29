@@ -120,6 +120,8 @@ describe("due dates on PAYE remittance lines", () => {
     const version = `${taxRule.code}@${taxRule.version}`;
     const line = (type: string, status: string) => ({ id: `${type}-${status}`, type, status, totalAmount: 250000, run: { taxRuleVersion: version, period: { year: 2026, month: 3 } } });
     const rows = [line("PAYE", "PENDING"), line("PAYE", "PAID"), line("PENSION", "PENDING")];
+    const saved = { payeDueDay: taxRule.payeDueDay, annualReturnMonth: taxRule.annualReturnMonth, annualReturnDay: taxRule.annualReturnDay, latePenaltyPct: taxRule.latePenaltyPct };
+    await db.taxRule.update({ where: { id: taxRule.id }, data: { payeDueDay: null, annualReturnMonth: null, annualReturnDay: null, latePenaltyPct: null } }); // start from a rule with no dates, whatever the seed holds
     try {
       const before = await remittanceTiming(ctx, rows, "2026-04-11");
       expect(before.get("PAYE-PENDING")).toEqual({ dueDate: null, overdue: false, daysLate: 0, penalty: null }); // nothing set: no date, never overdue
@@ -135,7 +137,7 @@ describe("due dates on PAYE remittance lines", () => {
       const other = await isolatedOrg();
       expect((await remittanceTiming(other.ctx("FINANCE"), rows, "2026-04-11")).get("PAYE-PENDING")?.dueDate).toBeNull();
     } finally {
-      await db.taxRule.update({ where: { id: taxRule.id }, data: { payeDueDay: null, latePenaltyPct: null } });
+      await db.taxRule.update({ where: { id: taxRule.id }, data: saved });
     }
   });
 });

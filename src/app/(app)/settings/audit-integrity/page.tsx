@@ -1,16 +1,18 @@
 import { requirePage } from "@/lib/auth/session";
-import { auditIntegrityOverview } from "@/server/services/audit-seal";
+import { can } from "@/lib/auth/permissions";
+import { auditAlertSettings, auditIntegrityOverview } from "@/server/services/audit-seal";
 import { fmtDate } from "@/lib/dates";
-import { PageHeader, Section, Stat, StatGrid } from "@/components/page";
+import { FormPanel, PageHeader, Section, Stat, StatGrid } from "@/components/page";
+import { SmartForm } from "@/components/smart-form";
 import { ActionButton } from "@/components/action-button";
 import { Badge } from "@/components/ui/badge";
-import { verifyAuditNowAction } from "@/app/actions/audit-seal";
+import { setAuditAlertRecipientsAction, verifyAuditNowAction } from "@/app/actions/audit-seal";
 
 const when = (d: Date | null | undefined) => (d ? `${d.toISOString().slice(0, 16).replace("T", " ")} UTC` : "never");
 
 export default async function AuditIntegrityPage() {
   const ctx = await requirePage("audit.view");
-  const o = await auditIntegrityOverview(ctx);
+  const [o, alerts] = await Promise.all([auditIntegrityOverview(ctx), auditAlertSettings(ctx)]);
   const job = (j: typeof o.jobs.seal) => (j ? <Badge tone={j.ok ? "green" : "red"}>{j.ok ? "ran" : "FAILED"} {when(j.startedAt)}</Badge> : <Badge tone="amber">never run</Badge>);
   return (
     <>
@@ -48,6 +50,28 @@ export default async function AuditIntegrityPage() {
       <Section title="Check now" description="Seals anything waiting, then checks every entry of your organization's audit log. The check itself is written to the audit log.">
         <ActionButton action={verifyAuditNowAction}>Check the audit log now</ActionButton>
       </Section>
+      <Section
+        title="Who is told"
+        description="When the check fails, and each week with the chain head, an email goes to everyone in your organization who can view the audit log. You can add addresses (for example an outside auditor), or send only to the addresses you name. It is never sent to nobody."
+      >
+        <p className="text-sm">
+          {alerts.includeEveryone ? "Everyone who can view the audit log" : "Only the addresses named below"}
+          {alerts.extraEmails.length ? `, plus: ${alerts.extraEmails.join(", ")}` : ""}.
+        </p>
+      </Section>
+      {can(ctx.role, "settings.manage") && (
+        <FormPanel title="Change who is told">
+          <SmartForm
+            columns={3}
+            fields={[
+              { name: "includeEveryone", label: "Also tell everyone who can view the audit log", type: "checkbox", defaultValue: alerts.includeEveryone, span: 3 },
+              { name: "extraEmails", label: "Extra addresses (one per line)", type: "textarea", defaultValue: alerts.extraEmails.join("\n"), span: 3 },
+            ]}
+            action={setAuditAlertRecipientsAction}
+            submitLabel="Save"
+          />
+        </FormPanel>
+      )}
     </>
   );
 }

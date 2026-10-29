@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupPayeByState, NIGERIA_STATES, normaliseState, STATE_NOT_RECORDED } from "@/lib/nigeria-states";
+import { groupPayeByState, missingStateSeverity, NIGERIA_STATES, normaliseState, STATE_NOT_RECORDED } from "@/lib/nigeria-states";
 
 describe("the states of Nigeria", () => {
   it("are the 36 states and the Federal Capital Territory, each once", () => {
@@ -58,5 +58,12 @@ describe("PAYE grouped by the state of residence", () => {
   it("gives nothing when nobody is taxed", () => {
     expect(groupPayeByState([rec("Lagos", 0), rec(null, 0)])).toEqual([]);
     expect(groupPayeByState([])).toEqual([]);
+  });
+});
+
+describe("what a missing state of residence does to a payroll", () => {
+  it("is a warning by default, and a blocking (critical) finding when the payroll rule requires a state", () => {
+    expect(missingStateSeverity(false)).toBe("WARNING");
+    expect(missingStateSeverity(true)).toBe("CRITICAL");
   });
 });
