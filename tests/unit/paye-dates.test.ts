@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { annualReturnDueDate, latePenalty, payeDueInfo, payeDueDate, rangesOverlap, validateTiming } from "@/lib/paye-dates";
+import { annualReturnDueDate, FOUNDER_FILING_DEFAULTS, filingDefaultsFor, latePenalty, payeDueInfo, payeDueDate, rangesOverlap, validateTiming } from "@/lib/paye-dates";
 
 /**
  * When PAYE is due, when the annual return is due and the penalty on PAYE paid late are RULE DATA (they come from the tax rule in force, as the
@@ -101,5 +101,18 @@ describe("effective dates that overlap", () => {
   it("do not overlap when one ends the day before the other starts", () => {
     expect(rangesOverlap(r("2026-01-01", "2026-12-31"), r("2027-01-01", null))).toBe(false);
     expect(rangesOverlap(r("2027-01-01", null), r("2025-01-01", "2026-12-31"))).toBe(false);
+  });
+});
+
+describe("the default filing dates and penalty (supplied by the founder, NOT verified by the tax adviser)", () => {
+  it("are the values in the founder's own PAYE seed file: the 10th of the next month, 31 January, 10%", () => {
+    expect(FOUNDER_FILING_DEFAULTS).toEqual({ dueDay: 10, annualReturnMonth: 1, annualReturnDay: 31, latePenaltyPct: 10 });
+    expect(validateTiming(FOUNDER_FILING_DEFAULTS)).toEqual([]);
+  });
+  it("are proposed only when the rule has none of its own: any value already set is kept as it is", () => {
+    const none = { dueDay: null, annualReturnMonth: null, annualReturnDay: null, latePenaltyPct: null };
+    expect(filingDefaultsFor(none)).toEqual({ ...FOUNDER_FILING_DEFAULTS, proposed: true });
+    const mine = { dueDay: 15, annualReturnMonth: null, annualReturnDay: null, latePenaltyPct: null };
+    expect(filingDefaultsFor(mine)).toEqual({ ...mine, proposed: false });
   });
 });

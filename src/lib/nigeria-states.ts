@@ -58,3 +58,10 @@ export function groupPayeByState(records: ReadonlyArray<{ payeState: string | nu
     .map(([state, amounts]) => ({ state, paye: koboToNumber(sumKobo(amounts)), headcount: amounts.length }))
     .sort((a, b) => (a.state === STATE_NOT_RECORDED ? 1 : b.state === STATE_NOT_RECORDED ? -1 : a.state.localeCompare(b.state)));
 }
+
+/**
+ * What a worker with PAYE and no recognised state does to a payroll. A setting on the payroll rule, not a fixed rule: as shipped it is a warning (the PAYE goes
+ * on the "State not recorded" line and nothing is stopped); switched on, it is a critical finding that blocks approval until the state is set or Finance
+ * overrides it with a documented reason.
+ */
+export const missingStateSeverity = (requirePayeState: boolean): "WARNING" | "CRITICAL" => (requirePayeState ? "CRITICAL" : "WARNING");

@@ -4,7 +4,7 @@ import type { Ctx } from "@/lib/auth/context";
 import { daysInMonth, eachDay, iso, monthEnd, monthStart, periodName } from "@/lib/dates";
 import { num } from "@/lib/money";
 import { roundPlaces } from "@/lib/money-exact";
-import { normaliseState } from "@/lib/nigeria-states";
+import { missingStateSeverity, normaliseState } from "@/lib/nigeria-states";
 import { percentOfAmount, totalOf } from "@/lib/payroll/pay-inputs";
 import { fullName } from "@/lib/utils";
 import {
@@ -785,7 +785,7 @@ async function validate(
     if (res.paye.paye > 0 && !emp.taxId)
       add(emp.id, "PAYE", "WARNING", "TAX_ID_MISSING", `${tag}: Tax ID missing for PAYE remittance.`);
     if (res.paye.paye > 0 && !normaliseState(emp.stateOfResidence))
-      add(emp.id, "PAYE", "WARNING", "STATE_MISSING", `${tag}: state of residence missing — their PAYE goes on the "State not recorded" line of the remittance, not to a state.`);
+      add(emp.id, "PAYE", missingStateSeverity(a.rules.requirePayeState), "STATE_MISSING", `${tag}: state of residence missing — their PAYE goes on the "State not recorded" line of the remittance, not to a state${a.rules.requirePayeState ? "; the payroll rule requires a state, so set it and recalculate or have Finance override with a reason" : ""}.`);
     // DEDUCTIONS
     if (res.netPay < 0)
       add(

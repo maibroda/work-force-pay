@@ -31,6 +31,7 @@ export default async function PayrollRulesPage() {
               <TH>Max OT hrs/month</TH>
               <TH>Max deductions % of earnings</TH>
               <TH>Back office charge %</TH>
+              <TH>State of residence</TH>
               <TH>Effective</TH>
             </TR>
           </THead>
@@ -47,6 +48,7 @@ export default async function PayrollRulesPage() {
                 <TD>{num(x.maxOvertimeHoursPerMonth)}</TD>
                 <TD>{num(x.maxDeductionPctOfGross)}%</TD>
                 <TD>{num(x.backOfficeChargePct)}%</TD>
+                <TD>{x.requirePayeState ? <Badge tone="amber">required to approve</Badge> : <span className="text-muted-foreground text-xs">warning only</span>}</TD>
                 <TD>
                   {fmtDate(x.effectiveFrom)} →{" "}
                   {x.effectiveTo ? fmtDate(x.effectiveTo) : <Badge tone="green">current</Badge>}
@@ -116,6 +118,14 @@ export default async function PayrollRulesPage() {
                 min: 0,
                 max: 100,
                 defaultValue: num(r.backOfficeChargePct),
+              },
+              {
+                name: "requirePayeState",
+                label: "Require every taxed worker to have a state of residence before approval",
+                type: "checkbox",
+                defaultValue: r.requirePayeState,
+                help: "Off (the default): a worker with PAYE and no state is a warning and their PAYE goes on a 'State not recorded' line. On: it is a critical finding that blocks approval until the state is set, or Finance overrides it with a reason.",
+                span: 3,
               },
               { name: "effectiveFrom", label: "Effective from", type: "date", required: true },
             ]}
