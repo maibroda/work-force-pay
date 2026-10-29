@@ -136,17 +136,46 @@ export async function savePayingBank(ctx: Ctx, input: SavePayingBankInput) {
   return { ...saved, layout: asLayout(saved.layout) };
 }
 
+export interface AssignPayingBankInput {
+  /** The bank to pay from, or null to go back to the default. */
+  payingBankId: string | null;
+  /** Employee numbers, separated by commas, spaces or new lines. */
+  employeeNumbers?: string;
+  /** Everyone in this category. */
+  categoryId?: string;
+}
+
+/** Says which paying bank people are paid from (by employee number and/or category). Takes effect on the NEXT payment batches; batches already made keep theirs. */
+export async function assignPayingBank(ctx: Ctx, input: AssignPayingBankInput) {
+  assertCan(ctx, "payment.manage");
+  const numbers = [...new Set((input.employeeNumbers ?? "").split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean))];
+  if (!numbers.length && !input.categoryId) throw new BusinessError("Say who: give employee numbers, a category, or both.");
+  const bank = input.payingBankId ? await findBank(db, ctx, input.payingBankId) : null;
+  const people = await db.employee.findMany({
+    where: { organizationId: ctx.orgId, OR: [...(numbers.length ? [{ employeeNumber: { in: numbers } }] : []), ...(input.categoryId ? [{ categoryId: input.categoryId }] : [])] },
+    select: { id: true, employeeNumber: true },
+  });
+  const found = new Set(people.map((p) => p.employeeNumber));
+  const notFound = numbers.filter((n) => !found.has(n));
+  if (people.length)
+    await db.$transaction(async (tx) => {
+      await tx.employee.updateMany({ where: { id: { in: people.map((p) => p.id) }, organizationId: ctx.orgId }, data: { payingBankId: bank?.id ?? null } });
+      await logAudit(ctx, { action: "PAYING_BANK_ASSIGN", entity: "PayingBank", entityId: bank?.id ?? "DEFAULT", newValue: { bank: bank?.name ?? "the default bank", people: people.length, byCategory: !!input.categoryId, notFound: notFound.length } }, tx);
+    });
+  return { assigned: people.length, notFound };
+}
+
 export async function listPayingBanks(ctx: Ctx) {
   assertCan(ctx, "payment.manage");
   const banks = await db.payingBank.findMany({
     where: { organizationId: ctx.orgId },
     orderBy: { name: "asc" },
-    include: { codeSets: { orderBy: { version: "desc" }, take: 1 } },
+    include: { codeSets: { orderBy: { version: "desc" }, take: 1 }, _count: { select: { employees: true } } },
   });
-  return banks.map(({ codeSets, ...b }) => {
+  return banks.map(({ codeSets, _count, ...b }) => {
     const layout = asLayout(b.layout);
     const latest = codeSets[0] ?? null;
-    return { ...b, layout, hasLayout: !!layout && validateLayout(layout).length === 0, latest: latest && { version: latest.version, entryCount: latest.entryCount, blockedCount: latest.blockedCount, sourceName: latest.sourceName, sourceSha256: latest.sourceSha256, importedAt: latest.importedAt } };
+    return { ...b, people: _count.employees, layout, hasLayout: !!layout && validateLayout(layout).length === 0, latest: latest && { version: latest.version, entryCount: latest.entryCount, blockedCount: latest.blockedCount, sourceName: latest.sourceName, sourceSha256: latest.sourceSha256, importedAt: latest.importedAt } };
   });
 }
 

@@ -114,11 +114,13 @@ describe("paying banks: the file", () => {
   ];
 
   it("uses each bank's own code for the same employee bank: Stanbic is 039 for Access and 221 for First Bank", async () => {
+    // two clients with the same payroll, one paying from each bank (the first bank an organization sets up is its default, which everyone without a bank of their own follows)
     const w = await world(staff);
     const first = await createPayingBank(w.fin, { name: "First Bank", builtIn: "FIRST_BANK", debitAccountNumber: "3000000001" });
-    const access = await createPayingBank(w.fin, { name: "Access Bank", builtIn: "ACCESS_BANK" });
+    const w2 = await world(staff);
+    const access = await createPayingBank(w2.fin, { name: "Access Bank", builtIn: "ACCESS_BANK" });
     const pf = await paymentFilePreview(w.fin, w.run.id, { payingBankId: first.id });
-    const pa = await paymentFilePreview(w.fin, w.run.id, { payingBankId: access.id });
+    const pa = await paymentFilePreview(w2.fin, w2.run.id, { payingBankId: access.id });
     expect(pf.problems).toEqual([]);
     expect(pa.problems).toEqual([]);
     expect(pf.rows.find((r) => r.accountNumber === "0123456789")?.bankCode).toBe("221");
@@ -179,10 +181,9 @@ describe("paying banks: the file", () => {
 
   it("refuses, saying why, when the bank has no layout, no debit account, an inactive profile, too long a narration or too many rows", async () => {
     const w = await world(staff);
+    const first = await createPayingBank(w.fin, { name: "First Bank", builtIn: "FIRST_BANK" }); // the first bank set up is the default
     const unset = await createPayingBank(w.fin, { name: "Some Other Bank" }); // a bank whose upload template is not known yet
     await expect(exportPaymentFile(w.fin, w.run.id, { payingBankId: unset.id })).rejects.toThrow(/upload template.*not been set up/i);
-
-    const first = await createPayingBank(w.fin, { name: "First Bank", builtIn: "FIRST_BANK" });
     await expect(exportPaymentFile(w.fin, w.run.id, { payingBankId: first.id })).rejects.toThrow(/debit account/i);
 
     await savePayingBank(w.fin, { id: first.id, debitAccountNumber: "3000000001", narrationMax: 10 });

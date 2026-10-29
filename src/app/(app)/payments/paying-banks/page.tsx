@@ -1,3 +1,4 @@
+import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth/session";
 import { BUILT_IN_CODE_LISTS } from "@/lib/bank-code-lists";
 import { LAYOUT_SOURCES, layoutToText } from "@/lib/paying-bank";
@@ -7,11 +8,12 @@ import { PageHeader, Section } from "@/components/page";
 import { SmartForm } from "@/components/smart-form";
 import { Badge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { createPayingBankAction, importCodeSetAction, savePayingBankAction } from "@/app/actions/payment-file";
+import { assignPayingBankAction, createPayingBankAction, importCodeSetAction, savePayingBankAction } from "@/app/actions/payment-file";
 
 export default async function PayingBanksPage() {
   const ctx = await requirePage("payment.manage");
   const banks = await listPayingBanks(ctx);
+  const categories = await db.employeeCategory.findMany({ where: { organizationId: ctx.orgId }, orderBy: { name: "asc" }, select: { id: true, name: true } });
   return (
     <>
       <PageHeader
@@ -25,6 +27,7 @@ export default async function PayingBanksPage() {
               <TH>Bank</TH>
               <TH>Upload layout</TH>
               <TH>Bank-code list</TH>
+              <TH className="text-right">People assigned</TH>
               <TH>Status</TH>
             </TR>
           </THead>
@@ -44,7 +47,10 @@ export default async function PayingBanksPage() {
                     "None yet"
                   )}
                 </TD>
-                <TD>{b.active ? <Badge tone="green">In use</Badge> : <Badge>Not in use</Badge>}</TD>
+                <TD className="text-right">{b.people}</TD>
+                <TD>
+                  {b.active ? <Badge tone="green">In use</Badge> : <Badge>Not in use</Badge>} {b.isDefault && <Badge tone="blue">Default</Badge>}
+                </TD>
               </TR>
             ))}
           </TBody>
@@ -65,6 +71,22 @@ export default async function PayingBanksPage() {
           ]}
         />
       </Section>
+
+      {banks.length > 0 && (
+        <Section title="Who is paid from which bank" description="One payroll can be paid from several banks: say which bank each person is paid from, and one file is made per bank. Anyone with no bank of their own is paid from the default bank. This applies from the NEXT payment batches; batches already made keep theirs.">
+          <SmartForm
+            columns={2}
+            submitLabel="Assign"
+            resetOnSuccess
+            action={assignPayingBankAction}
+            fields={[
+              { name: "payingBankId", label: "Paid from", type: "select", options: [{ value: "", label: "The default bank (clears their own)" }, ...banks.filter((b) => b.active).map((b) => ({ value: b.id, label: b.name }))] },
+              { name: "categoryId", label: "Everyone in this category (optional)", type: "select", options: [{ value: "", label: "—" }, ...categories.map((c) => ({ value: c.id, label: c.name }))] },
+              { name: "employeeNumbers", label: "Employee numbers (separated by commas, spaces or new lines)", type: "textarea", span: 2 },
+            ]}
+          />
+        </Section>
+      )}
 
       {banks.map((b) => (
         <Section key={b.id} title={b.name} description={b.hasLayout ? undefined : "No file can be made for this bank until its upload template is set up."}>
