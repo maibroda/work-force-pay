@@ -630,6 +630,11 @@ model Organization {
   calendarSetting           PayrollCalendarSetting?
   reminderSetting           PayrollReminderSetting?
   bankCodes                 BankCode[]
+  crmSetting                CrmSetting?
+  crmAccounts               CrmAccount[]
+  crmContacts               CrmContact[]
+  crmLeads                  CrmLead[]
+  crmConsents               CrmConsent[]
   payslipSetting            PayslipSetting?
   payslipDeliveries         PayslipDelivery[]
   paymentFileExports        PaymentFileExport[]
@@ -5531,4 +5536,230 @@ model JournalReversal {
 
   @@index([organizationId, status])
   @@index([journalId])
+}
+
+// ─────────────────────────────── SALES AND ACCOUNT MANAGEMENT (a company's own CRM for the clients it serves; see docs/crm) ───────────────────────────────
+// Separate from the bureau's own payroll-sales pipeline above (Lead, Proposal, ...): these models are all prefixed Crm and used through the sales.* permissions.
+
+enum CrmMode {
+  CLASSIC
+  SIMPLE
+}
+
+enum CrmRecordStatus {
+  ACTIVE
+  VOID
+}
+
+enum CrmAccountType {
+  PROSPECT
+  CLIENT
+  FORMER_CLIENT
+}
+
+enum CrmSource {
+  REFERRAL
+  WALK_IN
+  PHONE
+  WEBSITE
+  WHATSAPP
+  TENDER
+  EVENT
+  EXISTING_CLIENT
+  OTHER
+}
+
+enum CrmServiceInterest {
+  GUARDING
+  CLEANING
+  FACILITY
+  STAFFING
+  OTHER
+}
+
+enum CrmDecisionRole {
+  DECISION_MAKER
+  INFLUENCER
+  USER
+  FINANCE
+  PROCUREMENT
+  GATEKEEPER
+}
+
+enum CrmLeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  UNQUALIFIED
+  CONVERTED
+  VOID
+}
+
+enum CrmConsentPurpose {
+  MARKETING
+  SERVICE
+}
+
+enum CrmConsentStatus {
+  GRANTED
+  WITHDRAWN
+}
+
+enum CrmChannel {
+  EMAIL
+  WHATSAPP
+  SMS
+  PHONE
+  IN_PERSON
+  WEB_FORM
+  OTHER
+}
+
+/// Whether the sales module is on for an organization (off until a company administrator switches it on) and how enquiries are handled.
+model CrmSetting {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  enabled        Boolean      @default(false)
+  mode           CrmMode      @default(CLASSIC)
+  updatedBy      String
+  updatedAt      DateTime     @updatedAt
+}
+
+/// A company the organization sells to or serves, as the sales side sees it. It links to the real Client only when a won deal is handed over.
+model CrmAccount {
+  id              String          @id @default(cuid())
+  organizationId  String
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  name            String
+  /// The name reduced to what identifies it (no case, punctuation or company ending), to find duplicates.
+  normalizedName  String
+  industry        String?
+  accountType     CrmAccountType  @default(PROSPECT)
+  ownerUserId     String
+  ownerName       String
+  parentAccountId String?
+  parent          CrmAccount?     @relation("CrmAccountParent", fields: [parentAccountId], references: [id])
+  children        CrmAccount[]    @relation("CrmAccountParent")
+  source          CrmSource?
+  sourceDetail    String?
+  state           String?
+  lga             String?
+  address         String?
+  rcNumber        String?
+  emailDomain     String?
+  /// The existing Client this became, set only at handover.
+  clientId        String?
+  status          CrmRecordStatus @default(ACTIVE)
+  voidedAt        DateTime?
+  voidedBy        String?
+  voidReason      String?
+  createdBy       String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  contacts CrmContact[]
+
+  @@index([organizationId, ownerUserId, status])
+  @@index([organizationId, normalizedName])
+}
+
+/// A person at an account (or not yet attached to one). Phones are stored as E.164 (+234...).
+model CrmContact {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  accountId      String?
+  account        CrmAccount?      @relation(fields: [accountId], references: [id])
+  firstName      String
+  lastName       String
+  jobTitle       String?
+  roleInDecision CrmDecisionRole?
+  phoneE164      String?
+  whatsappE164   String?
+  email          String?
+  isPrimary      Boolean          @default(false)
+  ownerUserId    String
+  ownerName      String
+  status         CrmRecordStatus  @default(ACTIVE)
+  voidedAt       DateTime?
+  voidedBy       String?
+  voidReason     String?
+  createdBy      String
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  consents CrmConsent[]
+
+  @@index([organizationId, ownerUserId, status])
+  @@index([organizationId, phoneE164])
+  @@index([organizationId, email])
+  @@index([accountId])
+}
+
+/// An enquiry not yet known to be real. Becomes an account and contact (and a deal) when converted (a later phase).
+model CrmLead {
+  id                 String             @id @default(cuid())
+  organizationId     String
+  organization       Organization       @relation(fields: [organizationId], references: [id])
+  number             String
+  companyName        String
+  contactName        String?
+  jobTitle           String?
+  phoneE164          String?
+  email              String?
+  industry           String?
+  state              String?
+  lga                String?
+  address            String?
+  source             CrmSource          @default(OTHER)
+  sourceDetail       String?
+  estimatedGuards    Int?
+  serviceInterest    CrmServiceInterest @default(OTHER)
+  status             CrmLeadStatus      @default(NEW)
+  unqualifiedReason  String?
+  ownerUserId        String
+  ownerName          String
+  convertedAccountId String?
+  convertedContactId String?
+  convertedAt        DateTime?
+  convertedBy        String?
+  voidedAt           DateTime?
+  voidedBy           String?
+  voidReason         String?
+  createdBy          String
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  consents CrmConsent[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId, ownerUserId, status])
+  @@index([organizationId, phoneE164])
+  @@index([organizationId, email])
+}
+
+/// One consent or withdrawal, never changed (the database refuses it). The latest row for a person and purpose decides; none means unknown.
+model CrmConsent {
+  id               String            @id @default(cuid())
+  /// Orders the rows; the latest has the highest number.
+  seq              Int               @unique @default(autoincrement())
+  organizationId   String
+  organization     Organization      @relation(fields: [organizationId], references: [id])
+  contactId        String?
+  contact          CrmContact?       @relation(fields: [contactId], references: [id])
+  leadId           String?
+  lead             CrmLead?          @relation(fields: [leadId], references: [id])
+  purpose          CrmConsentPurpose
+  status           CrmConsentStatus
+  channel          CrmChannel
+  source           String
+  evidenceRef      String?
+  recordedBy       String
+  recordedByUserId String
+  recordedAt       DateTime          @default(now())
+
+  @@index([contactId, purpose, seq])
+  @@index([leadId, purpose, seq])
+  @@index([organizationId])
 }

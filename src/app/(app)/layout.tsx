@@ -15,7 +15,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Every page inside this layout runs its own requirePage (which enforces the two-factor requirement); the
   // layout itself must not, or someone sent to My security would be redirected from it, in a loop.
   const ctx = await requirePage(undefined, { allowUnenrolled: true });
-  const [org, gate] = await Promise.all([db.organization.findUnique({ where: { id: ctx.orgId } }), twoFactorStateFor(ctx)]);
+  const [org, gate, salesSetting] = await Promise.all([db.organization.findUnique({ where: { id: ctx.orgId } }), twoFactorStateFor(ctx), db.crmSetting.findUnique({ where: { organizationId: ctx.orgId }, select: { enabled: true } })]);
+  const salesOn = salesSetting?.enabled ?? false;
   const home = ctx.homeOrgId ? await db.organization.findUnique({ where: { id: ctx.homeOrgId }, select: { name: true } }) : null;
   const showBureau = Boolean(org?.isBureau || ctx.homeOrgId);
   const reminder = twoFactorReminder(gate.state, gate.enforceFrom, new Date(new Date().toISOString().slice(0, 10)));
@@ -27,7 +28,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .map((g) => ({
       title: g.title,
       items: g.items
-        .filter((i) => can(ctx.role, i.perm) && (!i.bureauOnly || showBureau) && (!i.clientOnly || ctx.role === "CLIENT_APPROVER" || ctx.role === "CLIENT_HR"))
+        .filter((i) => can(ctx.role, i.perm) && (!i.bureauOnly || showBureau) && (!i.salesOnly || salesOn) && (!i.clientOnly || ctx.role === "CLIENT_APPROVER" || ctx.role === "CLIENT_HR"))
         .map(({ href, label, section }) => ({ href, label, section })),
     }))
     .filter((g) => g.items.length);

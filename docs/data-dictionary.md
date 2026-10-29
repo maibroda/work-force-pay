@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-165 tables and 125 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+170 tables and 135 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -104,6 +104,11 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | calendarSetting | → PayrollCalendarSetting |  |  |
 | reminderSetting | → PayrollReminderSetting |  |  |
 | bankCodes | → BankCode[] |  |  |
+| crmSetting | → CrmSetting |  |  |
+| crmAccounts | → CrmAccount[] |  |  |
+| crmContacts | → CrmContact[] |  |  |
+| crmLeads | → CrmLead[] |  |  |
+| crmConsents | → CrmConsent[] |  |  |
 | payslipSetting | → PayslipSetting |  |  |
 | payslipDeliveries | → PayslipDelivery[] |  |  |
 | paymentFileExports | → PaymentFileExport[] |  |  |
@@ -4149,6 +4154,147 @@ A request to reverse a posted manual journal. Someone else approves; approving p
 | decidedAt | DateTime |  |  |
 | decisionNote | String |  |  |
 
+### CrmSetting
+
+Whether the sales module is on for an organization (off until a company administrator switches it on) and how enquiries are handled.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes | (unique) |
+| organization | → Organization |  |  |
+| enabled | Boolean |  |  |
+| mode | CrmMode |  |  |
+| updatedBy | String | yes |  |
+| updatedAt | DateTime |  |  |
+
+### CrmAccount
+
+A company the organization sells to or serves, as the sales side sees it. It links to the real Client only when a won deal is handed over.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| name | String | yes |  |
+| normalizedName | String | yes | The name reduced to what identifies it (no case, punctuation or company ending), to find duplicates. |
+| industry | String |  |  |
+| accountType | CrmAccountType |  |  |
+| ownerUserId | String | yes |  |
+| ownerName | String | yes |  |
+| parentAccountId | String |  |  |
+| parent | → CrmAccount |  |  |
+| children | → CrmAccount[] |  |  |
+| source | CrmSource |  |  |
+| sourceDetail | String |  |  |
+| state | String |  |  |
+| lga | String |  |  |
+| address | String |  |  |
+| rcNumber | String |  |  |
+| emailDomain | String |  |  |
+| clientId | String |  | The existing Client this became, set only at handover. |
+| status | CrmRecordStatus |  |  |
+| voidedAt | DateTime |  |  |
+| voidedBy | String |  |  |
+| voidReason | String |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+| contacts | → CrmContact[] |  |  |
+
+### CrmContact
+
+A person at an account (or not yet attached to one). Phones are stored as E.164 (+234...).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| accountId | String |  |  |
+| account | → CrmAccount |  |  |
+| firstName | String | yes |  |
+| lastName | String | yes |  |
+| jobTitle | String |  |  |
+| roleInDecision | CrmDecisionRole |  |  |
+| phoneE164 | String |  |  |
+| whatsappE164 | String |  |  |
+| email | String |  |  |
+| isPrimary | Boolean |  |  |
+| ownerUserId | String | yes |  |
+| ownerName | String | yes |  |
+| status | CrmRecordStatus |  |  |
+| voidedAt | DateTime |  |  |
+| voidedBy | String |  |  |
+| voidReason | String |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+| consents | → CrmConsent[] |  |  |
+
+### CrmLead
+
+An enquiry not yet known to be real. Becomes an account and contact (and a deal) when converted (a later phase).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| number | String | yes |  |
+| companyName | String | yes |  |
+| contactName | String |  |  |
+| jobTitle | String |  |  |
+| phoneE164 | String |  |  |
+| email | String |  |  |
+| industry | String |  |  |
+| state | String |  |  |
+| lga | String |  |  |
+| address | String |  |  |
+| source | CrmSource |  |  |
+| sourceDetail | String |  |  |
+| estimatedGuards | Int |  |  |
+| serviceInterest | CrmServiceInterest |  |  |
+| status | CrmLeadStatus |  |  |
+| unqualifiedReason | String |  |  |
+| ownerUserId | String | yes |  |
+| ownerName | String | yes |  |
+| convertedAccountId | String |  |  |
+| convertedContactId | String |  |  |
+| convertedAt | DateTime |  |  |
+| convertedBy | String |  |  |
+| voidedAt | DateTime |  |  |
+| voidedBy | String |  |  |
+| voidReason | String |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+| consents | → CrmConsent[] |  |  |
+
+### CrmConsent
+
+One consent or withdrawal, never changed (the database refuses it). The latest row for a person and purpose decides; none means unknown.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| seq | Int |  | Orders the rows; the latest has the highest number. (unique) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| contactId | String |  |  |
+| contact | → CrmContact |  |  |
+| leadId | String |  |  |
+| lead | → CrmLead |  |  |
+| purpose | CrmConsentPurpose | yes |  |
+| status | CrmConsentStatus | yes |  |
+| channel | CrmChannel | yes |  |
+| source | String | yes |  |
+| evidenceRef | String |  |  |
+| recordedBy | String | yes |  |
+| recordedByUserId | String | yes |  |
+| recordedAt | DateTime |  |  |
+
 ## Fixed sets of values
 
 ### Role
@@ -4670,4 +4816,44 @@ What the controller concluded about the harm a breach could do to the people aff
 ### JournalReversalStatus
 
 `PENDING`, `APPROVED`, `REJECTED`
+
+### CrmMode
+
+`CLASSIC`, `SIMPLE`
+
+### CrmRecordStatus
+
+`ACTIVE`, `VOID`
+
+### CrmAccountType
+
+`PROSPECT`, `CLIENT`, `FORMER_CLIENT`
+
+### CrmSource
+
+`REFERRAL`, `WALK_IN`, `PHONE`, `WEBSITE`, `WHATSAPP`, `TENDER`, `EVENT`, `EXISTING_CLIENT`, `OTHER`
+
+### CrmServiceInterest
+
+`GUARDING`, `CLEANING`, `FACILITY`, `STAFFING`, `OTHER`
+
+### CrmDecisionRole
+
+`DECISION_MAKER`, `INFLUENCER`, `USER`, `FINANCE`, `PROCUREMENT`, `GATEKEEPER`
+
+### CrmLeadStatus
+
+`NEW`, `CONTACTED`, `QUALIFIED`, `UNQUALIFIED`, `CONVERTED`, `VOID`
+
+### CrmConsentPurpose
+
+`MARKETING`, `SERVICE`
+
+### CrmConsentStatus
+
+`GRANTED`, `WITHDRAWN`
+
+### CrmChannel
+
+`EMAIL`, `WHATSAPP`, `SMS`, `PHONE`, `IN_PERSON`, `WEB_FORM`, `OTHER`
 
