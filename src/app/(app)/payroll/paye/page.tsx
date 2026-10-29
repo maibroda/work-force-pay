@@ -6,6 +6,7 @@ import { runOptions } from "@/server/options";
 import { recordSensitiveAccess } from "@/server/services/sensitive-access";
 import { fmtDate } from "@/lib/dates";
 import { naira, num } from "@/lib/money";
+import { groupPayeByState, STATE_NOT_RECORDED } from "@/lib/nigeria-states";
 import { PageHeader, Section, Stat, StatGrid } from "@/components/page";
 import { RunPicker } from "@/components/run-picker";
 import { Badge } from "@/components/ui/badge";
@@ -106,12 +107,33 @@ export default async function PayePage({
         <Stat label="Employees taxed" value={rows.filter((r) => r.paye > 0).length} />
         <Stat label="Exempt / nil" value={rows.filter((r) => r.paye === 0).length} />
       </StatGrid>
+      <Section title="PAYE by state of residence" description="PAYE is paid to the tax authority of the state each worker lives in. Anyone without a recognised state is on the last line." flush>
+        <Table>
+          <THead>
+            <TR>
+              <TH>State</TH>
+              <TH className="text-right">Employees taxed</TH>
+              <TH className="text-right">PAYE</TH>
+            </TR>
+          </THead>
+          <TBody>
+            {groupPayeByState(rows).map((l) => (
+              <TR key={l.state}>
+                <TD>{l.state === STATE_NOT_RECORDED ? <Badge tone="amber">{l.state}</Badge> : l.state}</TD>
+                <TD className="text-right">{l.headcount}</TD>
+                <TD className="text-right">{naira(l.paye)}</TD>
+              </TR>
+            ))}
+          </TBody>
+        </Table>
+      </Section>
       <Section title="PAYE by employee" flush>
         <Table>
           <THead>
             <TR>
               <TH>Emp. No.</TH>
               <TH>Name</TH>
+              <TH>State</TH>
               <TH>Tax ID</TH>
               <TH className="text-right">Total earnings</TH>
               <TH className="text-right">Taxable</TH>
@@ -124,6 +146,7 @@ export default async function PayePage({
               <TR key={r.employeeNumber}>
                 <TD className="font-mono text-xs">{r.employeeNumber}</TD>
                 <TD>{r.employeeName}</TD>
+                <TD className="text-xs">{r.payeState}</TD>
                 <TD className="text-xs">{r.taxId}</TD>
                 <TD className="text-right">{naira(r.totalEarnings)}</TD>
                 <TD className="text-right">{naira(r.taxableIncome)}</TD>

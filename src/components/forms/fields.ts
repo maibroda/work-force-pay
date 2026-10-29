@@ -1,6 +1,7 @@
 import type { Field } from "@/components/smart-form";
 import { enumOptions } from "@/server/options";
 import { iso } from "@/lib/dates";
+import { NIGERIA_STATES } from "@/lib/nigeria-states";
 
 type Opts = { value: string; label: string }[];
 const NUBAN = { pattern: "^\\d{10}$", patternMessage: "Account number must be 10 digits (NUBAN)" };
@@ -61,6 +62,14 @@ export function employeeFields(
     { name: "phone", label: "Phone", defaultValue: v("phone") },
     { name: "email", label: "Email", type: "email", defaultValue: v("email") },
     { name: "address", label: "Residential address", defaultValue: v("address"), span: 2 },
+    {
+      name: "stateOfResidence",
+      label: "State of residence (PAYE goes here)",
+      type: "select",
+      options: NIGERIA_STATES.map((s) => ({ value: s, label: s })),
+      defaultValue: v("stateOfResidence"),
+      help: "PAYE is paid to the tax authority of the state the worker lives in",
+    },
     {
       name: "employmentDate",
       label: "Employment date",

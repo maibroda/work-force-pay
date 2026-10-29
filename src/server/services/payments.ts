@@ -1,5 +1,7 @@
 import type { Ctx } from "@/lib/auth/context";
 import { num } from "@/lib/money";
+import { groupPayeByState, STATE_NOT_RECORDED } from "@/lib/nigeria-states";
+import { payeDueInfo, type DueInfo, type PayeTiming } from "@/lib/paye-dates";
 import { totalOf } from "@/lib/payroll/pay-inputs";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
@@ -171,7 +173,7 @@ export async function listTransactions(ctx: Ctx, batchId?: string) {
   });
 }
 
-/** PAYE (one payee) and pension (per PFA, employee + employer) remittance schedules. */
+/** PAYE (one line per state of residence) and pension (per PFA, employee + employer) remittance schedules. */
 export async function generateRemittances(ctx: Ctx, runId: string) {
   assertCan(ctx, "payment.manage");
   const run = await db.payrollRun.findFirst({ where: { id: runId, organizationId: ctx.orgId } });
@@ -203,19 +205,22 @@ export async function generateRemittances(ctx: Ctx, runId: string) {
       };
     })
     .filter((c) => c.total > 0);
+  // PAYE goes to the tax authority of each worker's state of residence: one line per state (anyone without a recognised state is on "State not recorded").
+  const payeLines = groupPayeByState(records.map((r) => ({ payeState: r.payeState, paye: num(r.paye) })));
   await db.$transaction(async (tx) => {
-    await tx.statutoryRemittance.create({
-      data: {
-        organizationId: ctx.orgId,
-        runId,
-        type: "PAYE",
-        payee: "State Internal Revenue Service (PAYE)",
-        employeeAmount: paye,
-        employerAmount: 0,
-        totalAmount: paye,
-        headcount: records.filter((r) => num(r.paye) > 0).length,
-      },
-    });
+    for (const line of payeLines)
+      await tx.statutoryRemittance.create({
+        data: {
+          organizationId: ctx.orgId,
+          runId,
+          type: "PAYE",
+          payee: line.state === STATE_NOT_RECORDED ? `${STATE_NOT_RECORDED} (PAYE)` : `${line.state} Internal Revenue Service (PAYE)`,
+          employeeAmount: line.paye,
+          employerAmount: 0,
+          totalAmount: line.paye,
+          headcount: line.headcount,
+        },
+      });
     for (const [pfa, v] of byPfa)
       await tx.statutoryRemittance.create({
         data: {
@@ -248,7 +253,7 @@ export async function generateRemittances(ctx: Ctx, runId: string) {
         action: "STATUTORY_REMITTANCE_GENERATE",
         entity: "PayrollRun",
         entityId: runId,
-        newValue: { paye, pfas: byPfa.size, employerCostTypes: employerCosts.length },
+        newValue: { paye, payeStates: payeLines.length, pfas: byPfa.size, employerCostTypes: employerCosts.length },
       },
       tx,
     );
@@ -265,6 +270,30 @@ export async function listRemittances(ctx: Ctx, opts: { runId?: string; type?: s
     include: { run: { include: { period: true } } },
     orderBy: [{ createdAt: "desc" }, { type: "asc" }],
   });
+}
+
+/**
+ * Due date, lateness and penalty of PAYE remittance lines, from the tax rule each payroll was calculated under (its filing dates are rule data).
+ * A rule with no due day gives no date, and nothing is ever overdue. Other kinds of remittance get nothing.
+ */
+export async function remittanceTiming(
+  ctx: Ctx,
+  rows: ReadonlyArray<{ id: string; type: string; status: string; totalAmount: unknown; run: { taxRuleVersion: string | null; period: { year: number; month: number } } }>,
+  today: string = new Date().toISOString().slice(0, 10),
+): Promise<Map<string, DueInfo>> {
+  const out = new Map<string, DueInfo>();
+  const paye = rows.filter((r) => r.type === "PAYE");
+  if (!paye.length) return out;
+  const wanted = [...new Set(paye.map((r) => r.run.taxRuleVersion).filter((v): v is string => !!v))].map((v) => {
+    const at = v.lastIndexOf("@");
+    return { code: v.slice(0, at), version: v.slice(at + 1), key: v };
+  });
+  const rules = wanted.length ? await db.taxRule.findMany({ where: { organizationId: ctx.orgId, OR: wanted.map((w) => ({ code: w.code, version: w.version })) } }) : [];
+  const timingOf = new Map<string, PayeTiming>(
+    rules.map((r) => [`${r.code}@${r.version}`, { dueDay: r.payeDueDay, annualReturnMonth: r.annualReturnMonth, annualReturnDay: r.annualReturnDay, latePenaltyPct: r.latePenaltyPct === null ? null : num(r.latePenaltyPct) }]),
+  );
+  for (const r of paye) out.set(r.id, payeDueInfo({ type: r.type, status: r.status, totalAmount: num(r.totalAmount as never), period: r.run.period }, (r.run.taxRuleVersion ? timingOf.get(r.run.taxRuleVersion) : undefined) ?? null, today));
+  return out;
 }
 
 /** Every remittance type with a human label — for the per-type filter/portal on the remittance page. */

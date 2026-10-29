@@ -786,6 +786,8 @@ async function main() {
         email: `${first}.${last}${n}@mail.test`.toLowerCase(),
         address: `${Math.floor(1 + rand() * 90)} ${pick(["Allen Avenue", "Herbert Macaulay Way", "Ogunlana Drive", "Aba Road", "Zik Avenue", "Isaac John Street"])}`,
         employmentDate: d(p.empDate),
+        // synthetic states chosen by position, NOT from the random stream, so every other seeded value is unchanged
+        stateOfResidence: n % 19 === 0 ? null : n % 7 === 0 ? "Ogun" : "Lagos",
         exitDate: p.exit ? d(p.exit) : null,
         status: p.status ?? "ACTIVE",
         categoryId: cat[p.cat].id,

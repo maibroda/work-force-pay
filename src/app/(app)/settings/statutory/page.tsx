@@ -31,6 +31,7 @@ export default async function StatutoryPage() {
               <TH>Effective</TH>
               <TH>Bands</TH>
               <TH>Reliefs</TH>
+              <TH>PAYE filing</TH>
             </TR>
           </THead>
           <TBody>
@@ -57,6 +58,19 @@ export default async function StatutoryPage() {
                     .map((r) => r.name)
                     .join("; ")}
                 </TD>
+                <TD className="whitespace-normal text-xs">
+                  {t.payeDueDay === null && t.annualReturnMonth === null && t.latePenaltyPct === null ? (
+                    <span className="text-muted-foreground">not set</span>
+                  ) : (
+                    [
+                      t.payeDueDay !== null ? `PAYE due day ${t.payeDueDay} of the next month` : null,
+                      t.annualReturnMonth !== null ? `annual return ${t.annualReturnDay}/${t.annualReturnMonth}` : null,
+                      t.latePenaltyPct !== null ? `late penalty ${num(t.latePenaltyPct)}%` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
+                  )}
+                </TD>
               </TR>
             ))}
           </TBody>
@@ -68,6 +82,10 @@ export default async function StatutoryPage() {
             current={{
               code: current.code,
               name: current.name,
+              payeDueDay: current.payeDueDay,
+              annualReturnMonth: current.annualReturnMonth,
+              annualReturnDay: current.annualReturnDay,
+              latePenaltyPct: current.latePenaltyPct === null ? null : num(current.latePenaltyPct),
               bands: current.bands
                 .map(
                   (b) =>

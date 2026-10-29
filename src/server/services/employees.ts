@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import type { Ctx } from "@/lib/auth/context";
 import { d } from "@/lib/dates";
+import { normaliseState } from "@/lib/nigeria-states";
 import { fullName } from "@/lib/utils";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
@@ -28,6 +29,17 @@ export const employeeSchema = z.object({
     .optional()
     .or(z.literal("").transform(() => undefined)),
   address: opt,
+  /** One of the 36 states or FCT, however it was typed; stored under its proper name. Blank means not recorded. */
+  stateOfResidence: z
+    .string()
+    .trim()
+    .optional()
+    .transform((s, ctx) => {
+      if (!s) return undefined;
+      const state = normaliseState(s);
+      if (!state) ctx.addIssue({ code: "custom", message: "The state of residence isn't a recognised Nigerian state (use one of the 36 states or FCT)." });
+      return state ?? undefined;
+    }),
   employmentDate: z.string().min(10, "Employment date is required"),
   status: z
     .enum(["ACTIVE", "INACTIVE", "SUSPENDED", "ON_LEAVE", "TERMINATED", "RESIGNED", "EXITED"])
@@ -60,6 +72,7 @@ function toData(v: z.output<typeof employeeSchema>) {
     phone: v.phone ?? null,
     email: v.email ?? null,
     address: v.address ?? null,
+    stateOfResidence: v.stateOfResidence ?? null,
     employmentDate: d(v.employmentDate),
     status: v.status,
     exitDate: v.exitDate ? d(v.exitDate) : null,

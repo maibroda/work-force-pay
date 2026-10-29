@@ -4,6 +4,7 @@ import type { Ctx } from "@/lib/auth/context";
 import { daysInMonth, eachDay, iso, monthEnd, monthStart, periodName } from "@/lib/dates";
 import { num } from "@/lib/money";
 import { roundPlaces } from "@/lib/money-exact";
+import { normaliseState } from "@/lib/nigeria-states";
 import { percentOfAmount, totalOf } from "@/lib/payroll/pay-inputs";
 import { fullName } from "@/lib/utils";
 import {
@@ -543,6 +544,7 @@ function recordRow(
     pensionPin: string | null;
     pfa: string | null;
     taxId: string | null;
+    stateOfResidence: string | null;
   },
   res: EngineResult,
   taxVersion: string,
@@ -562,6 +564,7 @@ function recordRow(
     pensionPin: emp.pensionPin,
     pfa: emp.pfa,
     taxId: emp.taxId,
+    payeState: normaliseState(emp.stateOfResidence),
     basisDays: res.basisDays,
     daysWorked: res.daysWorked,
     daysAbsent: res.daysAbsent,
@@ -781,6 +784,8 @@ async function validate(
       );
     if (res.paye.paye > 0 && !emp.taxId)
       add(emp.id, "PAYE", "WARNING", "TAX_ID_MISSING", `${tag}: Tax ID missing for PAYE remittance.`);
+    if (res.paye.paye > 0 && !normaliseState(emp.stateOfResidence))
+      add(emp.id, "PAYE", "WARNING", "STATE_MISSING", `${tag}: state of residence missing — their PAYE goes on the "State not recorded" line of the remittance, not to a state.`);
     // DEDUCTIONS
     if (res.netPay < 0)
       add(
