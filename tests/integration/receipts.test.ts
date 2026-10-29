@@ -46,6 +46,9 @@ async function world() {
 }
 
 const TODAY = new Date().toISOString().slice(0, 10);
+// The ageing test counts days past each due date (June 72, July 41, August 10) and those counts only hold on THIS day. It used the real date and so failed once the
+// calendar moved on (on 29 October June became 91 days, "Over 90"). Only that test uses it: the others apply things "today" (the system's real date) and need TODAY.
+const AGEING_DAY = "2026-10-10";
 
 describe("a receipt across several invoices", () => {
   it("settles three invoices from one 10,000,000 receipt, in one journal, and the statement agrees with the ledger", async () => {
@@ -191,13 +194,13 @@ describe("statements and ageing", () => {
   it("ages what is owed by days past the due date, and the buckets add up to the balance", async () => {
     const { fin, clientId, jun, receive } = await world();
     await receive({ amount: 1_000_000, receivedDate: "2026-07-01", allocations: [{ invoiceId: jun.id, cash: 1_000_000 }] });
-    const s = await clientStatement(fin, clientId, TODAY);
+    const s = await clientStatement(fin, clientId, AGEING_DAY);
     // June (due 30 Jul, 72 days) owes 3,000,000; July (due 30 Aug, 41 days) and August (due 30 Sep, 10 days) 4,000,000 each
     expect(s.ageing).toEqual({ "Not yet due": 0, "1–30 days": 4_000_000, "31–60 days": 4_000_000, "61–90 days": 3_000_000, "Over 90 days": 0 });
     expect(Object.values(s.ageing).reduce((a, b) => a + b, 0)).toBe(s.closing);
     const early = await clientStatement(fin, clientId, "2026-07-15");
     expect(early.ageing["Not yet due"]).toBe(early.closing);
-    const all = await receivablesAgeing(fin, TODAY);
+    const all = await receivablesAgeing(fin, AGEING_DAY);
     expect(all).toHaveLength(1);
     expect(all[0]).toMatchObject({ clientId, closing: 11_000_000, ledger: 11_000_000 });
   });
