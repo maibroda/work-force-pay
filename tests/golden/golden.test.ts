@@ -165,6 +165,8 @@ function runEngine(c: GoldenRow) {
     days,
     resolveRate: (day) => rates[Number(day.beatId?.split("-")[1] ?? 0)],
     pension: { employeeRate: Exact.decimal(params.employee_pension_rate).mul(Exact.int(100)).toNumber(), employerRate: 10, version: "golden" },
+    // the key's NHF rate, loaded the way GOLDEN_FORMAT.md section 4 says: from the golden parameters, into the setting the engine reads
+    nhfEmployeeRatePct: Exact.decimal(params.nhf_rate_on_basic).mul(Exact.int(100)).toNumber(),
     taxRule: goldenTaxRule(),
   };
   return calculateEmployeePayroll(input);
@@ -172,7 +174,7 @@ function runEngine(c: GoldenRow) {
 
 const kobo = (naira: number) => Number(nairaToKobo(String(naira)).round());
 
-describe("golden dataset: the payroll engine agrees with the key on gross, pension and PAYE", () => {
+describe("golden dataset: the payroll engine agrees with the key on gross, pension, NHF, PAYE and net pay", () => {
   // Cases the engine can be given the same inputs for, and whose rules are the same on these three lines.
   // Case 9 is left out on purpose: see the todo below (the key rounds basic pay and allowances separately).
   for (const n of [1, 2, 3, 6, 7, 8, 11]) {
@@ -185,12 +187,13 @@ describe("golden dataset: the payroll engine agrees with the key on gross, pensi
       expect(kobo(r.paye.annualChargeable), "annual taxable").toBe(want.annual_taxable);
       expect(kobo(r.paye.annualTax), "annual PAYE").toBe(want.annual_paye);
       expect(kobo(r.paye.paye), "monthly PAYE").toBe(want.monthly_paye);
+      expect(kobo(r.employeeNhf), "NHF").toBe(want.nhf);
+      expect(kobo(r.netPay), "net pay").toBe(want.net_pay);
     });
   }
 
   // Where the engine follows DIFFERENT RULES from the key. Not failures to hide: each needs the founder's (and the adviser's) decision on which rule is right.
   // When a decision is made, the rule is changed in one place and the key regenerated (GOLDEN_FORMAT.md section 2), and the todo becomes a test.
-  it.todo("NHF: the key deducts the employee's NHF (2.5% of basic) from net pay; the engine has no employee NHF deduction, so net pay is higher by exactly that amount (cases 1 to 3, 6 to 9, 11)");
   it.todo("Net-pay floor: the key limits loan and cooperative deductions so at least half of gross is taken home (case 10); the engine only flags deductions above a percentage of earnings");
   it.todo("Unpaid absence: the key leaves allowances unreduced by absence days (case 4); the engine pays everything pro rata to the days paid");
   it.todo("Overtime base: the key's hourly rate uses the rate without allowances (case 5); the app derives it from the whole operative monthly gross");

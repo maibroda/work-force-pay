@@ -1,12 +1,15 @@
 import type { Ctx } from "@/lib/auth/context";
 import { num } from "@/lib/money";
 import { groupPayeByState, STATE_NOT_RECORDED } from "@/lib/nigeria-states";
-import { payeDueInfo, type DueInfo, type PayeTiming } from "@/lib/paye-dates";
+import { remittanceDueInfo, type DueInfo, type PayeTiming } from "@/lib/paye-dates";
 import { totalOf } from "@/lib/payroll/pay-inputs";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { nextNumber } from "./numbering";
 import { EMPLOYER_COST_FIELDS, type EmployerCostField } from "./reports";
+
+/** The payee of the employee NHF line (it shares the NHF / Medical type with the employer's share); also how that line is recognised for its due date. */
+export const NHF_EMPLOYEE_PAYEE = "Federal Mortgage Bank of Nigeria (employee NHF)";
 
 /** RemittanceType value for each employer add-on cost field. */
 const EMPLOYER_COST_REMITTANCE_TYPE: Record<EmployerCostField, string> = {
@@ -184,6 +187,9 @@ export async function generateRemittances(ctx: Ctx, runId: string) {
   if (existing) throw new BusinessError("Remittances already generated for this run.");
   const records = await db.payrollRecord.findMany({ where: { runId } });
   const paye = totalOf(records.map((r) => num(r.paye)));
+  // The employee's own NHF contribution (a payslip line, present only when the payroll rule sets a rate), owed to the Federal Mortgage Bank of Nigeria
+  const nhfAmounts = records.flatMap((r) => ((r.lines as unknown as Array<{ type: string; code: string; amount: number }>) ?? []).filter((l) => l.type === "DEDUCTION" && l.code === "NHF" && l.amount > 0).map((l) => l.amount));
+  const nhfTotal = totalOf(nhfAmounts);
   const byPfa = new Map<string, { ee: number; er: number; n: number }>();
   for (const r of records) {
     if (!num(r.employeePension) && !num(r.employerPension)) continue;
@@ -221,6 +227,19 @@ export async function generateRemittances(ctx: Ctx, runId: string) {
           headcount: line.headcount,
         },
       });
+    if (nhfAmounts.length)
+      await tx.statutoryRemittance.create({
+        data: {
+          organizationId: ctx.orgId,
+          runId,
+          type: "NHF_MEDICAL",
+          payee: NHF_EMPLOYEE_PAYEE,
+          employeeAmount: nhfTotal,
+          employerAmount: 0,
+          totalAmount: nhfTotal,
+          headcount: nhfAmounts.length,
+        },
+      });
     for (const [pfa, v] of byPfa)
       await tx.statutoryRemittance.create({
         data: {
@@ -253,7 +272,7 @@ export async function generateRemittances(ctx: Ctx, runId: string) {
         action: "STATUTORY_REMITTANCE_GENERATE",
         entity: "PayrollRun",
         entityId: runId,
-        newValue: { paye, payeStates: payeLines.length, pfas: byPfa.size, employerCostTypes: employerCosts.length },
+        newValue: { paye, payeStates: payeLines.length, employeeNhf: nhfTotal, pfas: byPfa.size, employerCostTypes: employerCosts.length },
       },
       tx,
     );
@@ -278,11 +297,14 @@ export async function listRemittances(ctx: Ctx, opts: { runId?: string; type?: s
  */
 export async function remittanceTiming(
   ctx: Ctx,
-  rows: ReadonlyArray<{ id: string; type: string; status: string; totalAmount: unknown; run: { taxRuleVersion: string | null; period: { year: number; month: number } } }>,
+  rows: ReadonlyArray<{ id: string; type: string; payee?: string; status: string; totalAmount: unknown; run: { taxRuleVersion: string | null; period: { year: number; month: number } } }>,
   today: string = new Date().toISOString().slice(0, 10),
 ): Promise<Map<string, DueInfo>> {
   const out = new Map<string, DueInfo>();
   const paye = rows.filter((r) => r.type === "PAYE");
+  // the employee's NHF is due at the end of the pay month whatever the tax rule says
+  for (const r of rows.filter((x) => x.type === "NHF_MEDICAL" && x.payee === NHF_EMPLOYEE_PAYEE))
+    out.set(r.id, remittanceDueInfo({ type: "NHF", status: r.status, totalAmount: num(r.totalAmount as never), period: r.run.period }, null, today));
   if (!paye.length) return out;
   const wanted = [...new Set(paye.map((r) => r.run.taxRuleVersion).filter((v): v is string => !!v))].map((v) => {
     const at = v.lastIndexOf("@");
@@ -292,7 +314,7 @@ export async function remittanceTiming(
   const timingOf = new Map<string, PayeTiming>(
     rules.map((r) => [`${r.code}@${r.version}`, { dueDay: r.payeDueDay, annualReturnMonth: r.annualReturnMonth, annualReturnDay: r.annualReturnDay, latePenaltyPct: r.latePenaltyPct === null ? null : num(r.latePenaltyPct) }]),
   );
-  for (const r of paye) out.set(r.id, payeDueInfo({ type: r.type, status: r.status, totalAmount: num(r.totalAmount as never), period: r.run.period }, (r.run.taxRuleVersion ? timingOf.get(r.run.taxRuleVersion) : undefined) ?? null, today));
+  for (const r of paye) out.set(r.id, remittanceDueInfo({ type: r.type, status: r.status, totalAmount: num(r.totalAmount as never), period: r.run.period }, (r.run.taxRuleVersion ? timingOf.get(r.run.taxRuleVersion) : undefined) ?? null, today));
   return out;
 }
 

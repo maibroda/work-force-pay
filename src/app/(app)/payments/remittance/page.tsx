@@ -94,7 +94,7 @@ export default async function RemittancePage({
                 <TD className="text-right">{naira(r.employerAmount)}</TD>
                 <TD className="text-right font-medium">{naira(r.totalAmount)}</TD>
                 <TD className="text-xs">
-                  {r.type !== "PAYE" ? (
+                  {!due.has(r.id) && r.type !== "PAYE" ? (
                     "—"
                   ) : !due.get(r.id)?.dueDate ? (
                     <span className="text-muted-foreground">not set in the tax rule</span>

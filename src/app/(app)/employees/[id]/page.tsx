@@ -151,6 +151,7 @@ export default async function EmployeePage({
                 ["Tax ID", sensitive ? e.taxId : "••••"],
                 ["Pension PIN", sensitive ? e.pensionPin : "••••"],
                 ["PFA", sensitive ? e.pfa : "••••"],
+                ["NHF (voluntary)", e.nhfContributes ? `Contributes since ${fmtDate(e.nhfOptedInOn)}` : "Not contributing"],
                 ["Annual rent (relief)", sensitive && e.annualRent ? naira(e.annualRent) : "—"],
               ]}
             />

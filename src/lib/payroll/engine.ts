@@ -106,6 +106,11 @@ export interface EngineInput {
     reason: string;
   }>;
   pension: { employeeRate: number; employerRate: number; version: string };
+  /**
+   * The employee's NHF contribution as a percentage of BASIC pay (a payroll-rule setting). 0 or absent = none, which is how pay has always been worked.
+   * When above 0 it is taken off net pay as its own line and the PAYE relief for NHF is the amount actually taken.
+   */
+  nhfEmployeeRatePct?: number;
   taxRule: TaxRuleDef;
   annualRent?: number | null;
   /** Supplementary runs pay only adjustments (no base salary). */
@@ -198,6 +203,8 @@ export interface EngineResult {
   totalEarnings: number;
   pensionBase: number;
   employeePension: number;
+  /** The employee's NHF contribution taken from pay (0 when the payroll rule sets none). */
+  employeeNhf: number;
   employerPension: number;
   taxableIncome: number;
   paye: PayeResult;
@@ -284,6 +291,9 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
   const overtimeHours = roundPlaces((input.overtime ?? []).reduce((a, o) => a + o.hours, 0), 2);
   const employeeRate = rateOf(input.pension.employeeRate);
   const employerRate = rateOf(input.pension.employerRate);
+  const nhfPct = input.nhfEmployeeRatePct ?? 0;
+  if (!Number.isFinite(nhfPct) || nhfPct < 0 || nhfPct > 100) throw new MoneyError("The employee NHF rate must be from 0 to 100 percent.");
+  const nhfRate = nhfPct > 0 ? rateOf(nhfPct) : null;
   const cost = input.employerCostRule
     ? {
         itf: rateOf(input.employerCostRule.itfPct),
@@ -448,6 +458,7 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
   const regularTaxable = sumKobo(compLines.filter((c) => c.taxable).map((c) => c.kobo));
   const irregularTaxable = sumKobo([overtimeAmount, arrearsAmount, otherTaxable]);
   const basic = compLines.find((c) => c.code === "BASIC")?.kobo ?? ZERO;
+  const employeeNhf = nhfRate ? mulPct(basic, nhfRate) : ZERO;
   const annualRent = kobo(input.annualRent ?? 0, "The annual rent");
   let payeK: PayeResultKobo;
   if (input.payeBase) {
@@ -463,7 +474,7 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
     const after = computePayeKobo({ ...common, regularTaxable: addKobo(earlier, regularTaxable), irregularTaxable }, input.taxRule);
     payeK = { ...after, paye: after.paye > before.paye ? subKobo(after.paye, before.paye) : ZERO };
   } else {
-    payeK = computePayeKobo({ regularTaxable, irregularTaxable, employeePension, basic, annualRent }, input.taxRule);
+    payeK = computePayeKobo({ regularTaxable, irregularTaxable, employeePension, basic, annualRent, ...(nhfRate ? { nhfMonthly: employeeNhf } : {}) }, input.taxRule);
   }
   const paye: PayeResult = payeResultToNaira(payeK);
 
@@ -478,7 +489,7 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
   });
   const acceptedKobo = accepted.map((x) => ({ x, kobo: kobo(x.amount, "A deduction amount") }));
   const otherDeductions = sumKobo(acceptedKobo.map((a) => a.kobo));
-  const totalDeductions = sumKobo([payeK.paye, employeePension, otherDeductions]);
+  const totalDeductions = sumKobo([payeK.paye, employeePension, employeeNhf, otherDeductions]);
   const netPay = subKobo(totalEarnings, totalDeductions);
 
   const clientBilling = billedRaw.round();
@@ -523,6 +534,7 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
     lines.push({ type: "EARNING", code: "OTHER", name: o.x.name, amount: koboToNumber(o.kobo) });
   lines.push({ type: "DEDUCTION", code: "PAYE", name: "PAYE", amount: paye.paye });
   lines.push({ type: "DEDUCTION", code: "PENSION_EE", name: "Employee Pension", amount: koboToNumber(employeePension) });
+  if (employeeNhf) lines.push({ type: "DEDUCTION", code: "NHF", name: "NHF", amount: koboToNumber(employeeNhf) });
   for (const a of acceptedKobo)
     lines.push({
       type: "DEDUCTION",
@@ -699,6 +711,7 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
     totalEarnings: koboToNumber(totalEarnings),
     pensionBase: koboToNumber(pensionBase),
     employeePension: koboToNumber(employeePension),
+    employeeNhf: koboToNumber(employeeNhf),
     employerPension: koboToNumber(employerPension),
     taxableIncome: koboToNumber(addKobo(regularTaxable, irregularTaxable)),
     paye,

@@ -3,6 +3,7 @@ import type { Ctx } from "@/lib/auth/context";
 import { d } from "@/lib/dates";
 import { num } from "@/lib/money";
 import { overlappingVersion, validateTiming } from "@/lib/paye-dates";
+import { NHF_STANDARD_RATE_PCT } from "@/lib/payroll/standard-rates";
 import type { TaxRuleDef } from "@/lib/payroll/paye";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
@@ -94,6 +95,7 @@ export async function copyStatutoryRules(tx: Tx, fromOrgId: string, toOrgId: str
         maxDeductionPctOfGross: r.maxDeductionPctOfGross,
         backOfficeChargePct: r.backOfficeChargePct,
         requirePayeState: r.requirePayeState,
+        nhfEmployeeRatePct: r.nhfEmployeeRatePct,
         effectiveFrom: r.effectiveFrom,
         effectiveTo: r.effectiveTo,
       },
@@ -158,6 +160,7 @@ export async function payrollRuleFor(tx: Tx, orgId: string, date: Date) {
     maxDeductionPctOfGross: num(r.maxDeductionPctOfGross),
     backOfficeChargePct: num(r.backOfficeChargePct),
     requirePayeState: r.requirePayeState,
+    nhfEmployeeRatePct: num(r.nhfEmployeeRatePct),
   };
 }
 
@@ -393,6 +396,8 @@ export const payrollRuleSchema = z.object({
   maxDeductionPctOfGross: z.coerce.number().min(0).max(100),
   backOfficeChargePct: z.coerce.number().min(0).max(100).default(15),
   /** A worker with PAYE and no state of residence blocks approval (true) or is only a warning (false, the default). */
+  /** The VOLUNTARY NHF contribution rate, % of basic pay, for employees who chose it (2.5 by the founder's rule; 0 = none). */
+  nhfEmployeeRatePct: z.coerce.number().min(0).max(100).default(NHF_STANDARD_RATE_PCT),
   requirePayeState: z.preprocess((v) => v === true || v === "true" || v === "on", z.boolean()).default(false),
   effectiveFrom: z.string().min(10),
 });
