@@ -4,20 +4,25 @@ import { requirePage } from "@/lib/auth/session";
 import { BusinessError } from "@/server/services/_base";
 import { listExports, paymentFilePreview } from "@/server/services/payment-file";
 import { recordSensitiveAccess } from "@/server/services/sensitive-access";
-import { PAYMENT_FILE_HEADERS } from "@/lib/payment-file";
+import { GENERIC_LAYOUT, layoutCells } from "@/lib/paying-bank";
+import { listPayingBanks } from "@/server/services/paying-banks";
 import { fmtDate } from "@/lib/dates";
 import { naira } from "@/lib/money";
 import { PageHeader, Section } from "@/components/page";
 import { buttonVariants } from "@/components/ui/button";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 
-export default async function BankFilePage({ params }: { params: Promise<{ runId: string }> }) {
+export default async function BankFilePage({ params, searchParams }: { params: Promise<{ runId: string }>; searchParams: Promise<{ bank?: string }> }) {
   const ctx = await requirePage("payment.manage");
   const { runId } = await params;
+  const { bank } = await searchParams;
+  const payingBanks = (await listPayingBanks(ctx)).filter((b) => b.active);
+  const bankId = bank && payingBanks.some((b) => b.id === bank) ? bank : null;
+  const bankQuery = bankId ? `bank=${bankId}` : "";
   let p: Awaited<ReturnType<typeof paymentFilePreview>> | null = null;
   let why = "";
   try {
-    p = await paymentFilePreview(ctx, runId);
+    p = await paymentFilePreview(ctx, runId, { payingBankId: bankId });
   } catch (e) {
     if (!(e instanceof BusinessError)) throw e;
     why = e.message;
@@ -25,29 +30,46 @@ export default async function BankFilePage({ params }: { params: Promise<{ runId
   if (!p && why === "Payroll run not found.") notFound();
   if (p) await recordSensitiveAccess(ctx, { kind: "PAYMENTS", ref: runId, count: p.rows.length });
   const exports = p ? await listExports(ctx, runId) : [];
+  const payingNames = new Map((await listPayingBanks(ctx)).map((b) => [b.id, b.name]));
+  // the rows as the bank's file will have them; the company's own account is shown masked
+  const layout = p?.payingBank?.layout ?? GENERIC_LAYOUT;
+  const shown = layoutCells(layout, p?.rows.slice(0, 200) ?? [], p?.payingBank?.debitAccountNumber ? `••••${p.payingBank.debitAccountNumber.slice(-4)}` : null);
 
   return (
     <>
       <PageHeader
         title="Bank payment file"
         crumbs={[{ href: "/payroll/runs", label: "Payroll runs" }]}
-        description="An Excel file for the client to upload to their own bank. The app only makes the file; it never moves money."
+        description="A file for the client to upload to their own bank. The app only makes the file; it never moves money."
       />
+      <Section title="Paying bank" description="The bank the client pays from decides the bank codes and the layout of the file. With none chosen, the general file is made, using the general bank list.">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          {[{ id: null as string | null, name: "General file" }, ...payingBanks].map((b) => (
+            <Link key={b.id ?? "general"} href={b.id ? `?bank=${b.id}` : "?"} className={buttonVariants({ variant: b.id === bankId ? "default" : "outline", size: "sm" })}>
+              {b.name}
+            </Link>
+          ))}
+          <Link className="text-xs underline" href="/payments/paying-banks">
+            Set up paying banks
+          </Link>
+        </div>
+      </Section>
       {!p && <p className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-900">{why}</p>}
       {p && (
         <>
-          <Section title={`${p.run.period.name} — ${p.rows.length} payment(s), ${naira(p.total)}`} description={`Columns: ${PAYMENT_FILE_HEADERS.join(", ")}. Payment description: "${p.description}". Built from what was frozen with the locked payroll.`}>
+          <Section title={`${p.run.period.name} — ${p.rows.length} payment(s), ${naira(p.total)}`} description={`Columns: ${(p.payingBank?.layout ?? GENERIC_LAYOUT).columns.map((c) => c.header).join(", ")}. Payment description: "${p.description}". Built from what was frozen with the locked payroll.`}>
+            {p.blockers.length > 0 && <p className="mb-3 rounded bg-amber-50 px-3 py-2 text-sm text-amber-900">{p.blockers.join(" ")}</p>}
             {p.alreadyPaid ? (
               <p className="text-sm text-muted-foreground">This payroll has been marked paid, so no new file is made.</p>
-            ) : (
+            ) : p.blockers.length > 0 ? null : (
               <div className="flex flex-wrap items-center gap-3">
                 {!p.problems.length && p.rows.length > 0 && (
-                  <a className={buttonVariants()} href={`/api/payments/runs/${runId}/bank-file`}>
-                    Download Excel file
+                  <a className={buttonVariants()} href={`/api/payments/runs/${runId}/bank-file${bankQuery ? `?${bankQuery}` : ""}`}>
+                    Download file
                   </a>
                 )}
                 {p.problems.length > 0 && p.rows.length > 0 && (
-                  <a className={buttonVariants({ variant: "outline" })} href={`/api/payments/runs/${runId}/bank-file?leaveOut=1`}>
+                  <a className={buttonVariants({ variant: "outline" })} href={`/api/payments/runs/${runId}/bank-file?leaveOut=1${bankQuery ? `&${bankQuery}` : ""}`}>
                     Download without the {p.problems.length} employee(s) below
                   </a>
                 )}
@@ -100,21 +122,21 @@ export default async function BankFilePage({ params }: { params: Promise<{ runId
             <Table>
               <THead>
                 <TR>
-                  {PAYMENT_FILE_HEADERS.map((h) => (
-                    <TH key={h} className={h === "Amount" ? "text-right" : ""}>
+                  {shown.header.map((h, i) => (
+                    <TH key={h} className={layout.columns[i].source === "AMOUNT" ? "text-right" : ""}>
                       {h}
                     </TH>
                   ))}
                 </TR>
               </THead>
               <TBody>
-                {p.rows.slice(0, 200).map((r) => (
-                  <TR key={r.transactionId}>
-                    <TD>{r.name}</TD>
-                    <TD className="font-mono text-xs">{r.accountNumber}</TD>
-                    <TD className="font-mono text-xs">{r.bankCode}</TD>
-                    <TD className="text-right">{naira(r.amount)}</TD>
-                    <TD className="text-xs">{r.description}</TD>
+                {shown.body.map((cells, n) => (
+                  <TR key={p.rows[n].transactionId}>
+                    {cells.map((v, i) => (
+                      <TD key={i} className={layout.columns[i].source === "AMOUNT" ? "text-right" : ["DEBIT_ACCOUNT", "CREDIT_ACCOUNT", "BANK_CODE"].includes(layout.columns[i].source) ? "font-mono text-xs" : "text-xs"}>
+                        {layout.columns[i].source === "AMOUNT" ? naira(v as number) : v}
+                      </TD>
+                    ))}
                   </TR>
                 ))}
               </TBody>
@@ -128,6 +150,7 @@ export default async function BankFilePage({ params }: { params: Promise<{ runId
                 <TR>
                   <TH>When</TH>
                   <TH>By</TH>
+                  <TH>Paying bank</TH>
                   <TH className="text-right">Payments</TH>
                   <TH className="text-right">Total</TH>
                   <TH>Left out</TH>
@@ -139,6 +162,7 @@ export default async function BankFilePage({ params }: { params: Promise<{ runId
                   <TR key={x.id}>
                     <TD>{fmtDate(x.createdAt)}</TD>
                     <TD className="text-xs">{x.createdBy}</TD>
+                    <TD className="text-xs">{x.payingBankId ? `${payingNames.get(x.payingBankId) ?? "—"}, list v${x.codeSetVersion}` : "General"}</TD>
                     <TD className="text-right">{x.rowCount}</TD>
                     <TD className="text-right">{naira(x.totalAmount)}</TD>
                     <TD className="text-xs">{(x.excluded as unknown[]).length || "—"}</TD>

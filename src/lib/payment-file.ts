@@ -33,7 +33,10 @@ function readAmount(n: number): { kobo: Kobo; exact: boolean } | null {
 /** The name the bank will see: the account name when there is one (it has to match the account), otherwise the employee's. */
 const beneficiary = (l: PaymentLine) => (l.accountName?.trim() || l.name).replace(/\s+/g, " ").trim();
 
-export function buildPaymentRows(lines: PaymentLine[], banks: BankEntry[], description: string): { rows: FileRow[]; problems: RowProblem[]; warnings: FileWarning[]; total: number } {
+/** What a bank name stands for on the list in use: a code that can be used, a blocked entry (with its reason), or nothing. */
+export type BankLookup = (name: string) => { code: string; blockedReason?: string; listName?: string } | null;
+
+export function buildPaymentRows(lines: PaymentLine[], banks: BankEntry[], description: string, lookup?: BankLookup): { rows: FileRow[]; problems: RowProblem[]; warnings: FileWarning[]; total: number } {
   const rows: FileRow[] = [];
   const problems: RowProblem[] = [];
   const warnings: FileWarning[] = [];
@@ -45,8 +48,9 @@ export function buildPaymentRows(lines: PaymentLine[], banks: BankEntry[], descr
     if (!account) p.push("No account number.");
     else if (!/^\d{10}$/.test(account)) p.push(`Account number "${l.accountNumber}" is not 10 digits.`);
     if (!l.bankName?.trim()) p.push("No bank name.");
-    const bank = l.bankName ? resolveBank(l.bankName, banks) : null;
+    const bank = l.bankName ? (lookup ? lookup(l.bankName) : resolveBank(l.bankName, banks)) : null;
     if (l.bankName?.trim() && !bank) p.push(`Bank "${l.bankName}" is not in the bank list, or matches more than one bank. Correct the bank list or the employee's bank.`);
+    else if (bank && "blockedReason" in bank && bank.blockedReason) p.push(`Bank "${l.bankName}" is on the list as "${bank.listName ?? l.bankName}" but is blocked: ${bank.blockedReason}`);
     const amount = readAmount(l.amount);
     if (!amount) p.push("The amount is not a number.");
     else if (!(amount.kobo > 0)) p.push("Nothing to pay.");
