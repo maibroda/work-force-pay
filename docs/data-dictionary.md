@@ -1071,6 +1071,8 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | phone | String |  |  |
 | email | String |  |  |
 | address | String |  |  |
+| nhfContributes | Boolean |  | Has chosen to contribute to the National Housing Fund (voluntary: 2.5% of basic pay, remitted by the end of the month). Off unless chosen. |
+| nhfOptedInOn | DateTime |  | The day they chose it; cleared when they stop. |
 | stateOfResidence | String |  | The state PAYE is due to (one of the 36 states or FCT, under its proper name). Copied onto each payroll record when it is calculated. |
 | employmentDate | DateTime | yes |  |
 | exitDate | DateTime |  |  |
@@ -2396,6 +2398,7 @@ Recurring payroll deductions applied automatically on every REGULAR run — dist
 | maxDeductionPctOfGross | Decimal |  |  |
 | backOfficeChargePct | Decimal |  | Overhead allocation used in Contract Profitability — % of contract revenue charged as back-office cost. |
 | requirePayeState | Boolean |  | A worker with PAYE and no state of residence is a warning (false, the default) or a CRITICAL finding that blocks approval until fixed or overridden with a reason (true). |
+| nhfEmployeeRatePct | Decimal |  | The rate of the VOLUNTARY NHF (National Housing Fund) contribution, as a % of BASIC pay: 2.5 by the founder's rule (the tax adviser confirms it). It is taken only from employees who have chosen to contribute (Employee.nhfContributes), as its own deduction line, and is allowed against PAYE at the amount taken. 0 = none. |
 | effectiveFrom | DateTime | yes |  |
 | effectiveTo | DateTime |  |  |
 | createdAt | DateTime |  |  |
