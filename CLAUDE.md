@@ -78,3 +78,23 @@ For every change to pay, statutory, approvals, audit, access control or bank-fil
 - A test you believe is wrong blocks you.
 - You discover real personal data in the repository, fixtures or logs (stop immediately and tell me).
 - You find a likely security vulnerability: report it with severity before fixing.
+
+## CRM module rules (sales and account management)
+Added 2026-10-29 from the founder's CRM prompt pack, reconciled with the rules above (docs/crm/00-audit.md, section 8). Where the pack and the rules above differ, the rules above win.
+
+### Scope
+- It is a module inside WorkforcePay, behind a per-organization switch that defaults to OFF. New code lives under `src/lib/sales` and `src/server/services/sales`, models are prefixed `Crm`, permissions are `sales.*`. It never shares a file or permission with the bureau's own payroll-sales pipeline (`crm.*`, `Lead`, `Proposal`).
+- It NEVER changes payroll calculation, statutory rules, payment files or posted payroll. It may READ costs only through the same functions payroll uses. Operational records (client, contract, rate card, site) are created only when a handover is approved by a checker who is not the maker, through their existing services.
+
+### Money
+- Money columns are `Decimal(16,2)`; every calculation is done in whole kobo through `src/lib/money-exact.ts` (no floats; round half up, once). Monthly contract value is stored and annual value is derived. Weighted value = monthly value x probability / 100, in one shared, tested function. New CRM files are never added to the lint exceptions list for inexact money.
+- Statutory rates and employer-cost percentages come from the effective-dated settings, never from CRM code.
+
+### Data integrity and privacy
+- Every table carries `organizationId`; every query is scoped to it; every table has a cross-organization isolation test.
+- Every create, update, stage change, conversion, merge, owner change and void is audited. Audit entries carry ids and the NAMES of changed fields, never personal values (so a person can be erased without touching the append-only log).
+- Records are voided, not deleted. Stage history is append-only. Phone numbers are stored as E.164 (+234...).
+- Marketing consent per contact or lead (unknown, granted, withdrawn) with source, time and evidence, kept as append-only rows. No marketing message to anyone whose latest consent is not "granted". A service message about an active contract is a separate, labelled purpose. Opt-out is one step and immediate. Consent wording and retention periods are for a lawyer to review.
+
+### Working method
+- Tests first. One phase per session; each phase ends with the report template and an explain-back note, then stops. A migration needs the founder's "go" and a reversible `down.sql`.
