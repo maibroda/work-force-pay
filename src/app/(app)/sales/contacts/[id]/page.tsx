@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ActivityPanel } from "@/components/sales/activity-panel";
 import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -108,6 +109,7 @@ export default async function SalesContactPage({ params }: { params: Promise<{ i
         </Table>
         {!v.opportunities.length && <p className="px-4 py-4 text-sm text-muted-foreground">No deals yet.</p>}
       </Section>
+      <ActivityPanel ctx={ctx} target={{ contactId: id }} />
     </>
   );
 }

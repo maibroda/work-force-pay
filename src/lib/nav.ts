@@ -27,6 +27,7 @@ export const NAV: NavGroup[] = [
       { href: "/sales/accounts", label: "Accounts", perm: "sales.view", salesOnly: true },
       { href: "/sales/board", label: "Deals Board", perm: "sales.view", salesOnly: true },
       { href: "/sales/opportunities", label: "Deals", perm: "sales.view", salesOnly: true },
+      { href: "/sales/tasks", label: "My Tasks", perm: "sales.view", salesOnly: true },
       { href: "/sales/handovers", label: "Handovers", perm: "sales.view", salesOnly: true },
       { href: "/sales/contacts", label: "Contacts", perm: "sales.view", salesOnly: true },
       { href: "/sales/import", label: "Import and Export", perm: "sales.manage", salesOnly: true },
