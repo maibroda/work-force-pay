@@ -1,5 +1,6 @@
 "use server";
 import { act } from "./_run";
+import { kickAutomation } from "@/server/services/sales/automation";
 import { moveOpportunity, updateOpportunity, LOST_REASONS } from "@/server/services/sales/deals";
 
 type V = Record<string, unknown>;
@@ -11,7 +12,7 @@ export async function moveOpportunityAction(v: V) {
     "sales.manage",
     async (ctx) => {
       const reason = text(v.lostReason);
-      await moveOpportunity(ctx, String(v.id), {
+      const moved = await moveOpportunity(ctx, String(v.id), {
         stageId: String(v.stageId ?? ""),
         nextStep: String(v.nextStep ?? ""),
         probability: num(v.probability),
@@ -19,6 +20,7 @@ export async function moveOpportunityAction(v: V) {
         lostReasonDetail: text(v.lostReasonDetail),
         competitor: text(v.competitor),
       });
+      await kickAutomation(ctx.orgId, moved.id); // the rules for the stage it entered that are due now (never fails the move)
       return { message: "Deal moved." };
     },
     ["/sales/board", "/sales/opportunities"],

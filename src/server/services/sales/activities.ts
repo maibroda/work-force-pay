@@ -29,7 +29,7 @@ type Target = { leadId?: string; accountId?: string; contactId?: string; opportu
 // ─────────────────────────────── who a thing is about ───────────────────────────────
 
 /** Finds each record named (only if the caller may see it) and fills in the account from the contact or deal. */
-async function resolveTarget(ctx: Ctx, tx: Tx | typeof db, t: Target, opts: { readOnly?: boolean } = {}) {
+export async function resolveTarget(ctx: Ctx, tx: Tx | typeof db, t: Target, opts: { readOnly?: boolean } = {}) {
   if (!t.leadId && !t.accountId && !t.contactId && !t.opportunityId) throw new BusinessError("Say who or what this is about: a lead, a contact, an account or a deal.");
   const f = ownerFilter(ctx);
   const lead = t.leadId ? await tx.crmLead.findFirst({ where: { id: t.leadId, organizationId: ctx.orgId, ...f } }) : null;
@@ -47,7 +47,7 @@ async function resolveTarget(ctx: Ctx, tx: Tx | typeof db, t: Target, opts: { re
 }
 
 /** Refuses a marketing message to someone who has not agreed, and a "service" label for someone who is not at a client. */
-async function assertMayMessage(ctx: Ctx, tx: Tx | typeof db, r: Awaited<ReturnType<typeof resolveTarget>>, purpose: "SERVICE" | "MARKETING") {
+export async function assertMayMessage(ctx: Ctx, tx: Tx | typeof db, r: Awaited<ReturnType<typeof resolveTarget>>, purpose: "SERVICE" | "MARKETING") {
   const person = r.contactId ? { contactId: r.contactId } : r.leadId ? { leadId: r.leadId } : null;
   if (!person) throw new BusinessError("Choose the contact or lead this message is for.");
   if (purpose === "MARKETING") {
