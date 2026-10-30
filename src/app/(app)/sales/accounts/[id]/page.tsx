@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { ActivityPanel } from "@/components/sales/activity-panel";
+import { HealthPanel } from "@/components/sales/health-panel";
+import { getAccountHealth } from "@/server/services/sales/health";
 import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { BusinessError } from "@/server/services/_base";
@@ -22,6 +24,7 @@ export default async function SalesAccountPage({ params }: { params: Promise<{ i
     throw e;
   }
   const a = v.account;
+  const health = await getAccountHealth(ctx, id);
   return (
     <>
       <PageHeader title={a.name} crumbs={[{ href: "/sales/accounts", label: "Accounts" }]} description={`Owner ${a.ownerName}.`} />
@@ -88,6 +91,7 @@ export default async function SalesAccountPage({ params }: { params: Promise<{ i
           </ul>
         </Section>
       )}
+      {health && <HealthPanel health={health} />}
       <ActivityPanel ctx={ctx} target={{ accountId: id }} />
     </>
   );

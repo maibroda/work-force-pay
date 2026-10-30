@@ -15,6 +15,7 @@ import { BusinessError, db, type Tx } from "../_base";
 import { logAudit } from "../audit";
 import { nextNumber } from "../numbering";
 import { ownerFilter, requireSales, resolveOwner } from "./access";
+import { refreshAccountHealthSafe } from "./health";
 import { insertOpportunity, ensureRenewalPipeline } from "./pipelines";
 
 const DAY = 86_400_000;
@@ -185,6 +186,7 @@ export async function createCase(ctx: Ctx, raw: z.input<typeof caseSchema>) {
     await logAudit(ctx, { action: "SALES_CASE_OPEN", entity: "CrmCase", entityId: made.id, newValue: { number, priority: v.priority, category: v.category, hasSla: !!policy } }, tx);
     return made;
   });
+  await refreshAccountHealthSafe(ctx.orgId, account.id); // an open case changes the account's health
   if (owner.ownerUserId !== ctx.userId) await notify(ctx.orgId, owner.ownerUserId, `Case ${c.number} was opened for you`, `${v.priority} priority: ${v.subject}`, c.id).catch((e) => logger.error("sales_case_notify_failed", { error: e }));
   return c;
 }
@@ -215,7 +217,7 @@ export async function addCaseNote(ctx: Ctx, id: string, note: string) {
 export async function resolveCase(ctx: Ctx, id: string, note: string) {
   await requireSales(ctx, "sales.case.manage");
   if (!note?.trim()) throw new BusinessError("Say how the case was resolved.");
-  return db.$transaction(async (tx: Tx) => {
+  const done = await db.$transaction(async (tx: Tx) => {
     const c = await loadCase(ctx, tx, id);
     if (c.status !== "OPEN") throw new BusinessError("This case is already resolved.");
     const now = new Date();
@@ -224,6 +226,8 @@ export async function resolveCase(ctx: Ctx, id: string, note: string) {
     await logAudit(ctx, { action: "SALES_CASE_RESOLVE", entity: "CrmCase", entityId: id }, tx);
     return u;
   });
+  await refreshAccountHealthSafe(ctx.orgId, done.accountId);
+  return done;
 }
 
 /** Reopening restarts the resolution clock from now (the first response is not asked for again) and is counted, so a case closed early shows up. */
@@ -231,7 +235,7 @@ export async function reopenCase(ctx: Ctx, id: string, reason: string) {
   await requireSales(ctx, "sales.case.manage");
   if (!reason?.trim()) throw new BusinessError("Say why the case is being reopened.");
   const cal = await calendarOf(ctx.orgId);
-  return db.$transaction(async (tx: Tx) => {
+  const reopened = await db.$transaction(async (tx: Tx) => {
     const c = await loadCase(ctx, tx, id);
     if (c.status !== "RESOLVED") throw new BusinessError("Only a resolved case can be reopened.");
     const now = new Date();
@@ -244,6 +248,8 @@ export async function reopenCase(ctx: Ctx, id: string, reason: string) {
     await logAudit(ctx, { action: "SALES_CASE_REOPEN", entity: "CrmCase", entityId: id, newValue: { reopenedCount: u.reopenedCount } }, tx);
     return u;
   });
+  await refreshAccountHealthSafe(ctx.orgId, reopened.accountId);
+  return reopened;
 }
 
 export async function reassignCase(ctx: Ctx, id: string, userId: string) {
@@ -325,6 +331,7 @@ export async function runCaseSlaJob(now = new Date(), opts: { orgId?: string } =
           await tell(c.organizationId, [...(owner ? [owner] : []), ...mgrs.filter((m) => m.id !== c.ownerUserId)], `Case ${c.number}: the ${k.name} time was missed`, `${c.priority} priority: ${c.subject}`, c.id);
           await ev(db, c.organizationId, c.id, "ESCALATED", "SLA monitor", null, `${mgrs.length} sales manager(s) told.`);
           out.escalated++;
+          await refreshAccountHealthSafe(c.organizationId, c.accountId); // a missed deadline changes the account's health
         }
       } else if (k.warn && now.getTime() >= k.warn.getTime() && !k.warnedAt && !k.breachedAt) {
         const claimed = await db.crmCase.updateMany({ where: { id: c.id, [k.warned]: null, status: "OPEN" }, data: { [k.warned]: now } });

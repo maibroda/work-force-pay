@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-195 tables and 154 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+196 tables and 155 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -130,6 +130,7 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | crmBusinessHours | → CrmBusinessHours |  |  |
 | crmHolidays | → CrmHoliday[] |  |  |
 | crmRenewalLinks | → CrmRenewalLink[] |  |  |
+| crmAccountHealth | → CrmAccountHealth[] |  |  |
 | payslipSetting | → PayslipSetting |  |  |
 | payslipDeliveries | → PayslipDelivery[] |  |  |
 | paymentFileExports | → PaymentFileExport[] |  |  |
@@ -4190,6 +4191,7 @@ Whether the sales module is on for an organization (off until a company administ
 | minMarginBps | Int |  | The lowest gross margin (a share of the bill) a quote may have before a designated approver must approve it, in basis points (1500 = 15.00%). 0 = no minimum. A new organization starts at 15%. |
 | assignmentCursor | Int |  |  |
 | renewalWindowDays | Int |  | A contract ending within this many days gets a renewal deal opened for it. |
+| healthWeights | Json |  | The weight of each of the six health-score measures (whole numbers adding up to 100). Empty means the starting weights. |
 | updatedBy | String | yes |  |
 | updatedAt | DateTime |  |  |
 
@@ -4235,6 +4237,7 @@ A company the organization sells to or serves, as the sales side sees it. It lin
 | tasks | → CrmTask[] |  |  |
 | cases | → CrmCase[] |  |  |
 | slaPolicies | → CrmSlaPolicy[] |  |  |
+| health | → CrmAccountHealth |  |  |
 
 ### CrmContact
 
@@ -4945,6 +4948,24 @@ The renewal deal opened for a contract: one for each contract, so the daily job 
 | opportunityId | String | yes |  |
 | createdAt | DateTime |  |  |
 
+### CrmAccountHealth
+
+The latest health score of a client account (0 to 100) with what each measure found, and when its band last changed. Recomputed nightly and when a case on the account changes.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| accountId | String | yes | (unique) |
+| account | → CrmAccount |  |  |
+| score | Int | yes |  |
+| band | CrmHealthBand | yes |  |
+| components | Json | yes | Each measure: its weight, its sub-score (empty when there was no data), and a sentence on what it found. |
+| previousBand | CrmHealthBand |  |  |
+| bandChangedAt | DateTime |  |  |
+| computedAt | DateTime | yes |  |
+
 ## Fixed sets of values
 
 ### Role
@@ -5584,4 +5605,8 @@ Whether an outbound message is a service message (about an active contract) or m
 ### CrmCaseEventKind
 
 `OPENED`, `RESPONDED`, `NOTE`, `REASSIGNED`, `RESOLVED`, `REOPENED`, `WARNING`, `BREACH`, `ESCALATED`
+
+### CrmHealthBand
+
+`HEALTHY`, `WATCH`, `AT_RISK`
 
