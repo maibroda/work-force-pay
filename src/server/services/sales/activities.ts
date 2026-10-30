@@ -191,12 +191,13 @@ export async function timeline(ctx: Ctx, t: Target, opts: { types?: TimelineType
   }
 
   const activityWhere: Prisma.CrmActivityWhereInput = t.leadId ? { leadId: t.leadId } : t.contactId ? { contactId: t.contactId } : t.accountId ? { accountId: t.accountId } : { opportunityId: t.opportunityId };
-  const [acts, stages, quotes, handoverEvents, consents] = await Promise.all([
+  const [acts, stages, quotes, handoverEvents, consents, caseEvents] = await Promise.all([
     db.crmActivity.findMany({ where: { organizationId: org, ...activityWhere }, orderBy: [{ occurredAt: "desc" }, { id: "desc" }], take: 500 }),
     dealIds.length ? db.crmStageHistory.findMany({ where: { organizationId: org, opportunityId: { in: dealIds } }, orderBy: { changedAt: "desc" }, take: 500 }) : [],
     dealIds.length ? db.crmQuote.findMany({ where: { organizationId: org, opportunityId: { in: dealIds } } }) : [],
     dealIds.length ? db.crmHandoverEvent.findMany({ where: { organizationId: org, handover: { opportunityId: { in: dealIds } } }, include: { handover: { select: { number: true } } }, take: 500 }) : [],
     leadId || contactIds.length ? db.crmConsent.findMany({ where: { organizationId: org, ...(leadId ? { leadId } : { contactId: { in: contactIds } }) }, orderBy: { seq: "desc" }, take: 500 }) : [],
+    t.accountId || t.contactId ? db.crmCaseEvent.findMany({ where: { organizationId: org, case: t.accountId ? { accountId: t.accountId } : { contactId: t.contactId } }, include: { case: { select: { number: true, priority: true } } }, orderBy: { at: "desc" }, take: 500 }) : [],
   ]);
 
   for (const a of acts) {
@@ -229,6 +230,9 @@ export async function timeline(ctx: Ctx, t: Target, opts: { types?: TimelineType
   }
   for (const e of handoverEvents) items.push({ id: `handover:${e.id}`, type: "HANDOVER", at: e.at, title: `Handover ${e.handover.number}: ${e.kind === "CREATED" ? "started" : e.kind === "SUBMITTED" ? "sent to Operations" : e.kind === "RETURNED" ? "returned with a question" : "accepted by Operations"}`, by: e.byName });
   for (const c of consents) items.push({ id: `consent:${c.id}`, type: "CONSENT", at: c.recordedAt, title: `${c.purpose === "MARKETING" ? "Marketing" : "Service"} consent ${c.status === "GRANTED" ? "granted" : "withdrawn"} (${c.channel.toLowerCase().replace("_", " ")})`, by: c.recordedBy });
+
+  const CASE_WORDS = { OPENED: "opened", RESPONDED: "answered", NOTE: "note added", REASSIGNED: "given to someone else", RESOLVED: "resolved", REOPENED: "reopened", WARNING: "75% of a time limit has gone", BREACH: "a time limit was missed", ESCALATED: "escalated to the sales managers" } as const;
+  for (const e of caseEvents) items.push({ id: `case:${e.id}`, type: "CASE", at: e.at, title: `Case ${e.case.number}: ${CASE_WORDS[e.kind]}${e.kind === "OPENED" ? ` (${e.case.priority.toLowerCase()})` : ""}`, detail: e.note, by: e.byName });
 
   const merged = filterTimeline(mergeTimeline(items), opts.types ?? []);
   return merged.slice(0, opts.take ?? 200).map((i) => ({ ...i, at: when(i.at) }));

@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-189 tables and 150 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+195 tables and 154 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -124,6 +124,12 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | crmAutomationRules | → CrmAutomationRule[] |  |  |
 | crmAutomationRuns | → CrmAutomationRun[] |  |  |
 | crmNotifications | → CrmNotification[] |  |  |
+| crmCases | → CrmCase[] |  |  |
+| crmCaseEvents | → CrmCaseEvent[] |  |  |
+| crmSlaPolicies | → CrmSlaPolicy[] |  |  |
+| crmBusinessHours | → CrmBusinessHours |  |  |
+| crmHolidays | → CrmHoliday[] |  |  |
+| crmRenewalLinks | → CrmRenewalLink[] |  |  |
 | payslipSetting | → PayslipSetting |  |  |
 | payslipDeliveries | → PayslipDelivery[] |  |  |
 | paymentFileExports | → PaymentFileExport[] |  |  |
@@ -4183,6 +4189,7 @@ Whether the sales module is on for an organization (off until a company administ
 | assignmentMethod | CrmAssignmentMethod |  | How new leads with no owner given (created by a manager) are assigned, and where round robin has got to. |
 | minMarginBps | Int |  | The lowest gross margin (a share of the bill) a quote may have before a designated approver must approve it, in basis points (1500 = 15.00%). 0 = no minimum. A new organization starts at 15%. |
 | assignmentCursor | Int |  |  |
+| renewalWindowDays | Int |  | A contract ending within this many days gets a renewal deal opened for it. |
 | updatedBy | String | yes |  |
 | updatedAt | DateTime |  |  |
 
@@ -4226,6 +4233,8 @@ A company the organization sells to or serves, as the sales side sees it. It lin
 | opportunities | → CrmOpportunity[] |  |  |
 | activities | → CrmActivity[] |  |  |
 | tasks | → CrmTask[] |  |  |
+| cases | → CrmCase[] |  |  |
+| slaPolicies | → CrmSlaPolicy[] |  |  |
 
 ### CrmContact
 
@@ -4809,6 +4818,132 @@ A message to a person inside the app (the email goes separately).
 | href | String |  |  |
 | createdAt | DateTime |  |  |
 | readAt | DateTime |  |  |
+
+### CrmSlaPolicy
+
+How quickly a case of a priority must be answered and resolved. A policy for an account wins over the organization's default for that priority.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| accountId | String |  | Empty for the organization's default. |
+| account | → CrmAccount |  |  |
+| accountKey | String |  | The account's id, or empty for the default: lets the database allow one policy for each account and priority. |
+| priority | CrmCasePriority | yes |  |
+| firstResponseMinutes | Int | yes |  |
+| resolutionMinutes | Int | yes |  |
+| businessHoursOnly | Boolean |  | The clock runs only in business hours (not at night, at weekends or on holidays). |
+| active | Boolean |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+| updatedBy | String |  |  |
+
+### CrmBusinessHours
+
+When the organization is open, in Lagos time. Without a row: Monday to Friday, 08:00 to 17:00.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes | (unique) |
+| organization | → Organization |  |  |
+| openMinute | Int |  |  |
+| closeMinute | Int |  |  |
+| workDays | Int[] |  | ISO weekdays, 1 = Monday to 7 = Sunday. |
+| updatedBy | String | yes |  |
+| updatedAt | DateTime |  |  |
+
+### CrmHoliday
+
+A day the organization is closed. Entered by an administrator: public holidays differ by year and are announced by government.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| date | DateTime | yes |  |
+| name | String | yes |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+
+### CrmCase
+
+A problem or request from a client account. The SLA deadlines are worked out when it opens and kept on the case, so a later change to a policy never moves them.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| number | String | yes |  |
+| accountId | String | yes |  |
+| account | → CrmAccount |  |  |
+| contactId | String |  |  |
+| opportunityId | String |  |  |
+| beatId | String |  | The client site (Beat) it is about, if any. |
+| category | CrmCaseCategory | yes |  |
+| priority | CrmCasePriority | yes |  |
+| status | CrmCaseStatus |  |  |
+| subject | String | yes |  |
+| description | String |  |  |
+| ownerUserId | String | yes |  |
+| ownerName | String | yes |  |
+| openedAt | DateTime |  |  |
+| slaPolicyId | String |  |  |
+| slaFirstResponseMinutes | Int |  |  |
+| slaResolutionMinutes | Int |  |  |
+| slaBusinessHoursOnly | Boolean |  |  |
+| firstResponseDueAt | DateTime |  |  |
+| firstResponseWarnAt | DateTime |  |  |
+| firstRespondedAt | DateTime |  |  |
+| firstResponseWarnedAt | DateTime |  |  |
+| firstResponseBreachedAt | DateTime |  |  |
+| resolutionStartedAt | DateTime |  | When the resolution clock last started: the opening, or the latest reopening. |
+| resolutionDueAt | DateTime |  |  |
+| resolutionWarnAt | DateTime |  |  |
+| resolvedAt | DateTime |  |  |
+| resolutionWarnedAt | DateTime |  |  |
+| resolutionBreachedAt | DateTime |  |  |
+| reopenedCount | Int |  | Reported separately, so closing cases early is not rewarded. |
+| createdBy | String | yes |  |
+| createdByUserId | String | yes |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+| events | → CrmCaseEvent[] |  |  |
+
+### CrmCaseEvent
+
+Everything that happens to a case, in order. Never changed (the database refuses it).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| caseId | String | yes |  |
+| case | → CrmCase |  |  |
+| kind | CrmCaseEventKind | yes |  |
+| byUserId | String |  |  |
+| byName | String | yes |  |
+| note | String |  |  |
+| at | DateTime |  |  |
+
+### CrmRenewalLink
+
+The renewal deal opened for a contract: one for each contract, so the daily job can never open two.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| contractId | String | yes | (unique) |
+| opportunityId | String | yes |  |
+| createdAt | DateTime |  |  |
 
 ## Fixed sets of values
 
@@ -5433,4 +5568,20 @@ Whether an outbound message is a service message (about an active contract) or m
 ### CrmAutomationRunStatus
 
 `PENDING`, `RUNNING`, `DONE`, `FAILED`, `CANCELLED`, `SKIPPED`
+
+### CrmCasePriority
+
+`LOW`, `NORMAL`, `HIGH`, `CRITICAL`
+
+### CrmCaseCategory
+
+`SERVICE_QUALITY`, `STAFFING`, `BILLING`, `COMPLAINT`, `REQUEST`, `OTHER`
+
+### CrmCaseStatus
+
+`OPEN`, `RESOLVED`
+
+### CrmCaseEventKind
+
+`OPENED`, `RESPONDED`, `NOTE`, `REASSIGNED`, `RESOLVED`, `REOPENED`, `WARNING`, `BREACH`, `ESCALATED`
 
