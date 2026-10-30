@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-183 tables and 143 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+186 tables and 147 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -118,6 +118,9 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | crmHandovers | → CrmHandover[] |  |  |
 | crmHandoverEvents | → CrmHandoverEvent[] |  |  |
 | crmHandoverAcceptors | → CrmHandoverAcceptor[] |  |  |
+| crmActivities | → CrmActivity[] |  |  |
+| crmTasks | → CrmTask[] |  |  |
+| crmDigestRuns | → CrmDigestRun[] |  |  |
 | payslipSetting | → PayslipSetting |  |  |
 | payslipDeliveries | → PayslipDelivery[] |  |  |
 | paymentFileExports | → PaymentFileExport[] |  |  |
@@ -4218,6 +4221,8 @@ A company the organization sells to or serves, as the sales side sees it. It lin
 | updatedAt | DateTime |  |  |
 | contacts | → CrmContact[] |  |  |
 | opportunities | → CrmOpportunity[] |  |  |
+| activities | → CrmActivity[] |  |  |
+| tasks | → CrmTask[] |  |  |
 
 ### CrmContact
 
@@ -4252,6 +4257,8 @@ A person at an account (or not yet attached to one). Phones are stored as E.164 
 | updatedAt | DateTime |  |  |
 | consents | → CrmConsent[] |  |  |
 | opportunities | → CrmOpportunity[] |  |  |
+| activities | → CrmActivity[] |  |  |
+| tasks | → CrmTask[] |  |  |
 
 ### CrmLead
 
@@ -4292,6 +4299,8 @@ An enquiry not yet known to be real. Becomes an account and contact (and a deal)
 | createdAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |
 | consents | → CrmConsent[] |  |  |
+| activities | → CrmActivity[] |  |  |
+| tasks | → CrmTask[] |  |  |
 
 ### CrmConsent
 
@@ -4397,6 +4406,8 @@ A specific bid for a client business: "24/7 guarding, 3 sites, 18 guards". Its m
 | history | → CrmStageHistory[] |  |  |
 | quotes | → CrmQuote[] |  |  |
 | handovers | → CrmHandover[] |  |  |
+| activities | → CrmActivity[] |  |  |
+| tasks | → CrmTask[] |  |  |
 
 ### CrmStageHistory
 
@@ -4648,6 +4659,82 @@ A person formally designated to accept a handover for Operations (the Executive 
 | designatedAt | DateTime |  |  |
 | removedBy | String |  |  |
 | removedAt | DateTime |  |  |
+
+### CrmActivity
+
+Something that happened with a lead, contact, account or deal: a call, meeting, site survey, WhatsApp, email or note. Never deleted and its content never changed (the database refuses both); a mistaken one is voided with a reason and stays on the timeline.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| kind | CrmActivityKind | yes |  |
+| leadId | String |  |  |
+| lead | → CrmLead |  |  |
+| accountId | String |  |  |
+| account | → CrmAccount |  |  |
+| contactId | String |  |  |
+| contact | → CrmContact |  |  |
+| opportunityId | String |  |  |
+| opportunity | → CrmOpportunity |  |  |
+| occurredAt | DateTime |  |  |
+| subject | String |  |  |
+| body | String |  |  |
+| callOutcome | CrmCallOutcome |  | A call's result; empty while a call started from a link has not yet been written up. |
+| survey | Json |  | A site survey's checklist: site type, entry points, existing guards, risk notes, photo links. |
+| purpose | CrmMessagePurpose |  | For a WhatsApp or an email: service or marketing. |
+| viaLink | Boolean |  | Logged automatically by using a call or WhatsApp link. |
+| createdBy | String | yes |  |
+| createdByUserId | String | yes |  |
+| createdAt | DateTime |  |  |
+| voidedAt | DateTime |  |  |
+| voidedBy | String |  |  |
+| voidReason | String |  |  |
+
+### CrmTask
+
+Something to do, by a date and time, for one person, optionally about a lead, contact, account or deal.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| title | String | yes |  |
+| notes | String |  |  |
+| dueAt | DateTime | yes |  |
+| reminderAt | DateTime |  | Brings the task into that morning's digest; there is no push notification. |
+| status | CrmTaskStatus |  |  |
+| ownerUserId | String | yes |  |
+| ownerName | String | yes |  |
+| leadId | String |  |  |
+| lead | → CrmLead |  |  |
+| accountId | String |  |  |
+| account | → CrmAccount |  |  |
+| contactId | String |  |  |
+| contact | → CrmContact |  |  |
+| opportunityId | String |  |  |
+| opportunity | → CrmOpportunity |  |  |
+| completedAt | DateTime |  |  |
+| completedBy | String |  |  |
+| createdBy | String | yes |  |
+| createdByUserId | String | yes |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+
+### CrmDigestRun
+
+One row for each user and day the digest email was sent, so it is never sent twice in a day.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| userId | String | yes |  |
+| forDate | DateTime | yes | The Lagos day it was for. |
+| sentAt | DateTime |  |  |
 
 ## Fixed sets of values
 
@@ -5242,4 +5329,22 @@ What the controller concluded about the harm a breach could do to the people aff
 ### CrmHandoverEventKind
 
 `CREATED`, `SUBMITTED`, `RETURNED`, `ACCEPTED`
+
+### CrmActivityKind
+
+`CALL`, `MEETING`, `SITE_SURVEY`, `WHATSAPP`, `EMAIL`, `NOTE`
+
+### CrmCallOutcome
+
+`REACHED`, `NO_ANSWER`, `CALLBACK`, `WRONG_NUMBER`
+
+### CrmMessagePurpose
+
+Whether an outbound message is a service message (about an active contract) or marketing (needs the person's consent).
+
+`SERVICE`, `MARKETING`
+
+### CrmTaskStatus
+
+`OPEN`, `DONE`, `CANCELLED`
 

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ActivityPanel } from "@/components/sales/activity-panel";
 import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -131,6 +132,7 @@ export default async function SalesDealPage({ params }: { params: Promise<{ id: 
           </TBody>
         </Table>
       </Section>
+      <ActivityPanel ctx={ctx} target={{ opportunityId: id }} />
     </>
   );
 }
