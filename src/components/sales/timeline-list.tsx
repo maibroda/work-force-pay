@@ -17,7 +17,7 @@ export interface TimelineRow {
   voided: boolean;
 }
 
-const LABEL: Record<string, string> = { CALL: "Calls", MEETING: "Meetings", SITE_SURVEY: "Site surveys", WHATSAPP: "WhatsApp", EMAIL: "Emails", NOTE: "Notes", STAGE: "Stage changes", QUOTE: "Quotes", HANDOVER: "Handovers", CONSENT: "Consent" };
+const LABEL: Record<string, string> = { CALL: "Calls", MEETING: "Meetings", SITE_SURVEY: "Site surveys", WHATSAPP: "WhatsApp", EMAIL: "Emails", NOTE: "Notes", STAGE: "Stage changes", QUOTE: "Quotes", HANDOVER: "Handovers", CONSENT: "Consent", CASE: "Cases" };
 
 const when = (iso: string) => new Date(iso).toLocaleString("en-NG", { timeZone: "Africa/Lagos", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 

@@ -42,7 +42,7 @@ export type Survey = z.infer<typeof surveySchema>;
 
 // ─────────────────────────────── the timeline ───────────────────────────────
 
-export const TIMELINE_TYPES = ["CALL", "MEETING", "SITE_SURVEY", "WHATSAPP", "EMAIL", "NOTE", "STAGE", "QUOTE", "HANDOVER", "CONSENT"] as const;
+export const TIMELINE_TYPES = ["CALL", "MEETING", "SITE_SURVEY", "WHATSAPP", "EMAIL", "NOTE", "STAGE", "QUOTE", "HANDOVER", "CONSENT", "CASE"] as const;
 export type TimelineType = (typeof TIMELINE_TYPES)[number];
 export interface TimelineItem {
   id: string;

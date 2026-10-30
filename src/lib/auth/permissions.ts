@@ -95,6 +95,7 @@ export const PERMISSIONS = [
   "sales.view.all", // see every sales record in the organization, not only your own, and reassign an owner
   "sales.manage", // add, change and void accounts, contacts and leads, and record consent
   "sales.configure", // switch the sales module on or off and choose how enquiries are handled
+  "sales.case.manage", // open, answer, resolve and reopen a client's cases (sales people, Operations, the company administrator)
   "sales.handover.accept", // for Operations: accept (or return with a question) the handover of an accepted quote; only people also designated by the company administrator
   "crm.manage", // add and move leads, log outreach, keep referral partners, record commission paid, and make and send proposals
   "healthcheck.view", // read the health checks of prospects' payroll processes and download their one-page summaries (never payroll data)
@@ -166,6 +167,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "sales.view",
     "sales.view.all", // read-only: they see the sales records but change nothing
     "sales.handover.accept", // and, once designated, accept the handover of an accepted quote
+    "sales.case.manage", // open and answer clients' cases
     "dashboard.view",
     "employee.view",
     "client.view",
@@ -252,7 +254,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
   EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise"],
   // the bureau's sales person sees the CRM and nothing else: no payroll, employee, client or finance data
-  BUSINESS_DEV: ["crm.view", "crm.manage", "sales.view", "sales.manage", "healthcheck.view", "self.security"],
+  BUSINESS_DEV: ["crm.view", "crm.manage", "sales.view", "sales.manage", "sales.case.manage", "healthcheck.view", "self.security"],
   // clients' own people see only their portal
   CLIENT_APPROVER: ["portal.view", "portal.approve", "portal.query", "portal.download", "self.security"],
   CLIENT_HR: ["portal.view", "portal.query", "portal.download", "portal.changes", "portal.inputs", "self.security"],
