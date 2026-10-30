@@ -95,6 +95,7 @@ export const PERMISSIONS = [
   "sales.view.all", // see every sales record in the organization, not only your own, and reassign an owner
   "sales.manage", // add, change and void accounts, contacts and leads, and record consent
   "sales.configure", // switch the sales module on or off and choose how enquiries are handled
+  "sales.handover.accept", // for Operations: accept (or return with a question) the handover of an accepted quote; only people also designated by the company administrator
   "crm.manage", // add and move leads, log outreach, keep referral partners, record commission paid, and make and send proposals
   "healthcheck.view", // read the health checks of prospects' payroll processes and download their one-page summaries (never payroll data)
   "healthcheck.manage", // carry out a health check: assess the controls, record findings, send it for review, review and issue it (never your own)
@@ -164,6 +165,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   OPERATIONS: [
     "sales.view",
     "sales.view.all", // read-only: they see the sales records but change nothing
+    "sales.handover.accept", // and, once designated, accept the handover of an accepted quote
     "dashboard.view",
     "employee.view",
     "client.view",

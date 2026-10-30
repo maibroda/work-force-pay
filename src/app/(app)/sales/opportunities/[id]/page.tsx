@@ -4,6 +4,7 @@ import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { BusinessError } from "@/server/services/_base";
 import { getOpportunity } from "@/server/services/sales/deals";
+import { getHandoverForDeal } from "@/server/services/sales/handover";
 import { listQuotes } from "@/server/services/sales/quotes";
 import { bpsToPercent } from "@/lib/sales/quote";
 import { annualValueKobo, weightedValueKobo } from "@/lib/sales/forecast";
@@ -33,6 +34,7 @@ export default async function SalesDealPage({ params }: { params: Promise<{ id: 
   const closed = o.stage.stageType !== "OPEN";
   const names = new Map(v.stages.map((s) => [s.id, s.name]));
   const quotes = await listQuotes(ctx, id);
+  const handover = await getHandoverForDeal(ctx, id);
   return (
     <>
       <PageHeader title={o.name} crumbs={[{ href: "/sales/board", label: "Deals board" }]} description={`${o.account.name}. Owner ${o.ownerName}.`} />
@@ -103,6 +105,15 @@ export default async function SalesDealPage({ params }: { params: Promise<{ id: 
           </p>
         )}
       </Section>
+
+      {handover && (
+        <Section title="Handover to Operations">
+          <p className="text-sm">
+            <Link className="underline" href={`/sales/handovers/${handover.id}`}>{handover.number}</Link>: <Badge>{label(handover.status)}</Badge>
+            {handover.status === "DRAFT" || handover.status === "RETURNED" ? " Sales must complete it and send it to Operations." : handover.status === "SUBMITTED" ? " Waiting for Operations." : " Accepted by Operations."}
+          </p>
+        </Section>
+      )}
 
       <Section title="Stage history" flush>
         <Table>
