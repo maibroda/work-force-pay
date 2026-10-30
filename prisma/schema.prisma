@@ -641,6 +641,9 @@ model Organization {
   crmAssignmentRules        CrmAssignmentRule[]
   crmQuotes                 CrmQuote[]
   crmQuoteApprovers         CrmQuoteApprover[]
+  crmHandovers              CrmHandover[]
+  crmHandoverEvents         CrmHandoverEvent[]
+  crmHandoverAcceptors      CrmHandoverAcceptor[]
   payslipSetting            PayslipSetting?
   payslipDeliveries         PayslipDelivery[]
   paymentFileExports        PaymentFileExport[]
@@ -5894,8 +5897,9 @@ model CrmOpportunity {
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
-  history CrmStageHistory[]
-  quotes  CrmQuote[]
+  history   CrmStageHistory[]
+  quotes    CrmQuote[]
+  handovers CrmHandover[]
 
   @@index([organizationId, ownerUserId, status])
   @@index([organizationId, stageId])
@@ -5992,7 +5996,8 @@ model CrmQuote {
   decidedBy           String?
   decisionNote        String?
 
-  lines CrmQuoteLine[]
+  lines    CrmQuoteLine[]
+  handover CrmHandover?
 
   @@unique([organizationId, number, versionNo])
   @@index([opportunityId, status])
@@ -6034,6 +6039,160 @@ model CrmQuoteLine {
 
 /// A person formally designated to approve a quote below the minimum margin. Only a designated approver (never the quote's maker) can approve one.
 model CrmQuoteApprover {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  userId         String
+  userName       String
+  active         Boolean      @default(true)
+  designatedBy   String
+  designatedAt   DateTime     @default(now())
+  removedBy      String?
+  removedAt      DateTime?
+
+  @@unique([organizationId, userId])
+}
+
+enum CrmHandoverStatus {
+  DRAFT
+  SUBMITTED
+  RETURNED
+  ACCEPTED
+}
+
+enum CrmHandoverEventKind {
+  CREATED
+  SUBMITTED
+  RETURNED
+  ACCEPTED
+}
+
+/// What an accepted quote hands over to Operations: the agreed scope, the client's requirements, the sites, headcount, shifts, pricing, start date, equipment
+/// and service-level obligations. One per deal. Sales prepares and submits it; Operations accepts it (or returns it with questions); only on acceptance are the
+/// client, contract (a draft), rates and sites created. The quote facts are copied in and never change; once ACCEPTED nothing can change (the database refuses).
+/// It holds no cost and no margin.
+model CrmHandover {
+  id                 String            @id @default(cuid())
+  organizationId     String
+  organization       Organization      @relation(fields: [organizationId], references: [id])
+  number             String
+  opportunityId      String
+  opportunity        CrmOpportunity    @relation(fields: [opportunityId], references: [id])
+  quoteId            String            @unique
+  quote              CrmQuote          @relation(fields: [quoteId], references: [id])
+  accountId          String
+  status             CrmHandoverStatus @default(DRAFT)
+  /// Goes up every time the handover is edited. Operations accepts only the revision it was sent.
+  revisionNo         Int               @default(1)
+  submittedRevision  Int?
+  /// From the accepted quote, copied in: never changes.
+  quoteNumber        String
+  quoteVersion       Int
+  monthlyBill        Decimal           @db.Decimal(16, 2)
+  validUntil         DateTime?         @db.Date
+  /// Entered in the handover.
+  scope              String?
+  clientRequirements String?
+  startDate          DateTime?         @db.Date
+  termMonths         Int?
+  /// Special service-level obligations: lines of { obligation, measure, consequence }. noSpecialSla says there are none (an explicit answer).
+  serviceLevels      Json              @default("[]")
+  noSpecialSla       Boolean           @default(false)
+  preparedBy         String
+  preparedByUserId   String
+  submittedAt        DateTime?
+  submittedBy        String?
+  submittedByUserId  String?
+  returnedAt         DateTime?
+  returnedBy         String?
+  returnNote         String?
+  acceptedAt         DateTime?
+  acceptedBy         String?
+  acceptedByUserId   String?
+  acceptanceNote     String?
+  acceptedRevision   Int?
+  /// The real records made on acceptance.
+  clientId           String?
+  contractId         String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  sites  CrmHandoverSite[]
+  posts  CrmHandoverPost[]
+  events CrmHandoverEvent[]
+
+  @@unique([organizationId, number])
+  @@unique([opportunityId])
+  @@index([organizationId, status])
+}
+
+/// One client site named on the quote. The address, state, local government, the client's site contact and the equipment are entered in the handover.
+model CrmHandoverSite {
+  id               String            @id @default(cuid())
+  handoverId       String
+  handover         CrmHandover       @relation(fields: [handoverId], references: [id])
+  sortOrder        Int
+  name             String
+  address          String?
+  state            String?
+  lga              String?
+  contactName      String?
+  contactRole      String?
+  contactPhoneE164 String?
+  contactEmail     String?
+  /// Lines of { item, quantity }. noEquipment says none is needed (an explicit answer).
+  equipment        Json              @default("[]")
+  noEquipment      Boolean           @default(false)
+  /// The site (Beat) made on acceptance.
+  beatId           String?
+  posts            CrmHandoverPost[]
+
+  @@index([handoverId, sortOrder])
+}
+
+/// One quote line, copied in with its billed guards, the personnel needed, the shift and the bill rate (never the cost or margin). Only the employee category is entered.
+model CrmHandoverPost {
+  id                String          @id @default(cuid())
+  handoverId        String
+  handover          CrmHandover     @relation(fields: [handoverId], references: [id])
+  siteId            String
+  site              CrmHandoverSite @relation(fields: [siteId], references: [id])
+  quoteLineId       String
+  sortOrder         Int
+  postLabel         String?
+  shiftPattern      String?
+  salaryStructureId String
+  structureName     String
+  businessLine      String
+  headcount         Int
+  requiredPersonnel Int
+  billPerHead       Decimal         @db.Decimal(16, 2)
+  operativeSharePct Decimal         @db.Decimal(5, 2)
+  /// The employee category the contract rate is made for (entered).
+  categoryId        String?
+
+  @@index([handoverId, sortOrder])
+}
+
+/// Who did what to a handover and when: submitted, returned (with the question), accepted. Never changed (the database refuses it).
+model CrmHandoverEvent {
+  id             String               @id @default(cuid())
+  organizationId String
+  organization   Organization         @relation(fields: [organizationId], references: [id])
+  handoverId     String
+  handover       CrmHandover          @relation(fields: [handoverId], references: [id])
+  kind           CrmHandoverEventKind
+  revisionNo     Int
+  byUserId       String
+  byName         String
+  note           String?
+  at             DateTime             @default(now())
+
+  @@index([handoverId, at])
+}
+
+/// A person formally designated to accept a handover for Operations (the Executive Director, Operations, or the Operations Manager). Never the person who prepared it.
+model CrmHandoverAcceptor {
   id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])

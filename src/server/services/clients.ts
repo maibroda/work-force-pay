@@ -30,28 +30,37 @@ export const clientSchema = z.object({
   endDate: opt,
 });
 
+/**
+ * What each `...Record` function below shares with its public twin: the work of making the record, inside a transaction the caller already holds, so that
+ * several records (a handover's client, contract, rates and sites) can be made together or not at all. They do NOT check permission (the caller must), and
+ * `idsOnlyAudit` writes the audit entry with the record's id and code only, for callers that must keep personal details out of the audit log.
+ */
+export type RecordOptions = { idsOnlyAudit?: boolean };
+
+export async function createClientRecord(ctx: Ctx, tx: Tx, v: z.output<typeof clientSchema>, opts: RecordOptions = {}) {
+  const code = v.code?.toUpperCase() ?? (await nextNumber(tx, ctx.orgId, "CLIENT"));
+  const c = await tx.client.create({
+    data: {
+      organizationId: ctx.orgId,
+      code,
+      name: v.name,
+      contactPerson: v.contactPerson,
+      address: v.address,
+      phone: v.phone,
+      email: v.email,
+      status: v.status,
+      startDate: v.startDate ? d(v.startDate) : null,
+      endDate: v.endDate ? d(v.endDate) : null,
+    },
+  });
+  await logAudit(ctx, { action: "CLIENT_CREATE", entity: "Client", entityId: c.id, newValue: opts.idsOnlyAudit ? { id: c.id, code: c.code } : c }, tx);
+  return c;
+}
+
 export async function createClient(ctx: Ctx, raw: z.input<typeof clientSchema>) {
   assertCan(ctx, "client.manage");
   const v = clientSchema.parse(raw);
-  return db.$transaction(async (tx) => {
-    const code = v.code?.toUpperCase() ?? (await nextNumber(tx, ctx.orgId, "CLIENT"));
-    const c = await tx.client.create({
-      data: {
-        organizationId: ctx.orgId,
-        code,
-        name: v.name,
-        contactPerson: v.contactPerson,
-        address: v.address,
-        phone: v.phone,
-        email: v.email,
-        status: v.status,
-        startDate: v.startDate ? d(v.startDate) : null,
-        endDate: v.endDate ? d(v.endDate) : null,
-      },
-    });
-    await logAudit(ctx, { action: "CLIENT_CREATE", entity: "Client", entityId: c.id, newValue: c }, tx);
-    return c;
-  });
+  return db.$transaction((tx) => createClientRecord(ctx, tx, v));
 }
 
 export async function updateClient(ctx: Ctx, id: string, raw: z.input<typeof clientSchema>) {
@@ -126,38 +135,40 @@ export const contractSchema = z.object({
   notes: opt,
 });
 
+export async function createContractRecord(ctx: Ctx, tx: Tx, v: z.output<typeof contractSchema>, opts: RecordOptions = {}) {
+  const client = await tx.client.findFirst({ where: { id: v.clientId, organizationId: ctx.orgId } });
+  if (!client) throw new BusinessError("Client not found.");
+  if (v.defaultStructureId) await assertStructure(ctx, v.defaultStructureId, tx);
+  const contractNumber = v.contractNumber?.toUpperCase() ?? (await nextNumber(tx, ctx.orgId, "CONTRACT"));
+  const c = await tx.contract.create({
+    data: {
+      organizationId: ctx.orgId,
+      clientId: v.clientId,
+      contractNumber,
+      name: v.name,
+      startDate: d(v.startDate),
+      endDate: v.endDate ? d(v.endDate) : null,
+      contractValue: v.contractValue ?? null,
+      billingMethod: v.billingMethod,
+      status: v.status,
+      businessLine: v.businessLine,
+      operativeSharePct: v.operativeSharePct,
+      defaultStructureId: v.defaultStructureId ?? null,
+      notes: v.notes,
+    },
+  });
+  await logAudit(ctx, { action: "CONTRACT_CREATE", entity: "Contract", entityId: c.id, newValue: opts.idsOnlyAudit ? { id: c.id, contractNumber: c.contractNumber, status: c.status } : c }, tx);
+  return c;
+}
+
 export async function createContract(ctx: Ctx, raw: z.input<typeof contractSchema>) {
   assertCan(ctx, "client.manage");
   const v = contractSchema.parse(raw);
-  const client = await db.client.findFirst({ where: { id: v.clientId, organizationId: ctx.orgId } });
-  if (!client) throw new BusinessError("Client not found.");
-  if (v.defaultStructureId) await assertStructure(ctx, v.defaultStructureId);
-  return db.$transaction(async (tx) => {
-    const contractNumber = v.contractNumber?.toUpperCase() ?? (await nextNumber(tx, ctx.orgId, "CONTRACT"));
-    const c = await tx.contract.create({
-      data: {
-        organizationId: ctx.orgId,
-        clientId: v.clientId,
-        contractNumber,
-        name: v.name,
-        startDate: d(v.startDate),
-        endDate: v.endDate ? d(v.endDate) : null,
-        contractValue: v.contractValue ?? null,
-        billingMethod: v.billingMethod,
-        status: v.status,
-        businessLine: v.businessLine,
-        operativeSharePct: v.operativeSharePct,
-        defaultStructureId: v.defaultStructureId ?? null,
-        notes: v.notes,
-      },
-    });
-    await logAudit(ctx, { action: "CONTRACT_CREATE", entity: "Contract", entityId: c.id, newValue: c }, tx);
-    return c;
-  });
+  return db.$transaction((tx) => createContractRecord(ctx, tx, v));
 }
 
-async function assertStructure(ctx: Ctx, id: string) {
-  const s = await db.salaryStructure.findFirst({ where: { id, organizationId: ctx.orgId } });
+async function assertStructure(ctx: Ctx, id: string, tx: Tx | typeof db = db) {
+  const s = await tx.salaryStructure.findFirst({ where: { id, organizationId: ctx.orgId } });
   if (!s) throw new BusinessError("Salary structure not found.");
   if (s.status !== "ACTIVE") throw new BusinessError("Only ACTIVE salary structures can be assigned.");
   return s;
@@ -214,50 +225,52 @@ export const contractRateSchema = z.object({
 });
 
 /** Adds an effective-dated agreed rate. The previous open rate for the same category is closed the day before. */
+export async function addContractRateRecord(ctx: Ctx, tx: Tx, v: z.output<typeof contractRateSchema>) {
+  const contract = await tx.contract.findFirst({ where: { id: v.contractId, organizationId: ctx.orgId } });
+  if (!contract) throw new BusinessError("Contract not found.");
+  const cat = await tx.employeeCategory.findFirst({ where: { id: v.categoryId, organizationId: ctx.orgId } });
+  if (!cat) throw new BusinessError("Category not found.");
+  await assertStructure(ctx, v.salaryStructureId, tx);
+  const from = d(v.effectiveFrom);
+  const open = await tx.contractRate.findMany({
+    where: {
+      organizationId: ctx.orgId,
+      contractId: v.contractId,
+      categoryId: v.categoryId,
+      effectiveTo: null,
+    },
+  });
+  for (const r of open) {
+    if (r.effectiveFrom >= from)
+      throw new BusinessError("A rate for this category already starts on or after this date.");
+    await tx.contractRate.update({
+      where: { id: r.id },
+      data: { effectiveTo: new Date(from.getTime() - 86400000) },
+    });
+  }
+  const rate = await tx.contractRate.create({
+    data: {
+      organizationId: ctx.orgId,
+      contractId: v.contractId,
+      categoryId: v.categoryId,
+      salaryStructureId: v.salaryStructureId,
+      agreedRate: v.agreedRate,
+      operativeSharePct: v.operativeSharePct ?? null,
+      effectiveFrom: from,
+    },
+  });
+  await logAudit(
+    ctx,
+    { action: "CONTRACT_RATE_SET", entity: "Contract", entityId: v.contractId, newValue: rate },
+    tx,
+  );
+  return rate;
+}
+
 export async function addContractRate(ctx: Ctx, raw: z.input<typeof contractRateSchema>) {
   assertCan(ctx, "client.manage");
   const v = contractRateSchema.parse(raw);
-  const contract = await db.contract.findFirst({ where: { id: v.contractId, organizationId: ctx.orgId } });
-  if (!contract) throw new BusinessError("Contract not found.");
-  const cat = await db.employeeCategory.findFirst({ where: { id: v.categoryId, organizationId: ctx.orgId } });
-  if (!cat) throw new BusinessError("Category not found.");
-  await assertStructure(ctx, v.salaryStructureId);
-  const from = d(v.effectiveFrom);
-  return db.$transaction(async (tx) => {
-    const open = await tx.contractRate.findMany({
-      where: {
-        organizationId: ctx.orgId,
-        contractId: v.contractId,
-        categoryId: v.categoryId,
-        effectiveTo: null,
-      },
-    });
-    for (const r of open) {
-      if (r.effectiveFrom >= from)
-        throw new BusinessError("A rate for this category already starts on or after this date.");
-      await tx.contractRate.update({
-        where: { id: r.id },
-        data: { effectiveTo: new Date(from.getTime() - 86400000) },
-      });
-    }
-    const rate = await tx.contractRate.create({
-      data: {
-        organizationId: ctx.orgId,
-        contractId: v.contractId,
-        categoryId: v.categoryId,
-        salaryStructureId: v.salaryStructureId,
-        agreedRate: v.agreedRate,
-        operativeSharePct: v.operativeSharePct ?? null,
-        effectiveFrom: from,
-      },
-    });
-    await logAudit(
-      ctx,
-      { action: "CONTRACT_RATE_SET", entity: "Contract", entityId: v.contractId, newValue: rate },
-      tx,
-    );
-    return rate;
-  });
+  return db.$transaction((tx) => addContractRateRecord(ctx, tx, v));
 }
 
 // ───────────────────────────── Beats ─────────────────────────────
@@ -278,36 +291,38 @@ export const beatSchema = z.object({
   supervisorId: opt,
 });
 
+export async function createBeatRecord(ctx: Ctx, tx: Tx, v: z.output<typeof beatSchema>, opts: RecordOptions = {}) {
+  const contract = await tx.contract.findFirst({ where: { id: v.contractId, organizationId: ctx.orgId } });
+  if (!contract) throw new BusinessError("Contract not found.");
+  const code = v.code?.toUpperCase() ?? (await nextNumber(tx, ctx.orgId, "BEAT"));
+  const b = await tx.beat.create({
+    data: {
+      organizationId: ctx.orgId,
+      clientId: contract.clientId,
+      contractId: contract.id,
+      code,
+      name: v.name,
+      bidReference: v.bidReference,
+      region: v.region,
+      state: v.state,
+      lga: v.lga,
+      address: v.address,
+      siteContact: v.siteContact,
+      approvedStrength: v.approvedStrength,
+      status: "UNMAPPED", // new beats start UNMAPPED until operations map employees
+      startDate: v.startDate ? d(v.startDate) : null,
+      endDate: v.endDate ? d(v.endDate) : null,
+      supervisorId: v.supervisorId ?? null,
+    },
+  });
+  await logAudit(ctx, { action: "BEAT_CREATE", entity: "Beat", entityId: b.id, newValue: opts.idsOnlyAudit ? { id: b.id, code: b.code, approvedStrength: b.approvedStrength } : b }, tx);
+  return b;
+}
+
 export async function createBeat(ctx: Ctx, raw: z.input<typeof beatSchema>) {
   assertCan(ctx, "client.manage");
   const v = beatSchema.parse(raw);
-  const contract = await db.contract.findFirst({ where: { id: v.contractId, organizationId: ctx.orgId } });
-  if (!contract) throw new BusinessError("Contract not found.");
-  return db.$transaction(async (tx) => {
-    const code = v.code?.toUpperCase() ?? (await nextNumber(tx, ctx.orgId, "BEAT"));
-    const b = await tx.beat.create({
-      data: {
-        organizationId: ctx.orgId,
-        clientId: contract.clientId,
-        contractId: contract.id,
-        code,
-        name: v.name,
-        bidReference: v.bidReference,
-        region: v.region,
-        state: v.state,
-        lga: v.lga,
-        address: v.address,
-        siteContact: v.siteContact,
-        approvedStrength: v.approvedStrength,
-        status: "UNMAPPED", // new beats start UNMAPPED until operations map employees
-        startDate: v.startDate ? d(v.startDate) : null,
-        endDate: v.endDate ? d(v.endDate) : null,
-        supervisorId: v.supervisorId ?? null,
-      },
-    });
-    await logAudit(ctx, { action: "BEAT_CREATE", entity: "Beat", entityId: b.id, newValue: b }, tx);
-    return b;
-  });
+  return db.$transaction((tx) => createBeatRecord(ctx, tx, v));
 }
 
 export async function updateBeatStrength(

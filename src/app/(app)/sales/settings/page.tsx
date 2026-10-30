@@ -2,6 +2,7 @@ import { requirePage } from "@/lib/auth/session";
 import { can, ROLE_PERMISSIONS, type Role } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { getAssignment } from "@/server/services/sales/assignment";
+import { listAcceptors } from "@/server/services/sales/handover";
 import { getMinimumMargin, listApprovers } from "@/server/services/sales/quotes";
 import { getSalesSetting } from "@/server/services/sales/setting";
 import { ActionButton } from "@/components/action-button";
@@ -10,6 +11,7 @@ import { SmartForm } from "@/components/smart-form";
 import { Badge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { removeAssignmentRuleAction, saveSalesSettingAction, setAssignmentMethodAction, setAssignmentRuleAction } from "@/app/actions/sales";
+import { designateAcceptorAction, removeAcceptorAction } from "@/app/actions/sales-handover";
 import { designateApproverAction, removeApproverAction, setMinimumMarginAction } from "@/app/actions/sales-quotes";
 
 const SERVICES = ["GUARDING", "CLEANING", "FACILITY", "STAFFING", "OTHER"];
@@ -23,6 +25,9 @@ export default async function SalesSettingsPage() {
   const approvers = s.enabled ? await listApprovers(ctx) : [];
   const managerRoles = (Object.keys(ROLE_PERMISSIONS) as Role[]).filter((r) => can(r, "sales.manage") && can(r, "sales.view.all"));
   const managers = s.enabled ? await db.user.findMany({ where: { organizationId: ctx.orgId, active: true, role: { in: managerRoles as never } }, orderBy: { name: "asc" }, select: { id: true, name: true } }) : [];
+  const acceptors = s.enabled ? await listAcceptors(ctx) : [];
+  const acceptRoles = (Object.keys(ROLE_PERMISSIONS) as Role[]).filter((r) => can(r, "sales.handover.accept"));
+  const opsPeople = s.enabled ? await db.user.findMany({ where: { organizationId: ctx.orgId, active: true, role: { in: acceptRoles as never } }, orderBy: { name: "asc" }, select: { id: true, name: true } }) : [];
   const salesRoles = (Object.keys(ROLE_PERMISSIONS) as Role[]).filter((r) => can(r, "sales.manage"));
   const people = await db.user.findMany({ where: { organizationId: ctx.orgId, active: true, role: { in: salesRoles as never } }, orderBy: { name: "asc" }, select: { id: true, name: true } });
   return (
@@ -83,6 +88,29 @@ export default async function SalesSettingsPage() {
           </Section>
           <Section title="Designate an approver">
             <SmartForm columns={2} submitLabel="Designate" resetOnSuccess action={designateApproverAction} fields={[{ name: "userId", label: "Sales manager", type: "select", required: true, options: [{ value: "", label: "— choose —" }, ...managers.map((m) => ({ value: m.id, label: m.name }))] }]} />
+          </Section>
+        </>
+      )}
+
+      {s.enabled && (
+        <>
+          <Section title={`${acceptors.length} designated to accept handovers`} description="When a client accepts a quote, Sales prepares a handover and Operations must accept it before the client, a draft contract, its rates and the sites are made. Only these people (the Executive Director, Operations, or the Operations Manager) can accept or return one, and never one they prepared." flush>
+            <Table>
+              <THead><TR><TH>Person</TH><TH>Designated by</TH><TH /></TR></THead>
+              <TBody>
+                {acceptors.map((a) => (
+                  <TR key={a.id}>
+                    <TD>{a.userName}</TD>
+                    <TD className="text-xs">{a.designatedBy}</TD>
+                    <TD><ActionButton action={removeAcceptorAction.bind(null, a.id)} confirm="Remove this person? They will no longer be able to accept handovers." variant="outline">Remove</ActionButton></TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+            {!acceptors.length && <p className="px-4 py-4 text-sm text-amber-800">Nobody is designated yet, so no handover can be accepted.</p>}
+          </Section>
+          <Section title="Designate someone to accept handovers">
+            <SmartForm columns={2} submitLabel="Designate" resetOnSuccess action={designateAcceptorAction} fields={[{ name: "userId", label: "Person in Operations", type: "select", required: true, options: [{ value: "", label: "— choose —" }, ...opsPeople.map((m) => ({ value: m.id, label: m.name }))] }]} />
           </Section>
         </>
       )}
