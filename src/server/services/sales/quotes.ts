@@ -17,6 +17,7 @@ import { nextNumber } from "../numbering";
 import { employerCostRuleFor, pensionRuleFor } from "../statutory";
 import { toStructureDef } from "../structures";
 import { ownerFilter, requireSales, seesAll } from "./access";
+import { fireEvent } from "./automation";
 import { createHandoverInTx } from "./handover";
 
 /** The share of the bill rate paid to the guard as gross, when a line does not say (the 70:30 split). */
@@ -365,7 +366,7 @@ export async function reviseQuote(ctx: Ctx, id: string) {
 /** The client's answer to a sent quote. Accepting copies its monthly total into the deal's value; only one quote of a deal can be accepted. */
 export async function decideQuote(ctx: Ctx, id: string, decision: "ACCEPTED" | "REJECTED", note?: string) {
   await requireSales(ctx, "sales.manage");
-  return db.$transaction(async (tx: Tx) => {
+  const result = await db.$transaction(async (tx: Tx) => {
     const q = await loadQuote(ctx, tx, id);
     if (q.status !== "SENT") throw new BusinessError("Only a sent quote can be accepted or rejected.");
     if (decision === "ACCEPTED" && (await tx.crmQuote.count({ where: { opportunityId: q.opportunityId, status: "ACCEPTED" } })))
@@ -378,6 +379,8 @@ export async function decideQuote(ctx: Ctx, id: string, decision: "ACCEPTED" | "
     await logAudit(ctx, { action: "SALES_QUOTE_DECIDE", entity: "CrmQuote", entityId: id, newValue: { decision } }, tx);
     return u;
   }, { timeout: 20_000, maxWait: 10_000 }); // accepting also starts the handover (a site and its posts for each site on the quote), which is more than five seconds of work on a busy server
+  if (decision === "ACCEPTED") await fireEvent(ctx.orgId, "QUOTE_ACCEPTED", result.opportunityId, result.id); // rules for this event run after the acceptance is saved; never throws
+  return result;
 }
 
 export async function getQuote(ctx: Ctx, id: string) {

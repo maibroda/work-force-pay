@@ -647,6 +647,9 @@ model Organization {
   crmActivities             CrmActivity[]
   crmTasks                  CrmTask[]
   crmDigestRuns             CrmDigestRun[]
+  crmAutomationRules        CrmAutomationRule[]
+  crmAutomationRuns         CrmAutomationRun[]
+  crmNotifications          CrmNotification[]
   payslipSetting            PayslipSetting?
   payslipDeliveries         PayslipDelivery[]
   paymentFileExports        PaymentFileExport[]
@@ -5835,8 +5838,9 @@ model CrmPipeline {
   active         Boolean         @default(true)
   createdAt      DateTime        @default(now())
 
-  stages        CrmStage[]
-  opportunities CrmOpportunity[]
+  stages          CrmStage[]
+  opportunities   CrmOpportunity[]
+  automationRules CrmAutomationRule[]
 
   @@unique([organizationId, name])
 }
@@ -5856,7 +5860,8 @@ model CrmStage {
   rottingDays        Int?
   active             Boolean      @default(true)
 
-  opportunities CrmOpportunity[]
+  opportunities   CrmOpportunity[]
+  automationRules CrmAutomationRule[]
 
   @@index([pipelineId, sortOrder])
 }
@@ -5906,11 +5911,12 @@ model CrmOpportunity {
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
-  history    CrmStageHistory[]
-  quotes     CrmQuote[]
-  handovers  CrmHandover[]
-  activities CrmActivity[]
-  tasks      CrmTask[]
+  history        CrmStageHistory[]
+  quotes         CrmQuote[]
+  handovers      CrmHandover[]
+  activities     CrmActivity[]
+  tasks          CrmTask[]
+  automationRuns CrmAutomationRun[]
 
   @@index([organizationId, ownerUserId, status])
   @@index([organizationId, stageId])
@@ -6328,4 +6334,106 @@ model CrmDigestRun {
   sentAt         DateTime     @default(now())
 
   @@unique([organizationId, userId, forDate])
+}
+
+enum CrmAutomationTrigger {
+  STAGE_ENTRY
+  QUOTE_ACCEPTED
+  HANDOVER_ACCEPTED
+  NO_ACTIVITY
+}
+
+enum CrmAutomationAction {
+  CREATE_TASK
+  NOTIFY
+  SEND_EMAIL
+  CHANGE_OWNER
+  SET_FIELD
+  CREATE_FOLLOW_UP
+  MOVE_TO_STAGE
+}
+
+enum CrmAutomationRunStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+  CANCELLED
+  SKIPPED
+}
+
+/// When something happens to a deal (it enters a stage, its quote or handover is accepted, or it goes quiet), do one thing, at once or after a delay,
+/// if the condition holds. Starts switched off. Changed by switching it off and making a new one, so the run log stays true.
+model CrmAutomationRule {
+  id             String               @id @default(cuid())
+  organizationId String
+  organization   Organization         @relation(fields: [organizationId], references: [id])
+  name           String
+  trigger        CrmAutomationTrigger
+  pipelineId     String
+  pipeline       CrmPipeline          @relation(fields: [pipelineId], references: [id])
+  /// For a stage-entry rule: the stage.
+  stageId        String?
+  stage          CrmStage?            @relation(fields: [stageId], references: [id])
+  /// How long after the trigger the action runs (0 = at once).
+  delayMinutes   Int                  @default(0)
+  /// For a no-activity rule: how many quiet days.
+  quietDays      Int?
+  /// { field, op, value }: the rule acts only if it holds when the run is due.
+  condition      Json?
+  actionType     CrmAutomationAction
+  actionParams   Json
+  enabled        Boolean              @default(false)
+  /// One of the rules offered to every organization (all start off).
+  isStarter      Boolean              @default(false)
+  createdBy      String
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  updatedBy      String?
+
+  runs CrmAutomationRun[]
+
+  @@index([organizationId, trigger, enabled])
+}
+
+/// One carrying-out of a rule for a deal and a stage entry (or quote, handover, quiet spell). The database allows one per rule, deal and entry, so a rule never
+/// fires twice for the same entry. Holds ids and figures, never message text.
+model CrmAutomationRun {
+  id             String                 @id @default(cuid())
+  organizationId String
+  organization   Organization           @relation(fields: [organizationId], references: [id])
+  ruleId         String
+  rule           CrmAutomationRule      @relation(fields: [ruleId], references: [id])
+  opportunityId  String
+  opportunity    CrmOpportunity         @relation(fields: [opportunityId], references: [id])
+  /// What this run is for: the stage-history row of the entry, the quote or handover, or the last-activity moment of a quiet spell.
+  entryKey       String
+  status         CrmAutomationRunStatus @default(PENDING)
+  runAt          DateTime
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  durationMs     Int?
+  inputs         Json?
+  outputs        Json?
+  error          String?
+  createdAt      DateTime               @default(now())
+
+  @@unique([ruleId, opportunityId, entryKey])
+  @@index([organizationId, status, runAt])
+  @@index([organizationId, createdAt])
+}
+
+/// A message to a person inside the app (the email goes separately).
+model CrmNotification {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  userId         String
+  title          String
+  body           String
+  href           String?
+  createdAt      DateTime     @default(now())
+  readAt         DateTime?
+
+  @@index([organizationId, userId, readAt])
 }

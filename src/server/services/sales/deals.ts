@@ -11,6 +11,7 @@ import { parseNairaAmount } from "@/lib/sales/money";
 import { koboToString, toKobo } from "@/lib/money-exact";
 import { BusinessError, db, type Tx } from "../_base";
 import { logAudit } from "../audit";
+import { scheduleStageEntry } from "./automation-schedule";
 import { ownerFilter, requireSales } from "./access";
 import { visibleContact } from "./loaders";
 
@@ -92,7 +93,8 @@ export async function moveOpportunity(ctx: Ctx, id: string, raw: z.input<typeof 
         ...(v.competitor ? { competitor: v.competitor } : {}),
       },
     });
-    await tx.crmStageHistory.create({ data: { organizationId: ctx.orgId, opportunityId: id, fromStageId: deal.stageId, toStageId: stage.id, changedBy: ctx.name, changedByUserId: ctx.userId, daysInPreviousStage: days } });
+    const entry = await tx.crmStageHistory.create({ data: { organizationId: ctx.orgId, opportunityId: id, fromStageId: deal.stageId, toStageId: stage.id, changedBy: ctx.name, changedByUserId: ctx.userId, daysInPreviousStage: days } });
+    await scheduleStageEntry(tx, ctx.orgId, id, stage.id, entry.id, now); // queue the rules for this stage, and cancel the ones waiting from the stage it left
     await logAudit(ctx, { action: "SALES_OPPORTUNITY_MOVE", entity: "CrmOpportunity", entityId: id, newValue: { from: deal.stage.name, to: stage.name, closed: closing } }, tx);
     return moved;
   });
