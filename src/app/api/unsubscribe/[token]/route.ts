@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { clientIp, unsubscribeLimiter } from "@/lib/rate-limit";
+import { clientIp, limitKey, unsubscribeLimiter } from "@/lib/rate-limit";
 import { limitedResponse } from "@/lib/rate-limit-http";
 import { unsubscribe } from "@/server/services/sales/privacy";
 
@@ -7,9 +7,9 @@ export const dynamic = "force-dynamic";
 
 /** One-click unsubscribe: a mail program POSTs here (RFC 8058). It answers the same whatever the token, so nothing is learned about who is on file. */
 export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
-  const slow = limitedResponse(unsubscribeLimiter, clientIp(req.headers));
-  if (slow) return slow;
   const { token } = await params;
+  const slow = limitedResponse(unsubscribeLimiter, limitKey(clientIp(req.headers), token));
+  if (slow) return slow;
   try {
     await unsubscribe(token);
   } catch {
