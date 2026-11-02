@@ -51,8 +51,10 @@ export async function recordConsent(ctx: Ctx, raw: z.input<typeof consentSchema>
 export async function consentStatus(ctx: Ctx, t: ConsentTarget & { purpose: "MARKETING" | "SERVICE" }): Promise<"GRANTED" | "WITHDRAWN" | "UNKNOWN"> {
   await requireSales(ctx, "sales.view");
   await checkTarget(ctx, t);
+  // a contact's consent includes that of every record merged into it (consent rows cannot be edited, so they stay where they were written)
+  const ids = t.contactId ? [t.contactId, ...(await db.crmContact.findMany({ where: { organizationId: ctx.orgId, mergedIntoId: t.contactId }, select: { id: true } })).map((c) => c.id)] : [];
   const last = await db.crmConsent.findFirst({
-    where: { organizationId: ctx.orgId, purpose: t.purpose, ...(t.contactId ? { contactId: t.contactId } : { leadId: t.leadId }) },
+    where: { organizationId: ctx.orgId, purpose: t.purpose, ...(t.contactId ? { contactId: { in: ids } } : { leadId: t.leadId }) },
     orderBy: { seq: "desc" },
     select: { status: true },
   });

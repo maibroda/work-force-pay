@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-170 tables and 135 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+175 tables and 139 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -109,6 +109,10 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | crmContacts | → CrmContact[] |  |  |
 | crmLeads | → CrmLead[] |  |  |
 | crmConsents | → CrmConsent[] |  |  |
+| crmPipelines | → CrmPipeline[] |  |  |
+| crmOpportunities | → CrmOpportunity[] |  |  |
+| crmStageHistory | → CrmStageHistory[] |  |  |
+| crmAssignmentRules | → CrmAssignmentRule[] |  |  |
 | payslipSetting | → PayslipSetting |  |  |
 | payslipDeliveries | → PayslipDelivery[] |  |  |
 | paymentFileExports | → PaymentFileExport[] |  |  |
@@ -4165,6 +4169,8 @@ Whether the sales module is on for an organization (off until a company administ
 | organization | → Organization |  |  |
 | enabled | Boolean |  |  |
 | mode | CrmMode |  |  |
+| assignmentMethod | CrmAssignmentMethod |  | How new leads with no owner given (created by a manager) are assigned, and where round robin has got to. |
+| assignmentCursor | Int |  |  |
 | updatedBy | String | yes |  |
 | updatedAt | DateTime |  |  |
 
@@ -4194,6 +4200,9 @@ A company the organization sells to or serves, as the sales side sees it. It lin
 | rcNumber | String |  |  |
 | emailDomain | String |  |  |
 | clientId | String |  | The existing Client this became, set only at handover. |
+| mergedIntoId | String |  | Set when this account was merged into another (it is then voided). |
+| mergedInto | → CrmAccount |  |  |
+| mergedFrom | → CrmAccount[] |  |  |
 | status | CrmRecordStatus |  |  |
 | voidedAt | DateTime |  |  |
 | voidedBy | String |  |  |
@@ -4202,6 +4211,7 @@ A company the organization sells to or serves, as the sales side sees it. It lin
 | createdAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |
 | contacts | → CrmContact[] |  |  |
+| opportunities | → CrmOpportunity[] |  |  |
 
 ### CrmContact
 
@@ -4225,6 +4235,9 @@ A person at an account (or not yet attached to one). Phones are stored as E.164 
 | ownerUserId | String | yes |  |
 | ownerName | String | yes |  |
 | status | CrmRecordStatus |  |  |
+| mergedIntoId | String |  | Set when this contact was merged into another (it is then voided; its consent history is read through the survivor). |
+| mergedInto | → CrmContact |  |  |
+| mergedFrom | → CrmContact[] |  |  |
 | voidedAt | DateTime |  |  |
 | voidedBy | String |  |  |
 | voidReason | String |  |  |
@@ -4232,6 +4245,7 @@ A person at an account (or not yet attached to one). Phones are stored as E.164 
 | createdAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |
 | consents | → CrmConsent[] |  |  |
+| opportunities | → CrmOpportunity[] |  |  |
 
 ### CrmLead
 
@@ -4262,6 +4276,7 @@ An enquiry not yet known to be real. Becomes an account and contact (and a deal)
 | ownerName | String | yes |  |
 | convertedAccountId | String |  |  |
 | convertedContactId | String |  |  |
+| convertedOpportunityId | String |  |  |
 | convertedAt | DateTime |  |  |
 | convertedBy | String |  |  |
 | voidedAt | DateTime |  |  |
@@ -4294,6 +4309,114 @@ One consent or withdrawal, never changed (the database refuses it). The latest r
 | recordedBy | String | yes |  |
 | recordedByUserId | String | yes |  |
 | recordedAt | DateTime |  |  |
+
+### CrmPipeline
+
+A sales process (new business, later renewal and rate review) made of stages. Each organization has its own copy; the starting stages and probabilities are editable defaults.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| name | String | yes |  |
+| kind | CrmPipelineKind | yes |  |
+| isDefault | Boolean |  |  |
+| sortOrder | Int |  |  |
+| active | Boolean |  |  |
+| createdAt | DateTime |  |  |
+| stages | → CrmStage[] |  |  |
+| opportunities | → CrmOpportunity[] |  |  |
+
+### CrmStage
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| pipelineId | String | yes |  |
+| pipeline | → CrmPipeline |  |  |
+| name | String | yes |  |
+| sortOrder | Int | yes |  |
+| stageType | CrmStageType |  |  |
+| defaultProbability | Int | yes | 0 to 100: what a deal entering this stage is given as its probability. |
+| requiredFields | Json |  | Field keys that must be filled before a deal may enter this stage (enforced from the board phase). |
+| rottingDays | Int |  | Days without activity after which a card on this stage is flagged. |
+| active | Boolean |  |  |
+| opportunities | → CrmOpportunity[] |  |  |
+
+### CrmOpportunity
+
+A specific bid for a client business: "24/7 guarding, 3 sites, 18 guards". Its monthly value is a money amount (Decimal 16,2, whole kobo).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| accountId | String | yes |  |
+| account | → CrmAccount |  |  |
+| primaryContactId | String |  |  |
+| primaryContact | → CrmContact |  |  |
+| pipelineId | String | yes |  |
+| pipeline | → CrmPipeline |  |  |
+| stageId | String | yes |  |
+| stage | → CrmStage |  |  |
+| name | String | yes |  |
+| serviceType | CrmServiceInterest |  |  |
+| monthlyContractValue | Decimal |  |  |
+| probability | Int | yes | 0 to 100; starts as the stage default and the owner may change it. |
+| expectedCloseDate | DateTime |  |  |
+| expectedStartDate | DateTime |  |  |
+| contractTermMonths | Int |  |  |
+| source | CrmSource |  |  |
+| sourceDetail | String |  |  |
+| ownerUserId | String | yes |  |
+| ownerName | String | yes |  |
+| fromLeadId | String |  | The lead this deal came from, if it came from one. |
+| status | CrmRecordStatus |  |  |
+| lastActivityAt | DateTime |  |  |
+| voidedAt | DateTime |  |  |
+| voidedBy | String |  |  |
+| voidReason | String |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+| history | → CrmStageHistory[] |  |  |
+
+### CrmStageHistory
+
+Every move of a deal between stages, with who and when. Never changed (the database refuses it).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| opportunityId | String | yes |  |
+| opportunity | → CrmOpportunity |  |  |
+| fromStageId | String |  |  |
+| toStageId | String | yes |  |
+| changedBy | String | yes |  |
+| changedByUserId | String | yes |  |
+| changedAt | DateTime |  |  |
+| daysInPreviousStage | Int |  |  |
+
+### CrmAssignmentRule
+
+Leads in this state (or wanting this service) go to this person.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| kind | CrmAssignmentKind | yes |  |
+| key | String | yes |  |
+| keyNorm | String | yes | The key in lower case with single spaces, so "Lagos" and "lagos" are the same rule. |
+| userId | String | yes |  |
+| userName | String | yes |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
 
 ## Fixed sets of values
 
@@ -4856,4 +4979,20 @@ What the controller concluded about the harm a breach could do to the people aff
 ### CrmChannel
 
 `EMAIL`, `WHATSAPP`, `SMS`, `PHONE`, `IN_PERSON`, `WEB_FORM`, `OTHER`
+
+### CrmPipelineKind
+
+`NEW_BUSINESS`, `RENEWAL`, `RATE_REVIEW`, `EXPANSION`
+
+### CrmStageType
+
+`OPEN`, `WON`, `LOST`
+
+### CrmAssignmentMethod
+
+`NONE`, `ROUND_ROBIN`, `BY_STATE`, `BY_SERVICE`
+
+### CrmAssignmentKind
+
+`STATE`, `SERVICE`
 

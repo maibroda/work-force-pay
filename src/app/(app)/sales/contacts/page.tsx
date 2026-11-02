@@ -85,6 +85,7 @@ export default async function SalesContactsPage() {
               { name: "phone", label: "Phone" },
               { name: "whatsapp", label: "WhatsApp" },
               { name: "email", label: "Email", type: "email" },
+              { name: "createAnyway", label: "Create anyway if it looks like a duplicate", type: "checkbox" },
             ]}
           />
         </Section>

@@ -56,7 +56,11 @@ export default async function SalesLeadsPage() {
             <TBody>
               {leads.map((l) => (
                 <TR key={l.id}>
-                  <TD className="font-mono text-xs">{l.number}</TD>
+                  <TD className="font-mono text-xs">
+                    <Link className="underline" href={`/sales/leads/${l.id}`}>
+                      {l.number}
+                    </Link>
+                  </TD>
                   <TD>{l.companyName}</TD>
                   <TD className="text-xs">{[l.contactName, l.phoneE164].filter(Boolean).join(" · ") || "—"}</TD>
                   <TD className="text-xs">{label(l.serviceInterest)}</TD>
@@ -92,6 +96,7 @@ export default async function SalesLeadsPage() {
               { name: "serviceInterest", label: "Service wanted", type: "select", defaultValue: "GUARDING", options: SERVICES.map((s) => ({ value: s, label: label(s) })) },
               { name: "estimatedGuards", label: "Estimated guards", type: "number" },
               { name: "sourceDetail", label: "Source detail (who referred, which event)", span: 2 },
+              { name: "createAnyway", label: "Create anyway if it looks like a duplicate", type: "checkbox" },
             ]}
           />
         </Section>
