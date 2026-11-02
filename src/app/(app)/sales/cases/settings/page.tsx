@@ -1,6 +1,9 @@
 import { requirePage } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { getCalendarSettings, listSlaPolicies } from "@/server/services/sales/cases";
+import { getHealthWeights } from "@/server/services/sales/health";
+import { COMPONENTS, COMPONENT_LABELS } from "@/lib/sales/health";
+import { saveHealthWeightsAction } from "@/app/actions/sales-health";
 import { addHolidayAction, removeHolidayAction, removeSlaPolicyAction, saveBusinessHoursAction, saveSlaPolicyAction, setRenewalWindowAction, starterPoliciesAction } from "@/app/actions/sales-cases";
 import { ActionButton } from "@/components/action-button";
 import { PageHeader, Section } from "@/components/page";
@@ -16,6 +19,7 @@ export default async function CaseSettingsPage() {
   const ctx = await requirePage("sales.configure");
   const setting = await db.crmSetting.findUnique({ where: { organizationId: ctx.orgId }, select: { enabled: true, renewalWindowDays: true } });
   if (!setting?.enabled) return <PageHeader title="Case settings" description="Switch the sales module on under Sales settings first." />;
+  const weights = (await getHealthWeights(ctx)).weights;
   const [cal, policies, accounts] = await Promise.all([getCalendarSettings(ctx), listSlaPolicies(ctx), db.crmAccount.findMany({ where: { organizationId: ctx.orgId, status: "ACTIVE" }, orderBy: { name: "asc" }, select: { id: true, name: true } })]);
   return (
     <>
@@ -87,6 +91,9 @@ export default async function CaseSettingsPage() {
             { name: "resolutionHours", label: "Resolved within (hours)", type: "number", required: true, min: 0.1 },
           ]}
         />
+      </Section>
+      <Section title="Account health weights" description="How much each measure counts towards a client account's health score (whole numbers adding up to 100). A measure with no data is left out and the others fill its place. The starting weights are my choice: change them to suit you.">
+        <SmartForm columns={3} submitLabel="Save weights" resetOnSuccess={false} action={saveHealthWeightsAction} fields={COMPONENTS.map((k) => ({ name: k, label: COMPONENT_LABELS[k], type: "number" as const, defaultValue: weights[k], required: true, min: 0, max: 100 }))} />
       </Section>
       <Section title="Renewals" description="A contract that ends within this many days gets one renewal deal opened for it by the daily job.">
         <SmartForm columns={2} submitLabel="Save" resetOnSuccess={false} action={setRenewalWindowAction} fields={[{ name: "days", label: "Window (days)", type: "number", defaultValue: setting.renewalWindowDays, required: true, min: 1, max: 365 }]} />

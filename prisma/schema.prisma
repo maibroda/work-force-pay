@@ -656,6 +656,7 @@ model Organization {
   crmBusinessHours          CrmBusinessHours?
   crmHolidays               CrmHoliday[]
   crmRenewalLinks           CrmRenewalLink[]
+  crmAccountHealth          CrmAccountHealth[]
   payslipSetting            PayslipSetting?
   payslipDeliveries         PayslipDelivery[]
   paymentFileExports        PaymentFileExport[]
@@ -5650,6 +5651,8 @@ model CrmSetting {
   assignmentCursor  Int                 @default(0)
   /// A contract ending within this many days gets a renewal deal opened for it.
   renewalWindowDays Int                 @default(90)
+  /// The weight of each of the six health-score measures (whole numbers adding up to 100). Empty means the starting weights.
+  healthWeights     Json?
   updatedBy         String
   updatedAt         DateTime            @updatedAt
 }
@@ -5696,6 +5699,7 @@ model CrmAccount {
   tasks         CrmTask[]
   cases         CrmCase[]
   slaPolicies   CrmSlaPolicy[]
+  health        CrmAccountHealth?
 
   @@index([organizationId, ownerUserId, status])
   @@index([organizationId, normalizedName])
@@ -6605,4 +6609,28 @@ model CrmRenewalLink {
   contractId     String       @unique
   opportunityId  String
   createdAt      DateTime     @default(now())
+}
+
+enum CrmHealthBand {
+  HEALTHY
+  WATCH
+  AT_RISK
+}
+
+/// The latest health score of a client account (0 to 100) with what each measure found, and when its band last changed. Recomputed nightly and when a case on the account changes.
+model CrmAccountHealth {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  accountId      String         @unique
+  account        CrmAccount     @relation(fields: [accountId], references: [id])
+  score          Int
+  band           CrmHealthBand
+  /// Each measure: its weight, its sub-score (empty when there was no data), and a sentence on what it found.
+  components     Json
+  previousBand   CrmHealthBand?
+  bandChangedAt  DateTime?
+  computedAt     DateTime
+
+  @@index([organizationId, band, score])
 }
