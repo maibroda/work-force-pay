@@ -141,6 +141,14 @@ export function employeeFields(
     },
     { name: "pensionPin", label: "Pension PIN", defaultValue: v("pensionPin") },
     {
+      name: "nhfContributes",
+      label: "Contributes to the National Housing Fund (NHF)",
+      type: "checkbox",
+      defaultValue: v("nhfContributes") === "true",
+      help: "Voluntary: only if the employee has chosen it. 2.5% of basic pay is taken and remitted by the end of the month.",
+      span: 3,
+    },
+    {
       name: "pfa",
       label: "Pension Fund Administrator",
       type: "select",

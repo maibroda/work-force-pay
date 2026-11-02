@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { annualReturnDueDate, FOUNDER_FILING_DEFAULTS, filingDefaultsFor, latePenalty, payeDueInfo, payeDueDate, rangesOverlap, validateTiming } from "@/lib/paye-dates";
+import { annualReturnDueDate, FOUNDER_FILING_DEFAULTS, filingDefaultsFor, latePenalty, monthEndDue, remittanceDueInfo, payeDueInfo, payeDueDate, rangesOverlap, validateTiming } from "@/lib/paye-dates";
 
 /**
  * When PAYE is due, when the annual return is due and the penalty on PAYE paid late are RULE DATA (they come from the tax rule in force, as the
@@ -105,8 +105,8 @@ describe("effective dates that overlap", () => {
 });
 
 describe("the default filing dates and penalty (supplied by the founder, NOT verified by the tax adviser)", () => {
-  it("are the values in the founder's own PAYE seed file: the 10th of the next month, 31 January, 10%", () => {
-    expect(FOUNDER_FILING_DEFAULTS).toEqual({ dueDay: 10, annualReturnMonth: 1, annualReturnDay: 31, latePenaltyPct: 10 });
+  it("are the values in the founder's own PAYE seed file: the 7th of the next month, 31 January, 10%", () => {
+    expect(FOUNDER_FILING_DEFAULTS).toEqual({ dueDay: 7, annualReturnMonth: 1, annualReturnDay: 31, latePenaltyPct: 10 });
     expect(validateTiming(FOUNDER_FILING_DEFAULTS)).toEqual([]);
   });
   it("are proposed only when the rule has none of its own: any value already set is kept as it is", () => {
@@ -114,5 +114,35 @@ describe("the default filing dates and penalty (supplied by the founder, NOT ver
     expect(filingDefaultsFor(none)).toEqual({ ...FOUNDER_FILING_DEFAULTS, proposed: true });
     const mine = { dueDay: 15, annualReturnMonth: null, annualReturnDay: null, latePenaltyPct: null };
     expect(filingDefaultsFor(mine)).toEqual({ ...mine, proposed: false });
+  });
+});
+
+describe("the employee NHF is remitted by the end of the pay month", () => {
+  it("has the last day of the month as its due date (28, 29, 30 and 31 day months)", () => {
+    expect(monthEndDue(2027, 11)).toBe("2027-11-30");
+    expect(monthEndDue(2027, 12)).toBe("2027-12-31");
+    expect(monthEndDue(2027, 2)).toBe("2027-02-28");
+    expect(monthEndDue(2028, 2)).toBe("2028-02-29");
+  });
+  it("is on time up to and including that day, late from the next, never late once paid, and carries no penalty", () => {
+    const line = (status: string) => ({ type: "NHF", status, totalAmount: 1375, period: { year: 2027, month: 11 } });
+    expect(remittanceDueInfo(line("PENDING"), null, "2027-11-30")).toEqual({ dueDate: "2027-11-30", overdue: false, daysLate: 0, penalty: null });
+    expect(remittanceDueInfo(line("PENDING"), null, "2027-12-01")).toEqual({ dueDate: "2027-11-30", overdue: true, daysLate: 1, penalty: null });
+    expect(remittanceDueInfo(line("PAID"), null, "2028-03-01").overdue).toBe(false);
+  });
+});
+
+describe("the pension remittance is due at the end of the pay month too (founder, 2026-10-29)", () => {
+  const line = (status: string, type = "PENSION") => ({ type, status, totalAmount: 250000, period: { year: 2027, month: 11 } });
+  it("has the last day of the pay month as its due date, is late from the next day, and carries no penalty", () => {
+    expect(remittanceDueInfo(line("PENDING"), null, "2027-11-30")).toEqual({ dueDate: "2027-11-30", overdue: false, daysLate: 0, penalty: null });
+    expect(remittanceDueInfo(line("PENDING"), null, "2027-12-03")).toEqual({ dueDate: "2027-11-30", overdue: true, daysLate: 3, penalty: null });
+    expect(remittanceDueInfo(line("PAID"), null, "2028-03-01").overdue).toBe(false);
+  });
+  it("does not depend on the PAYE tax rule's dates, and leaves the other kinds of remittance without a date", () => {
+    const paye = { dueDay: 10, annualReturnMonth: 1, annualReturnDay: 31, latePenaltyPct: 10 };
+    expect(remittanceDueInfo(line("PENDING"), paye, "2027-12-03").penalty).toBeNull();
+    expect(remittanceDueInfo(line("PENDING", "ITF"), null, "2028-03-01")).toEqual({ dueDate: null, overdue: false, daysLate: 0, penalty: null });
+    expect(remittanceDueInfo(line("PENDING", "PAYE"), paye, "2027-12-05").dueDate).toBe("2027-12-10"); // PAYE still follows its rule
   });
 });
