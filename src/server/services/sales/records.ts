@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { normalizeCompanyName } from "@/lib/sales/names";
 import { normalizeNgPhone } from "@/lib/sales/phone";
+import { pagingOf, type PagingInput } from "@/lib/sales/paging";
 import { BusinessError, db, type Tx } from "../_base";
 import { logAudit } from "../audit";
 import { nextNumber } from "../numbering";
@@ -107,20 +108,26 @@ export async function voidAccount(ctx: Ctx, id: string, reason: string) {
   return a;
 }
 
-export async function listAccounts(ctx: Ctx, f: { q?: string; accountType?: string; ownerUserId?: string } = {}) {
+type AccountFilter = { q?: string; accountType?: string; ownerUserId?: string };
+const accountWhere = (ctx: Ctx, f: AccountFilter) => ({
+  organizationId: ctx.orgId,
+  status: "ACTIVE" as const,
+  // the caller's own-records limit AND any owner they ask for: asking for someone else's can only narrow, never widen
+  AND: [ownerFilter(ctx), ...(f.ownerUserId ? [{ ownerUserId: f.ownerUserId }] : [])],
+  ...(f.accountType ? { accountType: f.accountType as never } : {}),
+  ...(f.q ? { OR: [{ name: { contains: f.q, mode: "insensitive" as const } }, { normalizedName: { contains: normalizeCompanyName(f.q) || f.q.toLowerCase() } }] } : {}),
+});
+
+/** The first 500 accounts the caller may see, or, when a page is asked for, that page (at most 100 rows). */
+export async function listAccounts(ctx: Ctx, f: AccountFilter & PagingInput = {}) {
   await requireSales(ctx, "sales.view");
-  return db.crmAccount.findMany({
-    where: {
-      organizationId: ctx.orgId,
-      status: "ACTIVE",
-      // the caller's own-records limit AND any owner they ask for: asking for someone else's can only narrow, never widen
-      AND: [ownerFilter(ctx), ...(f.ownerUserId ? [{ ownerUserId: f.ownerUserId }] : [])],
-      ...(f.accountType ? { accountType: f.accountType as never } : {}),
-      ...(f.q ? { OR: [{ name: { contains: f.q, mode: "insensitive" } }, { normalizedName: { contains: normalizeCompanyName(f.q) || f.q.toLowerCase() } }] } : {}),
-    },
-    orderBy: { name: "asc" },
-    take: 500,
-  });
+  const p = pagingOf(f);
+  return db.crmAccount.findMany({ where: accountWhere(ctx, f), orderBy: [{ name: "asc" }, { id: "asc" }], skip: p.skip, take: p.take });
+}
+
+export async function countAccounts(ctx: Ctx, f: AccountFilter = {}) {
+  await requireSales(ctx, "sales.view");
+  return db.crmAccount.count({ where: accountWhere(ctx, f) });
 }
 
 export async function getAccount(ctx: Ctx, id: string) {
@@ -189,19 +196,24 @@ export async function voidContact(ctx: Ctx, id: string, reason: string) {
   return c;
 }
 
-export async function listContacts(ctx: Ctx, f: { accountId?: string; q?: string } = {}) {
+type ContactFilter = { accountId?: string; q?: string };
+const contactWhere = (ctx: Ctx, f: ContactFilter) => ({
+  organizationId: ctx.orgId,
+  status: "ACTIVE" as const,
+  ...ownerFilter(ctx),
+  ...(f.accountId ? { accountId: f.accountId } : {}),
+  ...(f.q ? { OR: [{ firstName: { contains: f.q, mode: "insensitive" as const } }, { lastName: { contains: f.q, mode: "insensitive" as const } }, { email: { contains: f.q.toLowerCase() } }] } : {}),
+});
+
+export async function listContacts(ctx: Ctx, f: ContactFilter & PagingInput = {}) {
   await requireSales(ctx, "sales.view");
-  return db.crmContact.findMany({
-    where: {
-      organizationId: ctx.orgId,
-      status: "ACTIVE",
-      ...ownerFilter(ctx),
-      ...(f.accountId ? { accountId: f.accountId } : {}),
-      ...(f.q ? { OR: [{ firstName: { contains: f.q, mode: "insensitive" } }, { lastName: { contains: f.q, mode: "insensitive" } }, { email: { contains: f.q.toLowerCase() } }] } : {}),
-    },
-    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-    take: 500,
-  });
+  const p = pagingOf(f);
+  return db.crmContact.findMany({ where: contactWhere(ctx, f), orderBy: [{ lastName: "asc" }, { firstName: "asc" }, { id: "asc" }], skip: p.skip, take: p.take });
+}
+
+export async function countContacts(ctx: Ctx, f: ContactFilter = {}) {
+  await requireSales(ctx, "sales.view");
+  return db.crmContact.count({ where: contactWhere(ctx, f) });
 }
 
 // ─────────────────────────────── Leads ───────────────────────────────
@@ -280,19 +292,24 @@ export async function voidLead(ctx: Ctx, id: string, reason: string) {
   return l;
 }
 
-export async function listLeads(ctx: Ctx, f: { status?: string; ownerUserId?: string; source?: string; q?: string } = {}) {
+type LeadFilter = { status?: string; ownerUserId?: string; source?: string; q?: string };
+const leadWhere = (ctx: Ctx, f: LeadFilter) => ({
+  organizationId: ctx.orgId,
+  status: f.status ? (f.status as never) : { not: "VOID" as const },
+  AND: [ownerFilter(ctx), ...(f.ownerUserId ? [{ ownerUserId: f.ownerUserId }] : [])],
+  ...(f.source ? { source: f.source as never } : {}),
+  ...(f.q ? { OR: [{ companyName: { contains: f.q, mode: "insensitive" as const } }, { contactName: { contains: f.q, mode: "insensitive" as const } }, { number: { contains: f.q, mode: "insensitive" as const } }] } : {}),
+});
+
+export async function listLeads(ctx: Ctx, f: LeadFilter & PagingInput = {}) {
   await requireSales(ctx, "sales.view");
-  return db.crmLead.findMany({
-    where: {
-      organizationId: ctx.orgId,
-      status: f.status ? (f.status as never) : { not: "VOID" },
-      AND: [ownerFilter(ctx), ...(f.ownerUserId ? [{ ownerUserId: f.ownerUserId }] : [])],
-      ...(f.source ? { source: f.source as never } : {}),
-      ...(f.q ? { OR: [{ companyName: { contains: f.q, mode: "insensitive" } }, { contactName: { contains: f.q, mode: "insensitive" } }, { number: { contains: f.q, mode: "insensitive" } }] } : {}),
-    },
-    orderBy: { createdAt: "desc" },
-    take: 500,
-  });
+  const p = pagingOf(f);
+  return db.crmLead.findMany({ where: leadWhere(ctx, f), orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: p.skip, take: p.take });
+}
+
+export async function countLeads(ctx: Ctx, f: LeadFilter = {}) {
+  await requireSales(ctx, "sales.view");
+  return db.crmLead.count({ where: leadWhere(ctx, f) });
 }
 
 export async function getLead(ctx: Ctx, id: string) {

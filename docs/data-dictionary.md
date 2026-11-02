@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-196 tables and 155 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+198 tables and 158 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -131,6 +131,8 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | crmHolidays | → CrmHoliday[] |  |  |
 | crmRenewalLinks | → CrmRenewalLink[] |  |  |
 | crmAccountHealth | → CrmAccountHealth[] |  |  |
+| crmSuppressions | → CrmSuppression[] |  |  |
+| crmDataRequests | → CrmDataRequest[] |  |  |
 | payslipSetting | → PayslipSetting |  |  |
 | payslipDeliveries | → PayslipDelivery[] |  |  |
 | paymentFileExports | → PaymentFileExport[] |  |  |
@@ -4192,6 +4194,7 @@ Whether the sales module is on for an organization (off until a company administ
 | assignmentCursor | Int |  |  |
 | renewalWindowDays | Int |  | A contract ending within this many days gets a renewal deal opened for it. |
 | healthWeights | Json |  | The weight of each of the six health-score measures (whole numbers adding up to 100). Empty means the starting weights. |
+| leadRetentionMonths | Int |  | An unconverted lead with no activity for this many months is listed for review (keep or erase). Empty means no review. |
 | updatedBy | String | yes |  |
 | updatedAt | DateTime |  |  |
 
@@ -4269,6 +4272,7 @@ A person at an account (or not yet attached to one). Phones are stored as E.164 
 | voidReason | String |  |  |
 | createdBy | String | yes |  |
 | createdAt | DateTime |  |  |
+| erasedAt | DateTime |  | Set when the person was erased on a data request: the record stays (so deals and cases keep their links) but holds no personal detail. |
 | updatedAt | DateTime |  |  |
 | consents | → CrmConsent[] |  |  |
 | opportunities | → CrmOpportunity[] |  |  |
@@ -4312,6 +4316,8 @@ An enquiry not yet known to be real. Becomes an account and contact (and a deal)
 | voidReason | String |  |  |
 | createdBy | String | yes |  |
 | createdAt | DateTime |  |  |
+| erasedAt | DateTime |  |  |
+| retentionKeepUntil | DateTime |  | A lead past the retention period stays until this date once someone has reviewed it and decided to keep it. |
 | updatedAt | DateTime |  |  |
 | consents | → CrmConsent[] |  |  |
 | activities | → CrmActivity[] |  |  |
@@ -4966,6 +4972,52 @@ The latest health score of a client account (0 to 100) with what each measure fo
 | bandChangedAt | DateTime |  |  |
 | computedAt | DateTime | yes |  |
 
+### CrmSuppression
+
+An email address or phone number that must receive no marketing, kept as a KEYED HASH (never the address), so it still works after the person has been erased.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| kind | CrmSuppressionKind | yes |  |
+| valueHash | String | yes |  |
+| reason | String | yes | UNSUBSCRIBED, WITHDRAWN or ERASED. |
+| source | String | yes |  |
+| createdAt | DateTime |  |  |
+
+### CrmDataRequest
+
+A request about the personal data held on a contact or lead: a copy (ACCESS), erasure (ERASURE), or erasure at the end of the retention period (RETENTION).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| number | String | yes |  |
+| kind | CrmDataRequestKind | yes |  |
+| subjectType | String | yes | CONTACT or LEAD. |
+| subjectId | String | yes |  |
+| requesterName | String |  | Who asked: replaced with a note once the person has been erased. |
+| channel | String |  |  |
+| receivedOn | DateTime | yes |  |
+| dueOn | DateTime | yes |  |
+| status | CrmDataRequestStatus |  |  |
+| identityVerified | Boolean |  |  |
+| identityNote | String |  |  |
+| verifiedBy | String |  |  |
+| exportedAt | DateTime |  |  |
+| exportChecksum | String |  | SHA-256 of the file generated, and how many records each section held. |
+| exportSections | Json |  |  |
+| reviewList | Json |  | Records that may still mention the person in free text and need a person's review after an erasure (ids by kind, never the text). |
+| handledBy | String |  |  |
+| completedOn | DateTime |  |  |
+| outcomeNote | String |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+
 ## Fixed sets of values
 
 ### Role
@@ -5609,4 +5661,16 @@ Whether an outbound message is a service message (about an active contract) or m
 ### CrmHealthBand
 
 `HEALTHY`, `WATCH`, `AT_RISK`
+
+### CrmSuppressionKind
+
+`EMAIL`, `PHONE`
+
+### CrmDataRequestKind
+
+`ACCESS`, `ERASURE`, `RETENTION`
+
+### CrmDataRequestStatus
+
+`OPEN`, `COMPLETED`, `REFUSED`
 

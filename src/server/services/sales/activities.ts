@@ -10,12 +10,14 @@ import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { sendEmail } from "@/lib/email";
+import { emailSendLimiter } from "@/lib/rate-limit";
 import { filterTimeline, groupTasks, mergeTimeline, surveySchema, watDayStart, type TimelineItem, type TimelineType } from "@/lib/sales/activity";
 import { BusinessError, db, type Tx } from "../_base";
 import { logAudit } from "../audit";
 import { ownerFilter, requireSales, resolveOwner, seesAll } from "./access";
 import { canSendMarketing } from "./consent";
 import { DEFAULT_ROTTING_DAYS } from "./deals";
+import { marketingFooter, unsubscribeApiUrl, unsubscribeUrl, WHATSAPP_NEEDS_LINK } from "./privacy";
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -119,6 +121,11 @@ export async function logActivity(ctx: Ctx, raw: ActivityInput) {
     const r = await resolveTarget(ctx, tx, v);
     if ((v.kind === "WHATSAPP" || v.kind === "EMAIL") && !r.contactId && !r.leadId && r.opp?.primaryContactId) r.contactId = r.opp.primaryContactId;
     if (v.kind === "WHATSAPP" || v.kind === "EMAIL") await assertMayMessage(ctx, tx, r, v.purpose!);
+    if (v.kind === "WHATSAPP" && v.purpose === "MARKETING") {
+      // the message must carry this person's own unsubscribe link
+      const link = unsubscribeUrl(ctx.orgId, r.contactId ? { type: "CONTACT", id: r.contactId } : { type: "LEAD", id: r.leadId! });
+      if (!v.body?.includes(link)) throw new BusinessError(WHATSAPP_NEEDS_LINK);
+    }
     return insertActivity(ctx, tx, v, r);
   }, { timeout: 20_000, maxWait: 10_000 });
 }
@@ -136,11 +143,26 @@ export async function sendEmailTo(ctx: Ctx, raw: { contactId?: string; leadId?: 
   const r = await resolveTarget(ctx, db, { contactId: raw.contactId, leadId: raw.leadId, opportunityId: raw.opportunityId });
   if (!r.contactId && !r.leadId && r.opp?.primaryContactId) r.contactId = r.opp.primaryContactId;
   await assertMayMessage(ctx, db, r, raw.purpose);
+  // a person sending in bulk is slowed down; the automation rules are not people and have their own limits (one run for each rule, deal and stage entry)
+  if (!ctx.userId.startsWith("system:")) {
+    const slow = emailSendLimiter.check(ctx.userId);
+    if (!slow.ok) throw new BusinessError(`You have sent a lot of email in the last hour. Try again in ${Math.ceil(slow.retryAfterSeconds / 60)} minute(s).`);
+  }
   const person = r.contactId
     ? await db.crmContact.findFirstOrThrow({ where: { id: r.contactId, organizationId: ctx.orgId }, select: { email: true } })
     : await db.crmLead.findFirstOrThrow({ where: { id: r.leadId!, organizationId: ctx.orgId }, select: { email: true } });
   if (!person.email) throw new BusinessError("There is no email address on this contact or lead.");
-  await sendEmail({ to: person.email, subject, text: body, html: body.split(/\n{2,}/).map((p) => `<p>${esc(p).replace(/\n/g, "<br>")}</p>`).join("") });
+  const html = body.split(/\n{2,}/).map((p) => `<p>${esc(p).replace(/\n/g, "<br>")}</p>`).join("");
+  if (raw.purpose === "MARKETING") {
+    // every marketing email carries an unsubscribe link in its text and as the standard one-click header
+    const who = r.contactId ? { type: "CONTACT" as const, id: r.contactId } : { type: "LEAD" as const, id: r.leadId! };
+    const url = unsubscribeUrl(ctx.orgId, who);
+    const api = unsubscribeApiUrl(ctx.orgId, who);
+    const f = marketingFooter(url);
+    await sendEmail({ to: person.email, subject, text: body + f.text, html: html + f.html, headers: { "List-Unsubscribe": `<${api}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } });
+  } else {
+    await sendEmail({ to: person.email, subject, text: body, html });
+  }
   return db.$transaction((tx: Tx) => insertActivity(ctx, tx, { kind: "EMAIL", subject, body, purpose: raw.purpose, leadId: r.leadId ?? undefined, contactId: r.contactId ?? undefined, opportunityId: r.opportunityId ?? undefined }, r), { timeout: 20_000 });
 }
 

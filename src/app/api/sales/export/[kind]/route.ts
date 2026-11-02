@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth/session";
 import { twoFactorStateFor } from "@/lib/auth/two-factor-gate";
 import { can } from "@/lib/auth/permissions";
 import { IMPORT_KINDS, type ImportKind } from "@/lib/sales/import";
+import { exportLimiter } from "@/lib/rate-limit";
+import { limitedResponse } from "@/lib/rate-limit-http";
 import { BusinessError } from "@/server/services/_base";
 import { exportCsv } from "@/server/services/sales/export";
 
@@ -17,6 +19,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ kind: s
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if ((await twoFactorStateFor(ctx)).state === "BLOCKED") return NextResponse.json({ error: "Two-factor authentication is required for your role. Turn it on under My security." }, { status: 403 });
   if (!can(ctx.role, "sales.view")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const slow = limitedResponse(exportLimiter, ctx.userId);
+  if (slow) return slow;
   try {
     const f = await exportCsv(ctx, k);
     return new NextResponse(`﻿${f.csv}`, {

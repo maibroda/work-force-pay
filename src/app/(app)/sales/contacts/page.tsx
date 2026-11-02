@@ -1,8 +1,11 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { BusinessError } from "@/server/services/_base";
-import { listAccounts, listContacts } from "@/server/services/sales/records";
+import { countContacts, listAccounts, listContacts } from "@/server/services/sales/records";
+import { Pager } from "@/components/sales/pager";
+import { DEFAULT_PAGE_SIZE, pagingOf, windowOf } from "@/lib/sales/paging";
 import { PageHeader, Section } from "@/components/page";
 import { SmartForm } from "@/components/smart-form";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
@@ -11,17 +14,22 @@ import { createContactAction } from "@/app/actions/sales";
 const ROLES = ["DECISION_MAKER", "INFLUENCER", "USER", "FINANCE", "PROCUREMENT", "GATEKEEPER"];
 const label = (s: string) => s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, " ");
 
-export default async function SalesContactsPage() {
+export default async function SalesContactsPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const ctx = await requirePage("sales.view");
+  const sp = await searchParams;
+  const paging = pagingOf({ page: sp.page ?? "1", pageSize: DEFAULT_PAGE_SIZE });
   let contacts: Awaited<ReturnType<typeof listContacts>> = [];
   let accounts: Awaited<ReturnType<typeof listAccounts>> = [];
+  let total = 0;
   let why = "";
   try {
-    [contacts, accounts] = await Promise.all([listContacts(ctx), listAccounts(ctx)]);
+    [contacts, accounts, total] = await Promise.all([listContacts(ctx, paging), listAccounts(ctx), countContacts(ctx)]);
   } catch (e) {
     if (!(e instanceof BusinessError)) throw e;
     why = e.message;
   }
+  // a page past the end (a stale bookmark, an edited address) goes to the last page rather than showing an empty table
+  if (!why && !contacts.length && total > 0 && paging.page > 1) redirect(`/sales/contacts?page=${windowOf(total, paging).page}`);
   const names = new Map(accounts.map((a) => [a.id, a.name]));
   return (
     <>
@@ -37,7 +45,7 @@ export default async function SalesContactsPage() {
         </p>
       )}
       {!why && (
-        <Section title={`${contacts.length} contact(s)`} flush>
+        <Section title={`${total} contact(s)`} flush>
           <Table>
             <THead>
               <TR>
@@ -67,6 +75,7 @@ export default async function SalesContactsPage() {
               ))}
             </TBody>
           </Table>
+          <Pager path="/sales/contacts" total={total} page={paging.page} pageSize={paging.pageSize} />
           {!contacts.length && <p className="px-4 py-4 text-sm text-muted-foreground">No contacts yet.</p>}
         </Section>
       )}

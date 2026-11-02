@@ -95,6 +95,7 @@ export const PERMISSIONS = [
   "sales.view.all", // see every sales record in the organization, not only your own, and reassign an owner
   "sales.manage", // add, change and void accounts, contacts and leads, and record consent
   "sales.configure", // switch the sales module on or off and choose how enquiries are handled
+  "sales.privacy.manage", // answer data subject requests about a contact or lead (a copy, erasure), review leads past the retention period, and set it: the company administrator only
   "sales.case.manage", // open, answer, resolve and reopen a client's cases (sales people, Operations, the company administrator)
   "sales.handover.accept", // for Operations: accept (or return with a question) the handover of an accepted quote; only people also designated by the company administrator
   "crm.manage", // add and move leads, log outreach, keep referral partners, record commission paid, and make and send proposals

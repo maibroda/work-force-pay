@@ -7,6 +7,8 @@ export interface Email {
   html: string;
   text: string;
   attachments?: { filename: string; content: Buffer }[];
+  /** Extra message headers, for example List-Unsubscribe on marketing mail. */
+  headers?: Record<string, string>;
 }
 
 const FROM = process.env.EMAIL_FROM ?? "WorkforcePay <onboarding@resend.dev>";
@@ -18,7 +20,7 @@ const FROM = process.env.EMAIL_FROM ?? "WorkforcePay <onboarding@resend.dev>";
 export async function sendEmail(email: Email): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    logger.info("email_dev_transport", { to: email.to, subject: email.subject, text: email.text, attachments: email.attachments?.map((a) => ({ filename: a.filename, bytes: a.content.length })) });
+    logger.info("email_dev_transport", { to: email.to, subject: email.subject, text: email.text, headers: email.headers, attachments: email.attachments?.map((a) => ({ filename: a.filename, bytes: a.content.length })) });
     return;
   }
   const resend = new Resend(apiKey);
@@ -28,6 +30,7 @@ export async function sendEmail(email: Email): Promise<void> {
     subject: email.subject,
     html: email.html,
     text: email.text,
+    ...(email.headers ? { headers: email.headers } : {}),
     ...(email.attachments?.length ? { attachments: email.attachments.map((a) => ({ filename: a.filename, content: a.content })) } : {}),
   });
   if (error) {

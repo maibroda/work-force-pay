@@ -4,11 +4,21 @@ import { db } from "@/lib/db";
 import { fmtDate } from "@/lib/dates";
 import { cancelTaskAction, completeTaskAction } from "@/app/actions/sales-activities";
 import { timeline, tasksFor } from "@/server/services/sales/activities";
+import { unsubscribeUrl } from "@/server/services/sales/privacy";
 import { ActionButton } from "@/components/action-button";
 import { Section } from "@/components/page";
 import { ContactActions } from "./contact-actions";
 import { QuickLog, type LogTarget } from "./quick-log";
 import { TimelineList } from "./timeline-list";
+
+/** The person's unsubscribe page address, or null when the app cannot make one (no signing secret, or no public address in production). */
+function linkFor(orgId: string, t: LogTarget): string | null {
+  try {
+    return t.contactId ? unsubscribeUrl(orgId, { type: "CONTACT", id: t.contactId }) : t.leadId ? unsubscribeUrl(orgId, { type: "LEAD", id: t.leadId }) : null;
+  } catch {
+    return null;
+  }
+}
 
 /** The activity layer of a lead, contact, account or deal page: reach out, log what happened, the open tasks, and the timeline. */
 export async function ActivityPanel({ ctx, target }: { ctx: Ctx; target: LogTarget }) {
@@ -34,7 +44,7 @@ export async function ActivityPanel({ ctx, target }: { ctx: Ctx; target: LogTarg
     <>
       {person && (person.phone || person.whatsapp || person.email) && (
         <Section title="Reach out" description="Calling or opening WhatsApp logs it first. A marketing message goes only to someone whose marketing consent is granted; a service message is only for someone at a client.">
-          <ContactActions p={{ ...person, sender: ctx.name.split(" ")[0] }} />
+          <ContactActions p={{ ...person, sender: ctx.name.split(" ")[0], unsubscribeUrl: linkFor(ctx.orgId, person.target) }} />
         </Section>
       )}
       {manage && (

@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { sendEmail } from "@/lib/email";
 import { cancelTask, completeTask, createTask, digestFor, logActivity, myTasks, reopenTask, sendEmailTo, sendSalesDigests, tasksFor, timeline, voidActivity } from "@/server/services/sales/activities";
 import { recordConsent } from "@/server/services/sales/consent";
+import { unsubscribeUrl } from "@/server/services/sales/privacy";
 import { moveOpportunity } from "@/server/services/sales/deals";
 import { createOpportunity, listPipelines } from "@/server/services/sales/pipelines";
 import { createAccount, createContact, createLead } from "@/server/services/sales/records";
@@ -35,6 +36,8 @@ async function world() {
   return { t, admin, repA, repB, ops, account, contact, lead, deal, stage: (n: string) => stages.find((s) => s.name === n)!.id };
 }
 type W = Awaited<ReturnType<typeof world>>;
+/** A marketing WhatsApp must end with the person's own unsubscribe link (Phase 9a). */
+const withLink = (w: W, text: string, who: { type: "CONTACT" | "LEAD"; id: string } = { type: "CONTACT", id: w.contact.id }) => `${text} ${unsubscribeUrl(w.t.org.id, who)}`;
 const consent = (w: W, status: "GRANTED" | "WITHDRAWN", purpose: "MARKETING" | "SERVICE" = "MARKETING") =>
   recordConsent(w.repA, { contactId: w.contact.id, purpose, status, channel: "WHATSAPP", source: "Signed form at the site visit" });
 
@@ -49,7 +52,7 @@ describe("logging what happened", () => {
     expect(survey.accountId).toBe(w.account.id);
     await logActivity(w.repA, { kind: "NOTE", leadId: w.lead.id, body: "Met at the trade fair" });
     await consent(w, "GRANTED");
-    await logActivity(w.repA, { kind: "WHATSAPP", contactId: w.contact.id, purpose: "MARKETING", body: "Our new patrol service" });
+    await logActivity(w.repA, { kind: "WHATSAPP", contactId: w.contact.id, purpose: "MARKETING", body: withLink(w, "Our new patrol service") });
   });
 
   it("says what is missing: a call's outcome, the checklist, the note, what the meeting was, the purpose of a message, who it is about, and no future dates", async () => {
@@ -81,7 +84,7 @@ describe("logging what happened", () => {
 describe("marketing needs consent, on the server, before anything is sent", () => {
   it("refuses a marketing WhatsApp until the person has agreed, and again as soon as they withdraw; nothing is logged when refused", async () => {
     const w = await world();
-    const send = () => logActivity(w.repA, { kind: "WHATSAPP", contactId: w.contact.id, purpose: "MARKETING", body: "Our new patrol service" });
+    const send = () => logActivity(w.repA, { kind: "WHATSAPP", contactId: w.contact.id, purpose: "MARKETING", body: withLink(w, "Our new patrol service") });
     await expect(send()).rejects.toThrow(/marketing consent|agreed/i); // no consent recorded: unknown
     await consent(w, "GRANTED", "SERVICE"); // consent to service messages never opens marketing
     await expect(send()).rejects.toThrow(/agreed/i);
@@ -96,7 +99,7 @@ describe("marketing needs consent, on the server, before anything is sent", () =
     const w = await world();
     await expect(logActivity(w.repA, { kind: "WHATSAPP", leadId: w.lead.id, purpose: "MARKETING", body: "Hello" })).rejects.toThrow(/agreed/i);
     await recordConsent(w.repA, { leadId: w.lead.id, purpose: "MARKETING", status: "GRANTED", channel: "WEB_FORM", source: "Enquiry form on the website" });
-    await logActivity(w.repA, { kind: "WHATSAPP", leadId: w.lead.id, purpose: "MARKETING", body: "Hello" });
+    await logActivity(w.repA, { kind: "WHATSAPP", leadId: w.lead.id, purpose: "MARKETING", body: withLink(w, "Hello", { type: "LEAD", id: w.lead.id }) });
     await db.crmOpportunity.update({ where: { id: w.deal.id }, data: { primaryContactId: w.contact.id } });
     await expect(logActivity(w.repA, { kind: "WHATSAPP", opportunityId: w.deal.id, purpose: "MARKETING", body: "Hello" })).rejects.toThrow(/agreed/i); // the contact has not agreed
   });
@@ -133,7 +136,9 @@ describe("marketing needs consent, on the server, before anything is sent", () =
     const w = await world();
     await consent(w, "GRANTED");
     await sendEmailTo(w.repA, { contactId: w.contact.id, subject: "Hello again", body: "<script>alert(1)</script> & more", purpose: "MARKETING" });
-    expect(mail.mock.calls[0][0].html).toBe("<p>&lt;script&gt;alert(1)&lt;/script&gt; &amp; more</p>");
+    // what the user typed is escaped; the unsubscribe footer (Phase 9a) follows it
+    expect(mail.mock.calls[0][0].html.startsWith("<p>&lt;script&gt;alert(1)&lt;/script&gt; &amp; more</p>")).toBe(true);
+    expect(mail.mock.calls[0][0].html).not.toContain("<script>");
   });
 });
 

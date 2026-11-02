@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { twoFactorStateFor } from "@/lib/auth/two-factor-gate";
 import { can } from "@/lib/auth/permissions";
+import { exportLimiter } from "@/lib/rate-limit";
+import { limitedResponse } from "@/lib/rate-limit-http";
 import { BusinessError } from "@/server/services/_base";
 import { reportCsv, WIDGET_KEYS } from "@/server/services/sales/reports";
 
@@ -15,6 +17,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ widget: 
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if ((await twoFactorStateFor(ctx)).state === "BLOCKED") return NextResponse.json({ error: "Two-factor authentication is required for your role. Turn it on under My security." }, { status: 403 });
   if (!can(ctx.role, "sales.view")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const slow = limitedResponse(exportLimiter, ctx.userId);
+  if (slow) return slow;
   const q = new URL(req.url).searchParams;
   try {
     const f = await reportCsv(ctx, widget, { from: q.get("from") || undefined, to: q.get("to") || undefined }, { records: q.get("records") === "1" });

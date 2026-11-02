@@ -657,6 +657,8 @@ model Organization {
   crmHolidays               CrmHoliday[]
   crmRenewalLinks           CrmRenewalLink[]
   crmAccountHealth          CrmAccountHealth[]
+  crmSuppressions           CrmSuppression[]
+  crmDataRequests           CrmDataRequest[]
   payslipSetting            PayslipSetting?
   payslipDeliveries         PayslipDelivery[]
   paymentFileExports        PaymentFileExport[]
@@ -5639,22 +5641,24 @@ enum CrmChannel {
 
 /// Whether the sales module is on for an organization (off until a company administrator switches it on) and how enquiries are handled.
 model CrmSetting {
-  id                String              @id @default(cuid())
-  organizationId    String              @unique
-  organization      Organization        @relation(fields: [organizationId], references: [id])
-  enabled           Boolean             @default(false)
-  mode              CrmMode             @default(CLASSIC)
+  id                  String              @id @default(cuid())
+  organizationId      String              @unique
+  organization        Organization        @relation(fields: [organizationId], references: [id])
+  enabled             Boolean             @default(false)
+  mode                CrmMode             @default(CLASSIC)
   /// How new leads with no owner given (created by a manager) are assigned, and where round robin has got to.
-  assignmentMethod  CrmAssignmentMethod @default(NONE)
+  assignmentMethod    CrmAssignmentMethod @default(NONE)
   /// The lowest gross margin (a share of the bill) a quote may have before a designated approver must approve it, in basis points (1500 = 15.00%). 0 = no minimum. A new organization starts at 15%.
-  minMarginBps      Int                 @default(1500)
-  assignmentCursor  Int                 @default(0)
+  minMarginBps        Int                 @default(1500)
+  assignmentCursor    Int                 @default(0)
   /// A contract ending within this many days gets a renewal deal opened for it.
-  renewalWindowDays Int                 @default(90)
+  renewalWindowDays   Int                 @default(90)
   /// The weight of each of the six health-score measures (whole numbers adding up to 100). Empty means the starting weights.
-  healthWeights     Json?
-  updatedBy         String
-  updatedAt         DateTime            @updatedAt
+  healthWeights       Json?
+  /// An unconverted lead with no activity for this many months is listed for review (keep or erase). Empty means no review.
+  leadRetentionMonths Int?
+  updatedBy           String
+  updatedAt           DateTime            @updatedAt
 }
 
 /// A company the organization sells to or serves, as the sales side sees it. It links to the real Client only when a won deal is handed over.
@@ -5703,6 +5707,8 @@ model CrmAccount {
 
   @@index([organizationId, ownerUserId, status])
   @@index([organizationId, normalizedName])
+  @@index([organizationId, status, name])
+  @@index([organizationId, accountType, status])
 }
 
 /// A person at an account (or not yet attached to one). Phones are stored as E.164 (+234...).
@@ -5732,6 +5738,8 @@ model CrmContact {
   voidReason     String?
   createdBy      String
   createdAt      DateTime         @default(now())
+  /// Set when the person was erased on a data request: the record stays (so deals and cases keep their links) but holds no personal detail.
+  erasedAt       DateTime?
   updatedAt      DateTime         @updatedAt
 
   consents      CrmConsent[]
@@ -5743,6 +5751,7 @@ model CrmContact {
   @@index([organizationId, phoneE164])
   @@index([organizationId, email])
   @@index([accountId])
+  @@index([organizationId, status, lastName, firstName])
 }
 
 /// An enquiry not yet known to be real. Becomes an account and contact (and a deal) when converted (a later phase).
@@ -5778,6 +5787,9 @@ model CrmLead {
   voidReason             String?
   createdBy              String
   createdAt              DateTime           @default(now())
+  erasedAt               DateTime?
+  /// A lead past the retention period stays until this date once someone has reviewed it and decided to keep it.
+  retentionKeepUntil     DateTime?          @db.Date
   updatedAt              DateTime           @updatedAt
 
   consents   CrmConsent[]
@@ -5788,6 +5800,8 @@ model CrmLead {
   @@index([organizationId, ownerUserId, status])
   @@index([organizationId, phoneE164])
   @@index([organizationId, email])
+  @@index([organizationId, status, createdAt])
+  @@index([organizationId, source, status])
 }
 
 /// One consent or withdrawal, never changed (the database refuses it). The latest row for a person and purpose decides; none means unknown.
@@ -5935,6 +5949,9 @@ model CrmOpportunity {
   @@index([organizationId, ownerUserId, status])
   @@index([organizationId, stageId])
   @@index([accountId])
+  @@index([organizationId, status, createdAt])
+  @@index([organizationId, pipelineId, status])
+  @@index([organizationId, status, lastActivityAt])
 }
 
 /// Every move of a deal between stages, with who and when. Never changed (the database refuses it).
@@ -6155,6 +6172,7 @@ model CrmHandover {
   @@unique([organizationId, number])
   @@unique([opportunityId])
   @@index([organizationId, status])
+  @@index([organizationId, createdAt])
 }
 
 /// One client site named on the quote. The address, state, local government, the client's site contact and the equipment are entered in the handover.
@@ -6303,6 +6321,7 @@ model CrmActivity {
   @@index([organizationId, accountId, occurredAt])
   @@index([organizationId, contactId, occurredAt])
   @@index([organizationId, opportunityId, occurredAt])
+  @@index([organizationId, occurredAt])
 }
 
 /// Something to do, by a date and time, for one person, optionally about a lead, contact, account or deal.
@@ -6335,6 +6354,9 @@ model CrmTask {
 
   @@index([organizationId, ownerUserId, status, dueAt])
   @@index([opportunityId])
+  @@index([leadId])
+  @@index([contactId])
+  @@index([accountId])
 }
 
 /// One row for each user and day the digest email was sent, so it is never sent twice in a day.
@@ -6450,6 +6472,7 @@ model CrmNotification {
   readAt         DateTime?
 
   @@index([organizationId, userId, readAt])
+  @@index([organizationId, userId, createdAt])
 }
 
 enum CrmCasePriority {
@@ -6583,6 +6606,8 @@ model CrmCase {
   @@unique([organizationId, number])
   @@index([organizationId, status, priority])
   @@index([organizationId, accountId])
+  @@index([organizationId, openedAt])
+  @@index([contactId])
 }
 
 /// Everything that happens to a case, in order. Never changed (the database refuses it).
@@ -6633,4 +6658,72 @@ model CrmAccountHealth {
   computedAt     DateTime
 
   @@index([organizationId, band, score])
+}
+
+enum CrmSuppressionKind {
+  EMAIL
+  PHONE
+}
+
+enum CrmDataRequestKind {
+  ACCESS
+  ERASURE
+  RETENTION
+}
+
+enum CrmDataRequestStatus {
+  OPEN
+  COMPLETED
+  REFUSED
+}
+
+/// An email address or phone number that must receive no marketing, kept as a KEYED HASH (never the address), so it still works after the person has been erased.
+model CrmSuppression {
+  id             String             @id @default(cuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  kind           CrmSuppressionKind
+  valueHash      String
+  /// UNSUBSCRIBED, WITHDRAWN or ERASED.
+  reason         String
+  source         String
+  createdAt      DateTime           @default(now())
+
+  @@unique([organizationId, kind, valueHash])
+}
+
+/// A request about the personal data held on a contact or lead: a copy (ACCESS), erasure (ERASURE), or erasure at the end of the retention period (RETENTION).
+model CrmDataRequest {
+  id               String               @id @default(cuid())
+  organizationId   String
+  organization     Organization         @relation(fields: [organizationId], references: [id])
+  number           String
+  kind             CrmDataRequestKind
+  /// CONTACT or LEAD.
+  subjectType      String
+  subjectId        String
+  /// Who asked: replaced with a note once the person has been erased.
+  requesterName    String?
+  channel          String?
+  receivedOn       DateTime             @db.Date
+  dueOn            DateTime             @db.Date
+  status           CrmDataRequestStatus @default(OPEN)
+  identityVerified Boolean              @default(false)
+  identityNote     String?
+  verifiedBy       String?
+  exportedAt       DateTime?
+  /// SHA-256 of the file generated, and how many records each section held.
+  exportChecksum   String?
+  exportSections   Json?
+  /// Records that may still mention the person in free text and need a person's review after an erasure (ids by kind, never the text).
+  reviewList       Json?
+  handledBy        String?
+  completedOn      DateTime?
+  outcomeNote      String?
+  createdBy        String
+  createdAt        DateTime             @default(now())
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status])
+  @@index([organizationId, subjectType, subjectId])
 }
