@@ -53,7 +53,9 @@ export default async function SalesContactsPage() {
               {contacts.map((c) => (
                 <TR key={c.id}>
                   <TD>
-                    {c.firstName} {c.lastName}
+                    <Link className="underline" href={`/sales/contacts/${c.id}`}>
+                      {c.firstName} {c.lastName}
+                    </Link>
                     {c.jobTitle ? <span className="text-xs text-muted-foreground"> · {c.jobTitle}</span> : null}
                   </TD>
                   <TD className="text-xs">{c.accountId ? names.get(c.accountId) ?? "—" : "—"}</TD>

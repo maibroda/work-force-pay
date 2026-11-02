@@ -1,6 +1,6 @@
 # CRM Phase 2 plan: duplicates, merge, lead conversion, assignment, pipelines, import
 
-**Status: Phase 2a is BUILT on branch `feature/crm-phase-2a` (stacked on #95); Phase 2b (import, export, detail pages) follows.** Founder's instruction "continue with CRM Phase 2" (2026-10-29) is taken as the "go", including the migration. The pack's Phase 2 is large, so it is delivered as two pull requests, each with its own report.
+**Status: Phase 2a is BUILT (#96); Phase 2b (import, export, account and contact pages) is BUILT on branch `feature/crm-phase-2b`, stacked on #96.** Founder's instruction "continue with CRM Phase 2" (2026-10-29) is taken as the "go", including the migration. The pack's Phase 2 is large, so it is delivered as two pull requests, each with its own report.
 
 | | Delivers | Migration |
 | --- | --- | --- |
