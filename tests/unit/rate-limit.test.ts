@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clientIp, createLimiter } from "@/lib/rate-limit";
+import { clientIp, createLimiter, limitKey } from "@/lib/rate-limit";
 
 describe("the rate limiter", () => {
   it("lets the first `limit` calls in a window through, refuses the next, and says how long to wait", () => {
@@ -56,16 +56,54 @@ describe("the rate limiter", () => {
   });
 });
 
-describe("who a request is from", () => {
+describe("who a request is from (F-05)", () => {
   const h = (o: Record<string, string>) => new Headers(o);
-  it("takes the first address of x-forwarded-for, trimmed, and falls back to x-real-ip and then 'unknown'", () => {
-    expect(clientIp(h({ "x-forwarded-for": " 41.58.1.2 , 10.0.0.1" }))).toBe("41.58.1.2");
-    expect(clientIp(h({ "x-real-ip": "41.58.1.9" }))).toBe("41.58.1.9");
-    expect(clientIp(h({}))).toBe("unknown");
+
+  it("trusts no forwarding header unless the company says it sits behind a proxy, because anyone can send one", () => {
+    const spoof = h({ "x-forwarded-for": "41.58.1.2", "x-real-ip": "41.58.1.9", "cf-connecting-ip": "41.58.1.7" });
+    expect(clientIp(spoof, {})).toBe("unknown");
+    expect(clientIp(spoof, { TRUSTED_PROXY_HOPS: "0" })).toBe("unknown");
+    expect(clientIp(spoof, { TRUSTED_PROXY_HOPS: "" })).toBe("unknown");
   });
+
+  it("with n trusted proxies, takes the n-th address from the RIGHT of x-forwarded-for, the one the nearest trusted proxy saw; what a visitor put on the left cannot be chosen", () => {
+    const chain = h({ "x-forwarded-for": "6.6.6.6, 41.58.1.2, 10.0.0.1" }); // 6.6.6.6 was typed by the visitor
+    expect(clientIp(chain, { TRUSTED_PROXY_HOPS: "1" })).toBe("10.0.0.1");
+    expect(clientIp(chain, { TRUSTED_PROXY_HOPS: "2" })).toBe("41.58.1.2");
+    expect(clientIp(chain, { TRUSTED_PROXY_HOPS: "3" })).toBe("6.6.6.6");
+    expect(clientIp(chain, { TRUSTED_PROXY_HOPS: "4" })).toBe("unknown"); // more proxies claimed than the header has
+    expect(clientIp(h({ "x-forwarded-for": " 41.58.1.2 " }), { TRUSTED_PROXY_HOPS: "1" })).toBe("41.58.1.2");
+    expect(clientIp(h({}), { TRUSTED_PROXY_HOPS: "1" })).toBe("unknown");
+  });
+
+  it("can instead take a single header the proxy sets (Cloudflare's, or x-real-ip), and that header wins", () => {
+    const both = h({ "cf-connecting-ip": "41.58.1.7", "x-forwarded-for": "6.6.6.6, 10.0.0.1" });
+    expect(clientIp(both, { TRUSTED_IP_HEADER: "cf-connecting-ip" })).toBe("41.58.1.7");
+    expect(clientIp(both, { TRUSTED_IP_HEADER: "CF-Connecting-IP", TRUSTED_PROXY_HOPS: "1" })).toBe("41.58.1.7");
+    expect(clientIp(h({ "x-real-ip": "41.58.1.9" }), { TRUSTED_IP_HEADER: "x-real-ip" })).toBe("41.58.1.9");
+    expect(clientIp(h({}), { TRUSTED_IP_HEADER: "x-real-ip" })).toBe("unknown");
+  });
+
   it("never returns something long or odd, so a hostile header cannot be used to make keys", () => {
-    expect(clientIp(h({ "x-forwarded-for": "x".repeat(500) }))).toBe("unknown");
-    expect(clientIp(h({ "x-forwarded-for": "not an address!" }))).toBe("unknown");
-    expect(clientIp(h({ "x-forwarded-for": "2001:db8::1" }))).toBe("2001:db8::1");
+    const env = { TRUSTED_PROXY_HOPS: "1" };
+    expect(clientIp(h({ "x-forwarded-for": "x".repeat(500) }), env)).toBe("unknown");
+    expect(clientIp(h({ "x-forwarded-for": "not an address!" }), env)).toBe("unknown");
+    expect(clientIp(h({ "x-forwarded-for": "2001:db8::1" }), env)).toBe("2001:db8::1");
+    expect(clientIp(h({ "x-forwarded-for": "41.58.1.2" }), { TRUSTED_PROXY_HOPS: "x" })).toBe("unknown"); // a typo in the setting trusts nothing
+    expect(clientIp(h({ "x-forwarded-for": "41.58.1.2" }), { TRUSTED_PROXY_HOPS: "-1" })).toBe("unknown");
+  });
+});
+
+describe("the key a visitor is counted under", () => {
+  it("is their address when it is known", () => {
+    expect(limitKey("41.58.1.2", "abc.def")).toBe("41.58.1.2");
+  });
+  it("is their own link when it is not, so a visitor with no usable address does not use up the allowance of everyone else", () => {
+    const a = limitKey("unknown", "payloadAAAAAAAAAAAAAAAA.sigA");
+    const b = limitKey("unknown", "payloadBBBBBBBBBBBBBBBB.sigB");
+    expect(a).not.toBe(b);
+    expect(a.startsWith("unknown:")).toBe(true);
+    expect(limitKey("unknown", "payloadAAAAAAAAAAAAAAAA.sigA")).toBe(a); // the same link is the same key
+    expect(limitKey("unknown", "x".repeat(5000)).length).toBeLessThan(60); // a hostile link cannot make a huge key
   });
 });
