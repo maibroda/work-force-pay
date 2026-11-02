@@ -38,6 +38,7 @@ export const JOBS = [
   { name: "data-retention", label: "Records retention", required: false },
   { name: "journal-reversals", label: "Accrual reversals", required: false },
   { name: "recurring-journals", label: "Recurring journals", required: false },
+  { name: "sales-digest", label: "Sales digest", required: false },
 ] as const;
 export type JobName = (typeof JOBS)[number]["name"];
 

@@ -644,6 +644,9 @@ model Organization {
   crmHandovers              CrmHandover[]
   crmHandoverEvents         CrmHandoverEvent[]
   crmHandoverAcceptors      CrmHandoverAcceptor[]
+  crmActivities             CrmActivity[]
+  crmTasks                  CrmTask[]
+  crmDigestRuns             CrmDigestRun[]
   payslipSetting            PayslipSetting?
   payslipDeliveries         PayslipDelivery[]
   paymentFileExports        PaymentFileExport[]
@@ -5678,6 +5681,8 @@ model CrmAccount {
 
   contacts      CrmContact[]
   opportunities CrmOpportunity[]
+  activities    CrmActivity[]
+  tasks         CrmTask[]
 
   @@index([organizationId, ownerUserId, status])
   @@index([organizationId, normalizedName])
@@ -5714,6 +5719,8 @@ model CrmContact {
 
   consents      CrmConsent[]
   opportunities CrmOpportunity[]
+  activities    CrmActivity[]
+  tasks         CrmTask[]
 
   @@index([organizationId, ownerUserId, status])
   @@index([organizationId, phoneE164])
@@ -5756,7 +5763,9 @@ model CrmLead {
   createdAt              DateTime           @default(now())
   updatedAt              DateTime           @updatedAt
 
-  consents CrmConsent[]
+  consents   CrmConsent[]
+  activities CrmActivity[]
+  tasks      CrmTask[]
 
   @@unique([organizationId, number])
   @@index([organizationId, ownerUserId, status])
@@ -5897,9 +5906,11 @@ model CrmOpportunity {
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
-  history   CrmStageHistory[]
-  quotes    CrmQuote[]
-  handovers CrmHandover[]
+  history    CrmStageHistory[]
+  quotes     CrmQuote[]
+  handovers  CrmHandover[]
+  activities CrmActivity[]
+  tasks      CrmTask[]
 
   @@index([organizationId, ownerUserId, status])
   @@index([organizationId, stageId])
@@ -6205,4 +6216,116 @@ model CrmHandoverAcceptor {
   removedAt      DateTime?
 
   @@unique([organizationId, userId])
+}
+
+enum CrmActivityKind {
+  CALL
+  MEETING
+  SITE_SURVEY
+  WHATSAPP
+  EMAIL
+  NOTE
+}
+
+enum CrmCallOutcome {
+  REACHED
+  NO_ANSWER
+  CALLBACK
+  WRONG_NUMBER
+}
+
+/// Whether an outbound message is a service message (about an active contract) or marketing (needs the person's consent).
+enum CrmMessagePurpose {
+  SERVICE
+  MARKETING
+}
+
+enum CrmTaskStatus {
+  OPEN
+  DONE
+  CANCELLED
+}
+
+/// Something that happened with a lead, contact, account or deal: a call, meeting, site survey, WhatsApp, email or note. Never deleted and its content never
+/// changed (the database refuses both); a mistaken one is voided with a reason and stays on the timeline.
+model CrmActivity {
+  id              String             @id @default(cuid())
+  organizationId  String
+  organization    Organization       @relation(fields: [organizationId], references: [id])
+  kind            CrmActivityKind
+  leadId          String?
+  lead            CrmLead?           @relation(fields: [leadId], references: [id])
+  accountId       String?
+  account         CrmAccount?        @relation(fields: [accountId], references: [id])
+  contactId       String?
+  contact         CrmContact?        @relation(fields: [contactId], references: [id])
+  opportunityId   String?
+  opportunity     CrmOpportunity?    @relation(fields: [opportunityId], references: [id])
+  occurredAt      DateTime           @default(now())
+  subject         String?
+  body            String?
+  /// A call's result; empty while a call started from a link has not yet been written up.
+  callOutcome     CrmCallOutcome?
+  /// A site survey's checklist: site type, entry points, existing guards, risk notes, photo links.
+  survey          Json?
+  /// For a WhatsApp or an email: service or marketing.
+  purpose         CrmMessagePurpose?
+  /// Logged automatically by using a call or WhatsApp link.
+  viaLink         Boolean            @default(false)
+  createdBy       String
+  createdByUserId String
+  createdAt       DateTime           @default(now())
+  voidedAt        DateTime?
+  voidedBy        String?
+  voidReason      String?
+
+  @@index([organizationId, leadId, occurredAt])
+  @@index([organizationId, accountId, occurredAt])
+  @@index([organizationId, contactId, occurredAt])
+  @@index([organizationId, opportunityId, occurredAt])
+}
+
+/// Something to do, by a date and time, for one person, optionally about a lead, contact, account or deal.
+model CrmTask {
+  id              String          @id @default(cuid())
+  organizationId  String
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  title           String
+  notes           String?
+  dueAt           DateTime
+  /// Brings the task into that morning's digest; there is no push notification.
+  reminderAt      DateTime?
+  status          CrmTaskStatus   @default(OPEN)
+  ownerUserId     String
+  ownerName       String
+  leadId          String?
+  lead            CrmLead?        @relation(fields: [leadId], references: [id])
+  accountId       String?
+  account         CrmAccount?     @relation(fields: [accountId], references: [id])
+  contactId       String?
+  contact         CrmContact?     @relation(fields: [contactId], references: [id])
+  opportunityId   String?
+  opportunity     CrmOpportunity? @relation(fields: [opportunityId], references: [id])
+  completedAt     DateTime?
+  completedBy     String?
+  createdBy       String
+  createdByUserId String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([organizationId, ownerUserId, status, dueAt])
+  @@index([opportunityId])
+}
+
+/// One row for each user and day the digest email was sent, so it is never sent twice in a day.
+model CrmDigestRun {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  userId         String
+  /// The Lagos day it was for.
+  forDate        DateTime     @db.Date
+  sentAt         DateTime     @default(now())
+
+  @@unique([organizationId, userId, forDate])
 }
