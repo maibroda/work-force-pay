@@ -6711,6 +6711,8 @@ model CrmDataRequest {
   identityVerified Boolean              @default(false)
   identityNote     String?
   verifiedBy       String?
+  /// Who recorded the identity check (by id, so the person who erases can be told apart from them).
+  verifiedByUserId String?
   exportedAt       DateTime?
   /// SHA-256 of the file generated, and how many records each section held.
   exportChecksum   String?

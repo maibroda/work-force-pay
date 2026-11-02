@@ -592,6 +592,103 @@ describe("the copies a handover and the automation rules leave outside the perso
   });
 });
 
+/** A second company administrator (their own user row). */
+async function secondAdmin(w: W) {
+  const c = w.t.ctx("COMPANY_ADMIN", null, 2);
+  await db.user.create({ data: { id: c.userId, organizationId: w.t.org.id, email: c.email, name: c.name, passwordHash: "not-a-real-hash", role: "COMPANY_ADMIN" } });
+  return c;
+}
+
+describe("F-03: a salesperson cannot undo an unsubscribe", () => {
+  const again = (ctx: W["repA"], w: W, evidenceRef?: string) =>
+    recordConsent(ctx, { contactId: w.contact.id, purpose: "MARKETING", status: "GRANTED", channel: "PHONE", source: "Rang to say yes again", ...(evidenceRef ? { evidenceRef } : {}) });
+
+  it("records the new consent (the history is true) but keeps the person suppressed when it is a salesperson who records it, with or without evidence", async () => {
+    const w = await world();
+    await grant(w);
+    await unsubscribe(contactToken(w));
+    for (const evidence of [undefined, "Call note 5"]) {
+      const r = await again(w.repA, w, evidence);
+      expect(r.stillSuppressed).toBe(true);
+      expect(await consentStatus(w.repA, { contactId: w.contact.id, purpose: "MARKETING" })).toBe("GRANTED"); // what was recorded
+      expect(await canSendMarketing(w.repA, { contactId: w.contact.id })).toBe(false); // but nothing can be sent
+    }
+    expect(await db.crmSuppression.count({ where: { organizationId: w.t.org.id, reason: "UNSUBSCRIBED" } })).toBe(2);
+    await expect(sendEmailTo(w.repA, { contactId: w.contact.id, subject: "Our patrol service", body: "Hello", purpose: "MARKETING" })).rejects.toThrow(/agreed/i);
+  });
+
+  it("lets the administrator lift it, but only with evidence, and records that it was lifted", async () => {
+    const w = await world();
+    await grant(w);
+    await unsubscribe(contactToken(w));
+    expect((await again(w.admin, w)).stillSuppressed).toBe(true); // no evidence: not lifted
+    expect(await canSendMarketing(w.admin, { contactId: w.contact.id })).toBe(false);
+    const r = await again(w.admin, w, "Signed form 118, brought to the office");
+    expect(r.stillSuppressed).toBe(false);
+    expect(await canSendMarketing(w.admin, { contactId: w.contact.id })).toBe(true);
+    const audit = await db.auditLog.findFirstOrThrow({ where: { organizationId: w.t.org.id, action: "SALES_CONSENT_RECORD", entityId: r.id } });
+    expect(audit.newValue).toMatchObject({ liftedUnsubscribe: true });
+    expect(JSON.stringify(audit)).not.toContain("Signed form 118"); // the evidence is on the consent record, not in the audit log
+  });
+
+  it("still lets a salesperson lift a withdrawal that a person recorded by phone (only the unsubscribe link is protected), and never lifts an erasure", async () => {
+    const w = await world();
+    await grant(w);
+    await withdraw(w);
+    expect((await again(w.repA, w)).stillSuppressed).toBe(false);
+    expect(await canSendMarketing(w.repA, { contactId: w.contact.id })).toBe(true);
+  });
+});
+
+describe("F-04: the person who erases is not the person who checked the identity", () => {
+  it("refuses an erasure by the administrator who recorded the identity check when there is another administrator, and lets the other one do it", async () => {
+    const w = await world();
+    const other = await secondAdmin(w);
+    await grant(w);
+    const req = await openRequest(w.admin, { kind: "ERASURE", subjectType: "CONTACT", subjectId: w.contact.id, requesterName: "Owner" });
+    await verifyIdentity(w.admin, req.id, "Called back on the number on file");
+    expect((await db.crmDataRequest.findUniqueOrThrow({ where: { id: req.id } })).verifiedByUserId).toBe(w.admin.userId);
+    await expect(eraseSubject(w.admin, req.id)).rejects.toThrow(/second administrator|different/i);
+    expect((await db.crmContact.findUniqueOrThrow({ where: { id: w.contact.id } })).erasedAt).toBeNull(); // nothing was erased
+    await eraseSubject(other, req.id);
+    expect((await db.crmContact.findUniqueOrThrow({ where: { id: w.contact.id } })).erasedAt).not.toBeNull();
+    const audit = await db.auditLog.findFirstOrThrow({ where: { organizationId: w.t.org.id, action: "SALES_DSR_ERASE" } });
+    expect(audit.newValue).toMatchObject({ singleAdministrator: false });
+  });
+
+  it("applies to the person who re-records the check as well: whoever last recorded it cannot erase", async () => {
+    const w = await world();
+    const other = await secondAdmin(w);
+    const req = await openRequest(w.admin, { kind: "ERASURE", subjectType: "LEAD", subjectId: w.lead.id, requesterName: "Owner" });
+    await verifyIdentity(w.admin, req.id, "Called back on the number on file");
+    await verifyIdentity(other, req.id, "Checked a copy of their ID at the office");
+    await expect(eraseSubject(other, req.id)).rejects.toThrow(/second administrator|different/i);
+    await eraseSubject(w.admin, req.id);
+    expect((await db.crmLead.findUniqueOrThrow({ where: { id: w.lead.id } })).erasedAt).not.toBeNull();
+  });
+
+  it("allows the only administrator to do both (a company with one cannot erase anyone otherwise), and says so in the audit log", async () => {
+    const w = await world();
+    const req = await openRequest(w.admin, { kind: "ERASURE", subjectType: "CONTACT", subjectId: w.contact.id, requesterName: "Owner" });
+    await verifyIdentity(w.admin, req.id, "Called back on the number on file");
+    await eraseSubject(w.admin, req.id);
+    const audit = await db.auditLog.findFirstOrThrow({ where: { organizationId: w.t.org.id, action: "SALES_DSR_ERASE" } });
+    expect(audit.newValue).toMatchObject({ singleAdministrator: true });
+  });
+
+  it("counts only active administrators of the same organization", async () => {
+    const w = await world();
+    const other = await secondAdmin(w);
+    await db.user.update({ where: { id: other.userId }, data: { active: false } });
+    const stranger = await world(); // an administrator of another organization does not count
+    void stranger;
+    const req = await openRequest(w.admin, { kind: "ERASURE", subjectType: "CONTACT", subjectId: w.contact.id, requesterName: "Owner" });
+    await verifyIdentity(w.admin, req.id, "Called back on the number on file");
+    await eraseSubject(w.admin, req.id); // the only active administrator here
+    expect((await db.crmContact.findUniqueOrThrow({ where: { id: w.contact.id } })).erasedAt).not.toBeNull();
+  });
+});
+
 describe("the protected tables still refuse every other change", () => {
   it("lets only a transaction that has set the erasure flag blank personal columns, and only those", async () => {
     const w = await world();

@@ -8,6 +8,7 @@ import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { BusinessError, db } from "../_base";
 import { logAudit } from "../audit";
+import { can } from "@/lib/auth/permissions";
 import { ownerFilter, requireSales } from "./access";
 import { addSuppression, identifiersFor, isSuppressed, liftSuppression } from "./suppression";
 
@@ -45,14 +46,23 @@ export async function recordConsent(ctx: Ctx, raw: z.input<typeof consentSchema>
   const row = await db.crmConsent.create({
     data: { organizationId: ctx.orgId, contactId: v.contactId ?? null, leadId: v.leadId ?? null, purpose: v.purpose, status: v.status, channel: v.channel, source: v.source, evidenceRef: v.evidenceRef ?? null, recordedBy: ctx.name, recordedByUserId: ctx.userId },
   });
+  let stillSuppressed = false;
+  let liftedUnsubscribe = false;
   if (v.purpose === "MARKETING") {
     // a withdrawal also suppresses the person's addresses everywhere; a fresh consent lifts the suppression of their own
     const ids = await identifiersFor(ctx.orgId, v);
     if (v.status === "WITHDRAWN") await addSuppression(db, ctx.orgId, ids, "WITHDRAWN", v.channel);
-    else await liftSuppression(db, ctx.orgId, ids);
+    else {
+      // someone who used the unsubscribe link is brought back only by the administrator, and only with evidence (a salesperson's word is not enough); a recorded consent is kept either way
+      const mayLiftUnsubscribe = can(ctx.role, "sales.privacy.manage") && !!v.evidenceRef;
+      const before = await db.crmSuppression.count({ where: { organizationId: ctx.orgId, reason: "UNSUBSCRIBED" } });
+      await liftSuppression(db, ctx.orgId, ids, { includeUnsubscribed: mayLiftUnsubscribe });
+      liftedUnsubscribe = mayLiftUnsubscribe && before > (await db.crmSuppression.count({ where: { organizationId: ctx.orgId, reason: "UNSUBSCRIBED" } }));
+      stillSuppressed = await isSuppressed(ctx.orgId, ids);
+    }
   }
-  await logAudit(ctx, { action: "SALES_CONSENT_RECORD", entity: "CrmConsent", entityId: row.id, newValue: { purpose: v.purpose, status: v.status, channel: v.channel } });
-  return row;
+  await logAudit(ctx, { action: "SALES_CONSENT_RECORD", entity: "CrmConsent", entityId: row.id, newValue: { purpose: v.purpose, status: v.status, channel: v.channel, ...(liftedUnsubscribe ? { liftedUnsubscribe: true } : {}) } });
+  return { ...row, stillSuppressed };
 }
 
 export async function consentStatus(ctx: Ctx, t: ConsentTarget & { purpose: "MARKETING" | "SERVICE" }): Promise<"GRANTED" | "WITHDRAWN" | "UNKNOWN"> {

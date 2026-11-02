@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
+import { can, ROLE_PERMISSIONS, type Role } from "@/lib/auth/permissions";
 import { signUnsubscribe, suppressionHash, verifyUnsubscribe, type UnsubscribeSubject } from "@/lib/sales/privacy";
 import { BusinessError, db, type Tx } from "../_base";
 import { logAudit } from "../audit";
@@ -134,7 +135,7 @@ export async function verifyIdentity(ctx: Ctx, id: string, method: string) {
   if (!method?.trim() || method.trim().length < 5) throw new BusinessError("Say how the person's identity was checked (for example: called back on the number on file).");
   const r = await loadRequest(ctx, id);
   if (r.status !== "OPEN") throw new BusinessError("This request is closed.");
-  await db.crmDataRequest.update({ where: { id }, data: { identityVerified: true, identityNote: method.trim().slice(0, 300), verifiedBy: ctx.name } });
+  await db.crmDataRequest.update({ where: { id }, data: { identityVerified: true, identityNote: method.trim().slice(0, 300), verifiedBy: ctx.name, verifiedByUserId: ctx.userId } });
   await logAudit(ctx, { action: "SALES_DSR_VERIFY", entity: "CrmDataRequest", entityId: id });
 }
 
@@ -342,13 +343,18 @@ export async function eraseSubject(ctx: Ctx, requestId: string, outcomeNote?: st
   if (req.status !== "OPEN") throw new BusinessError("This request is closed.");
   if (req.kind !== "ERASURE") throw new BusinessError("This request is for a copy of the data, not for erasure.");
   if (!req.identityVerified) throw new BusinessError("Check the person's identity first, and record how.");
+  // erasure cannot be undone, so the person who recorded the identity check may not also erase, unless they are the only administrator there is
+  const holders = (Object.keys(ROLE_PERMISSIONS) as Role[]).filter((r) => can(r, "sales.privacy.manage"));
+  const administrators = await db.user.count({ where: { organizationId: ctx.orgId, active: true, role: { in: holders as never } } });
+  const sameAsVerifier = !!req.verifiedByUserId && req.verifiedByUserId === ctx.userId;
+  if (sameAsVerifier && administrators > 1) throw new BusinessError("A second administrator must erase this person: the person who checked their identity cannot also erase them. Ask another administrator to open this request and erase.");
   const out = await db.$transaction(async (tx: Tx) => {
     const s = await subject(ctx.orgId, req.subjectType, req.subjectId, tx);
     if (!s) throw new BusinessError("Person not found.");
     if (s.row.erasedAt) throw new BusinessError("This person has already been erased.");
     const r = await eraseInTx(tx, ctx, s, req.number);
     await tx.crmDataRequest.update({ where: { id: requestId }, data: { status: "COMPLETED", completedOn: today(), handledBy: ctx.name, reviewList: r.review, outcomeNote: outcomeNote?.trim().slice(0, 500) || null } });
-    await logAudit(ctx, { action: "SALES_DSR_ERASE", entity: "CrmDataRequest", entityId: requestId, newValue: { number: req.number, subjectType: req.subjectType, subjectId: req.subjectId, counts: r.counts } }, tx);
+    await logAudit(ctx, { action: "SALES_DSR_ERASE", entity: "CrmDataRequest", entityId: requestId, newValue: { number: req.number, subjectType: req.subjectType, subjectId: req.subjectId, counts: r.counts, singleAdministrator: sameAsVerifier } }, tx);
     return r;
   }, TX);
   return out;
