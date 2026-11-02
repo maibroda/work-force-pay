@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-175 tables and 139 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+175 tables and 140 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -4373,6 +4373,13 @@ A specific bid for a client business: "24/7 guarding, 3 sites, 18 guards". Its m
 | ownerUserId | String | yes |  |
 | ownerName | String | yes |  |
 | fromLeadId | String |  | The lead this deal came from, if it came from one. |
+| nextStep | String |  | What happens next on this deal; required every time it moves. |
+| lostReason | CrmLostReason |  |  |
+| lostReasonDetail | String |  |  |
+| competitor | String |  |  |
+| wonAt | DateTime |  |  |
+| lostAt | DateTime |  |  |
+| stageEnteredAt | DateTime |  | When the deal entered its current stage (days in stage on the board). |
 | status | CrmRecordStatus |  |  |
 | lastActivityAt | DateTime |  |  |
 | voidedAt | DateTime |  |  |
@@ -4995,4 +5002,8 @@ What the controller concluded about the harm a breach could do to the people aff
 ### CrmAssignmentKind
 
 `STATE`, `SERVICE`
+
+### CrmLostReason
+
+`PRICE`, `QUALITY`, `RELATIONSHIP`, `INCUMBENT_RETAINED`, `NO_DECISION`, `BUDGET`, `OTHER`
 

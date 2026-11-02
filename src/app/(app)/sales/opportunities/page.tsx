@@ -27,7 +27,7 @@ export default async function SalesOpportunitiesPage() {
   }
   return (
     <>
-      <PageHeader title="Deals" description="Specific bids for a client's business. A deal starts in the first stage of the New business pipeline with that stage's probability. The board and stage rules come in the next phase." />
+      <PageHeader title="Deals" description="Specific bids for a client's business. A deal starts in the first stage of the New business pipeline with that stage's probability. Move deals between stages on the board." />
       {why && (
         <p className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-900">
           {why}{" "}
@@ -55,7 +55,11 @@ export default async function SalesOpportunitiesPage() {
             <TBody>
               {deals.map((d) => (
                 <TR key={d.id}>
-                  <TD>{d.name}</TD>
+                  <TD>
+                    <Link className="underline" href={`/sales/opportunities/${d.id}`}>
+                      {d.name}
+                    </Link>
+                  </TD>
                   <TD className="text-xs">{d.account.name}</TD>
                   <TD className="text-xs">{label(d.serviceType)}</TD>
                   <TD>
