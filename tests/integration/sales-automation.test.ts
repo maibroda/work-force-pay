@@ -442,3 +442,63 @@ describe("the audit log and the run log", () => {
     expect((await runs(w)).every((r) => r.status === "DONE")).toBe(true);
   });
 });
+
+describe("a company that has switched the sales module off", () => {
+  const off = (w: W) => updateSalesSetting(w.admin, { enabled: false });
+  const on = (w: W) => updateSalesSetting(w.admin, { enabled: true });
+
+  it("does not carry out a run that was waiting for its delay, and does not carry it out late once the module is back on", async () => {
+    const w = await world();
+    await rule(w, { stageId: w.stage("Proposal sent"), delayMinutes: 3 * 24 * 60, ...task("Follow up on proposal") });
+    await db.crmOpportunity.update({ where: { id: w.deal.id }, data: { primaryContactId: w.contact.id } });
+    await db.crmQuote.create({ data: { organizationId: w.t.org.id, opportunityId: w.deal.id, number: "SQ-92001", versionNo: 1, status: "SENT", createdBy: "x", createdByUserId: w.repA.userId } });
+    await move(w, "Proposal sent");
+    expect((await runs(w))[0].status).toBe("PENDING");
+    await off(w);
+    const due = new Date(Date.now() + 3 * DAY + 60_000);
+    expect(await processDueRuns(due, { orgId: w.t.org.id })).toMatchObject({ done: 0, cancelled: 1 });
+    expect(await db.crmTask.count({ where: { organizationId: w.t.org.id } })).toBe(0); // nothing was done
+    const run = (await runs(w))[0];
+    expect(run.status).toBe("CANCELLED");
+    expect(run.error).toMatch(/switched off/i);
+    await on(w); // back on: the cancelled run is not revived and nothing fires late
+    expect(await processDueRuns(new Date(due.getTime() + DAY), { orgId: w.t.org.id })).toMatchObject({ done: 0, cancelled: 0 });
+    expect(await db.crmTask.count({ where: { organizationId: w.t.org.id } })).toBe(0);
+  });
+
+  it("does not notice quiet deals, and notices them again when the module is back on", async () => {
+    const w = await world();
+    await rule(w, { name: "Quiet deal", trigger: "NO_ACTIVITY", stageId: undefined, quietDays: 14, actionType: "NOTIFY", actionParams: { to: "OWNER", subject: "{{dealName}} has gone quiet", message: "Log a call" } });
+    const now = new Date();
+    await db.crmOpportunity.update({ where: { id: w.deal.id }, data: { lastActivityAt: new Date(now.getTime() - 20 * DAY) } });
+    await off(w);
+    expect((await scanQuietDeals(now, { orgId: w.t.org.id })).queued).toBe(0);
+    expect((await runAutomationJob(now)).queued).toBe(0); // the scheduled job, for every organization
+    expect(await runs(w)).toHaveLength(0);
+    await on(w);
+    expect((await scanQuietDeals(now, { orgId: w.t.org.id })).queued).toBe(1);
+  });
+
+  it("queues nothing for a quote or handover that is accepted while the module is off, and queues it when on", async () => {
+    const w = await world();
+    await rule(w, { name: "Accepted: sign", trigger: "QUOTE_ACCEPTED", stageId: undefined, actionType: "MOVE_TO_STAGE", actionParams: { stageId: w.stage("Contract signing") } });
+    await off(w);
+    await fireEvent(w.t.org.id, "QUOTE_ACCEPTED", w.deal.id, "quote-off");
+    expect(await runs(w)).toHaveLength(0);
+    await on(w);
+    await fireEvent(w.t.org.id, "QUOTE_ACCEPTED", w.deal.id, "quote-on");
+    expect(await runs(w)).toHaveLength(1);
+  });
+
+  it("is not affected for another organization whose module is on", async () => {
+    const a = await world();
+    const b = await world();
+    await rule(a, { name: "Quiet deal", trigger: "NO_ACTIVITY", stageId: undefined, quietDays: 14, actionType: "NOTIFY", actionParams: { to: "OWNER", subject: "{{dealName}} has gone quiet", message: "Log a call" } });
+    await rule(b, { name: "Quiet deal", trigger: "NO_ACTIVITY", stageId: undefined, quietDays: 14, actionType: "NOTIFY", actionParams: { to: "OWNER", subject: "{{dealName}} has gone quiet", message: "Log a call" } });
+    const now = new Date();
+    for (const x of [a, b]) await db.crmOpportunity.update({ where: { id: x.deal.id }, data: { lastActivityAt: new Date(now.getTime() - 20 * DAY) } });
+    await off(a);
+    expect((await scanQuietDeals(now, { orgId: a.t.org.id })).queued).toBe(0);
+    expect((await scanQuietDeals(now, { orgId: b.t.org.id })).queued).toBe(1);
+  });
+});
