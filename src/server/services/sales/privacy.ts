@@ -14,6 +14,7 @@ import type { Ctx } from "@/lib/auth/context";
 import { signUnsubscribe, suppressionHash, verifyUnsubscribe, type UnsubscribeSubject } from "@/lib/sales/privacy";
 import { BusinessError, db, type Tx } from "../_base";
 import { logAudit } from "../audit";
+import { clearBeatSiteContact } from "../clients";
 import { nextNumber } from "../numbering";
 import { requireSales } from "./access";
 import { addSuppression, identifiersOf, isSuppressed, signingSecret, type Identifier } from "./suppression";
@@ -192,7 +193,7 @@ export async function exportSubject(ctx: Ctx, requestId: string): Promise<Export
   const org = ctx.orgId;
   const c = await closure(org, s, db);
   const people = { OR: [{ contactId: { in: c.contactIds } }, { leadId: { in: c.leadIds } }] };
-  const [consents, activities, tasks, cases, sites, deals, suppressed] = await Promise.all([
+  const [consents, activities, tasks, cases, sites, deals, suppressed, siteRows] = await Promise.all([
     db.crmConsent.findMany({ where: { organizationId: org, ...people }, orderBy: { seq: "asc" }, select: { purpose: true, status: true, channel: true, source: true, evidenceRef: true, recordedBy: true, recordedAt: true } }),
     db.crmActivity.findMany({ where: { organizationId: org, ...people }, orderBy: { occurredAt: "asc" }, select: { kind: true, occurredAt: true, subject: true, body: true, callOutcome: true, survey: true, purpose: true, createdBy: true, voidedAt: true, voidReason: true } }),
     db.crmTask.findMany({ where: { organizationId: org, ...people }, orderBy: { dueAt: "asc" }, select: { title: true, notes: true, dueAt: true, status: true, ownerName: true } }),
@@ -200,7 +201,10 @@ export async function exportSubject(ctx: Ctx, requestId: string): Promise<Export
     siteContacts(org, idsOfPerson(c), db),
     db.crmOpportunity.findMany({ where: { organizationId: org, primaryContactId: { in: c.contactIds } }, select: { name: true, stage: { select: { name: true } }, createdAt: true } }),
     isSuppressed(org, idsOfPerson(c)),
+    siteContacts(org, idsOfPerson(c), db),
   ]);
+  // the contact text a handover copied onto the operational site (the client's site record in operations)
+  const operationalSites = await db.beat.findMany({ where: { organizationId: org, id: { in: siteRows.map((x) => x.beatId).filter((x): x is string => !!x) }, siteContact: { not: null } }, select: { name: true, siteContact: true } });
   const data = {
     generatedOn: new Date().toISOString(),
     request: req.number,
@@ -209,12 +213,13 @@ export async function exportSubject(ctx: Ctx, requestId: string): Promise<Export
     consents, activities, tasks,
     cases: cases.map(({ events, ...rest }) => ({ ...rest, history: events })),
     siteContacts: sites.map((x) => ({ handover: x.handoverNumber, site: x.site, name: x.contactName, role: x.contactRole, phone: x.contactPhoneE164, email: x.contactEmail })),
+    operationalSites: operationalSites.map((b) => ({ site: b.name, siteContact: b.siteContact })),
     deals: deals.map((d) => ({ name: d.name, stage: d.stage?.name ?? null, createdAt: d.createdAt })),
     onSuppressionList: suppressed,
   };
   const json = JSON.stringify(data, null, 2);
   const checksum = createHash("sha256").update(json).digest("hex");
-  const sections = { contacts: c.contacts.length, leads: c.leads.length, consents: consents.length, activities: activities.length, tasks: tasks.length, cases: cases.length, siteContacts: sites.length, deals: deals.length };
+  const sections = { contacts: c.contacts.length, leads: c.leads.length, consents: consents.length, activities: activities.length, tasks: tasks.length, cases: cases.length, siteContacts: sites.length, operationalSites: operationalSites.length, deals: deals.length };
   await db.crmDataRequest.update({ where: { id: requestId }, data: { exportedAt: new Date(), exportChecksum: checksum, exportSections: sections, handledBy: ctx.name } });
   await logAudit(ctx, { action: "SALES_DSR_EXPORT", entity: "CrmDataRequest", entityId: requestId, newValue: { sections } });
   return { fileName: `data-request-${req.number}.json`, json, checksum, sections };
@@ -226,8 +231,8 @@ async function siteContacts(orgId: string, ids: Identifier[], tx: Tx | typeof db
   const phones = ids.filter((i) => i.kind === "PHONE").map((i) => i.value);
   if (!emails.length && !phones.length) return [];
   const where: Prisma.CrmHandoverSiteWhereInput = { OR: [...(phones.length ? [{ contactPhoneE164: { in: phones } }] : []), ...emails.map((e) => ({ contactEmail: { equals: e, mode: "insensitive" as const } }))] };
-  const rows = await tx.crmHandoverSite.findMany({ where: { handover: { organizationId: orgId }, ...where }, select: { id: true, name: true, contactName: true, contactRole: true, contactPhoneE164: true, contactEmail: true, handover: { select: { number: true } } } });
-  return rows.map((r) => ({ id: r.id, site: r.name, handoverNumber: r.handover.number, contactName: r.contactName, contactRole: r.contactRole, contactPhoneE164: r.contactPhoneE164, contactEmail: r.contactEmail }));
+  const rows = await tx.crmHandoverSite.findMany({ where: { handover: { organizationId: orgId }, ...where }, select: { id: true, name: true, beatId: true, contactName: true, contactRole: true, contactPhoneE164: true, contactEmail: true, handover: { select: { number: true } } } });
+  return rows.map((r) => ({ id: r.id, beatId: r.beatId, site: r.name, handoverNumber: r.handover.number, contactName: r.contactName, contactRole: r.contactRole, contactPhoneE164: r.contactPhoneE164, contactEmail: r.contactEmail }));
 }
 
 // ─────────────────────────────── erasure ───────────────────────────────
@@ -262,6 +267,13 @@ async function eraseInTx(tx: Tx, ctx: Ctx, s: NonNullable<Awaited<ReturnType<typ
   const dealIds = dealRows.map((d) => d.id);
   const review: Record<string, string[]> = {
     deals: dealIds,
+    // written by automation rules, which put the contact's first name in the text; not linked to the person, so the tool cannot be sure they are about them
+    dealTasks: dealIds.length
+      ? (await tx.crmTask.findMany({ where: { organizationId: org, opportunityId: { in: dealIds }, OR: [{ contactId: null }, { contactId: { notIn: c.contactIds } }] }, select: { id: true }, take: CAP })).map((x) => x.id)
+      : [],
+    dealNotifications: dealIds.length
+      ? (await tx.crmNotification.findMany({ where: { organizationId: org, href: { in: dealIds.map((id) => `/sales/opportunities/${id}`) } }, select: { id: true }, take: CAP })).map((x) => x.id)
+      : [],
     accountAndDealActivities: (await tx.crmActivity.findMany({
       where: {
         organizationId: org,
@@ -280,6 +292,18 @@ async function eraseInTx(tx: Tx, ctx: Ctx, s: NonNullable<Awaited<ReturnType<typ
   };
 
   const sites = await siteContacts(org, ids, tx);
+  // F-01: a handover copied each site's contact as text onto the operational site record. It is cleared only if it still names the person (an address or number of theirs, or the
+  // contact's name); text someone has since rewritten is left alone and listed for review.
+  const matchers = [...ids.map((i) => i.value.toLowerCase()), ...sites.map((x) => x.contactName?.trim().toLowerCase()).filter((n): n is string => !!n && n.length >= 3)];
+  counts.operationalSites = 0;
+  review.operationalSites = [];
+  for (const beatId of new Set(sites.map((x) => x.beatId).filter((x): x is string => !!x))) {
+    const beat = await tx.beat.findFirst({ where: { id: beatId, organizationId: org }, select: { siteContact: true } });
+    if (!beat?.siteContact) continue;
+    if (matchers.some((m) => beat.siteContact!.toLowerCase().includes(m))) {
+      if (await clearBeatSiteContact(tx, ctx, beatId, requestNumber)) counts.operationalSites++;
+    } else review.operationalSites.push(beatId);
+  }
   await tx.$queryRaw`SELECT set_config('app.crm_erasure', 'on', true)`;
   const people = { OR: [{ contactId: { in: c.contactIds } }, { leadId: { in: c.leadIds } }] };
 

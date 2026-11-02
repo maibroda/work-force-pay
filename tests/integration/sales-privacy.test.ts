@@ -13,7 +13,7 @@ import { systemCtx } from "@/server/services/sales/automation";
 import { createCase, respondToCase } from "@/server/services/sales/cases";
 import { canSendMarketing, consentStatus, recordConsent } from "@/server/services/sales/consent";
 import { exportCsv } from "@/server/services/sales/export";
-import { getHandover, getHandoverForDeal, saveHandover } from "@/server/services/sales/handover";
+import { acceptHandover, designateAcceptor, getHandover, getHandoverForDeal, saveHandover, submitHandover } from "@/server/services/sales/handover";
 import { completeAccess, eraseForRetention, eraseSubject, exportSubject, keepLead, listRequests, openRequest, refuseRequest, retentionCandidates, setRetention, unsubscribe, unsubscribeApiUrl, unsubscribeUrl, verifyIdentity } from "@/server/services/sales/privacy";
 import { createOpportunity } from "@/server/services/sales/pipelines";
 import { createQuote, decideQuote, sendQuote, setMinimumMargin } from "@/server/services/sales/quotes";
@@ -319,6 +319,10 @@ async function handoverWithSiteContact(w: W) {
     sites: full.sites.map((s) => ({ id: s.id, address: "2 Admiralty Way", state: "Lagos", lga: "Eti-Osa", contactName: `${w.person.first} ${w.person.last}`, contactRole: "Estate manager", contactPhone: w.person.local, contactEmail: w.person.email, equipment: [{ item: "Two-way radio", quantity: 4 }] })),
     posts: full.sites.flatMap((s) => s.posts).map((p) => ({ id: p.id, categoryId: guard.id })),
   });
+  // accepted by a designated person in Operations: this is what copies the site contact onto the operational site record
+  await designateAcceptor(w.admin, w.ops.userId);
+  await submitHandover(w.repA, h.id);
+  await acceptHandover(w.ops, h.id, {});
   return { deal, handoverId: h.id };
 }
 
@@ -367,13 +371,16 @@ describe("a copy of everything held about a person", () => {
     const f = await exportSubject(w.admin, req.id);
     const data = JSON.parse(f.json);
 
-    expect(f.sections).toEqual({ contacts: 2, leads: 1, consents: 1, activities: 2, tasks: 1, cases: 1, siteContacts: 1, deals: 1 });
+    expect(f.sections).toEqual({ contacts: 2, leads: 1, consents: 1, activities: 2, tasks: 1, cases: 1, siteContacts: 1, operationalSites: 1, deals: 1 });
     expect(data.contacts.map((c: { email: string }) => c.email)).toEqual([w.person.email, w.person.email]); // the contact and the duplicate merged into it
     expect(data.leads[0]).toMatchObject({ contactName: `${w.person.first} ${w.person.last}`, address: `12 ${w.person.first} Close` });
     expect(data.consents[0]).toMatchObject({ purpose: "MARKETING", status: "GRANTED", source: "Enquiry form on the website" });
     expect(data.cases[0].history.length).toBeGreaterThan(0);
     expect(data.siteContacts[0]).toMatchObject({ name: `${w.person.first} ${w.person.last}`, email: w.person.email, phone: w.person.e164 });
     expect(data.deals[0].name).toBe("Estate guarding");
+    // the copy of the site contact on the operational site record (F-01) is in the file too
+    expect(data.operationalSites).toHaveLength(1);
+    expect(data.operationalSites[0].siteContact).toContain(w.person.email);
     expect(data.onSuppressionList).toBe(false);
     expect(f.json).not.toContain("Stranger");
     expect(f.json).not.toContain("Not the person");
@@ -403,9 +410,9 @@ describe("a copy of everything held about a person", () => {
 
 // ─────────────────────────────── erasure ───────────────────────────────
 
-/** Rows in the CRM tables (and the audit log of this organization) that still hold any of the needles in a text or JSON column. */
+/** Rows in the CRM tables, the operational site table (a handover copies the site contact there) and the audit log of this organization that still hold any of the needles in a text or JSON column. */
 async function mentions(orgId: string, needles: string[]) {
-  const cols = await db.$queryRaw<{ t: string; c: string }[]>`SELECT table_name::text AS t, column_name::text AS c FROM information_schema.columns WHERE table_schema = 'public' AND table_name LIKE 'Crm%' AND data_type IN ('text', 'character varying', 'jsonb', 'ARRAY')`;
+  const cols = await db.$queryRaw<{ t: string; c: string }[]>`SELECT table_name::text AS t, column_name::text AS c FROM information_schema.columns WHERE table_schema = 'public' AND (table_name LIKE 'Crm%' OR table_name = 'Beat') AND data_type IN ('text', 'character varying', 'jsonb', 'ARRAY')`;
   const hits: string[] = [];
   for (const { t, c } of cols) {
     for (const n of needles) {
@@ -430,7 +437,7 @@ describe("erasing a person", () => {
     const r = await eraseSubject(w.admin, req.id);
 
     expect(await mentions(w.t.org.id, needles)).toEqual([]);
-    expect(r.counts).toMatchObject({ contacts: 2, leads: 1, tasks: 1, cases: 1, siteContacts: 1 });
+    expect(r.counts).toMatchObject({ contacts: 2, leads: 1, tasks: 1, cases: 1, siteContacts: 1, operationalSites: 1 });
     const c = await db.crmContact.findUniqueOrThrow({ where: { id: w.contact.id } });
     expect(c).toMatchObject({ firstName: "Erased", lastName: "Contact", email: null, phoneE164: null, status: "VOID" });
     expect(c.erasedAt).not.toBeNull();
@@ -528,6 +535,60 @@ describe("erasing a person", () => {
     // the note itself is left alone for a person to decide on
     expect((await db.crmActivity.findUniqueOrThrow({ where: { id: note.id } })).body).toContain(w.person.first);
     expect((await db.crmDataRequest.findUniqueOrThrow({ where: { id: req.id } })).reviewList).toEqual(r.review);
+  });
+});
+
+describe("the copies a handover and the automation rules leave outside the person's own records", () => {
+  it("clears the site contact that an accepted handover copied onto the operational site, and says so in the audit log (ids only)", async () => {
+    const w = await world();
+    await grant(w);
+    const ho = await handoverWithSiteContact(w);
+    const site = await db.crmHandoverSite.findFirstOrThrow({ where: { handoverId: ho.handoverId } });
+    const beatBefore = await db.beat.findUniqueOrThrow({ where: { id: site.beatId! } });
+    expect(beatBefore.siteContact).toContain(w.person.email); // the premise: it really is there
+    const req = await openRequest(w.admin, { kind: "ERASURE", subjectType: "CONTACT", subjectId: w.contact.id, requesterName: "Owner" });
+    await verifyIdentity(w.admin, req.id, "Called back on the number on file");
+    const r = await eraseSubject(w.admin, req.id);
+    const beat = await db.beat.findUniqueOrThrow({ where: { id: beatBefore.id } });
+    expect(beat.siteContact).toBeNull();
+    expect(r.counts.operationalSites).toBe(1);
+    // nothing else on the site changed
+    expect({ ...beat, siteContact: null, updatedAt: null }).toEqual({ ...beatBefore, siteContact: null, updatedAt: null });
+    const audit = await db.auditLog.findMany({ where: { organizationId: w.t.org.id, action: "BEAT_SITE_CONTACT_CLEAR" } });
+    expect(audit).toHaveLength(1);
+    expect(audit[0]).toMatchObject({ entity: "Beat", entityId: beatBefore.id });
+    expect(JSON.stringify(audit)).not.toContain(w.person.first);
+  });
+
+  it("does not overwrite a site contact that someone has since rewritten to something that does not name the person; it lists the site for review instead", async () => {
+    const w = await world();
+    await grant(w);
+    const ho = await handoverWithSiteContact(w);
+    const site = await db.crmHandoverSite.findFirstOrThrow({ where: { handoverId: ho.handoverId } });
+    await db.beat.update({ where: { id: site.beatId! }, data: { siteContact: "Estate office, ask for the manager" } });
+    const req = await openRequest(w.admin, { kind: "ERASURE", subjectType: "CONTACT", subjectId: w.contact.id, requesterName: "Owner" });
+    await verifyIdentity(w.admin, req.id, "Called back on the number on file");
+    const r = await eraseSubject(w.admin, req.id);
+    expect(r.counts.operationalSites).toBe(0);
+    expect(r.review.operationalSites).toEqual([site.beatId]);
+    expect((await db.beat.findUniqueOrThrow({ where: { id: site.beatId! } })).siteContact).toBe("Estate office, ask for the manager");
+  });
+
+  it("lists the tasks and in-app notifications that the automation rules wrote on the person's deals (they use the person's first name), by id", async () => {
+    const w = await world();
+    await grant(w);
+    const deal = await createOpportunity(w.repA, { accountId: w.account.id, name: "Estate guarding" });
+    await db.crmOpportunity.update({ where: { id: deal.id }, data: { primaryContactId: w.contact.id } });
+    const task = await createTask(w.repA, { title: `Follow up ${w.person.first}`, notes: "Rule: quote sent", dueAt: new Date(Date.now() + DAY).toISOString(), opportunityId: deal.id });
+    const note = await db.crmNotification.create({ data: { organizationId: w.t.org.id, userId: w.repA.userId, title: "Quote accepted", body: `${w.person.first} accepted`, href: `/sales/opportunities/${deal.id}` } });
+    const other = await db.crmNotification.create({ data: { organizationId: w.t.org.id, userId: w.repA.userId, title: "Unrelated", body: "Nothing to do with them", href: "/sales/opportunities/someone-elses-deal" } });
+    const req = await openRequest(w.admin, { kind: "ERASURE", subjectType: "CONTACT", subjectId: w.contact.id, requesterName: "Owner" });
+    await verifyIdentity(w.admin, req.id, "Called back on the number on file");
+    const r = await eraseSubject(w.admin, req.id);
+    expect(r.review.dealTasks).toEqual([task.id]);
+    expect(r.review.dealNotifications).toEqual([note.id]);
+    expect(r.review.dealNotifications).not.toContain(other.id);
+    expect(JSON.stringify(r.review)).not.toContain(w.person.first);
   });
 });
 
