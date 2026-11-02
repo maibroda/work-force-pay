@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
+import { db } from "@/lib/db";
 import { listNotifications } from "@/server/services/sales/automation";
 import { markNotificationsReadAction } from "@/app/actions/sales-automation";
 import { ActionButton } from "@/components/action-button";
@@ -9,6 +10,8 @@ const when = (d: Date) => d.toLocaleString("en-NG", { timeZone: "Africa/Lagos", 
 
 export default async function SalesNotificationsPage() {
   const ctx = await requirePage("sales.view");
+  const setting = await db.crmSetting.findUnique({ where: { organizationId: ctx.orgId }, select: { enabled: true } });
+  if (!setting?.enabled) return <PageHeader title="Notifications" description="Switch the sales module on under Sales settings first." />;
   const rows = await listNotifications(ctx);
   const unread = rows.filter((r) => !r.readAt).length;
   return (

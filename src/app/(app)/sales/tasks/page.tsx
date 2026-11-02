@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
+import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
 import { myDigest, myTasks } from "@/server/services/sales/activities";
 import { completeTaskAction } from "@/app/actions/sales-activities";
@@ -20,6 +21,8 @@ function About({ t }: { t: Row }) {
 
 export default async function SalesTasksPage() {
   const ctx = await requirePage("sales.view");
+  const setting = await db.crmSetting.findUnique({ where: { organizationId: ctx.orgId }, select: { enabled: true } });
+  if (!setting?.enabled) return <PageHeader title="My tasks" description="Switch the sales module on under Sales settings first." />;
   const manage = can(ctx.role, "sales.manage");
   const [g, digest] = await Promise.all([myTasks(ctx), myDigest(ctx)]);
   const groups: Array<[string, Row[], string?]> = [

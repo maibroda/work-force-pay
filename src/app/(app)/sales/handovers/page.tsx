@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
+import { db } from "@/lib/db";
 import { fmtDate } from "@/lib/dates";
 import { listHandovers } from "@/server/services/sales/handover";
 import { PageHeader, Section } from "@/components/page";
@@ -12,6 +13,8 @@ const money = (s: unknown) => `₦${Number(s).toLocaleString("en-NG", { minimumF
 
 export default async function HandoversPage() {
   const ctx = await requirePage("sales.view");
+  const setting = await db.crmSetting.findUnique({ where: { organizationId: ctx.orgId }, select: { enabled: true } });
+  if (!setting?.enabled) return <PageHeader title="Handovers to Operations" description="Switch the sales module on under Sales settings first." />;
   const rows = await listHandovers(ctx);
   const waiting = rows.filter((r) => r.status === "SUBMITTED").length;
   return (

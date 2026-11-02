@@ -78,6 +78,15 @@ function resolvers(orgId: string): Record<string, () => Promise<string | undefin
     "/bureau/clients/[id]": () => first(db.organization.findFirst({ where: { bureauOrganizationId: orgId }, select: { id: true } })),
     // a rule release of the organization being smoked (the demo company is not a bureau, so this page is skipped)
     "/bureau/rules/[id]": () => first(db.ruleRelease.findFirst({ where: { bureauOrganizationId: orgId }, select: { id: true } })),
+    // the company's own sales module (the demo company has none until someone switches it on, so these are skipped with a note until then)
+    "/sales/leads/[id]": () => first(db.crmLead.findFirst({ where, select: { id: true } })),
+    "/sales/accounts/[id]": () => first(db.crmAccount.findFirst({ where, select: { id: true } })),
+    "/sales/contacts/[id]": () => first(db.crmContact.findFirst({ where, select: { id: true } })),
+    "/sales/opportunities/[id]": () => first(db.crmOpportunity.findFirst({ where, select: { id: true } })),
+    "/sales/opportunities/[id]/quote": () => first(db.crmOpportunity.findFirst({ where, select: { id: true } })),
+    "/sales/quotes/[id]": () => first(db.crmQuote.findFirst({ where, select: { id: true } })),
+    "/sales/cases/[id]": () => first(db.crmCase.findFirst({ where, select: { id: true } })),
+    "/sales/handovers/[id]": () => first(db.crmHandover.findFirst({ where, select: { id: true } })),
     "/payroll/calendar/[periodId]": () => first(db.payrollPeriod.findFirst({ where, select: { id: true } })),
     "/payments/bank-file/[runId]": () => first(db.payrollRun.findFirst({ where: { ...where, status: "LOCKED" }, select: { id: true } })),
     "/portal/payroll/[runId]": () => first(db.payrollRun.findFirst({ where, select: { id: true } })),
