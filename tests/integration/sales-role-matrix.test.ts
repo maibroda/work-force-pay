@@ -26,6 +26,9 @@ const EXPECTED: Record<string, string[]> = {
   COMPANY_ADMIN: ["sales.case.manage", "sales.configure", "sales.handover.accept", "sales.manage", "sales.privacy.manage", "sales.view", "sales.view.all"],
   SUPER_ADMIN: ["sales.case.manage", "sales.configure", "sales.handover.accept", "sales.manage", "sales.privacy.manage", "sales.view", "sales.view.all"],
   BUSINESS_DEV: ["sales.case.manage", "sales.manage", "sales.view"],
+  SALES_REP: ["sales.case.manage", "sales.manage", "sales.view"],
+  SALES_MANAGER: ["sales.case.manage", "sales.manage", "sales.view"],
+  ACCOUNT_MANAGER: ["sales.case.manage", "sales.manage", "sales.view"],
   OPERATIONS: ["sales.case.manage", "sales.handover.accept", "sales.view", "sales.view.all"],
   FINANCE: ["sales.view", "sales.view.all"],
 };

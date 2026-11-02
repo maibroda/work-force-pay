@@ -8,13 +8,13 @@ import { accountMatches, businessEmailDomain, personMatches } from "@/lib/sales/
 import { normalizeCompanyName } from "@/lib/sales/names";
 import { normalizeNgPhone } from "@/lib/sales/phone";
 import { db } from "../_base";
-import { requireSales, seesAll } from "./access";
+import { canSeeOwner, requireSales } from "./access";
 
 export type VisibleMatch = { kind: "ACCOUNT" | "LEAD" | "CONTACT"; id: string; label: string; reason: string; ownerName: string };
 export type HiddenMatch = { ownerName: string; reason: string };
 export type DuplicateReport = { visible: VisibleMatch[]; hidden: HiddenMatch[] };
 
-const canSee = (ctx: Ctx, ownerUserId: string) => seesAll(ctx) || ownerUserId === ctx.userId;
+const canSee = (ctx: Ctx, ownerUserId: string) => canSeeOwner(ctx, ownerUserId);
 
 export async function findAccountDuplicates(ctx: Ctx, candidate: { name: string; rcNumber?: string; emailDomain?: string; email?: string }, excludeId?: string): Promise<DuplicateReport> {
   await requireSales(ctx, "sales.view");

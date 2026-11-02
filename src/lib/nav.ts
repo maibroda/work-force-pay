@@ -38,6 +38,7 @@ export const NAV: NavGroup[] = [
       { href: "/sales/merge", label: "Merge Records", perm: "sales.view.all", salesOnly: true },
       { href: "/sales/automation", label: "Automation", perm: "sales.configure" },
       { href: "/sales/cases/settings", label: "Case Settings", perm: "sales.configure" },
+      { href: "/sales/teams", label: "Teams", perm: "sales.configure", salesOnly: true },
       { href: "/sales/privacy", label: "Privacy", perm: "sales.privacy.manage" },
       { href: "/sales/settings", label: "Sales Settings", perm: "sales.configure" },
     ],

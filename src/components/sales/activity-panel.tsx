@@ -3,7 +3,9 @@ import { can, ROLE_PERMISSIONS, type Role } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { fmtDate } from "@/lib/dates";
 import { cancelTaskAction, completeTaskAction } from "@/app/actions/sales-activities";
+import { isSalesManagerRole } from "@/lib/sales/roles";
 import { timeline, tasksFor } from "@/server/services/sales/activities";
+import { scopeOf } from "@/server/services/sales/access";
 import { unsubscribeUrl } from "@/server/services/sales/privacy";
 import { ActionButton } from "@/components/action-button";
 import { Section } from "@/components/page";
@@ -38,7 +40,8 @@ export async function ActivityPanel({ ctx, target }: { ctx: Ctx; target: LogTarg
     }
   }
   const salesRoles = (Object.keys(ROLE_PERMISSIONS) as Role[]).filter((r) => can(r, "sales.manage"));
-  const people = can(ctx.role, "sales.view.all") && manage ? await db.user.findMany({ where: { organizationId: ctx.orgId, active: true, role: { in: salesRoles as never } }, orderBy: { name: "asc" }, select: { id: true, name: true } }) : [];
+  const scope = scopeOf(ctx);
+  const people = isSalesManagerRole(ctx.role) && manage ? await db.user.findMany({ where: { organizationId: ctx.orgId, active: true, role: { in: salesRoles as never }, ...(scope === "all" ? {} : { id: { in: scope } }) }, orderBy: { name: "asc" }, select: { id: true, name: true } }) : [];
 
   return (
     <>

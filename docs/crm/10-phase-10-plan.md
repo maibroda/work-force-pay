@@ -1,6 +1,6 @@
 # CRM Phase 10 plan: Sales Manager, Account Manager and teams
 
-**Status: a plan only, waiting for the founder's "go" and answers to section 6. Nothing has been built, no migration written.** Written 2026-11-02, after the founder's answer "add both roles and a team" to the Phase 9 plan's role question. It changes who can see and change sales records everywhere, adds a database enum value and two tables, and touches access control, so under `CLAUDE.md` it needs your "go", tests first, and an explain-back note.
+**Status: BUILT on branch `feature/crm-phase-10` (2026-11-02) after the founder's answers: three new roles, teams set up by the administrator only, reps see only their own records, an account manager is a rep who works the accounts they own, and agreement that the new role values cannot be undone by `down.sql`. Deviations from this plan are listed at the end.** Written 2026-11-02, after the founder's answer "add both roles and a team" to the Phase 9 plan's role question. It changes who can see and change sales records everywhere, adds a database enum value and two tables, and touches access control, so under `CLAUDE.md` it needs your "go", tests first, and an explain-back note.
 
 ## 1. What I understood you want
 
@@ -60,3 +60,12 @@ Change payroll or statutory settings, the bureau's own pipeline, the privacy pow
 7. **Order against the module work.** You asked for the CRM first. This is the next CRM phase; the pending review findings F-03 to F-05 change permissions too and are best decided before it.
 
 When you answer 1 to 6 and say "go", I start with step 1, the tests.
+
+## What was built, and where it differs from the plan above
+
+- **Visibility is not a new asynchronous function at 57 call sites.** The shared `ownerFilter` stays synchronous (so no call site changed); `requireSales`, which every service function already calls first, now works out whose records the person may see (a sales manager's own and their open teams' members) and remembers it for that call. Until it has been worked out the narrowest answer, only themselves, is used, so a missed call can only show too little, never too much. The sites that decided "own or everything" by hand were changed to use it: tasks, voiding an activity, the duplicate check, the import's duplicate check, the activity report and the owner choices.
+- **A sales manager's reach** is themselves and the members of the open teams they manage; changes to a team are felt at the next call. A team manager must hold the Sales Manager role.
+- **A sales manager may be named a quote approver** (a role that manages teams counts as a sales manager) and approves quotes within their reach. **Merging records stays with the administrator** (it needs to see everything). **Escalations** (a case breach, a rule that tells "the sales managers") still go to the roles that see everything, not to team managers.
+- **Not done:** the round-robin pool is not limited to a team (it already includes the new roles); an account has no separate account-manager owner (you chose the simple definition).
+- **Sign-in** takes the three new roles to My Tasks. **Teams page** (Sales > Teams, administrator only). The bureau's `BUSINESS_DEV` role is unchanged and still bureau-only.
+- **Migration** `20261114090000_sales_teams_roles`: three role values and two tables. `down.sql` drops the tables and **refuses while any user holds a new role**; the three unused values stay (tested).

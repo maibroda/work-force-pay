@@ -1,5 +1,6 @@
 import { requirePage } from "@/lib/auth/session";
 import { can, ROLE_PERMISSIONS, type Role } from "@/lib/auth/permissions";
+import { isSalesManagerRole } from "@/lib/sales/roles";
 import { db } from "@/lib/db";
 import { getAssignment } from "@/server/services/sales/assignment";
 import { listAcceptors } from "@/server/services/sales/handover";
@@ -23,7 +24,7 @@ export default async function SalesSettingsPage() {
   const assignment = await getAssignment(ctx);
   const minimum = s.enabled ? await getMinimumMargin(ctx) : null;
   const approvers = s.enabled ? await listApprovers(ctx) : [];
-  const managerRoles = (Object.keys(ROLE_PERMISSIONS) as Role[]).filter((r) => can(r, "sales.manage") && can(r, "sales.view.all"));
+  const managerRoles = (Object.keys(ROLE_PERMISSIONS) as Role[]).filter((r) => isSalesManagerRole(r));
   const managers = s.enabled ? await db.user.findMany({ where: { organizationId: ctx.orgId, active: true, role: { in: managerRoles as never } }, orderBy: { name: "asc" }, select: { id: true, name: true } }) : [];
   const acceptors = s.enabled ? await listAcceptors(ctx) : [];
   const acceptRoles = (Object.keys(ROLE_PERMISSIONS) as Role[]).filter((r) => can(r, "sales.handover.accept"));

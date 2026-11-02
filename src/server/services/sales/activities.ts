@@ -14,7 +14,7 @@ import { emailSendLimiter } from "@/lib/rate-limit";
 import { filterTimeline, groupTasks, mergeTimeline, surveySchema, watDayStart, type TimelineItem, type TimelineType } from "@/lib/sales/activity";
 import { BusinessError, db, type Tx } from "../_base";
 import { logAudit } from "../audit";
-import { ownerFilter, requireSales, resolveOwner, seesAll } from "./access";
+import { isManager, ownerFilter, requireSales, resolveOwner, seesAll } from "./access";
 import { canSendMarketing } from "./consent";
 import { DEFAULT_ROTTING_DAYS } from "./deals";
 import { marketingFooter, unsubscribeApiUrl, unsubscribeUrl, WHATSAPP_NEEDS_LINK } from "./privacy";
@@ -176,7 +176,7 @@ export async function voidActivity(ctx: Ctx, id: string, reason: string) {
   });
   if (!a) throw new BusinessError("Activity not found.");
   if (a.voidedAt) throw new BusinessError("This activity is already voided.");
-  if (a.createdByUserId !== ctx.userId && !seesAll(ctx)) throw new BusinessError("Only the person who logged it, or a sales manager, can void an activity.");
+  if (a.createdByUserId !== ctx.userId && !isManager(ctx)) throw new BusinessError("Only the person who logged it, or a sales manager, can void an activity.");
   await db.crmActivity.update({ where: { id }, data: { voidedAt: new Date(), voidedBy: ctx.name, voidReason: reason.trim() } });
   await logAudit(ctx, { action: "SALES_ACTIVITY_VOID", entity: "CrmActivity", entityId: id, newValue: { kind: a.kind } });
 }
@@ -275,7 +275,7 @@ export const taskSchema = z.object({
 });
 
 async function loadTask(ctx: Ctx, tx: Tx | typeof db, id: string) {
-  const t = await tx.crmTask.findFirst({ where: { id, organizationId: ctx.orgId, ...(seesAll(ctx) ? {} : { ownerUserId: ctx.userId }) } });
+  const t = await tx.crmTask.findFirst({ where: { id, organizationId: ctx.orgId, ...ownerFilter(ctx) } });
   if (!t) throw new BusinessError("Task not found.");
   return t;
 }
@@ -335,8 +335,8 @@ const taskInclude = { lead: { select: { id: true, companyName: true } }, account
 /** The open tasks, grouped overdue, today, this week and later (Lagos time). A manager may ask for everyone's. */
 export async function myTasks(ctx: Ctx, opts: { scope?: "mine" | "all"; now?: Date } = {}) {
   await requireSales(ctx, "sales.view");
-  if (opts.scope === "all" && !seesAll(ctx)) throw new BusinessError("Only a sales manager can see everyone's tasks.");
-  const rows = await db.crmTask.findMany({ where: { organizationId: ctx.orgId, status: "OPEN", ...(opts.scope === "all" ? {} : { ownerUserId: ctx.userId }) }, include: taskInclude, take: 1000 });
+  if (opts.scope === "all" && !isManager(ctx)) throw new BusinessError("Only a sales manager can see everyone's tasks.");
+  const rows = await db.crmTask.findMany({ where: { organizationId: ctx.orgId, status: "OPEN", ...(opts.scope === "all" ? ownerFilter(ctx) : { ownerUserId: ctx.userId }) }, include: taskInclude, take: 1000 });
   return groupTasks(rows, opts.now ?? new Date());
 }
 
@@ -345,7 +345,7 @@ export async function tasksFor(ctx: Ctx, t: Target) {
   await requireSales(ctx, "sales.view");
   const r = await resolveTarget(ctx, db, t, { readOnly: true });
   const key = t.opportunityId ? { opportunityId: r.opportunityId } : t.contactId ? { contactId: r.contactId } : t.leadId ? { leadId: r.leadId } : { accountId: r.accountId };
-  return db.crmTask.findMany({ where: { organizationId: ctx.orgId, status: "OPEN", ...(seesAll(ctx) ? {} : { ownerUserId: ctx.userId }), ...key }, include: taskInclude, orderBy: { dueAt: "asc" } });
+  return db.crmTask.findMany({ where: { organizationId: ctx.orgId, status: "OPEN", ...ownerFilter(ctx), ...key }, include: taskInclude, orderBy: { dueAt: "asc" } });
 }
 
 // ─────────────────────────────── the daily digest ───────────────────────────────

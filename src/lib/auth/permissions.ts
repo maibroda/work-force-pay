@@ -10,7 +10,10 @@ export type Role =
   | "EMPLOYEE"
   | "CLIENT_APPROVER"
   | "CLIENT_HR"
-  | "BUSINESS_DEV";
+  | "BUSINESS_DEV"
+  | "SALES_REP"
+  | "SALES_MANAGER"
+  | "ACCOUNT_MANAGER";
 
 export const PERMISSIONS = [
   "dashboard.view",
@@ -256,6 +259,11 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise"],
   // the bureau's sales person sees the CRM and nothing else: no payroll, employee, client or finance data
   BUSINESS_DEV: ["crm.view", "crm.manage", "sales.view", "sales.manage", "sales.case.manage", "healthcheck.view", "self.security"],
+  // a company's own sales people see the sales module and nothing else: no bureau pipeline, payroll, employee, client or finance data. They differ only in WHICH records they see:
+  // a rep and an account manager their own; a sales manager their own and those of the people in the teams they manage (src/server/services/sales/access.ts)
+  SALES_REP: ["sales.view", "sales.manage", "sales.case.manage", "self.security"],
+  SALES_MANAGER: ["sales.view", "sales.manage", "sales.case.manage", "self.security"],
+  ACCOUNT_MANAGER: ["sales.view", "sales.manage", "sales.case.manage", "self.security"],
   // clients' own people see only their portal
   CLIENT_APPROVER: ["portal.view", "portal.approve", "portal.query", "portal.download", "self.security"],
   CLIENT_HR: ["portal.view", "portal.query", "portal.download", "portal.changes", "portal.inputs", "self.security"],
