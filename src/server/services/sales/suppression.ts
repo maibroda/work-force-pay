@@ -48,10 +48,14 @@ export async function addSuppression(tx: Tx | typeof db, orgId: string, ids: Ide
   await tx.crmSuppression.createMany({ data: hashes(orgId, ids).map((h) => ({ organizationId: orgId, ...h, reason, source })), skipDuplicates: true });
 }
 
-/** Takes the addresses off the list, except those put there because the person was erased. */
-export async function liftSuppression(tx: Tx | typeof db, orgId: string, ids: Identifier[]) {
+/**
+ * Takes the addresses off the list. An erased person is never lifted; a person who used the unsubscribe link is lifted only when `includeUnsubscribed` says so (the caller
+ * decides who may do that); a withdrawal that someone recorded for the person is lifted by a fresh consent.
+ */
+export async function liftSuppression(tx: Tx | typeof db, orgId: string, ids: Identifier[], opts: { includeUnsubscribed?: boolean } = {}) {
   if (!ids.length) return;
-  await tx.crmSuppression.deleteMany({ where: { organizationId: orgId, reason: { not: "ERASED" }, OR: hashes(orgId, ids).map((h) => ({ kind: h.kind, valueHash: h.valueHash })) } });
+  const keep = opts.includeUnsubscribed ? ["ERASED"] : ["ERASED", "UNSUBSCRIBED"];
+  await tx.crmSuppression.deleteMany({ where: { organizationId: orgId, reason: { notIn: keep }, OR: hashes(orgId, ids).map((h) => ({ kind: h.kind, valueHash: h.valueHash })) } });
 }
 
 export async function isSuppressed(orgId: string, ids: Identifier[], tx: Tx | typeof db = db): Promise<boolean> {

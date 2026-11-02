@@ -5008,6 +5008,7 @@ A request about the personal data held on a contact or lead: a copy (ACCESS), er
 | identityVerified | Boolean |  |  |
 | identityNote | String |  |  |
 | verifiedBy | String |  |  |
+| verifiedByUserId | String |  | Who recorded the identity check (by id, so the person who erases can be told apart from them). |
 | exportedAt | DateTime |  |  |
 | exportChecksum | String |  | SHA-256 of the file generated, and how many records each section held. |
 | exportSections | Json |  |  |

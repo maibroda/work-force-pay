@@ -32,7 +32,7 @@ export async function recordConsentAction(v: V) {
   return act(
     "sales.manage",
     async (ctx) => {
-      await recordConsent(ctx, {
+      const r = await recordConsent(ctx, {
         contactId: v.contactId ? String(v.contactId) : undefined,
         leadId: v.leadId ? String(v.leadId) : undefined,
         purpose: v.purpose === "SERVICE" ? "SERVICE" : "MARKETING",
@@ -41,7 +41,11 @@ export async function recordConsentAction(v: V) {
         source: String(v.source ?? ""),
         evidenceRef: v.evidenceRef ? String(v.evidenceRef) : undefined,
       });
-      return { message: "Consent recorded." };
+      return {
+        message: r.stillSuppressed
+          ? "Consent recorded, but this person is still on the do-not-market list (they used an unsubscribe link, were erased, or their number or address is on it). No marketing can be sent until the administrator lifts it with evidence."
+          : "Consent recorded.",
+      };
     },
     ["/sales/contacts"],
   );
