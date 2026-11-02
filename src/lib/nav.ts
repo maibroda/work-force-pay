@@ -10,6 +10,8 @@ export interface NavItem {
   bureauOnly?: boolean;
   /** Shown only to a client's own people (the portal roles). */
   clientOnly?: boolean;
+  /** Shown only while the organization has switched the sales module on. */
+  salesOnly?: boolean;
 }
 export interface NavGroup {
   title: string;
@@ -18,6 +20,15 @@ export interface NavGroup {
 
 export const NAV: NavGroup[] = [
   { title: "Dashboard", items: [{ href: "/", label: "Dashboard", perm: "dashboard.view" }] },
+  {
+    title: "Sales",
+    items: [
+      { href: "/sales/leads", label: "Leads", perm: "sales.view", salesOnly: true },
+      { href: "/sales/accounts", label: "Accounts", perm: "sales.view", salesOnly: true },
+      { href: "/sales/contacts", label: "Contacts", perm: "sales.view", salesOnly: true },
+      { href: "/sales/settings", label: "Sales Settings", perm: "sales.configure" },
+    ],
+  },
   {
     title: "Your payroll",
     items: [

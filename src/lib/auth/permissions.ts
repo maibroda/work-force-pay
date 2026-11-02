@@ -91,6 +91,10 @@ export const PERMISSIONS = [
   "portal.inputs", // send the month's overtime, allowances, bonuses and deductions as a file, and follow what happened to it (the client's HR contact)
   "query.respond", // answer clients' queries and close them (bureau staff)
   "crm.view", // the bureau's sales pipeline, outreach log and referral partners (never payroll data)
+  "sales.view", // the company's own sales module: accounts, contacts and leads (own records; with sales.view.all, everyone's)
+  "sales.view.all", // see every sales record in the organization, not only your own, and reassign an owner
+  "sales.manage", // add, change and void accounts, contacts and leads, and record consent
+  "sales.configure", // switch the sales module on or off and choose how enquiries are handled
   "crm.manage", // add and move leads, log outreach, keep referral partners, record commission paid, and make and send proposals
   "healthcheck.view", // read the health checks of prospects' payroll processes and download their one-page summaries (never payroll data)
   "healthcheck.manage", // carry out a health check: assess the controls, record findings, send it for review, review and issue it (never your own)
@@ -158,6 +162,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "query.respond",
   ],
   OPERATIONS: [
+    "sales.view",
+    "sales.view.all", // read-only: they see the sales records but change nothing
     "dashboard.view",
     "employee.view",
     "client.view",
@@ -205,6 +211,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "query.respond",
   ],
   FINANCE: [
+    "sales.view",
+    "sales.view.all", // read-only: they see the sales records but change nothing
     ...READ_ALL,
     "healthcheck.view",
     "healthcheck.manage",
@@ -242,7 +250,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
   EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise"],
   // the bureau's sales person sees the CRM and nothing else: no payroll, employee, client or finance data
-  BUSINESS_DEV: ["crm.view", "crm.manage", "healthcheck.view", "self.security"],
+  BUSINESS_DEV: ["crm.view", "crm.manage", "sales.view", "sales.manage", "healthcheck.view", "self.security"],
   // clients' own people see only their portal
   CLIENT_APPROVER: ["portal.view", "portal.approve", "portal.query", "portal.download", "self.security"],
   CLIENT_HR: ["portal.view", "portal.query", "portal.download", "portal.changes", "portal.inputs", "self.security"],
