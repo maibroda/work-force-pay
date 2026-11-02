@@ -51,3 +51,25 @@ export async function importCodeSetAction(v: V) {
     ["/payments/paying-banks", "/payments/bank-file"],
   );
 }
+
+export async function assignPayingBankAction(v: V) {
+  return act(
+    "payment.manage",
+    async (ctx) => {
+      const r = await pb.assignPayingBank(ctx, { payingBankId: v.payingBankId ? String(v.payingBankId) : null, employeeNumbers: String(v.employeeNumbers ?? ""), categoryId: v.categoryId ? String(v.categoryId) : undefined });
+      return { message: `${r.assigned} ${r.assigned === 1 ? "person" : "people"} assigned. It applies to the next payment batches.${r.notFound.length ? ` Not found: ${r.notFound.join(", ")}.` : ""}` };
+    },
+    ["/payments/paying-banks", "/payments/bank-file"],
+  );
+}
+
+export async function confirmBlockedEntryAction(v: V) {
+  return act(
+    "payment.manage",
+    async (ctx) => {
+      const set = await pb.confirmBlockedEntry(ctx, String(v.payingBankId), String(v.entryId), { code: String(v.code ?? ""), note: String(v.note ?? "") });
+      return { message: `Code applied. Saved as version ${set.version}.` };
+    },
+    ["/payments/paying-banks", "/payments/bank-file"],
+  );
+}

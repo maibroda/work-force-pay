@@ -10,7 +10,8 @@ import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { DEFAULT_BANKS, normalizeBankName, resolveBank, type BankEntry } from "@/lib/bank-codes";
 import { num } from "@/lib/money";
-import { GENERIC_LAYOUT, layoutCells, type FileRowLike, type PayingLayout } from "@/lib/paying-bank";
+import { totalOf } from "@/lib/payroll/pay-inputs";
+import { GENERIC_LAYOUT, layoutCells, narrationFor, type FileRowLike, type PayingLayout } from "@/lib/paying-bank";
 import { buildPaymentRows, type PaymentLine } from "@/lib/payment-file";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
@@ -82,8 +83,23 @@ export async function paymentFilePreview(ctx: Ctx, runId: string, opts: { paying
   assertCan(ctx, "payment.manage");
   const run = await loadRun(ctx, runId);
   if (!["LOCKED", "PAID"].includes(run.status)) throw new BusinessError("A bank payment file is made from a locked payroll.");
-  const txns = await db.paymentTransaction.findMany({ where: { batch: { runId }, organizationId: ctx.orgId }, include: { employee: { select: { employeeNumber: true, firstName: true, middleName: true, lastName: true } } }, orderBy: { employee: { employeeNumber: "asc" } } });
-  if (!txns.length) throw new BusinessError("Create the payment batches for this payroll first.");
+  const allTxns = await db.paymentTransaction.findMany({ where: { batch: { runId }, organizationId: ctx.orgId }, include: { employee: { select: { employeeNumber: true, firstName: true, middleName: true, lastName: true } } }, orderBy: { employee: { employeeNumber: "asc" } } });
+  if (!allTxns.length) throw new BusinessError("Create the payment batches for this payroll first.");
+  // one payroll may be paid from several banks: each payment says which (fixed when the batches were made); an older one with none follows the default bank
+  const payingNames = new Map((await db.payingBank.findMany({ where: { organizationId: ctx.orgId }, select: { id: true, name: true, isDefault: true } })).map((b) => [b.id, b]));
+  const defaultId = [...payingNames.values()].find((b) => b.isDefault)?.id ?? null;
+  const bankOf = (t: { payingBankId: string | null }) => t.payingBankId ?? defaultId;
+  const groups = new Map<string | null, { count: number; amounts: number[] }>();
+  for (const t of allTxns) {
+    const g = groups.get(bankOf(t)) ?? { count: 0, amounts: [] };
+    g.count += 1;
+    g.amounts.push(num(t.amount));
+    groups.set(bankOf(t), g);
+  }
+  const split = [...groups.entries()]
+    .map(([id, g]) => ({ payingBankId: id, name: id ? payingNames.get(id)?.name ?? "Unknown bank" : "No paying bank chosen", count: g.count, total: totalOf(g.amounts) }))
+    .sort((a, b) => (a.payingBankId === null ? 1 : b.payingBankId === null ? -1 : a.name.localeCompare(b.name)));
+  const txns = opts.payingBankId ? allTxns.filter((t) => bankOf(t) === opts.payingBankId) : allTxns;
   const lines: PaymentLine[] = txns.map((t) => ({
     transactionId: t.id,
     employeeNumber: t.employee.employeeNumber,
@@ -95,17 +111,17 @@ export async function paymentFilePreview(ctx: Ctx, runId: string, opts: { paying
   }));
   const using = opts.payingBankId ? await payingBankForFile(ctx, opts.payingBankId) : null;
   const banks = using ? [] : (await bankList(db, ctx.orgId)).filter((b) => b.active);
-  // the narration on every row names the month the payment is for, in capitals
-  const description = `PAYMENT FOR ${run.period.name.toUpperCase()}${run.type === "SUPPLEMENTARY" ? " (ADJUSTMENT)" : ""}`;
+  // the narration on every row names the month the payment is for, in capitals, shortened to fit the bank's limit if it has one
+  const narration = narrationFor(run.period.name, run.type === "SUPPLEMENTARY", using?.layout?.narrationMax ?? null);
+  const description = "text" in narration ? narration.text : (narrationFor(run.period.name, run.type === "SUPPLEMENTARY", null) as { text: string }).text; // no limit always gives the full text
   const built = buildPaymentRows(lines, banks as BankEntry[], description, using?.lookup);
   const alreadyPaid = run.status === "PAID" || (await db.paymentBatch.count({ where: { runId, status: "PAID" } })) > 0;
   const blockers = [...(using?.blockers ?? [])];
   const layout = using?.layout ?? null;
-  if (layout?.narrationMax && description.length > layout.narrationMax)
-    blockers.push(`The narration "${description}" is ${description.length} characters; ${using!.bank.name} accepts at most ${layout.narrationMax} characters.`);
+  if ("problem" in narration) blockers.push(`${using!.bank.name}: ${narration.problem}`);
   if (layout?.maxRows && built.rows.length > layout.maxRows)
     blockers.push(`${using!.bank.name} accepts at most ${layout.maxRows} row${layout.maxRows === 1 ? "" : "s"} in one file; this one has ${built.rows.length}.`);
-  return { run, description, ...built, payable: txns.length, alreadyPaid, payingBank: using && { id: using.bank.id, name: using.bank.name, codeSetVersion: using.codeSetVersion, layout, debitAccountNumber: using.bank.debitAccountNumber }, blockers };
+  return { run, description, ...built, payable: txns.length, split, unplaced: groups.get(null)?.count ?? 0, alreadyPaid, payingBank: using && { id: using.bank.id, name: using.bank.name, codeSetVersion: using.codeSetVersion, layout, debitAccountNumber: using.bank.debitAccountNumber }, blockers };
 }
 
 type FileResult = { buffer: Buffer; contentType: string; extension: "xlsx" | "csv" };

@@ -136,17 +136,46 @@ export async function savePayingBank(ctx: Ctx, input: SavePayingBankInput) {
   return { ...saved, layout: asLayout(saved.layout) };
 }
 
+export interface AssignPayingBankInput {
+  /** The bank to pay from, or null to go back to the default. */
+  payingBankId: string | null;
+  /** Employee numbers, separated by commas, spaces or new lines. */
+  employeeNumbers?: string;
+  /** Everyone in this category. */
+  categoryId?: string;
+}
+
+/** Says which paying bank people are paid from (by employee number and/or category). Takes effect on the NEXT payment batches; batches already made keep theirs. */
+export async function assignPayingBank(ctx: Ctx, input: AssignPayingBankInput) {
+  assertCan(ctx, "payment.manage");
+  const numbers = [...new Set((input.employeeNumbers ?? "").split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean))];
+  if (!numbers.length && !input.categoryId) throw new BusinessError("Say who: give employee numbers, a category, or both.");
+  const bank = input.payingBankId ? await findBank(db, ctx, input.payingBankId) : null;
+  const people = await db.employee.findMany({
+    where: { organizationId: ctx.orgId, OR: [...(numbers.length ? [{ employeeNumber: { in: numbers } }] : []), ...(input.categoryId ? [{ categoryId: input.categoryId }] : [])] },
+    select: { id: true, employeeNumber: true },
+  });
+  const found = new Set(people.map((p) => p.employeeNumber));
+  const notFound = numbers.filter((n) => !found.has(n));
+  if (people.length)
+    await db.$transaction(async (tx) => {
+      await tx.employee.updateMany({ where: { id: { in: people.map((p) => p.id) }, organizationId: ctx.orgId }, data: { payingBankId: bank?.id ?? null } });
+      await logAudit(ctx, { action: "PAYING_BANK_ASSIGN", entity: "PayingBank", entityId: bank?.id ?? "DEFAULT", newValue: { bank: bank?.name ?? "the default bank", people: people.length, byCategory: !!input.categoryId, notFound: notFound.length } }, tx);
+    });
+  return { assigned: people.length, notFound };
+}
+
 export async function listPayingBanks(ctx: Ctx) {
   assertCan(ctx, "payment.manage");
   const banks = await db.payingBank.findMany({
     where: { organizationId: ctx.orgId },
     orderBy: { name: "asc" },
-    include: { codeSets: { orderBy: { version: "desc" }, take: 1 } },
+    include: { codeSets: { orderBy: { version: "desc" }, take: 1 }, _count: { select: { employees: true } } },
   });
-  return banks.map(({ codeSets, ...b }) => {
+  return banks.map(({ codeSets, _count, ...b }) => {
     const layout = asLayout(b.layout);
     const latest = codeSets[0] ?? null;
-    return { ...b, layout, hasLayout: !!layout && validateLayout(layout).length === 0, latest: latest && { version: latest.version, entryCount: latest.entryCount, blockedCount: latest.blockedCount, sourceName: latest.sourceName, sourceSha256: latest.sourceSha256, importedAt: latest.importedAt } };
+    return { ...b, people: _count.employees, layout, hasLayout: !!layout && validateLayout(layout).length === 0, latest: latest && { version: latest.version, entryCount: latest.entryCount, blockedCount: latest.blockedCount, sourceName: latest.sourceName, sourceSha256: latest.sourceSha256, importedAt: latest.importedAt } };
   });
 }
 
@@ -163,6 +192,41 @@ export async function importCodeSet(ctx: Ctx, payingBankId: string, text: string
   assertCan(ctx, "payment.manage");
   const bank = await findBank(db, ctx, payingBankId);
   return db.$transaction((tx) => writeCodeSet(tx, ctx, bank, text, sourceName.trim() || "pasted list"));
+}
+
+/**
+ * Applies a bank's confirmed code to ONE blocked entry of its newest list (a shared code, a bank listed under two codes, a short code). The code is never guessed: a person
+ * enters what the bank confirmed and says who confirmed it and how. It is saved as the next version (the list the bank sent stays as it was), and audited.
+ */
+export async function confirmBlockedEntry(ctx: Ctx, payingBankId: string, entryId: string, input: { code: string; note: string }) {
+  assertCan(ctx, "payment.manage");
+  const bank = await findBank(db, ctx, payingBankId);
+  const code = input.code.trim();
+  if (!/^[A-Za-z0-9]{3,6}$/.test(code)) throw new BusinessError("A bank code is 3 to 6 letters or digits.");
+  const note = input.note.trim();
+  if (note.length < 10) throw new BusinessError("Say who confirmed the code and how (for example the bank's name, the person and the date).");
+  const entry = await db.payingBankCode.findFirst({ where: { id: entryId, codeSet: { payingBankId: bank.id } }, include: { codeSet: true } });
+  if (!entry) throw new BusinessError("Bank entry not found.");
+  const latest = await db.bankCodeSet.findFirstOrThrow({ where: { payingBankId: bank.id }, orderBy: { version: "desc" } });
+  if (entry.codeSetId !== latest.id) throw new BusinessError("Only the newest list can be changed: this entry belongs to an older version.");
+  if (!entry.blocked) throw new BusinessError(`"${entry.name}" is not blocked, so there is nothing to confirm.`);
+  const all = await db.payingBankCode.findMany({ where: { codeSetId: latest.id } });
+  const clash = all.find((e) => e.id !== entry.id && !e.blocked && e.code === code && normalizeBankName(e.name) !== normalizeBankName(entry.name));
+  if (clash) throw new BusinessError(`The code ${code} is already used by "${clash.name}", so confirming it for "${entry.name}" would make it ambiguous.`);
+  return db.$transaction(async (tx) => {
+    const blockedCount = all.filter((e) => e.blocked && e.id !== entry.id).length;
+    const set = await tx.bankCodeSet.create({
+      data: {
+        organizationId: ctx.orgId, payingBankId: bank.id, version: latest.version + 1, sourceName: `${latest.sourceName} + confirmed ${entry.name} = ${code}`,
+        sourceSha256: createHash("sha256").update(`${latest.sourceSha256}|${entry.name}|${code}|${note}`).digest("hex"), entryCount: all.length, blockedCount, importedBy: ctx.name,
+      },
+    });
+    await tx.payingBankCode.createMany({
+      data: all.map((e) => (e.id === entry.id ? { codeSetId: set.id, name: e.name, code, aliases: e.aliases, blocked: false, blockedReason: null } : { codeSetId: set.id, name: e.name, code: e.code, aliases: e.aliases, blocked: e.blocked, blockedReason: e.blockedReason })),
+    });
+    await logAudit(ctx, { action: "BANK_CODE_CONFIRM", entity: "PayingBank", entityId: bank.id, oldValue: { name: entry.name, code: entry.code, blocked: true }, newValue: { bank: bank.name, name: entry.name, code, version: set.version }, reason: note }, tx);
+    return set;
+  });
 }
 
 export async function listCodeSetEntries(ctx: Ctx, payingBankId: string, version?: number) {

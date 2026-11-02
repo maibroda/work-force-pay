@@ -54,6 +54,33 @@ export default async function BankFilePage({ params, searchParams }: { params: P
           </Link>
         </div>
       </Section>
+      {p && p.split.length > 0 && (
+        <Section title="How this payroll is split between banks" description="Each person is paid from the bank fixed when the payment batches were made. Make one file per bank; together they pay everyone once. The general file above pays everyone in one list.">
+          <Table>
+            <THead>
+              <TR>
+                <TH>Paying bank</TH>
+                <TH className="text-right">People</TH>
+                <TH className="text-right">Total</TH>
+                <TH>Files made</TH>
+                <TH />
+              </TR>
+            </THead>
+            <TBody>
+              {p.split.map((s) => (
+                <TR key={s.payingBankId ?? "none"} className={s.payingBankId === null ? "bg-red-50/60" : ""}>
+                  <TD>{s.name}</TD>
+                  <TD className="text-right">{s.count}</TD>
+                  <TD className="text-right">{naira(s.total)}</TD>
+                  <TD className="text-xs">{s.payingBankId ? exports.filter((x) => x.payingBankId === s.payingBankId).length || "none yet" : "—"}</TD>
+                  <TD>{s.payingBankId && s.payingBankId !== bankId ? <Link className="text-xs underline" href={`?bank=${s.payingBankId}`}>Make this file</Link> : null}</TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+          {p.unplaced > 0 && <p className="mt-3 rounded bg-amber-50 px-3 py-2 text-sm text-amber-900">{p.unplaced} {p.unplaced === 1 ? "person has" : "people have"} no paying bank, so {p.unplaced === 1 ? "is" : "are"} in none of the bank files. Choose a default bank, or assign them, under Paying Banks (it applies from the next payment batches), or pay them separately.</p>}
+        </Section>
+      )}
       {!p && <p className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-900">{why}</p>}
       {p && (
         <>

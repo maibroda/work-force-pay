@@ -28,6 +28,9 @@ export async function createPaymentBatches(ctx: Ctx, runId: string) {
   const existing = await db.paymentBatch.count({ where: { runId } });
   if (existing) throw new BusinessError("Payment batches already exist for this payroll run.");
   const records = await db.payrollRecord.findMany({ where: { runId, netPay: { gt: 0 } } });
+  // who each person is paid from is fixed now: their own paying bank, or the organization's default (docs/plans/paying-bank-files.md)
+  const defaultBank = await db.payingBank.findFirst({ where: { organizationId: ctx.orgId, isDefault: true }, select: { id: true } });
+  const own = new Map((await db.employee.findMany({ where: { id: { in: records.map((r) => r.employeeId) }, organizationId: ctx.orgId }, select: { id: true, payingBankId: true } })).map((e) => [e.id, e.payingBankId]));
   const byBank = new Map<string, typeof records>();
   for (const r of records)
     byBank.set(r.bankName ?? "UNKNOWN BANK", [...(byBank.get(r.bankName ?? "UNKNOWN BANK") ?? []), r]);
@@ -53,6 +56,7 @@ export async function createPaymentBatches(ctx: Ctx, runId: string) {
               bankName: r.bankName,
               accountNumber: r.accountNumber,
               accountName: r.accountName,
+              payingBankId: own.get(r.employeeId) ?? defaultBank?.id ?? null,
             })),
           },
         },

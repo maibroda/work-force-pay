@@ -719,6 +719,8 @@ A bank a client pays salaries FROM. It has its own list of bank codes (a bank's 
 | createdAt | DateTime |  |  |
 | codeSets | → BankCodeSet[] |  |  |
 | exports | → PaymentFileExport[] |  |  |
+| employees | → Employee[] |  |  |
+| transactions | → PaymentTransaction[] |  |  |
 
 ### BankCodeSet
 
@@ -1122,6 +1124,8 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | importBatch | → EmployeeImportBatch |  |  |
 | clientInputRows | → ClientInputRow[] |  |  |
 | employeeNumber | String | yes |  |
+| payingBankId | String |  | The paying bank this person's salary is paid from. Empty = the organization's default paying bank. It is copied onto the payment when the payment batches are made. |
+| payingBank | → PayingBank |  |  |
 | firstName | String | yes |  |
 | middleName | String |  |  |
 | lastName | String | yes |  |
@@ -2507,6 +2511,8 @@ Employer add-on costs beyond employer pension, specific to guarding / outsourcin
 | bankName | String |  |  |
 | accountNumber | String |  |  |
 | accountName | String |  |  |
+| payingBankId | String |  | The paying bank this payment is made from, fixed when the batches are made. Empty = the default paying bank. |
+| payingBank | → PayingBank |  |  |
 | status | PaymentStatus |  |  |
 | bankReference | String |  |  |
 | reconciled | Boolean |  |  |
