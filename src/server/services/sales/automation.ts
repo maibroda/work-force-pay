@@ -129,9 +129,20 @@ export async function setRuleEnabled(ctx: Ctx, id: string, enabled: boolean) {
 
 // ─────────────────────────────── queuing: events and quiet deals ───────────────────────────────
 
+/** Is the sales module on for this company? Switching it off stops its automation: nothing is queued and nothing already waiting is carried out. */
+async function moduleOn(orgId: string): Promise<boolean> {
+  return !!(await db.crmSetting.findUnique({ where: { organizationId: orgId }, select: { enabled: true } }))?.enabled;
+}
+/** The companies (or the one asked for) whose sales module is on. */
+async function orgsWithModuleOn(orgId?: string): Promise<Set<string>> {
+  const rows = await db.crmSetting.findMany({ where: { enabled: true, ...(orgId ? { organizationId: orgId } : {}) }, select: { organizationId: true } });
+  return new Set(rows.map((r) => r.organizationId));
+}
+
 /** Queues the rules for an event (a quote or handover accepted) and carries them out. Never throws: a rule problem must not undo the event. */
 export async function fireEvent(orgId: string, event: "QUOTE_ACCEPTED" | "HANDOVER_ACCEPTED", opportunityId: string, entryKey: string, now = new Date()) {
   try {
+    if (!(await moduleOn(orgId))) return;
     const deal = await db.crmOpportunity.findFirst({ where: { id: opportunityId, organizationId: orgId }, select: { id: true, pipelineId: true } });
     if (!deal) return;
     const rules = await db.crmAutomationRule.findMany({ where: { organizationId: orgId, trigger: event, pipelineId: deal.pipelineId, enabled: true }, select: { id: true, delayMinutes: true } });
@@ -154,7 +165,8 @@ export async function kickAutomation(orgId: string, opportunityId: string) {
 
 /** Queues the no-activity rules for deals that have gone quiet: once for each quiet spell (it can fire again after the next activity). */
 export async function scanQuietDeals(now = new Date(), opts: { orgId?: string } = {}) {
-  const rules = await db.crmAutomationRule.findMany({ where: { trigger: "NO_ACTIVITY", enabled: true, ...(opts.orgId ? { organizationId: opts.orgId } : {}) } });
+  const on = await orgsWithModuleOn(opts.orgId);
+  const rules = (await db.crmAutomationRule.findMany({ where: { trigger: "NO_ACTIVITY", enabled: true, organizationId: { in: [...on] } } }));
   let queued = 0;
   for (const r of rules) {
     const deals = await db.crmOpportunity.findMany({
@@ -262,6 +274,7 @@ async function perform(rule: Rule, deal: Deal, now: Date): Promise<Outcome> {
 async function decide(run: { organizationId: string; opportunityId: string; entryKey: string }, rule: Rule, now: Date): Promise<Outcome & { inputs: Record<string, unknown> }> {
   const inputs: Record<string, unknown> = { rule: rule.name, trigger: rule.trigger, action: rule.actionType };
   if (!rule.enabled) return { status: "CANCELLED", note: "The rule was switched off before this was due.", inputs };
+  if (!(await moduleOn(run.organizationId))) return { status: "CANCELLED", note: "The sales module was switched off before this was due.", inputs };
   const deal = await loadDeal(run.organizationId, run.opportunityId);
   if (!deal || deal.status !== "ACTIVE") return { status: "CANCELLED", note: "The deal is no longer active.", inputs };
   inputs.stage = deal.stage.name;
