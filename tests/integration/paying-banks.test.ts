@@ -11,11 +11,11 @@ const d = (s: string) => new Date(`${s}T00:00:00Z`);
 type Staff = { bank: string | null; account: string | null; net: number };
 
 /** A locked October payroll with payment batches, for the (synthetic) people described. */
-async function world(staff: Staff[]) {
+async function world(staff: Staff[], periodName = "October 2026") {
   const t = await isolatedOrg();
   const hr = t.ctx("HR_ADMIN", null, 1);
   const fin = t.ctx("FINANCE", null, 1);
-  const period = await db.payrollPeriod.create({ data: { organizationId: t.org.id, name: "October 2026", year: 2026, month: 10, startDate: d("2026-10-01"), endDate: d("2026-10-31") } });
+  const period = await db.payrollPeriod.create({ data: { organizationId: t.org.id, name: periodName, year: 2026, month: 10, startDate: d("2026-10-01"), endDate: d("2026-10-31") } });
   const run = await db.payrollRun.create({ data: { organizationId: t.org.id, periodId: period.id, runNumber: 1, status: "LOCKED" } });
   for (let i = 0; i < staff.length; i++) {
     const s = staff[i];
@@ -153,6 +153,19 @@ describe("paying banks: the file", () => {
     expect(s.rows.find((x) => x[2] === "0123456789")).toEqual(["STAFF NUMBER1", "039", "0123456789", 100000.5, "PAYMENT FOR OCTOBER 2026"]);
     expect(f.fileName).toBe("access-bank-payment-October-2026.xlsx");
     expect(f.record).toMatchObject({ codeSetVersion: 1, layoutHeaders: "Beneficiary name|bank code|account number|amount|narration" });
+  });
+
+  it("fits the narration to the bank's 25 characters: October in full, September as SEP, the general file always in full", async () => {
+    const oct = await world(staff);
+    const bo = await createPayingBank(oct.fin, { name: "Access Bank", builtIn: "ACCESS_BANK" });
+    expect((await paymentFilePreview(oct.fin, oct.run.id, { payingBankId: bo.id })).description).toBe("PAYMENT FOR OCTOBER 2026");
+    const sep = await world(staff, "September 2026");
+    const bs = await createPayingBank(sep.fin, { name: "First Bank", builtIn: "FIRST_BANK", debitAccountNumber: "3000000001" });
+    const f = await exportPaymentFile(sep.fin, sep.run.id, { payingBankId: bs.id });
+    expect((await sheet(f.buffer)).rows[1][4]).toBe("PAYMENT FOR SEP 2026");
+    expect((await paymentFilePreview(sep.fin, sep.run.id)).description).toBe("PAYMENT FOR SEPTEMBER 2026");
+    // both banks' limits as given: 25 characters, 1,000 rows
+    expect((await listPayingBanks(sep.fin)).map((b) => [b.layout?.narrationMax, b.layout?.maxRows])).toEqual([[25, 1000]]);
   });
 
   it("keeps the version a past file used when a newer list arrives", async () => {
