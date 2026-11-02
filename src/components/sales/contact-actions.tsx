@@ -3,7 +3,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { logLinkUseAction, sendEmailAction } from "@/app/actions/sales-activities";
 import { defaultWhatsAppText, telLink, waLink } from "@/lib/sales/activity";
-import { whatsappFooter } from "@/lib/sales/privacy";
+import { whatsappFooter } from "@/lib/sales/whatsapp";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { toast } from "@/components/toaster";
