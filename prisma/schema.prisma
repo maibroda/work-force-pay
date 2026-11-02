@@ -6740,15 +6740,17 @@ model CrmDataRequest {
 
 /// A sales team: one manager (a sales manager) and its members. A team is closed, not deleted; closing it removes its members.
 model CrmTeam {
-  id             String          @id @default(cuid())
-  organizationId String
-  organization   Organization    @relation(fields: [organizationId], references: [id])
-  name           String
-  managerUserId  String
-  active         Boolean         @default(true)
-  createdBy      String
-  createdAt      DateTime        @default(now())
-  members        CrmTeamMember[]
+  id               String          @id @default(cuid())
+  organizationId   String
+  organization     Organization    @relation(fields: [organizationId], references: [id])
+  name             String
+  managerUserId    String
+  active           Boolean         @default(true)
+  /// Where this team's round robin has got to: each new lead a manager adds goes to the next member.
+  assignmentCursor Int             @default(0)
+  createdBy        String
+  createdAt        DateTime        @default(now())
+  members          CrmTeamMember[]
 
   @@unique([organizationId, name])
   @@index([organizationId, managerUserId, active])

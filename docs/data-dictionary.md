@@ -5033,6 +5033,7 @@ A sales team: one manager (a sales manager) and its members. A team is closed, n
 | name | String | yes |  |
 | managerUserId | String | yes |  |
 | active | Boolean |  |  |
+| assignmentCursor | Int |  | Where this team's round robin has got to: each new lead a manager adds goes to the next member. |
 | createdBy | String | yes |  |
 | createdAt | DateTime |  |  |
 | members | → CrmTeamMember[] |  |  |
