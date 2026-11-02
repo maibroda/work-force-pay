@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
+import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
 import { listCases } from "@/server/services/sales/cases";
 import { listAccounts } from "@/server/services/sales/records";
@@ -15,6 +16,8 @@ const when = (d: Date) => d.toLocaleString("en-NG", { timeZone: "Africa/Lagos", 
 
 export default async function CasesPage() {
   const ctx = await requirePage("sales.view");
+  const setting = await db.crmSetting.findUnique({ where: { organizationId: ctx.orgId }, select: { enabled: true } });
+  if (!setting?.enabled) return <PageHeader title="Cases" description="Switch the sales module on under Sales settings first." />;
   const manage = can(ctx.role, "sales.case.manage");
   const [cases, accounts] = await Promise.all([listCases(ctx), manage ? listAccounts(ctx) : Promise.resolve([])]);
   const open = cases.filter((c) => c.status === "OPEN");

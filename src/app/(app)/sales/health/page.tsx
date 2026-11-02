@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
+import { db } from "@/lib/db";
 import { listHealth } from "@/server/services/sales/health";
 import { PageHeader, Section } from "@/components/page";
 import { bandBadge } from "@/components/sales/health-panel";
@@ -8,6 +9,8 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 
 export default async function HealthListPage() {
   const ctx = await requirePage("sales.view");
+  const setting = await db.crmSetting.findUnique({ where: { organizationId: ctx.orgId }, select: { enabled: true } });
+  if (!setting?.enabled) return <PageHeader title="Account health" description="Switch the sales module on under Sales settings first." />;
   const rows = await listHealth(ctx);
   const risk = rows.filter((r) => r.band === "AT_RISK").length;
   return (
