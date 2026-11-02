@@ -1,8 +1,11 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { BusinessError } from "@/server/services/_base";
-import { listOpportunities } from "@/server/services/sales/pipelines";
+import { countOpportunities, listOpportunities } from "@/server/services/sales/pipelines";
+import { Pager } from "@/components/sales/pager";
+import { DEFAULT_PAGE_SIZE, pagingOf, windowOf } from "@/lib/sales/paging";
 import { listAccounts } from "@/server/services/sales/records";
 import { naira } from "@/lib/money";
 import { PageHeader, Section } from "@/components/page";
@@ -14,17 +17,22 @@ import { createOpportunityAction } from "@/app/actions/sales";
 const SERVICES = ["GUARDING", "CLEANING", "FACILITY", "STAFFING", "OTHER"];
 const label = (s: string) => s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, " ");
 
-export default async function SalesOpportunitiesPage() {
+export default async function SalesOpportunitiesPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const ctx = await requirePage("sales.view");
+  const sp = await searchParams;
+  const paging = pagingOf({ page: sp.page ?? "1", pageSize: DEFAULT_PAGE_SIZE });
   let deals: Awaited<ReturnType<typeof listOpportunities>> = [];
   let accounts: Awaited<ReturnType<typeof listAccounts>> = [];
+  let total = 0;
   let why = "";
   try {
-    [deals, accounts] = await Promise.all([listOpportunities(ctx), listAccounts(ctx)]);
+    [deals, accounts, total] = await Promise.all([listOpportunities(ctx, paging), listAccounts(ctx), countOpportunities(ctx)]);
   } catch (e) {
     if (!(e instanceof BusinessError)) throw e;
     why = e.message;
   }
+  // a page past the end (a stale bookmark, an edited address) goes to the last page rather than showing an empty table
+  if (!why && !deals.length && total > 0 && paging.page > 1) redirect(`/sales/opportunities?page=${windowOf(total, paging).page}`);
   return (
     <>
       <PageHeader title="Deals" description="Specific bids for a client's business. A deal starts in the first stage of the New business pipeline with that stage's probability. Move deals between stages on the board." />
@@ -39,7 +47,7 @@ export default async function SalesOpportunitiesPage() {
         </p>
       )}
       {!why && (
-        <Section title={`${deals.length} deal(s)`} flush>
+        <Section title={`${total} deal(s)`} flush>
           <Table>
             <THead>
               <TR>
@@ -72,6 +80,7 @@ export default async function SalesOpportunitiesPage() {
               ))}
             </TBody>
           </Table>
+          <Pager path="/sales/opportunities" total={total} page={paging.page} pageSize={paging.pageSize} />
           {!deals.length && <p className="px-4 py-4 text-sm text-muted-foreground">No deals yet. Converting a lead creates one, or add one on an account below.</p>}
         </Section>
       )}

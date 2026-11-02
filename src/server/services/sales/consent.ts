@@ -9,6 +9,7 @@ import type { Ctx } from "@/lib/auth/context";
 import { BusinessError, db } from "../_base";
 import { logAudit } from "../audit";
 import { ownerFilter, requireSales } from "./access";
+import { addSuppression, identifiersFor, isSuppressed, liftSuppression } from "./suppression";
 
 export const CHANNELS = ["EMAIL", "WHATSAPP", "SMS", "PHONE", "IN_PERSON", "WEB_FORM", "OTHER"] as const;
 
@@ -44,6 +45,12 @@ export async function recordConsent(ctx: Ctx, raw: z.input<typeof consentSchema>
   const row = await db.crmConsent.create({
     data: { organizationId: ctx.orgId, contactId: v.contactId ?? null, leadId: v.leadId ?? null, purpose: v.purpose, status: v.status, channel: v.channel, source: v.source, evidenceRef: v.evidenceRef ?? null, recordedBy: ctx.name, recordedByUserId: ctx.userId },
   });
+  if (v.purpose === "MARKETING") {
+    // a withdrawal also suppresses the person's addresses everywhere; a fresh consent lifts the suppression of their own
+    const ids = await identifiersFor(ctx.orgId, v);
+    if (v.status === "WITHDRAWN") await addSuppression(db, ctx.orgId, ids, "WITHDRAWN", v.channel);
+    else await liftSuppression(db, ctx.orgId, ids);
+  }
   await logAudit(ctx, { action: "SALES_CONSENT_RECORD", entity: "CrmConsent", entityId: row.id, newValue: { purpose: v.purpose, status: v.status, channel: v.channel } });
   return row;
 }
@@ -61,7 +68,11 @@ export async function consentStatus(ctx: Ctx, t: ConsentTarget & { purpose: "MAR
   return last?.status ?? "UNKNOWN";
 }
 
-/** The single yes/no every marketing send must ask first. */
+/**
+ * The single yes/no every marketing send must ask first: the latest marketing consent is "granted" AND none of the person's email addresses or phone numbers is on the suppression
+ * list (so a withdrawal on one record blocks the same address on every other record, and an erased person stays blocked).
+ */
 export async function canSendMarketing(ctx: Ctx, t: ConsentTarget): Promise<boolean> {
-  return (await consentStatus(ctx, { ...t, purpose: "MARKETING" })) === "GRANTED";
+  if ((await consentStatus(ctx, { ...t, purpose: "MARKETING" })) !== "GRANTED") return false;
+  return !(await isSuppressed(ctx.orgId, await identifiersFor(ctx.orgId, t)));
 }

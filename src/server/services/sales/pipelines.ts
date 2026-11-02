@@ -6,6 +6,7 @@
 import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { parseNairaAmount } from "@/lib/sales/money";
+import { pagingOf, type PagingInput } from "@/lib/sales/paging";
 import { BusinessError, db, type Tx } from "../_base";
 import { logAudit } from "../audit";
 import { scheduleStageEntry } from "./automation-schedule";
@@ -134,12 +135,21 @@ export async function createOpportunity(ctx: Ctx, raw: z.input<typeof opportunit
   });
 }
 
-export async function listOpportunities(ctx: Ctx, f: { accountId?: string } = {}) {
+const dealWhere = (ctx: Ctx, f: { accountId?: string }) => ({ organizationId: ctx.orgId, status: "ACTIVE" as const, ...ownerFilter(ctx), ...(f.accountId ? { accountId: f.accountId } : {}) });
+
+export async function listOpportunities(ctx: Ctx, f: { accountId?: string } & PagingInput = {}) {
   await requireSales(ctx, "sales.view");
+  const p = pagingOf(f);
   return db.crmOpportunity.findMany({
-    where: { organizationId: ctx.orgId, status: "ACTIVE", ...ownerFilter(ctx), ...(f.accountId ? { accountId: f.accountId } : {}) },
-    orderBy: { createdAt: "desc" },
+    where: dealWhere(ctx, f),
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     include: { stage: { select: { name: true, stageType: true } }, account: { select: { name: true } } },
-    take: 500,
+    skip: p.skip,
+    take: p.take,
   });
+}
+
+export async function countOpportunities(ctx: Ctx, f: { accountId?: string } = {}) {
+  await requireSales(ctx, "sales.view");
+  return db.crmOpportunity.count({ where: dealWhere(ctx, f) });
 }

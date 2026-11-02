@@ -134,6 +134,7 @@ export async function listHandovers(ctx: Ctx, f: { status?: "DRAFT" | "SUBMITTED
     where: { organizationId: ctx.orgId, opportunity: { ...ownerFilter(ctx) }, ...(f.status ? { status: f.status } : {}) },
     include: { opportunity: { select: { name: true, account: { select: { name: true } } } } },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: 500,
   });
 }
 

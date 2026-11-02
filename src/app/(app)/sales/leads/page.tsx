@@ -1,8 +1,11 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { BusinessError } from "@/server/services/_base";
-import { listLeads } from "@/server/services/sales/records";
+import { countLeads, listLeads } from "@/server/services/sales/records";
+import { Pager } from "@/components/sales/pager";
+import { DEFAULT_PAGE_SIZE, pagingOf, windowOf } from "@/lib/sales/paging";
 import { fmtDate } from "@/lib/dates";
 import { PageHeader, Section } from "@/components/page";
 import { SmartForm } from "@/components/smart-form";
@@ -14,16 +17,21 @@ const SOURCES = ["REFERRAL", "WALK_IN", "PHONE", "WEBSITE", "WHATSAPP", "TENDER"
 const SERVICES = ["GUARDING", "CLEANING", "FACILITY", "STAFFING", "OTHER"];
 const label = (s: string) => s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, " ");
 
-export default async function SalesLeadsPage() {
+export default async function SalesLeadsPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const ctx = await requirePage("sales.view");
+  const sp = await searchParams;
+  const paging = pagingOf({ page: sp.page ?? "1", pageSize: DEFAULT_PAGE_SIZE });
   let leads: Awaited<ReturnType<typeof listLeads>> = [];
+  let total = 0;
   let why = "";
   try {
-    leads = await listLeads(ctx);
+    [leads, total] = await Promise.all([listLeads(ctx, paging), countLeads(ctx)]);
   } catch (e) {
     if (!(e instanceof BusinessError)) throw e;
     why = e.message;
   }
+  // a page past the end (a stale bookmark, an edited address) goes to the last page rather than showing an empty table
+  if (!why && !leads.length && total > 0 && paging.page > 1) redirect(`/sales/leads?page=${windowOf(total, paging).page}`);
   const canManage = can(ctx.role, "sales.manage");
   return (
     <>
@@ -39,7 +47,7 @@ export default async function SalesLeadsPage() {
         </p>
       )}
       {!why && (
-        <Section title={`${leads.length} lead(s)`} flush>
+        <Section title={`${total} lead(s)`} flush>
           <Table>
             <THead>
               <TR>
@@ -74,6 +82,7 @@ export default async function SalesLeadsPage() {
               ))}
             </TBody>
           </Table>
+          <Pager path="/sales/leads" total={total} page={paging.page} pageSize={paging.pageSize} />
           {!leads.length && <p className="px-4 py-4 text-sm text-muted-foreground">No leads yet.</p>}
         </Section>
       )}

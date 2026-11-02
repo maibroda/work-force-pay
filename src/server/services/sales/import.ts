@@ -14,6 +14,7 @@ import { logAudit } from "../audit";
 import { nextNumber } from "../numbering";
 import { ownerFilter, requireSales, seesAll } from "./access";
 import { pickOwner } from "./assignment";
+import { addSuppression, identifiersFor } from "./suppression";
 
 export type RowDuplicates = { visible: string[]; hidden: number };
 export type ImportPreview = { check: ImportCheck; duplicates: Record<number, RowDuplicates> };
@@ -110,7 +111,9 @@ export async function commitImport(ctx: Ctx, kind: ImportKind, csv: string, opts
       const d = r.data!;
       const consent = d.consent as { status: "GRANTED" | "WITHDRAWN"; source: string } | undefined;
       const noteConsent = async (target: { contactId?: string; leadId?: string }) => {
-        if (consent) await tx.crmConsent.create({ data: { organizationId: ctx.orgId, ...target, purpose: "MARKETING", status: consent.status, channel: "OTHER", source: `Import: ${consent.source}`, recordedBy: ctx.name, recordedByUserId: ctx.userId } });
+        if (!consent) return;
+        await tx.crmConsent.create({ data: { organizationId: ctx.orgId, ...target, purpose: "MARKETING", status: consent.status, channel: "OTHER", source: `Import: ${consent.source}`, recordedBy: ctx.name, recordedByUserId: ctx.userId } });
+        if (consent.status === "WITHDRAWN") await addSuppression(tx, ctx.orgId, await identifiersFor(ctx.orgId, target, tx), "WITHDRAWN", "import");
       };
       if (kind === "LEADS") {
         const picked = seesAll(ctx) ? await pickOwner(ctx, tx, { state: d.state as string | undefined, serviceInterest: (d.serviceInterest as string | undefined) ?? "OTHER" }) : null;

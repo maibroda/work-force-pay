@@ -244,7 +244,12 @@ describe("the actions", () => {
     await processDueRuns(new Date(), { orgId: w.t.org.id });
     expect((await runs(w)).at(-1)!.status).toBe("DONE");
     expect(mail).toHaveBeenCalledTimes(1);
-    expect(mail.mock.calls[0][0]).toMatchObject({ to: "funmi@lekki.test", subject: "Our patrol service", text: "Hello Funmi, about Lekki Gardens Estate" });
+    const sent = mail.mock.calls[0][0];
+    expect(sent).toMatchObject({ to: "funmi@lekki.test", subject: "Our patrol service" });
+    // the message, then the contact's own unsubscribe link (Phase 9a)
+    expect(sent.text.startsWith("Hello Funmi, about Lekki Gardens Estate")).toBe(true);
+    expect(sent.text).toContain("/unsubscribe/");
+    expect(sent.headers?.["List-Unsubscribe"]).toContain("/api/unsubscribe/");
     const act = await db.crmActivity.findFirstOrThrow({ where: { organizationId: w.t.org.id } });
     expect(act).toMatchObject({ kind: "EMAIL", purpose: "MARKETING", createdBy: "Automation: Marketing mail" });
     await recordConsent(w.repA, { contactId: w.contact.id, purpose: "MARKETING", status: "WITHDRAWN", channel: "EMAIL", source: "Replied STOP" });

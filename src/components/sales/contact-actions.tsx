@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { logLinkUseAction, sendEmailAction } from "@/app/actions/sales-activities";
 import { defaultWhatsAppText, telLink, waLink } from "@/lib/sales/activity";
+import { whatsappFooter } from "@/lib/sales/privacy";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { toast } from "@/components/toaster";
@@ -16,6 +17,8 @@ export interface PersonLinks {
   whatsapp: string | null;
   email: string | null;
   sender: string;
+  /** This person's own unsubscribe page address; a marketing WhatsApp ends with it. Empty when the app cannot make one. */
+  unsubscribeUrl: string | null;
 }
 
 const sel = "h-9 w-full rounded-md border bg-background px-2 text-sm";
@@ -32,7 +35,9 @@ export function ContactActions({ p }: { p: PersonLinks }) {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [emailPurpose, setEmailPurpose] = useState("");
-  const wa = waLink(p.whatsapp ?? p.phone, text);
+  // a marketing WhatsApp always ends with the person's unsubscribe link (the server refuses one without it)
+  const outgoing = purpose === "MARKETING" && p.unsubscribeUrl && !text.includes(p.unsubscribeUrl) ? text + whatsappFooter(p.unsubscribeUrl) : text;
+  const wa = waLink(p.whatsapp ?? p.phone, outgoing);
   const tel = telLink(p.phone);
 
   const call = () =>
@@ -44,7 +49,7 @@ export function ContactActions({ p }: { p: PersonLinks }) {
     });
   const whatsapp = () =>
     start(async () => {
-      const res = await logLinkUseAction({ ...p.target, kind: "WHATSAPP", purpose, body: text });
+      const res = await logLinkUseAction({ ...p.target, kind: "WHATSAPP", purpose, body: outgoing });
       toast(res.ok, res.ok ? "Logged. Opening WhatsApp." : (res.error ?? "Could not log the message."));
       if (res.ok && wa) window.open(wa, "_blank", "noopener");
       router.refresh();
@@ -77,6 +82,7 @@ export function ContactActions({ p }: { p: PersonLinks }) {
           <div className="space-y-1">
             <Label>Message (edit it before it opens)</Label>
             <Textarea rows={3} value={text} onChange={(e) => setText(e.target.value)} />
+            {purpose === "MARKETING" && <p className="text-xs text-muted-foreground">The person&apos;s unsubscribe link is added at the end.</p>}
           </div>
           <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
             <select className={sel} value={purpose} onChange={(e) => setPurpose(e.target.value)}>
