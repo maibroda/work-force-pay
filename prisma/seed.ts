@@ -39,6 +39,7 @@ import {
 import { explainIssue } from "../src/server/services/payroll-controls";
 import { buildDemoClient, finishDemoMonth } from "./demo-client";
 import { buildDemoPipeline } from "./demo-crm";
+import { buildSalesDemo } from "./demo-sales";
 import { createPaymentBatches, generateRemittances, markBatchPaid } from "../src/server/services/payments";
 import { ensureDefaultChart } from "../src/server/services/accounting";
 import { applyForLeave, decideLeave } from "../src/server/services/leave";
@@ -1315,6 +1316,8 @@ async function main() {
   await seedJournalDemo(org.id);
   await seedRecurringDemo(org.id);
   await seedBillingDemo(org.id);
+  console.log("→ The demo company's sales module: accounts, leads, a deal, a quote, a case, a sales team");
+  await buildSalesDemo({ orgId: org.id, admin, passwordHash: hash, structureId: std.id });
 
   // the demo client: 30 employees, 3 sites, one full month (see prisma/demo-client.ts and the acceptance test)
   console.log("→ ThreeRoots demo client (Acme Facilities Ltd): onboarding, import, October 2026 payroll");
