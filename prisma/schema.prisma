@@ -30,6 +30,12 @@ enum Role {
   CLIENT_HR
   /// The bureau's sales person: the CRM, pipeline and proposals, and no payroll data.
   BUSINESS_DEV
+  /// A company's own salesperson (the sales module only): sees and changes their own records.
+  SALES_REP
+  /// Sees and changes their own records and those of the people in the teams they manage; may be named a quote approver.
+  SALES_MANAGER
+  /// A salesperson who looks after client accounts: their own accounts and the cases, renewals and deals on them.
+  ACCOUNT_MANAGER
 }
 
 enum EmployeeStatus {
@@ -659,6 +665,8 @@ model Organization {
   crmAccountHealth          CrmAccountHealth[]
   crmSuppressions           CrmSuppression[]
   crmDataRequests           CrmDataRequest[]
+  crmTeams                  CrmTeam[]
+  crmTeamMembers            CrmTeamMember[]
   payslipSetting            PayslipSetting?
   payslipDeliveries         PayslipDelivery[]
   paymentFileExports        PaymentFileExport[]
@@ -6728,4 +6736,34 @@ model CrmDataRequest {
   @@unique([organizationId, number])
   @@index([organizationId, status])
   @@index([organizationId, subjectType, subjectId])
+}
+
+/// A sales team: one manager (a sales manager) and its members. A team is closed, not deleted; closing it removes its members.
+model CrmTeam {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  name           String
+  managerUserId  String
+  active         Boolean         @default(true)
+  createdBy      String
+  createdAt      DateTime        @default(now())
+  members        CrmTeamMember[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, managerUserId, active])
+}
+
+/// A person in a team. A person is in at most one team.
+model CrmTeamMember {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  teamId         String
+  team           CrmTeam      @relation(fields: [teamId], references: [id])
+  userId         String
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, userId])
+  @@index([teamId])
 }

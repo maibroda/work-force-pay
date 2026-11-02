@@ -6,7 +6,6 @@
  */
 import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
-import { can, type Role } from "@/lib/auth/permissions";
 import { estimateHeadCost, type BusinessLine, type HeadCost } from "@/lib/sales/cost-estimator";
 import { parseNairaAmount } from "@/lib/sales/money";
 import { quotePdf } from "@/lib/sales/quote-pdf";
@@ -16,7 +15,8 @@ import { logAudit } from "../audit";
 import { nextNumber } from "../numbering";
 import { employerCostRuleFor, pensionRuleFor } from "../statutory";
 import { toStructureDef } from "../structures";
-import { ownerFilter, requireSales, seesAll } from "./access";
+import { isManager, ownerFilter, requireSales } from "./access";
+import { isSalesManagerRole } from "@/lib/sales/roles";
 import { fireEvent } from "./automation";
 import { createHandoverInTx } from "./handover";
 
@@ -278,7 +278,7 @@ export async function approveBelowMargin(ctx: Ctx, id: string, note: string) {
           : "No designated approver has been set up yet, so nobody can approve a quote below the minimum margin. The company administrator designates approvers under Sales Settings.",
       );
     }
-    if (!seesAll(ctx)) throw new BusinessError("A designated approver must still be a sales manager; ask the company administrator to review the designation.");
+    if (!isManager(ctx)) throw new BusinessError("A designated approver must still be a sales manager; ask the company administrator to review the designation.");
     const q = await loadQuote(ctx, tx, id);
     if (q.status !== "DRAFT") throw new BusinessError("Only a draft quote needs this approval.");
     if (q.createdByUserId === ctx.userId) throw new BusinessError("Someone else must approve a quote you made: you cannot approve your own.");
@@ -302,7 +302,7 @@ export async function designateApprover(ctx: Ctx, userId: string) {
   await requireSales(ctx, "sales.configure");
   const user = await db.user.findFirst({ where: { id: userId, organizationId: ctx.orgId, active: true }, select: { id: true, name: true, role: true } });
   if (!user) throw new BusinessError("That person is not an active user of this organization.");
-  if (!(can(user.role as Role, "sales.manage") && can(user.role as Role, "sales.view.all"))) throw new BusinessError(`${user.name} is not a sales manager (someone who can see and change everyone's sales records), so cannot be a designated approver.`);
+  if (!isSalesManagerRole(user.role)) throw new BusinessError(`${user.name} is not a sales manager (someone who can see and change everyone's sales records), so cannot be a designated approver.`);
   const existing = await db.crmQuoteApprover.findUnique({ where: { organizationId_userId: { organizationId: ctx.orgId, userId } } });
   if (existing?.active) return existing;
   const rec = existing

@@ -12,14 +12,14 @@ import { normalizeCompanyName } from "@/lib/sales/names";
 import { BusinessError, db, type Tx } from "../_base";
 import { logAudit } from "../audit";
 import { nextNumber } from "../numbering";
-import { ownerFilter, requireSales, seesAll } from "./access";
+import { canSeeOwner, ownerFilter, requireSales, seesAll } from "./access";
 import { pickOwner } from "./assignment";
 import { addSuppression, identifiersFor } from "./suppression";
 
 export type RowDuplicates = { visible: string[]; hidden: number };
 export type ImportPreview = { check: ImportCheck; duplicates: Record<number, RowDuplicates> };
 
-const canSee = (ctx: Ctx, ownerUserId: string) => seesAll(ctx) || ownerUserId === ctx.userId;
+const canSee = (ctx: Ctx, ownerUserId: string) => canSeeOwner(ctx, ownerUserId);
 
 function assertKind(kind: string): asserts kind is ImportKind {
   if (!(IMPORT_KINDS as string[]).includes(kind)) throw new BusinessError("Choose what is being imported: leads, accounts or contacts.");

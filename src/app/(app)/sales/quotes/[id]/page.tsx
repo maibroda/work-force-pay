@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
+import { isSalesManagerRole } from "@/lib/sales/roles";
 import { db } from "@/lib/db";
 import { BusinessError } from "@/server/services/_base";
 import { getQuote, listQuotes } from "@/server/services/sales/quotes";
@@ -30,7 +31,7 @@ export default async function SalesQuotePage({ params }: { params: Promise<{ id:
   const deal = await db.crmOpportunity.findUniqueOrThrow({ where: { id: q.opportunityId }, select: { id: true, name: true, account: { select: { name: true } } } });
   const versions = await listQuotes(ctx, q.opportunityId);
   const manage = can(ctx.role, "sales.manage");
-  const manager = can(ctx.role, "sales.view.all") && manage;
+  const manager = isSalesManagerRole(ctx.role) && manage;
   const tone = q.status === "ACCEPTED" ? "green" : q.status === "REJECTED" ? "red" : undefined;
   return (
     <>

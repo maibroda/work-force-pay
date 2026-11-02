@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { can, ROLE_PERMISSIONS, type Role } from "@/lib/auth/permissions";
+import { isSalesManagerRole } from "@/lib/sales/roles";
 import { db } from "@/lib/db";
 import { BusinessError } from "@/server/services/_base";
 import { getCase } from "@/server/services/sales/cases";
@@ -27,7 +28,7 @@ export default async function CasePage({ params }: { params: Promise<{ id: strin
   }
   const account = await db.crmAccount.findUniqueOrThrow({ where: { id: c.accountId }, select: { id: true, name: true } });
   const manage = can(ctx.role, "sales.case.manage");
-  const manager = manage && can(ctx.role, "sales.view.all");
+  const manager = manage && isSalesManagerRole(ctx.role);
   const roles = (Object.keys(ROLE_PERMISSIONS) as Role[]).filter((r) => can(r, "sales.case.manage"));
   const people = manager ? await db.user.findMany({ where: { organizationId: ctx.orgId, active: true, role: { in: roles as never } }, orderBy: { name: "asc" }, select: { id: true, name: true } }) : [];
   const hidden = (v: string) => ({ name: "id", label: "", type: "hidden" as const, defaultValue: v });

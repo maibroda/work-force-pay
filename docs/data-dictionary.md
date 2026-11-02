@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-198 tables and 158 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+200 tables and 158 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -133,6 +133,8 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | crmAccountHealth | → CrmAccountHealth[] |  |  |
 | crmSuppressions | → CrmSuppression[] |  |  |
 | crmDataRequests | → CrmDataRequest[] |  |  |
+| crmTeams | → CrmTeam[] |  |  |
+| crmTeamMembers | → CrmTeamMember[] |  |  |
 | payslipSetting | → PayslipSetting |  |  |
 | payslipDeliveries | → PayslipDelivery[] |  |  |
 | paymentFileExports | → PaymentFileExport[] |  |  |
@@ -5019,11 +5021,41 @@ A request about the personal data held on a contact or lead: a copy (ACCESS), er
 | createdBy | String | yes |  |
 | createdAt | DateTime |  |  |
 
+### CrmTeam
+
+A sales team: one manager (a sales manager) and its members. A team is closed, not deleted; closing it removes its members.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| name | String | yes |  |
+| managerUserId | String | yes |  |
+| active | Boolean |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| members | → CrmTeamMember[] |  |  |
+
+### CrmTeamMember
+
+A person in a team. A person is in at most one team.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| teamId | String | yes |  |
+| team | → CrmTeam |  |  |
+| userId | String | yes |  |
+| createdAt | DateTime |  |  |
+
 ## Fixed sets of values
 
 ### Role
 
-`SUPER_ADMIN`, `COMPANY_ADMIN`, `HR_ADMIN`, `OPERATIONS`, `PAYROLL_ADMIN`, `FINANCE`, `AUDITOR`, `SUPERVISOR`, `EMPLOYEE`, `CLIENT_APPROVER`, `CLIENT_HR`, `BUSINESS_DEV`
+`SUPER_ADMIN`, `COMPANY_ADMIN`, `HR_ADMIN`, `OPERATIONS`, `PAYROLL_ADMIN`, `FINANCE`, `AUDITOR`, `SUPERVISOR`, `EMPLOYEE`, `CLIENT_APPROVER`, `CLIENT_HR`, `BUSINESS_DEV`, `SALES_REP`, `SALES_MANAGER`, `ACCOUNT_MANAGER`
 
 ### EmployeeStatus
 

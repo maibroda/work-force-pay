@@ -12,7 +12,7 @@ import { csvRow } from "@/lib/sales/import";
 import { koboToString, sumKobo, toKobo } from "@/lib/money-exact";
 import { BusinessError, db } from "../_base";
 import { logAudit } from "../audit";
-import { ownerFilter, requireSales, seesAll } from "./access";
+import { actorFilter, ownerFilter, requireSales } from "./access";
 import { listHealth } from "./health";
 
 const DAY = 86_400_000;
@@ -118,7 +118,7 @@ async function build(ctx: Ctx, key: string, s: ReturnType<typeof span>, now: Dat
       return key === "stage-days" ? stageDaysWidget(history, await stageRefs(ctx.orgId)) : conversionWidget(history, await stageRefs(ctx.orgId));
     }
     case "activity": {
-      const rows = await db.crmActivity.findMany({ where: { organizationId: ctx.orgId, kind: { in: ["CALL", "MEETING", "SITE_SURVEY"] }, voidedAt: null, ...(s.filter ? { occurredAt: s.filter } : {}), ...(seesAll(ctx) ? {} : { createdByUserId: ctx.userId }) }, orderBy: [{ occurredAt: "asc" }, { id: "asc" }], take: 50000 });
+      const rows = await db.crmActivity.findMany({ where: { organizationId: ctx.orgId, kind: { in: ["CALL", "MEETING", "SITE_SURVEY"] }, voidedAt: null, ...(s.filter ? { occurredAt: s.filter } : {}), ...actorFilter(ctx) }, orderBy: [{ occurredAt: "asc" }, { id: "asc" }], take: 50000 });
       return activityWidget(rows.map((a) => ({ id: a.id, userName: a.createdBy, kind: a.kind, at: a.occurredAt })));
     }
     case "margins": {
@@ -192,7 +192,7 @@ export async function drillRecords(ctx: Ctx, kind: Widget["records"], ids: strin
     const mine = (await db.crmAccount.findMany({ where: { organizationId: org, clientId: { not: null }, ...f }, select: { clientId: true } })).map((a) => a.clientId as string);
     return sort((await db.contract.findMany({ where: { id: { in: take }, organizationId: org, clientId: { in: mine } }, select: { id: true, name: true, endDate: true } })).map((c) => ({ id: c.id, label: `${c.name}, ends ${c.endDate?.toISOString().slice(0, 10) ?? ""}` })));
   }
-  const acts = await db.crmActivity.findMany({ where: { id: { in: take }, organizationId: org, ...(seesAll(ctx) ? {} : { createdByUserId: ctx.userId }) }, select: { id: true, kind: true, occurredAt: true, createdBy: true, subject: true } });
+  const acts = await db.crmActivity.findMany({ where: { id: { in: take }, organizationId: org, ...actorFilter(ctx) }, select: { id: true, kind: true, occurredAt: true, createdBy: true, subject: true } });
   return sort(acts.map((a) => ({ id: a.id, label: `${a.occurredAt.toISOString().slice(0, 10)} ${a.kind.toLowerCase().replace("_", " ")} by ${a.createdBy}${a.subject ? `: ${a.subject}` : ""}` })));
 }
 
