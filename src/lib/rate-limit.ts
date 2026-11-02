@@ -54,13 +54,33 @@ export function createLimiter(o: { limit: number; windowMs: number; maxKeys?: nu
   return limiter;
 }
 
+const PLAIN_ADDRESS = /^[0-9a-fA-F:.]{2,45}$/;
+const asAddress = (raw: string | null | undefined) => {
+  const v = (raw ?? "").trim();
+  return PLAIN_ADDRESS.test(v) ? v : "unknown";
+};
+
 /**
- * The address a request came from, as the first hop of x-forwarded-for (or x-real-ip). It can only be trusted when the app sits behind a proxy that sets it; anything that is
- * not a plain address is "unknown", so a hostile header cannot be used to make up keys.
+ * The address a request came from. A forwarding header is only as good as the proxy that wrote it: anyone can send "x-forwarded-for: 1.2.3.4" themselves. So NO header is
+ * trusted unless the company says how many proxies it sits behind, or which single header its proxy sets:
+ *  - TRUSTED_IP_HEADER (for example cf-connecting-ip or x-real-ip): that header is the address, and it wins;
+ *  - TRUSTED_PROXY_HOPS (a whole number from 1): the n-th address from the RIGHT of x-forwarded-for, which is the one the nearest trusted proxy saw (what a visitor typed is on
+ *    the left and cannot be chosen).
+ * With neither set, or with a setting that is not understood, the answer is "unknown". Anything that is not a plain address is also "unknown", so a hostile header cannot be
+ * used to make up keys.
  */
-export function clientIp(h: Headers): string {
-  const raw = (h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? "").split(",")[0].trim();
-  return /^[0-9a-fA-F:.]{2,45}$/.test(raw) ? raw : "unknown";
+export function clientIp(h: Headers, env: Record<string, string | undefined> = process.env): string {
+  const single = env.TRUSTED_IP_HEADER?.trim();
+  if (single) return asAddress(h.get(single));
+  const hops = /^[1-9][0-9]{0,1}$/.test((env.TRUSTED_PROXY_HOPS ?? "").trim()) ? Number(env.TRUSTED_PROXY_HOPS) : 0;
+  if (!hops) return "unknown";
+  const chain = (h.get("x-forwarded-for") ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  return chain.length >= hops ? asAddress(chain[chain.length - hops]) : "unknown";
+}
+
+/** What a visitor is counted under: their address, or, when it is not known, their own link, so one unknown visitor cannot use up the allowance of every other. */
+export function limitKey(ip: string, token: string): string {
+  return ip !== "unknown" ? ip : `unknown:${token.slice(0, 24)}`;
 }
 
 /** The public unsubscribe address: 30 a minute from one address. */

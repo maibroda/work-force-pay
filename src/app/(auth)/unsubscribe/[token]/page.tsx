@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { clientIp, unsubscribeLimiter } from "@/lib/rate-limit";
+import { clientIp, limitKey, unsubscribeLimiter } from "@/lib/rate-limit";
 import { unsubscribe } from "@/server/services/sales/privacy";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export default async function UnsubscribePage({ params }: { params: Promise<{ to
   const { token } = await params;
   let status: "done" | "invalid" | "error" | "slow" = "error";
   try {
-    status = unsubscribeLimiter.check(clientIp(await headers())).ok ? (await unsubscribe(decodeURIComponent(token))).status : "slow";
+    status = unsubscribeLimiter.check(limitKey(clientIp(await headers()), token)).ok ? (await unsubscribe(decodeURIComponent(token))).status : "slow";
   } catch {
     status = "error";
   }
