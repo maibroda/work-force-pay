@@ -347,6 +347,18 @@ export async function updateBeatStrength(
   return b;
 }
 
+/**
+ * Clears the contact text of a site (name, role, phone and email as a handover copied them there) because the person it names was erased on a data request. It changes that
+ * one field and nothing else, inside the caller's transaction, and the audit entry carries the site's id and the request number, never the text. The caller (the sales
+ * module's erasure, which needs sales.privacy.manage) decides whether the text still names the person.
+ */
+export async function clearBeatSiteContact(tx: Tx, ctx: Ctx, beatId: string, requestNumber: string): Promise<boolean> {
+  const done = await tx.beat.updateMany({ where: { id: beatId, organizationId: ctx.orgId, siteContact: { not: null } }, data: { siteContact: null } });
+  if (!done.count) return false;
+  await logAudit(ctx, { action: "BEAT_SITE_CONTACT_CLEAR", entity: "Beat", entityId: beatId, reason: requestNumber }, tx);
+  return true;
+}
+
 /** UNMAPPED → MAPPED / UNDERSTAFFED / OVERSTAFFED based on active deployments. */
 export async function recomputeBeatStatus(tx: Tx, orgId: string, beatId: string) {
   const beat = await tx.beat.findFirst({ where: { id: beatId, organizationId: orgId } });
