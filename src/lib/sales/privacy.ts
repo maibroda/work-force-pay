@@ -61,9 +61,6 @@ export function verifyUnsubscribe(secret: string, token: string): UnsubscribeSub
   return { orgId, type: t === "C" ? "CONTACT" : "LEAD", id };
 }
 
-/** What a marketing WhatsApp ends with: the person's own unsubscribe link. */
-export const whatsappFooter = (url: string) => `\n\nTo stop these messages: ${url}`;
-
 // ─────────────────────────────── suppression ───────────────────────────────
 
 export type SuppressionKind = "EMAIL" | "PHONE";
