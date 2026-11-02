@@ -2,6 +2,8 @@
 
 **Status: stages 1, 2 and 3 are built on branch `paye-by-state`, with the recommendations taken: (1) a worker with no state is warned about and goes on a "State not recorded" line, nothing is blocked; (2) the rule for which date decides the state is the adviser's and is NOT decided: the state recorded on the employee when the payroll is calculated is used; (3) no filing date or penalty value is entered, the adviser supplies them; (4) overlap protection is service-level only; (5) stages in order. Correction found while building: the creation paths already refused a new version when an OPEN version started on or after it, so stage 3 only closes the gap for ENDED versions, and also covers pension and employer-contribution versions published to clients.**
 
+**Default decisions now editable (branch `editable-defaults`):** a missing state is a warning by default and can be made blocking by a payroll rule switch; the filing dates start from the founder's own PAYE seed values, proposed in the new-version form and labelled unverified; the state-of-residence date default is "the state on the employee at calculation" (adviser to confirm).
+
 *Original status:* a plan for the founder's "go". Nothing in it had been built. It touches the statutory module, the payroll record and remittances, and needs migrations, so `CLAUDE.md` says it waits for your "go" (rules 3, 7, 14).
 
 **Rules it serves:** rule 3 (statutory settings are effective-dated data, verified, never hard-coded), rule 5 (tenant isolation, audit), rule 7 (reversible, non-destructive migrations), rule 13 (Nigerian filing practice). The product description says PAYE is assigned to the worker's **state of residence**.

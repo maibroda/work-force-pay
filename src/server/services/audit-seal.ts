@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import {
@@ -18,6 +19,7 @@ import { sendEmail } from "@/lib/email";
 import { logger } from "@/lib/logger";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
+import { getHrPolicy } from "./hr-policy";
 
 /**
  * Seals for the audit log (rule 5: tamper-evident). The rules and arithmetic are in lib/audit-seal.ts; this is the part that reads and writes the
@@ -185,9 +187,50 @@ export async function redactAuditRows(
 
 // ─────────────────────────────── People who are told ───────────────────────────────
 
+/**
+ * Who is told (a failed check, the weekly chain head): by default everyone in the organization who can view the audit log; the organization can add
+ * addresses (an outside auditor) or narrow it to the addresses it names. It is never nobody: an empty narrowed list falls back to the viewers.
+ */
 async function recipientsFor(orgId: string) {
+  const policy = await getHrPolicy(orgId);
   const users = await db.user.findMany({ where: { organizationId: orgId, active: true }, select: { email: true, role: true } });
-  return users.filter((u) => can(u.role, "audit.view")).map((u) => u.email);
+  const viewers = users.filter((u) => can(u.role, "audit.view")).map((u) => u.email);
+  const extra = policy.auditAlertEmails ?? [];
+  const list = policy.auditAlertIncludeEveryone ? [...viewers, ...extra] : extra;
+  // the same address once, however it is capitalized; each is sent to as it is stored
+  const seen = new Set<string>();
+  return (list.length ? list : viewers).filter((e) => !seen.has(e.toLowerCase()) && !!seen.add(e.toLowerCase()));
+}
+
+export const auditAlertSchema = z.object({ extraEmails: z.array(z.string()).max(20, "At most 20 extra addresses."), includeEveryone: z.boolean() });
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** The current setting. Needs the audit permission. */
+export async function auditAlertSettings(ctx: Ctx) {
+  assertCan(ctx, "audit.view");
+  const p = await getHrPolicy(ctx.orgId);
+  return { extraEmails: p.auditAlertEmails ?? [], includeEveryone: p.auditAlertIncludeEveryone };
+}
+
+/** Changes who is told about the audit log. Needs the settings permission; every change is written to the audit log. */
+export async function setAuditAlertRecipients(ctx: Ctx, raw: z.input<typeof auditAlertSchema>) {
+  assertCan(ctx, "settings.manage");
+  const v = auditAlertSchema.parse(raw);
+  const emails: string[] = [];
+  for (const e of v.extraEmails.map((x) => x.trim().toLowerCase()).filter(Boolean)) {
+    if (!EMAIL.test(e)) throw new BusinessError(`"${e}" is not an email address.`);
+    if (!emails.includes(e)) emails.push(e);
+  }
+  const before = await getHrPolicy(ctx.orgId);
+  await db.hrPolicy.update({ where: { organizationId: ctx.orgId }, data: { auditAlertEmails: emails, auditAlertIncludeEveryone: v.includeEveryone } });
+  await logAudit(ctx, {
+    action: "AUDIT_ALERT_RECIPIENTS_CHANGE",
+    entity: "HrPolicy",
+    entityId: before.id,
+    oldValue: { extraEmails: before.auditAlertEmails ?? [], includeEveryone: before.auditAlertIncludeEveryone },
+    newValue: { extraEmails: emails, includeEveryone: v.includeEveryone },
+  });
+  return { extraEmails: emails, includeEveryone: v.includeEveryone };
 }
 
 /** An entry written by the system itself (no signed-in person). */

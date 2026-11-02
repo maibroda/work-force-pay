@@ -128,3 +128,22 @@ describe("checking a file", () => {
     expect(run(good({ dob: "01/01/1990", ed: "01/01/1980" })).rows[0].errors.join(" ")).toMatch(/before the date of birth/);
   });
 });
+
+describe("the voluntary NHF column", () => {
+  const withNhf = (value: string) => checkImport([HEAD + ",NHF Contribution", good() + "," + value].join("\r\n"), ref).rows[0];
+  it("starts the contribution only for a clear Yes, and leaves everyone else as not contributing", () => {
+    for (const yes of ["Yes", "yes", "Y", "true"]) expect(withNhf(yes).employee?.nhfContributes, yes).toBe(true);
+    for (const no of ["No", "no", "", "false"]) {
+      expect(withNhf(no).employee?.nhfContributes, no).toBeUndefined();
+      expect(withNhf(no).warnings.join(" ")).not.toMatch(/NHF/);
+    }
+  });
+  it("warns, and does not start it, when the cell is neither Yes nor No (it is voluntary: only Yes starts it)", () => {
+    const r = withNhf("maybe");
+    expect(r.employee?.nhfContributes).toBeUndefined();
+    expect(r.warnings.join(" ")).toMatch(/NHF contribution "maybe" is not Yes or No/);
+  });
+  it("is not required: a file without the column imports as before", () => {
+    expect(run(good()).rows[0].employee?.nhfContributes).toBeUndefined();
+  });
+});

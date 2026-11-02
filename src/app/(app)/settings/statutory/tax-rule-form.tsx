@@ -1,10 +1,13 @@
 "use client";
 import { SmartForm } from "@/components/smart-form";
 import { createTaxRuleAction } from "@/app/actions/payroll";
+import { filingDefaultsFor } from "@/lib/paye-dates";
 
 type Current = { code: string; name: string; payeDueDay: number | null; annualReturnMonth: number | null; annualReturnDay: number | null; latePenaltyPct: number | null; bands: string; reliefs: unknown[]; exemptions: unknown[] };
 
 export function TaxRuleForm({ current }: { current: Current }) {
+  const timing = filingDefaultsFor({ dueDay: current.payeDueDay, annualReturnMonth: current.annualReturnMonth, annualReturnDay: current.annualReturnDay, latePenaltyPct: current.latePenaltyPct });
+  const note = timing.proposed ? "Starting value from the founder's PAYE file, NOT yet verified by the tax adviser: change or clear it" : "Carried over from the current version";
   return (
     <SmartForm
       columns={3}
@@ -15,10 +18,10 @@ export function TaxRuleForm({ current }: { current: Current }) {
         { name: "effectiveFrom", label: "Effective from", type: "date", required: true },
         { name: "legalBasis", label: "Legal basis / source", span: 2 },
         // Filing dates and the penalty are statutory values: leave blank until the tax adviser confirms them (carried over from the current version).
-        { name: "payeDueDay", label: "PAYE due day (of the next month)", type: "number", min: 1, max: 28, defaultValue: current.payeDueDay ?? undefined, help: "From your tax adviser. Blank = not set" },
-        { name: "annualReturnMonth", label: "Annual return month (1-12)", type: "number", min: 1, max: 12, defaultValue: current.annualReturnMonth ?? undefined, help: "In the year after the tax year" },
-        { name: "annualReturnDay", label: "Annual return day", type: "number", min: 1, max: 31, defaultValue: current.annualReturnDay ?? undefined },
-        { name: "latePenaltyPct", label: "Late penalty (% of unremitted PAYE)", type: "number", min: 0, max: 100, defaultValue: current.latePenaltyPct ?? undefined, help: "Interest is not calculated" },
+        { name: "payeDueDay", label: "PAYE due day (of the next month)", type: "number", min: 1, max: 28, defaultValue: timing.dueDay ?? undefined, help: note },
+        { name: "annualReturnMonth", label: "Annual return month (1-12)", type: "number", min: 1, max: 12, defaultValue: timing.annualReturnMonth ?? undefined, help: note },
+        { name: "annualReturnDay", label: "Annual return day", type: "number", min: 1, max: 31, defaultValue: timing.annualReturnDay ?? undefined },
+        { name: "latePenaltyPct", label: "Late penalty (% of unremitted PAYE)", type: "number", min: 0, max: 100, defaultValue: timing.latePenaltyPct ?? undefined, help: `${note}. Interest is not calculated` },
         {
           name: "bands",
           label: "Bands — one per line: lower,upper,rate% (blank upper = no limit)",
