@@ -16,6 +16,7 @@ import { logAudit } from "../audit";
 import { addContractRateRecord, beatSchema, clientSchema, contractRateSchema, contractSchema, createBeatRecord, createClientRecord, createContractRecord } from "../clients";
 import { nextNumber } from "../numbering";
 import { ownerFilter, requireSales } from "./access";
+import { fireEvent } from "./automation";
 
 /** The writes of a handover are several statements (one per site and post); a transaction is cut off after five seconds unless told otherwise, which is too short on a busy server. Reading back is done after the transaction. */
 const TX = { timeout: 20_000, maxWait: 10_000 } as const;
@@ -330,13 +331,16 @@ export async function acceptHandover(ctx: Ctx, id: string, opts: { note?: string
       }
       await tx.crmAccount.update({ where: { id: account.id }, data: { clientId, accountType: "CLIENT" } });
       await tx.crmHandover.update({ where: { id }, data: { status: "ACCEPTED", acceptedAt: new Date(), acceptedBy: ctx.name, acceptedByUserId: ctx.userId, acceptanceNote: note, acceptedRevision: h.revisionNo, clientId, contractId: contract.id } });
-      await tx.crmOpportunity.update({ where: { id: deal.id }, data: { lastActivityAt: new Date() } });
+      // the start date and term agreed in the handover become the deal's (the Won stage needs them)
+      await tx.crmOpportunity.update({ where: { id: deal.id }, data: { lastActivityAt: new Date(), expectedStartDate: h.startDate, contractTermMonths: h.termMonths } });
       await event(tx, ctx, h, "ACCEPTED", h.revisionNo, note);
       await logAudit(ctx, { action: "SALES_HANDOVER_ACCEPT", entity: "CrmHandover", entityId: id, newValue: { number: h.number, clientId, contractId: contract.id, rates: plan.rates.length, sites: s.sites.length, revisionNo: h.revisionNo } }, tx);
     },
     { timeout: 30_000, maxWait: 10_000 }, // several records are made together; the default five seconds is for one
   );
-  return shape(db, await loadRow(ctx, db, id));
+  const done = await shape(db, await loadRow(ctx, db, id));
+  if (first.status === "SUBMITTED") await fireEvent(ctx.orgId, "HANDOVER_ACCEPTED", first.opportunityId, first.id); // rules for this event; never throws
+  return done;
 }
 
 // ─────────────────────────────── the designated acceptors ───────────────────────────────

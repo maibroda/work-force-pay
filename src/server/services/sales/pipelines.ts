@@ -8,6 +8,7 @@ import type { Ctx } from "@/lib/auth/context";
 import { parseNairaAmount } from "@/lib/sales/money";
 import { BusinessError, db, type Tx } from "../_base";
 import { logAudit } from "../audit";
+import { scheduleStageEntry } from "./automation-schedule";
 import { ownerFilter, requireSales, resolveOwner } from "./access";
 import { visibleAccount, visibleContact } from "./loaders";
 
@@ -98,7 +99,8 @@ export async function insertOpportunity(
       createdBy: ctx.name,
     },
   });
-  await tx.crmStageHistory.create({ data: { organizationId: ctx.orgId, opportunityId: o.id, fromStageId: null, toStageId: stage.id, changedBy: ctx.name, changedByUserId: ctx.userId } });
+  const entry = await tx.crmStageHistory.create({ data: { organizationId: ctx.orgId, opportunityId: o.id, fromStageId: null, toStageId: stage.id, changedBy: ctx.name, changedByUserId: ctx.userId } });
+  await scheduleStageEntry(tx as Tx, ctx.orgId, o.id, stage.id, entry.id);
   await logAudit(ctx, { action: "SALES_OPPORTUNITY_CREATE", entity: "CrmOpportunity", entityId: o.id, newValue: { stage: stage.name, fromLead: !!v.fromLeadId } }, tx);
   return o;
 }

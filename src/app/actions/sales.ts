@@ -5,6 +5,7 @@ import { removeAssignmentRule, setAssignmentMethod, setAssignmentRule, type Assi
 import { convertLead } from "@/server/services/sales/conversion";
 import { findAccountDuplicates, findPersonDuplicates, type DuplicateReport } from "@/server/services/sales/duplicates";
 import { mergeAccounts, mergeContacts } from "@/server/services/sales/merge";
+import { kickAutomation } from "@/server/services/sales/automation";
 import { createOpportunity } from "@/server/services/sales/pipelines";
 import * as records from "@/server/services/sales/records";
 import { updateSalesSetting } from "@/server/services/sales/setting";
@@ -121,7 +122,8 @@ export async function createOpportunityAction(v: V) {
   return act(
     "sales.manage",
     async (ctx) => {
-      await createOpportunity(ctx, blankToUndefined(v) as never);
+      const made = await createOpportunity(ctx, blankToUndefined(v) as never);
+      await kickAutomation(ctx.orgId, made.id);
       return { message: "Deal added." };
     },
     ["/sales/opportunities"],
@@ -137,6 +139,7 @@ export async function convertLeadAction(v: V) {
         contact: text(v.contactId) ? { id: String(v.contactId) } : { create: true },
         opportunity: ticked(v.createDeal) ? {} : false,
       });
+      if (r.opportunityId) await kickAutomation(ctx.orgId, r.opportunityId);
       return { message: r.opportunityId ? "Lead converted into an account, a contact and a deal." : "Lead converted into an account and a contact." };
     },
     ["/sales/leads", "/sales/accounts", "/sales/contacts", "/sales/opportunities"],

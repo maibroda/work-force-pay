@@ -39,6 +39,7 @@ export const JOBS = [
   { name: "journal-reversals", label: "Accrual reversals", required: false },
   { name: "recurring-journals", label: "Recurring journals", required: false },
   { name: "sales-digest", label: "Sales digest", required: false },
+  { name: "sales-automation", label: "Sales automation", required: false },
 ] as const;
 export type JobName = (typeof JOBS)[number]["name"];
 

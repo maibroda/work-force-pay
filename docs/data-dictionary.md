@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-186 tables and 147 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+189 tables and 150 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -121,6 +121,9 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | crmActivities | → CrmActivity[] |  |  |
 | crmTasks | → CrmTask[] |  |  |
 | crmDigestRuns | → CrmDigestRun[] |  |  |
+| crmAutomationRules | → CrmAutomationRule[] |  |  |
+| crmAutomationRuns | → CrmAutomationRun[] |  |  |
+| crmNotifications | → CrmNotification[] |  |  |
 | payslipSetting | → PayslipSetting |  |  |
 | payslipDeliveries | → PayslipDelivery[] |  |  |
 | paymentFileExports | → PaymentFileExport[] |  |  |
@@ -4342,6 +4345,7 @@ A sales process (new business, later renewal and rate review) made of stages. Ea
 | createdAt | DateTime |  |  |
 | stages | → CrmStage[] |  |  |
 | opportunities | → CrmOpportunity[] |  |  |
+| automationRules | → CrmAutomationRule[] |  |  |
 
 ### CrmStage
 
@@ -4358,6 +4362,7 @@ A sales process (new business, later renewal and rate review) made of stages. Ea
 | rottingDays | Int |  | Days without activity after which a card on this stage is flagged. |
 | active | Boolean |  |  |
 | opportunities | → CrmOpportunity[] |  |  |
+| automationRules | → CrmAutomationRule[] |  |  |
 
 ### CrmOpportunity
 
@@ -4408,6 +4413,7 @@ A specific bid for a client business: "24/7 guarding, 3 sites, 18 guards". Its m
 | handovers | → CrmHandover[] |  |  |
 | activities | → CrmActivity[] |  |  |
 | tasks | → CrmTask[] |  |  |
+| automationRuns | → CrmAutomationRun[] |  |  |
 
 ### CrmStageHistory
 
@@ -4735,6 +4741,74 @@ One row for each user and day the digest email was sent, so it is never sent twi
 | userId | String | yes |  |
 | forDate | DateTime | yes | The Lagos day it was for. |
 | sentAt | DateTime |  |  |
+
+### CrmAutomationRule
+
+When something happens to a deal (it enters a stage, its quote or handover is accepted, or it goes quiet), do one thing, at once or after a delay, if the condition holds. Starts switched off. Changed by switching it off and making a new one, so the run log stays true.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| name | String | yes |  |
+| trigger | CrmAutomationTrigger | yes |  |
+| pipelineId | String | yes |  |
+| pipeline | → CrmPipeline |  |  |
+| stageId | String |  | For a stage-entry rule: the stage. |
+| stage | → CrmStage |  |  |
+| delayMinutes | Int |  | How long after the trigger the action runs (0 = at once). |
+| quietDays | Int |  | For a no-activity rule: how many quiet days. |
+| condition | Json |  | { field, op, value }: the rule acts only if it holds when the run is due. |
+| actionType | CrmAutomationAction | yes |  |
+| actionParams | Json | yes |  |
+| enabled | Boolean |  |  |
+| isStarter | Boolean |  | One of the rules offered to every organization (all start off). |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+| updatedBy | String |  |  |
+| runs | → CrmAutomationRun[] |  |  |
+
+### CrmAutomationRun
+
+One carrying-out of a rule for a deal and a stage entry (or quote, handover, quiet spell). The database allows one per rule, deal and entry, so a rule never fires twice for the same entry. Holds ids and figures, never message text.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| ruleId | String | yes |  |
+| rule | → CrmAutomationRule |  |  |
+| opportunityId | String | yes |  |
+| opportunity | → CrmOpportunity |  |  |
+| entryKey | String | yes | What this run is for: the stage-history row of the entry, the quote or handover, or the last-activity moment of a quiet spell. |
+| status | CrmAutomationRunStatus |  |  |
+| runAt | DateTime | yes |  |
+| startedAt | DateTime |  |  |
+| finishedAt | DateTime |  |  |
+| durationMs | Int |  |  |
+| inputs | Json |  |  |
+| outputs | Json |  |  |
+| error | String |  |  |
+| createdAt | DateTime |  |  |
+
+### CrmNotification
+
+A message to a person inside the app (the email goes separately).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| userId | String | yes |  |
+| title | String | yes |  |
+| body | String | yes |  |
+| href | String |  |  |
+| createdAt | DateTime |  |  |
+| readAt | DateTime |  |  |
 
 ## Fixed sets of values
 
@@ -5347,4 +5421,16 @@ Whether an outbound message is a service message (about an active contract) or m
 ### CrmTaskStatus
 
 `OPEN`, `DONE`, `CANCELLED`
+
+### CrmAutomationTrigger
+
+`STAGE_ENTRY`, `QUOTE_ACCEPTED`, `HANDOVER_ACCEPTED`, `NO_ACTIVITY`
+
+### CrmAutomationAction
+
+`CREATE_TASK`, `NOTIFY`, `SEND_EMAIL`, `CHANGE_OWNER`, `SET_FIELD`, `CREATE_FOLLOW_UP`, `MOVE_TO_STAGE`
+
+### CrmAutomationRunStatus
+
+`PENDING`, `RUNNING`, `DONE`, `FAILED`, `CANCELLED`, `SKIPPED`
 
