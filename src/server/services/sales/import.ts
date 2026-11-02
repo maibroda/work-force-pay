@@ -12,8 +12,8 @@ import { normalizeCompanyName } from "@/lib/sales/names";
 import { BusinessError, db, type Tx } from "../_base";
 import { logAudit } from "../audit";
 import { nextNumber } from "../numbering";
-import { canSeeOwner, ownerFilter, requireSales, seesAll } from "./access";
-import { pickOwner } from "./assignment";
+import { canSeeOwner, ownerFilter, requireSales } from "./access";
+import { autoAssigns, pickOwner } from "./assignment";
 import { addSuppression, identifiersFor } from "./suppression";
 
 export type RowDuplicates = { visible: string[]; hidden: number };
@@ -116,7 +116,7 @@ export async function commitImport(ctx: Ctx, kind: ImportKind, csv: string, opts
         if (consent.status === "WITHDRAWN") await addSuppression(tx, ctx.orgId, await identifiersFor(ctx.orgId, target, tx), "WITHDRAWN", "import");
       };
       if (kind === "LEADS") {
-        const picked = seesAll(ctx) ? await pickOwner(ctx, tx, { state: d.state as string | undefined, serviceInterest: (d.serviceInterest as string | undefined) ?? "OTHER" }) : null;
+        const picked = autoAssigns(ctx) ? await pickOwner(ctx, tx, { state: d.state as string | undefined, serviceInterest: (d.serviceInterest as string | undefined) ?? "OTHER" }) : null;
         const owner = picked ? { ownerUserId: picked.ownerUserId, ownerName: picked.ownerName } : { ownerUserId: ctx.userId, ownerName: ctx.name };
         const number = await nextNumber(tx, ctx.orgId, "SALES_LEAD");
         const l = await tx.crmLead.create({

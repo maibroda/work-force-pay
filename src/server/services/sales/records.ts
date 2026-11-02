@@ -11,8 +11,8 @@ import { pagingOf, type PagingInput } from "@/lib/sales/paging";
 import { BusinessError, db, type Tx } from "../_base";
 import { logAudit } from "../audit";
 import { nextNumber } from "../numbering";
-import { ownerFilter, requireSales, resolveOwner, seesAll } from "./access";
-import { pickOwner } from "./assignment";
+import { ownerFilter, requireSales, resolveOwner } from "./access";
+import { autoAssigns, pickOwner } from "./assignment";
 
 const text = (max = 200) =>
   z
@@ -257,7 +257,7 @@ export async function createLead(ctx: Ctx, raw: z.input<typeof leadSchema>) {
   const phoneE164 = phoneOf("Phone number", v.phone);
   return db.$transaction(async (tx) => {
     // a manager who names no owner gets the organization's assignment method; a sales person always owns what they add
-    const picked = !named && seesAll(ctx) ? await pickOwner(ctx, tx, { state: v.state, serviceInterest: v.serviceInterest ?? "OTHER" }) : null;
+    const picked = !named && autoAssigns(ctx) ? await pickOwner(ctx, tx, { state: v.state, serviceInterest: v.serviceInterest ?? "OTHER" }) : null;
     const owner = named ?? (picked ? { ownerUserId: picked.ownerUserId, ownerName: picked.ownerName } : { ownerUserId: ctx.userId, ownerName: ctx.name });
     const number = await nextNumber(tx, ctx.orgId, "SALES_LEAD");
     const l = await tx.crmLead.create({
