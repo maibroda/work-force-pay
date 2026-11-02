@@ -17,6 +17,7 @@ import { nextNumber } from "../numbering";
 import { employerCostRuleFor, pensionRuleFor } from "../statutory";
 import { toStructureDef } from "../structures";
 import { ownerFilter, requireSales, seesAll } from "./access";
+import { createHandoverInTx } from "./handover";
 
 /** The share of the bill rate paid to the guard as gross, when a line does not say (the 70:30 split). */
 export const DEFAULT_OPERATIVE_SHARE = 70;
@@ -340,6 +341,7 @@ export async function reviseQuote(ctx: Ctx, id: string) {
   await requireSales(ctx, "sales.manage");
   const q0 = await loadQuote(ctx, db, id);
   if (!["SENT", "REJECTED", "ACCEPTED"].includes(q0.status)) throw new BusinessError("Only the latest sent, accepted or rejected version can be revised.");
+  if (await db.crmHandover.count({ where: { opportunityId: q0.opportunityId } })) throw new BusinessError("A handover to Operations has been started from this deal's accepted quote, so the quote can no longer be revised.");
   const old = await db.crmQuoteLine.findMany({ where: { quoteId: id }, orderBy: { sortOrder: "asc" } });
   const input = old.map((l) => ({ siteName: l.siteName, siteAddress: l.siteAddress ?? undefined, postLabel: l.postLabel ?? undefined, shiftPattern: l.shiftPattern ?? undefined, salaryStructureId: l.salaryStructureId, headcount: l.headcount, requiredPersonnel: l.requiredPersonnel, billRatePerHead: l.billPerHead.toString(), operativeSharePct: Number(l.operativeSharePct), businessLine: l.businessLine as "GUARDING" | "OUTSOURCING" }));
   const { rows, totals } = await priceLines(ctx, db, input); // reads only, so before the transaction
@@ -369,10 +371,13 @@ export async function decideQuote(ctx: Ctx, id: string, decision: "ACCEPTED" | "
     if (decision === "ACCEPTED" && (await tx.crmQuote.count({ where: { opportunityId: q.opportunityId, status: "ACCEPTED" } })))
       throw new BusinessError("Another quote for this deal has already been accepted.");
     const u = await tx.crmQuote.update({ where: { id }, data: { status: decision, decidedAt: new Date(), decidedBy: ctx.name, decisionNote: note?.trim() || null } });
-    if (decision === "ACCEPTED") await tx.crmOpportunity.update({ where: { id: q.opportunityId }, data: { monthlyContractValue: q.monthlyBill, lastActivityAt: new Date() } });
+    if (decision === "ACCEPTED") {
+      await tx.crmOpportunity.update({ where: { id: q.opportunityId }, data: { monthlyContractValue: q.monthlyBill, lastActivityAt: new Date() } });
+      await createHandoverInTx(ctx, tx, u); // the client's acceptance starts the handover to Operations (a draft: nothing exists in Operations until it is accepted there)
+    }
     await logAudit(ctx, { action: "SALES_QUOTE_DECIDE", entity: "CrmQuote", entityId: id, newValue: { decision } }, tx);
     return u;
-  });
+  }, { timeout: 20_000, maxWait: 10_000 }); // accepting also starts the handover (a site and its posts for each site on the quote), which is more than five seconds of work on a busy server
 }
 
 export async function getQuote(ctx: Ctx, id: string) {

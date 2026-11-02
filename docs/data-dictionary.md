@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-178 tables and 141 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+183 tables and 143 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -115,6 +115,9 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | crmAssignmentRules | → CrmAssignmentRule[] |  |  |
 | crmQuotes | → CrmQuote[] |  |  |
 | crmQuoteApprovers | → CrmQuoteApprover[] |  |  |
+| crmHandovers | → CrmHandover[] |  |  |
+| crmHandoverEvents | → CrmHandoverEvent[] |  |  |
+| crmHandoverAcceptors | → CrmHandoverAcceptor[] |  |  |
 | payslipSetting | → PayslipSetting |  |  |
 | payslipDeliveries | → PayslipDelivery[] |  |  |
 | paymentFileExports | → PaymentFileExport[] |  |  |
@@ -4393,6 +4396,7 @@ A specific bid for a client business: "24/7 guarding, 3 sites, 18 guards". Its m
 | updatedAt | DateTime |  |  |
 | history | → CrmStageHistory[] |  |  |
 | quotes | → CrmQuote[] |  |  |
+| handovers | → CrmHandover[] |  |  |
 
 ### CrmStageHistory
 
@@ -4466,6 +4470,7 @@ A priced bid for a deal: posts, guards and bill rates, with what the guards cost
 | decidedBy | String |  |  |
 | decisionNote | String |  |  |
 | lines | → CrmQuoteLine[] |  |  |
+| handover | → CrmHandover |  |  |
 
 ### CrmQuoteLine
 
@@ -4499,6 +4504,137 @@ A priced bid for a deal: posts, guards and bill rates, with what the guards cost
 ### CrmQuoteApprover
 
 A person formally designated to approve a quote below the minimum margin. Only a designated approver (never the quote's maker) can approve one.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| userId | String | yes |  |
+| userName | String | yes |  |
+| active | Boolean |  |  |
+| designatedBy | String | yes |  |
+| designatedAt | DateTime |  |  |
+| removedBy | String |  |  |
+| removedAt | DateTime |  |  |
+
+### CrmHandover
+
+What an accepted quote hands over to Operations: the agreed scope, the client's requirements, the sites, headcount, shifts, pricing, start date, equipment and service-level obligations. One per deal. Sales prepares and submits it; Operations accepts it (or returns it with questions); only on acceptance are the client, contract (a draft), rates and sites created. The quote facts are copied in and never change; once ACCEPTED nothing can change (the database refuses). It holds no cost and no margin.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| number | String | yes |  |
+| opportunityId | String | yes |  |
+| opportunity | → CrmOpportunity |  |  |
+| quoteId | String | yes | (unique) |
+| quote | → CrmQuote |  |  |
+| accountId | String | yes |  |
+| status | CrmHandoverStatus |  |  |
+| revisionNo | Int |  | Goes up every time the handover is edited. Operations accepts only the revision it was sent. |
+| submittedRevision | Int |  |  |
+| quoteNumber | String | yes | From the accepted quote, copied in: never changes. |
+| quoteVersion | Int | yes |  |
+| monthlyBill | Decimal | yes |  |
+| validUntil | DateTime |  |  |
+| scope | String |  | Entered in the handover. |
+| clientRequirements | String |  |  |
+| startDate | DateTime |  |  |
+| termMonths | Int |  |  |
+| serviceLevels | Json |  | Special service-level obligations: lines of { obligation, measure, consequence }. noSpecialSla says there are none (an explicit answer). |
+| noSpecialSla | Boolean |  |  |
+| preparedBy | String | yes |  |
+| preparedByUserId | String | yes |  |
+| submittedAt | DateTime |  |  |
+| submittedBy | String |  |  |
+| submittedByUserId | String |  |  |
+| returnedAt | DateTime |  |  |
+| returnedBy | String |  |  |
+| returnNote | String |  |  |
+| acceptedAt | DateTime |  |  |
+| acceptedBy | String |  |  |
+| acceptedByUserId | String |  |  |
+| acceptanceNote | String |  |  |
+| acceptedRevision | Int |  |  |
+| clientId | String |  | The real records made on acceptance. |
+| contractId | String |  |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+| sites | → CrmHandoverSite[] |  |  |
+| posts | → CrmHandoverPost[] |  |  |
+| events | → CrmHandoverEvent[] |  |  |
+
+### CrmHandoverSite
+
+One client site named on the quote. The address, state, local government, the client's site contact and the equipment are entered in the handover.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| handoverId | String | yes |  |
+| handover | → CrmHandover |  |  |
+| sortOrder | Int | yes |  |
+| name | String | yes |  |
+| address | String |  |  |
+| state | String |  |  |
+| lga | String |  |  |
+| contactName | String |  |  |
+| contactRole | String |  |  |
+| contactPhoneE164 | String |  |  |
+| contactEmail | String |  |  |
+| equipment | Json |  | Lines of { item, quantity }. noEquipment says none is needed (an explicit answer). |
+| noEquipment | Boolean |  |  |
+| beatId | String |  | The site (Beat) made on acceptance. |
+| posts | → CrmHandoverPost[] |  |  |
+
+### CrmHandoverPost
+
+One quote line, copied in with its billed guards, the personnel needed, the shift and the bill rate (never the cost or margin). Only the employee category is entered.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| handoverId | String | yes |  |
+| handover | → CrmHandover |  |  |
+| siteId | String | yes |  |
+| site | → CrmHandoverSite |  |  |
+| quoteLineId | String | yes |  |
+| sortOrder | Int | yes |  |
+| postLabel | String |  |  |
+| shiftPattern | String |  |  |
+| salaryStructureId | String | yes |  |
+| structureName | String | yes |  |
+| businessLine | String | yes |  |
+| headcount | Int | yes |  |
+| requiredPersonnel | Int | yes |  |
+| billPerHead | Decimal | yes |  |
+| operativeSharePct | Decimal | yes |  |
+| categoryId | String |  | The employee category the contract rate is made for (entered). |
+
+### CrmHandoverEvent
+
+Who did what to a handover and when: submitted, returned (with the question), accepted. Never changed (the database refuses it).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| handoverId | String | yes |  |
+| handover | → CrmHandover |  |  |
+| kind | CrmHandoverEventKind | yes |  |
+| revisionNo | Int | yes |  |
+| byUserId | String | yes |  |
+| byName | String | yes |  |
+| note | String |  |  |
+| at | DateTime |  |  |
+
+### CrmHandoverAcceptor
+
+A person formally designated to accept a handover for Operations (the Executive Director, Operations, or the Operations Manager). Never the person who prepared it.
 
 | Field | Type | Required | What it holds |
 | --- | --- | --- | --- |
@@ -5098,4 +5234,12 @@ What the controller concluded about the harm a breach could do to the people aff
 ### CrmQuoteStatus
 
 `DRAFT`, `SENT`, `ACCEPTED`, `REJECTED`, `SUPERSEDED`
+
+### CrmHandoverStatus
+
+`DRAFT`, `SUBMITTED`, `RETURNED`, `ACCEPTED`
+
+### CrmHandoverEventKind
+
+`CREATED`, `SUBMITTED`, `RETURNED`, `ACCEPTED`
 

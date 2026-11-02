@@ -57,7 +57,7 @@ export async function approveBelowMarginAction(v: V) {
 export async function decideQuoteAction(v: V) {
   return act("sales.manage", async (ctx) => {
     await decideQuote(ctx, String(v.id), v.decision === "REJECTED" ? "REJECTED" : "ACCEPTED", text(v.note));
-    return { message: v.decision === "REJECTED" ? "Quote marked as rejected." : "Quote accepted. Its monthly total is now the deal's value." };
+    return { message: v.decision === "REJECTED" ? "Quote marked as rejected." : "Quote accepted. Its monthly total is now the deal's value, and a handover to Operations has been started: open the deal to complete it." };
   }, ["/sales/opportunities", "/sales/board"]);
 }
 
