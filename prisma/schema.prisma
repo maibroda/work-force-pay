@@ -639,6 +639,8 @@ model Organization {
   crmOpportunities          CrmOpportunity[]
   crmStageHistory           CrmStageHistory[]
   crmAssignmentRules        CrmAssignmentRule[]
+  crmQuotes                 CrmQuote[]
+  crmQuoteApprovers         CrmQuoteApprover[]
   payslipSetting            PayslipSetting?
   payslipDeliveries         PayslipDelivery[]
   paymentFileExports        PaymentFileExport[]
@@ -5628,6 +5630,8 @@ model CrmSetting {
   mode             CrmMode             @default(CLASSIC)
   /// How new leads with no owner given (created by a manager) are assigned, and where round robin has got to.
   assignmentMethod CrmAssignmentMethod @default(NONE)
+  /// The lowest gross margin (a share of the bill) a quote may have before a designated approver must approve it, in basis points (1500 = 15.00%). 0 = no minimum. A new organization starts at 15%.
+  minMarginBps     Int                 @default(1500)
   assignmentCursor Int                 @default(0)
   updatedBy        String
   updatedAt        DateTime            @updatedAt
@@ -5891,6 +5895,7 @@ model CrmOpportunity {
   updatedAt            DateTime           @updatedAt
 
   history CrmStageHistory[]
+  quotes  CrmQuote[]
 
   @@index([organizationId, ownerUserId, status])
   @@index([organizationId, stageId])
@@ -5940,4 +5945,105 @@ enum CrmLostReason {
   NO_DECISION
   BUDGET
   OTHER
+}
+
+enum CrmQuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  SUPERSEDED
+}
+
+/// A priced bid for a deal: posts, guards and bill rates, with what the guards cost the company and the margin. Only a DRAFT can be changed (the database
+/// refuses to change the lines of any other); a new version is made to change a sent quote. The costs are saved with the rule versions they used.
+model CrmQuote {
+  id                  String         @id @default(cuid())
+  organizationId      String
+  organization        Organization   @relation(fields: [organizationId], references: [id])
+  opportunityId       String
+  opportunity         CrmOpportunity @relation(fields: [opportunityId], references: [id])
+  /// Shared by every version of the same quote.
+  number              String
+  versionNo           Int
+  status              CrmQuoteStatus @default(DRAFT)
+  validUntil          DateTime?      @db.Date
+  notes               String?
+  monthlyBill         Decimal        @default(0) @db.Decimal(16, 2)
+  monthlyCost         Decimal        @default(0) @db.Decimal(16, 2)
+  monthlyMargin       Decimal        @default(0) @db.Decimal(16, 2)
+  /// Margin as basis points of the bill (905 = 9.05%).
+  marginBps           Int            @default(0)
+  /// The minimum margin in force when the quote was priced, and whether this quote is below it.
+  minMarginBpsAtQuote Int            @default(0)
+  belowMinimum        Boolean        @default(false)
+  belowMarginApproved Boolean        @default(false)
+  approvedBy          String?
+  approvedByUserId    String?
+  approvedAt          DateTime?
+  approvalNote        String?
+  createdBy           String
+  createdByUserId     String
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  sentAt              DateTime?
+  sentBy              String?
+  decidedAt           DateTime?
+  decidedBy           String?
+  decisionNote        String?
+
+  lines CrmQuoteLine[]
+
+  @@unique([organizationId, number, versionNo])
+  @@index([opportunityId, status])
+}
+
+model CrmQuoteLine {
+  id                  String   @id @default(cuid())
+  quoteId             String
+  quote               CrmQuote @relation(fields: [quoteId], references: [id])
+  sortOrder           Int
+  siteName            String
+  siteAddress         String?
+  postLabel           String?
+  /// A label only (24/7, Day 12h): it changes no sum. The headcount is what the client pays for.
+  shiftPattern        String?
+  salaryStructureId   String
+  structureName       String
+  businessLine        String
+  /// The guards the client pays for (revenue is billed on this).
+  headcount           Int
+  /// The people actually needed to cover the agreed shifts (cost follows this). Often more than the billed headcount, for example on a 24/7 post.
+  requiredPersonnel   Int
+  billPerHead         Decimal  @db.Decimal(16, 2)
+  operativeSharePct   Decimal  @db.Decimal(5, 2)
+  grossPerHead        Decimal  @db.Decimal(16, 2)
+  employerCostPerHead Decimal  @db.Decimal(16, 2)
+  costPerHead         Decimal  @db.Decimal(16, 2)
+  lineBill            Decimal  @db.Decimal(16, 2)
+  lineCost            Decimal  @db.Decimal(16, 2)
+  lineMargin          Decimal  @db.Decimal(16, 2)
+  /// Every part of the employer cost as worked out, so the figure can be explained later.
+  costBreakdown       Json
+  /// The versions of the pension and employer-cost rules the figures came from.
+  ruleVersions        Json
+  estimatedOn         DateTime @db.Date
+
+  @@index([quoteId, sortOrder])
+}
+
+/// A person formally designated to approve a quote below the minimum margin. Only a designated approver (never the quote's maker) can approve one.
+model CrmQuoteApprover {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  userId         String
+  userName       String
+  active         Boolean      @default(true)
+  designatedBy   String
+  designatedAt   DateTime     @default(now())
+  removedBy      String?
+  removedAt      DateTime?
+
+  @@unique([organizationId, userId])
 }

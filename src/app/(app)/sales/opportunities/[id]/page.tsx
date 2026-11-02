@@ -4,6 +4,8 @@ import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { BusinessError } from "@/server/services/_base";
 import { getOpportunity } from "@/server/services/sales/deals";
+import { listQuotes } from "@/server/services/sales/quotes";
+import { bpsToPercent } from "@/lib/sales/quote";
 import { annualValueKobo, weightedValueKobo } from "@/lib/sales/forecast";
 import { koboToString } from "@/lib/money-exact";
 import { fmtDate } from "@/lib/dates";
@@ -30,6 +32,7 @@ export default async function SalesDealPage({ params }: { params: Promise<{ id: 
   const o = v.opportunity;
   const closed = o.stage.stageType !== "OPEN";
   const names = new Map(v.stages.map((s) => [s.id, s.name]));
+  const quotes = await listQuotes(ctx, id);
   return (
     <>
       <PageHeader title={o.name} crumbs={[{ href: "/sales/board", label: "Deals board" }]} description={`${o.account.name}. Owner ${o.ownerName}.`} />
@@ -78,6 +81,28 @@ export default async function SalesDealPage({ params }: { params: Promise<{ id: 
           />
         </Section>
       )}
+
+      <Section title={`${quotes.length} quote(s)`} flush>
+        <Table>
+          <THead><TR><TH>Quote</TH><TH>Status</TH><TH className="text-right">Monthly bill</TH><TH className="text-right">Margin</TH></TR></THead>
+          <TBody>
+            {quotes.map((x) => (
+              <TR key={x.id}>
+                <TD><Link className="underline" href={`/sales/quotes/${x.id}`}>{x.number} v{x.versionNo}</Link></TD>
+                <TD><Badge>{label(x.status)}</Badge></TD>
+                <TD className="text-right">{money(String(x.monthlyBill))}</TD>
+                <TD className="text-right text-xs">{bpsToPercent(x.marginBps)}%{x.belowMinimum ? " (below the minimum)" : ""}</TD>
+              </TR>
+            ))}
+          </TBody>
+        </Table>
+        {!quotes.length && <p className="px-4 py-4 text-sm text-muted-foreground">No quote yet.</p>}
+        {!closed && can(ctx.role, "sales.manage") && (
+          <p className="px-4 pb-4 text-sm">
+            <Link className="underline" href={`/sales/opportunities/${o.id}/quote`}>Make a quote</Link> priced against what the guards cost.
+          </p>
+        )}
+      </Section>
 
       <Section title="Stage history" flush>
         <Table>

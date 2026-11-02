@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-175 tables and 140 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+178 tables and 141 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -113,6 +113,8 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | crmOpportunities | → CrmOpportunity[] |  |  |
 | crmStageHistory | → CrmStageHistory[] |  |  |
 | crmAssignmentRules | → CrmAssignmentRule[] |  |  |
+| crmQuotes | → CrmQuote[] |  |  |
+| crmQuoteApprovers | → CrmQuoteApprover[] |  |  |
 | payslipSetting | → PayslipSetting |  |  |
 | payslipDeliveries | → PayslipDelivery[] |  |  |
 | paymentFileExports | → PaymentFileExport[] |  |  |
@@ -4170,6 +4172,7 @@ Whether the sales module is on for an organization (off until a company administ
 | enabled | Boolean |  |  |
 | mode | CrmMode |  |  |
 | assignmentMethod | CrmAssignmentMethod |  | How new leads with no owner given (created by a manager) are assigned, and where round robin has got to. |
+| minMarginBps | Int |  | The lowest gross margin (a share of the bill) a quote may have before a designated approver must approve it, in basis points (1500 = 15.00%). 0 = no minimum. A new organization starts at 15%. |
 | assignmentCursor | Int |  |  |
 | updatedBy | String | yes |  |
 | updatedAt | DateTime |  |  |
@@ -4389,6 +4392,7 @@ A specific bid for a client business: "24/7 guarding, 3 sites, 18 guards". Its m
 | createdAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |
 | history | → CrmStageHistory[] |  |  |
+| quotes | → CrmQuote[] |  |  |
 
 ### CrmStageHistory
 
@@ -4424,6 +4428,90 @@ Leads in this state (or wanting this service) go to this person.
 | userName | String | yes |  |
 | createdBy | String | yes |  |
 | createdAt | DateTime |  |  |
+
+### CrmQuote
+
+A priced bid for a deal: posts, guards and bill rates, with what the guards cost the company and the margin. Only a DRAFT can be changed (the database refuses to change the lines of any other); a new version is made to change a sent quote. The costs are saved with the rule versions they used.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| opportunityId | String | yes |  |
+| opportunity | → CrmOpportunity |  |  |
+| number | String | yes | Shared by every version of the same quote. |
+| versionNo | Int | yes |  |
+| status | CrmQuoteStatus |  |  |
+| validUntil | DateTime |  |  |
+| notes | String |  |  |
+| monthlyBill | Decimal |  |  |
+| monthlyCost | Decimal |  |  |
+| monthlyMargin | Decimal |  |  |
+| marginBps | Int |  | Margin as basis points of the bill (905 = 9.05%). |
+| minMarginBpsAtQuote | Int |  | The minimum margin in force when the quote was priced, and whether this quote is below it. |
+| belowMinimum | Boolean |  |  |
+| belowMarginApproved | Boolean |  |  |
+| approvedBy | String |  |  |
+| approvedByUserId | String |  |  |
+| approvedAt | DateTime |  |  |
+| approvalNote | String |  |  |
+| createdBy | String | yes |  |
+| createdByUserId | String | yes |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+| sentAt | DateTime |  |  |
+| sentBy | String |  |  |
+| decidedAt | DateTime |  |  |
+| decidedBy | String |  |  |
+| decisionNote | String |  |  |
+| lines | → CrmQuoteLine[] |  |  |
+
+### CrmQuoteLine
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| quoteId | String | yes |  |
+| quote | → CrmQuote |  |  |
+| sortOrder | Int | yes |  |
+| siteName | String | yes |  |
+| siteAddress | String |  |  |
+| postLabel | String |  |  |
+| shiftPattern | String |  | A label only (24/7, Day 12h): it changes no sum. The headcount is what the client pays for. |
+| salaryStructureId | String | yes |  |
+| structureName | String | yes |  |
+| businessLine | String | yes |  |
+| headcount | Int | yes | The guards the client pays for (revenue is billed on this). |
+| requiredPersonnel | Int | yes | The people actually needed to cover the agreed shifts (cost follows this). Often more than the billed headcount, for example on a 24/7 post. |
+| billPerHead | Decimal | yes |  |
+| operativeSharePct | Decimal | yes |  |
+| grossPerHead | Decimal | yes |  |
+| employerCostPerHead | Decimal | yes |  |
+| costPerHead | Decimal | yes |  |
+| lineBill | Decimal | yes |  |
+| lineCost | Decimal | yes |  |
+| lineMargin | Decimal | yes |  |
+| costBreakdown | Json | yes | Every part of the employer cost as worked out, so the figure can be explained later. |
+| ruleVersions | Json | yes | The versions of the pension and employer-cost rules the figures came from. |
+| estimatedOn | DateTime | yes |  |
+
+### CrmQuoteApprover
+
+A person formally designated to approve a quote below the minimum margin. Only a designated approver (never the quote's maker) can approve one.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| userId | String | yes |  |
+| userName | String | yes |  |
+| active | Boolean |  |  |
+| designatedBy | String | yes |  |
+| designatedAt | DateTime |  |  |
+| removedBy | String |  |  |
+| removedAt | DateTime |  |  |
 
 ## Fixed sets of values
 
@@ -5006,4 +5094,8 @@ What the controller concluded about the harm a breach could do to the people aff
 ### CrmLostReason
 
 `PRICE`, `QUALITY`, `RELATIONSHIP`, `INCUMBENT_RETAINED`, `NO_DECISION`, `BUDGET`, `OTHER`
+
+### CrmQuoteStatus
+
+`DRAFT`, `SENT`, `ACCEPTED`, `REJECTED`, `SUPERSEDED`
 
