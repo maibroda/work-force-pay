@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { Exact } from "../../src/lib/exact-fraction";
 import type { Kobo } from "../../src/lib/money-exact";
-import { calculateEmployeePayroll, type EngineInput, type RateInfo, type WorkDay } from "../../src/lib/payroll/engine";
+import { calculateEmployeePayroll, overtimeHourlyRate, type EngineInput, type RateInfo, type WorkDay } from "../../src/lib/payroll/engine";
+import { overtimePay } from "../../src/lib/payroll/pay-inputs";
 import { computePayeKobo, type TaxRuleDef } from "../../src/lib/payroll/paye";
 import type { StructureDef } from "../../src/lib/payroll/structure";
 import {
   calculateGolden,
+  calculateStructureModel,
+  goldenStructureModelCases,
   expectedGolden,
   goldenBands,
   goldenCases,
@@ -144,7 +147,11 @@ const GOLDEN_STRUCTURE: StructureDef = {
   ],
 };
 
-/** The engine's figures for a case, with the allowances carried inside each period's monthly gross (rate + allowances). Only for cases with no absence/overtime. */
+/**
+ * The engine's figures for a case, with the allowances carried inside each period's monthly gross (rate + allowances), as the engine's salary structures work.
+ * Days of unpaid absence are recorded as ABSENT (the last ones of the paid span); overtime is entered as the app enters it (hours x the app's own hourly rate); a sanction is
+ * an approved penalty.
+ */
 function runEngine(c: GoldenRow) {
   const d1 = Number(c.days_at_rate_1);
   const d2 = Number(c.days_at_rate_2);
@@ -157,9 +164,12 @@ function runEngine(c: GoldenRow) {
     monthlyGross: rate + allowances,
     structure: GOLDEN_STRUCTURE,
   }));
+  const absence = Number(c.unpaid_absence_days);
   const days: WorkDay[] = [];
   for (let day = 1; day <= d1 + d2; day++)
-    days.push({ date: new Date(Date.UTC(2026, 8, day)), clientId: null, clientName: "-", contractId: null, beatId: `beat-${day <= d1 ? 0 : 1}`, beatName: "-", categoryId: "GUARD", status: "PRESENT", overtimeHours: 0 });
+    days.push({ date: new Date(Date.UTC(2026, 8, day)), clientId: null, clientName: "-", contractId: null, beatId: `beat-${day <= d1 ? 0 : 1}`, beatName: "-", categoryId: "GUARD", status: day > d1 + d2 - absence ? "ABSENT" : "PRESENT", overtimeHours: 0 });
+  const otHours = Number(c.overtime_hours);
+  const otAmount = otHours > 0 ? overtimePay(otHours, overtimeHourlyRate(rates[0].monthlyGross, Number(c.days_in_month), Number(params.hours_per_shift_day), Number(c.overtime_multiplier))) : 0;
   const input: EngineInput = {
     basisDays: Number(c.days_in_month),
     days,
@@ -167,6 +177,14 @@ function runEngine(c: GoldenRow) {
     pension: { employeeRate: Exact.decimal(params.employee_pension_rate).mul(Exact.int(100)).toNumber(), employerRate: 10, version: "golden" },
     // the key's NHF rate, loaded the way GOLDEN_FORMAT.md section 4 says: from the golden parameters, into the setting the engine reads
     nhfEmployeeRatePct: Exact.decimal(params.nhf_rate_on_basic).mul(Exact.int(100)).toNumber(),
+    // the key's take-home floor and its loan and cooperative recoveries (the app has one kind of credit recovery, the loan: both are entered as loans)
+    minTakeHomePct: Exact.decimal(params.min_takehome_share_of_gross).mul(Exact.int(100)).toNumber(),
+    overtime: otHours > 0 ? [{ id: "ot", beatId: "beat-0", clientId: "c", contractId: "ct", hours: otHours, amount: otAmount }] : undefined,
+    deductions: [
+      ...(Number(c.sanction_deduction) > 0 ? [{ id: "sanction", type: "PENALTY", amount: Number(c.sanction_deduction), authorityReference: "SN-1", reason: "golden sanction" }] : []),
+      ...(Number(c.loan_deduction) > 0 ? [{ id: "loan", type: "LOAN", amount: Number(c.loan_deduction), authorityReference: "LN-1", reason: "golden loan" }] : []),
+      ...(Number(c.coop_deduction) > 0 ? [{ id: "coop", type: "LOAN", amount: Number(c.coop_deduction), authorityReference: "CO-1", reason: "golden cooperative" }] : []),
+    ],
     taxRule: goldenTaxRule(),
   };
   return calculateEmployeePayroll(input);
@@ -177,7 +195,7 @@ const kobo = (naira: number) => Number(nairaToKobo(String(naira)).round());
 describe("golden dataset: the payroll engine agrees with the key on gross, pension, NHF, PAYE and net pay", () => {
   // Cases the engine can be given the same inputs for, and whose rules are the same on these three lines.
   // Case 9 is left out on purpose: see the todo below (the key rounds basic pay and allowances separately).
-  for (const n of [1, 2, 3, 6, 7, 8, 11]) {
+  for (const n of [1, 2, 3, 6, 7, 8, 10, 11]) {
     const c = cases.find((x) => Number(x.case) === n)!;
     it(`case ${c.case}: ${c.scenario}`, () => {
       const want = expectedGolden(c);
@@ -189,13 +207,49 @@ describe("golden dataset: the payroll engine agrees with the key on gross, pensi
       expect(kobo(r.paye.paye), "monthly PAYE").toBe(want.monthly_paye);
       expect(kobo(r.employeeNhf), "NHF").toBe(want.nhf);
       expect(kobo(r.netPay), "net pay").toBe(want.net_pay);
+      expect(kobo(r.otherDeductions), "loan and cooperative actually taken").toBe(want.loan_coop_allowed);
+    });
+  }
+});
+
+describe("golden dataset: the cases whose key follows a different pay model (4, 5 and 9)", () => {
+  // The key describes pay as "a rate plus allowances". The engine's salary structures have one monthly gross split across components, so for these three the expected
+  // figures are worked in the engine's own model by an independent exact calculator and written down in golden_cases_structure_model.csv (see tests/golden/README.md).
+  const regenerated = goldenStructureModelCases();
+
+  it("the independent structure-model calculator reproduces the key's own figures for the eight cases where the two models agree", () => {
+    for (const c of cases.filter((x) => !["4", "5", "9"].includes(x.case))) {
+      const want = expectedGolden(c);
+      const m = calculateStructureModel(c, params, bands);
+      expect({ gross: m.gross, pension: m.pension, nhf: m.nhf, annual_taxable: m.annual_taxable, annual_paye: m.annual_paye, monthly_paye: m.monthly_paye, loan_coop_allowed: m.loan_coop_allowed, net_pay: m.net_pay }, `case ${c.case}`).toEqual({
+        gross: want.gross, pension: want.pension, nhf: want.nhf, annual_taxable: want.annual_taxable, annual_paye: want.annual_paye, monthly_paye: want.monthly_paye, loan_coop_allowed: want.loan_coop_allowed, net_pay: want.net_pay,
+      });
+    }
+  });
+
+  for (const n of ["4", "5", "9"]) {
+    const c = cases.find((x) => x.case === n)!;
+    it(`case ${n}: ${c.scenario}: the calculator, the written expectation and the engine agree to the kobo`, () => {
+      const want = regenerated[n];
+      expect(calculateStructureModel(c, params, bands), "calculator vs the written expectation").toEqual(want);
+      const r = runEngine(c);
+      expect(kobo(r.earnedGross), "gross").toBe(want.gross);
+      expect(kobo(r.overtimeAmount), "overtime").toBe(want.overtime_pay);
+      expect(kobo(r.employeePension), "pension").toBe(want.pension);
+      expect(kobo(r.employeeNhf), "NHF").toBe(want.nhf);
+      expect(kobo(r.paye.annualChargeable), "annual taxable").toBe(want.annual_taxable);
+      expect(kobo(r.paye.annualTax), "annual PAYE").toBe(want.annual_paye);
+      expect(kobo(r.paye.paye), "monthly PAYE").toBe(want.monthly_paye);
+      expect(kobo(r.netPay), "net pay").toBe(want.net_pay);
     });
   }
 
-  // Where the engine follows DIFFERENT RULES from the key. Not failures to hide: each needs the founder's (and the adviser's) decision on which rule is right.
-  // When a decision is made, the rule is changed in one place and the key regenerated (GOLDEN_FORMAT.md section 2), and the todo becomes a test.
-  it.todo("Net-pay floor: the key limits loan and cooperative deductions so at least half of gross is taken home (case 10); the engine only flags deductions above a percentage of earnings");
-  it.todo("Unpaid absence: the key leaves allowances unreduced by absence days (case 4); the engine pays everything pro rata to the days paid");
-  it.todo("Overtime base: the key's hourly rate uses the rate without allowances (case 5); the app derives it from the whole operative monthly gross");
-  it.todo("Rounding of basic pay and allowances: the key rounds them as two lines (case 9: 66,666.67 + 6,666.67 = 73,333.34); the engine rounds each salary component (73,333.33)");
+  it("differs from the founder's key only where the models differ, by the amounts the README explains", () => {
+    const key = (n: string) => expectedGolden(cases.find((x) => x.case === n)!);
+    expect(regenerated["9"].gross - key("9").gross, "case 9: one kobo, from rounding basic pay and allowances as two lines").toBe(-1);
+    expect(regenerated["4"].gross, "case 4: the allowances go with the 3 unpaid days").toBe(99_000_00);
+    expect(key("4").gross).toBe(100_000_00);
+    expect(regenerated["5"].overtime_pay, "case 5: 16 hours at the whole-gross hourly rate of 916.67").toBe(14_666_72);
+    expect(key("5").overtime_pay).toBe(13_333_33);
+  });
 });

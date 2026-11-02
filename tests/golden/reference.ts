@@ -166,3 +166,103 @@ export function expectedGolden(c: GoldenRow): GoldenResult {
     paye_state: c.expected_paye_state,
   };
 }
+
+// ───────────────────── the same cases worked in the payroll engine's pay model ─────────────────────
+
+/**
+ * The golden cases worked the way the payroll ENGINE models pay, independently of the engine (exact arithmetic again; nothing is taken from the engine's code).
+ * The key describes pay as "a rate plus allowances"; the engine has one monthly gross per site (rate + allowances) split by percentages across salary components, and:
+ *   - a component is each period's gross x its share x days paid / days in the month, added across periods and rounded half up to the kobo ONCE (not basic pay
+ *     and allowances as two rounded lines);
+ *   - days of unpaid absence are simply not paid, and the allowances go with them;
+ *   - overtime is hours x an hourly rate rounded to the kobo once (monthly gross / days / hours x multiplier), is not pensionable, and is taxed ONCE as a one-off on
+ *     top of the annualised regular pay (the key annualises the whole gross: the one difference of tax treatment, for the tax adviser);
+ *   - NHF is the key's rate on the basic component for a worker who contributes; the take-home floor and the PAYE bands work as in the key.
+ * Wherever the key has no absence, no overtime and a whole-month rounding it gives the key's own figures, which a test proves for eight cases. Cases 4, 5 and 9 give the
+ * regenerated figures in golden_cases_structure_model.csv.
+ */
+export interface StructureModelResult {
+  gross: number;
+  overtime_pay: number;
+  pension: number;
+  nhf: number;
+  annual_taxable: number;
+  annual_paye: number;
+  monthly_paye: number;
+  loan_coop_allowed: number;
+  net_pay: number;
+}
+
+const SHARES = { basic: 50, housing: 10, transport: 10, other: 30 } as const;
+
+export function calculateStructureModel(c: GoldenRow, p: Record<string, string>, bands: GoldenRow[]): StructureModelResult {
+  const basis = Exact.int(Number(c.days_in_month));
+  const absence = Number(c.unpaid_absence_days);
+  const allowances = nairaToKobo(c.monthly_allowances);
+  const d1 = Number(c.days_at_rate_1);
+  const d2 = Number(c.days_at_rate_2);
+  // unpaid absence comes off the last period that has days
+  const periods = [
+    { monthly: nairaToKobo(c.rate_1).add(allowances), days: d1 - Math.max(0, absence - d2) },
+    { monthly: nairaToKobo(c.rate_2).add(allowances), days: Math.max(0, d2 - absence) },
+  ].filter((x) => x.days > 0);
+  const component = (pct: number): number => {
+    let sum: Exact = K(0);
+    for (const x of periods) sum = sum.add(x.monthly.mul(Exact.ratio(pct, 100)).mul(Exact.int(x.days)).div(basis));
+    return r(sum);
+  };
+  const basic = component(SHARES.basic);
+  const gross = basic + component(SHARES.housing) + component(SHARES.transport) + component(SHARES.other);
+  const pensionable = basic + component(SHARES.housing) + component(SHARES.transport);
+
+  const otHours = Exact.decimal(c.overtime_hours);
+  if (!otHours.isZero() && periods.length !== 1) throw new Error("overtime across more than one rate is not modelled");
+  const hourly = otHours.isZero() ? 0 : r(periods[0].monthly.div(basis).div(Exact.int(Number(p.hours_per_shift_day))).mul(Exact.decimal(c.overtime_multiplier)));
+  const overtime = r(otHours.mul(K(hourly)));
+
+  const pension = r(K(pensionable).mul(D(p.employee_pension_rate)));
+  const nhf = r(K(basic).mul(D(p.nhf_rate_on_basic)));
+
+  const taxUnits = (chargeable: Exact): Exact => {
+    let t: Exact = K(0);
+    for (const b of bands) {
+      const over = chargeable.sub(nairaToKobo(b.lower_limit));
+      if (over.cmp(K(0)) > 0) t = t.add(over.mul(D(b.incremental_rate)));
+    }
+    return t;
+  };
+  const reliefs = K(12 * (pension + nhf)).add(nairaToKobo(p.other_annual_relief));
+  const regularCharged = Exact.max(K(0), K(12 * gross).sub(reliefs));
+  const withOvertime = regularCharged.add(K(overtime));
+  const regularTax = taxUnits(regularCharged);
+  const monthlyExact = regularTax.div(K(12)).add(taxUnits(withOvertime).sub(regularTax));
+  const paye = monthlyExact.cmp(K(0)) > 0 ? r(monthlyExact) : 0;
+
+  const totalEarnings = gross + overtime;
+  const sanction = r(nairaToKobo(c.sanction_deduction));
+  const requested = r(nairaToKobo(c.loan_deduction).add(nairaToKobo(c.coop_deduction)));
+  const floor = r(K(totalEarnings).mul(D(p.min_takehome_share_of_gross)));
+  const room = Math.max(0, totalEarnings - (pension + nhf + paye + sanction) - floor);
+  const loanCoop = Math.min(requested, room);
+  return {
+    gross,
+    overtime_pay: overtime,
+    pension,
+    nhf,
+    annual_taxable: r(withOvertime),
+    annual_paye: r(taxUnits(withOvertime)),
+    monthly_paye: paye,
+    loan_coop_allowed: loanCoop,
+    net_pay: totalEarnings - paye - pension - nhf - sanction - loanCoop,
+  };
+}
+
+/** The regenerated expectations for the cases whose key follows a different pay model (golden_cases_structure_model.csv), in whole kobo. */
+export function goldenStructureModelCases(): Record<string, StructureModelResult> {
+  const out: Record<string, StructureModelResult> = {};
+  for (const row of read("golden_cases_structure_model.csv")) {
+    const k = (col: string) => wholeKobo(row[`expected_${col}`], `case ${row.case} ${col}`);
+    out[row.case] = { gross: k("gross"), overtime_pay: k("overtime_pay"), pension: k("pension"), nhf: k("nhf"), annual_taxable: k("annual_taxable"), annual_paye: k("annual_paye"), monthly_paye: k("monthly_paye"), loan_coop_allowed: k("loan_coop_allowed"), net_pay: k("net_pay") };
+  }
+  return out;
+}

@@ -93,11 +93,11 @@ export function overlappingVersion<T extends { effectiveFrom: Date; effectiveTo:
 }
 
 /**
- * The starting values for a rule's filing dates and penalty: the 10th of the next month, 31 January, 10%. They come from the founder's own PAYE seed file
- * ("published summaries", marked there as unverified) and have NOT been verified by the tax adviser. They are only a starting point: they are proposed when a
+ * The starting values for a rule's filing dates and penalty: the 7th of the next month (the founder, 2026-10-29; his PAYE seed file had the 10th), 31 January, 10%.
+ * They come from the founder and have NOT been verified by the tax adviser. They are only a starting point: they are proposed when a
  * rule has none of its own, shown as such, and can be changed or cleared in the new-version form. A rule only counts as verified once HR and Finance sign it.
  */
-export const FOUNDER_FILING_DEFAULTS: PayeTiming = { dueDay: 10, annualReturnMonth: 1, annualReturnDay: 31, latePenaltyPct: 10 };
+export const FOUNDER_FILING_DEFAULTS: PayeTiming = { dueDay: 7, annualReturnMonth: 1, annualReturnDay: 31, latePenaltyPct: 10 };
 
 /** The timing to put in a new-version form: the rule's own values if it has any, otherwise the founder's starting values (`proposed` says which). */
 export function filingDefaultsFor(current: PayeTiming): PayeTiming & { proposed: boolean } {
@@ -112,16 +112,16 @@ export function monthEndDue(year: number, month: number): string {
 }
 
 /**
- * Due date, lateness and penalty for a remittance line. PAYE follows the tax rule's filing dates (see payeDueInfo). The employee's NHF contribution is
- * remitted to the appropriate authority by the END OF THE PAY MONTH (the founder's rule; to be confirmed by the tax adviser) and carries no penalty here.
- * `line.type` is "PAYE", "NHF" (the employee NHF line) or anything else, which gets no date.
+ * Due date, lateness and penalty for a remittance line. PAYE follows the tax rule's filing dates (see payeDueInfo). The employee's NHF contribution and the
+ * PENSION remittance are remitted by the END OF THE PAY MONTH (the founder's rule, 2026-10-29; to be confirmed by the tax adviser) and carry no penalty here.
+ * `line.type` is "PAYE", "NHF" (the employee NHF line), "PENSION", or anything else, which gets no date.
  */
 export function remittanceDueInfo(
   line: { type: string; status: string; totalAmount: number; period: { year: number; month: number } },
   timing: PayeTiming | null,
   today: string,
 ): DueInfo {
-  if (line.type !== "NHF") return payeDueInfo(line, timing, today);
+  if (line.type !== "NHF" && line.type !== "PENSION") return payeDueInfo(line, timing, today);
   const dueDate = monthEndDue(line.period.year, line.period.month);
   const late = line.status !== "PAID" && toMs(today) > toMs(dueDate);
   return { dueDate, overdue: late, daysLate: late ? Math.round((toMs(today) - toMs(dueDate)) / DAY_MS) : 0, penalty: null };

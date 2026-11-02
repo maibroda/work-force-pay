@@ -23,6 +23,7 @@ import {
   addKobo,
   koboFromNaira as kobo,
   koboToNumber,
+  koboToString,
   MoneyError,
   mulPct,
   pctToRate,
@@ -111,6 +112,12 @@ export interface EngineInput {
    * When above 0 it is taken off net pay as its own line and the PAYE relief for NHF is the amount actually taken.
    */
   nhfEmployeeRatePct?: number;
+  /**
+   * The take-home floor, a percentage of gross (a payroll-rule setting; 0 or absent = none, as pay has always been worked). Loan and salary-advance recoveries are
+   * limited so that net pay is not taken below that share of gross; what is not taken is reported as DEFERRED so the loan book can carry it forward. Penalties,
+   * recoveries and other deductions are never reduced.
+   */
+  minTakeHomePct?: number;
   taxRule: TaxRuleDef;
   annualRent?: number | null;
   /** Supplementary runs pay only adjustments (no base salary). */
@@ -153,6 +160,17 @@ export interface PayrollLine {
   code: string;
   name: string;
   amount: number;
+  /** On a deduction line: the id of the approved deduction it is, so a part-deferred recovery can be adjusted at the source. */
+  deductionId?: string;
+  /** On a deduction line: the part of the recovery that was NOT taken because of the take-home floor. */
+  deferred?: number;
+}
+
+export interface DeferredDeduction {
+  id: string;
+  type: string;
+  requested: number;
+  taken: number;
 }
 
 export interface LocationWorked {
@@ -207,6 +225,8 @@ export interface EngineResult {
   employeeNhf: number;
   employerPension: number;
   taxableIncome: number;
+  /** Recoveries cut by the take-home floor (empty when the floor is off or nothing was cut). */
+  deferredDeductions: DeferredDeduction[];
   paye: PayeResult;
   otherDeductions: number;
   rejectedDeductions: Array<{ id: string; reason: string }>;
@@ -232,6 +252,9 @@ export interface EngineResult {
   allocations: Allocation[];
   unratedDays: WorkDay[];
 }
+
+/** The kinds of deduction the take-home floor may reduce: loan and salary-advance recoveries, the only kinds whose unrecovered part the loan book carries forward. */
+export const CAPPABLE_DEDUCTIONS: ReadonlySet<string> = new Set(["LOAN", "SALARY_ADVANCE"]);
 
 export const DEDUCTION_AUTHORITY_ERROR =
   "Deduction cannot be processed because approval/reference documentation is missing.";
@@ -487,8 +510,27 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
     }
     return true;
   });
-  const acceptedKobo = accepted.map((x) => ({ x, kobo: kobo(x.amount, "A deduction amount") }));
-  const otherDeductions = sumKobo(acceptedKobo.map((a) => a.kobo));
+  const minTakeHomePct = input.minTakeHomePct ?? 0;
+  if (!Number.isFinite(minTakeHomePct) || minTakeHomePct < 0 || minTakeHomePct > 100) throw new MoneyError("The take-home floor must be from 0 to 100 percent.");
+  const acceptedKobo = accepted.map((x) => ({ x, kobo: kobo(x.amount, "A deduction amount"), taken: kobo(x.amount, "A deduction amount") }));
+  const deferredDeductions: DeferredDeduction[] = [];
+  if (minTakeHomePct > 0) {
+    // What cannot be reduced comes off first: PAYE, pension, NHF and every deduction that is not a loan or salary-advance recovery. The floor is a share of gross,
+    // rounded half up to the kobo once. Recoveries are then taken in the order given, each up to the room that is left.
+    const unavoidable = sumKobo([payeK.paye, employeePension, employeeNhf, ...acceptedKobo.filter((a) => !CAPPABLE_DEDUCTIONS.has(a.x.type)).map((a) => a.kobo)]);
+    const floor = mulPct(totalEarnings, rateOf(minTakeHomePct));
+    let room = Math.max(0, totalEarnings - unavoidable - floor);
+    for (const a of acceptedKobo) {
+      if (!CAPPABLE_DEDUCTIONS.has(a.x.type)) continue;
+      const take = Math.min(a.kobo, room);
+      room -= take;
+      if (take < a.kobo) {
+        a.taken = take as Kobo;
+        deferredDeductions.push({ id: a.x.id, type: a.x.type, requested: koboToNumber(a.kobo), taken: koboToNumber(take as Kobo) });
+      }
+    }
+  }
+  const otherDeductions = sumKobo(acceptedKobo.map((a) => a.taken));
   const totalDeductions = sumKobo([payeK.paye, employeePension, employeeNhf, otherDeductions]);
   const netPay = subKobo(totalEarnings, totalDeductions);
 
@@ -535,13 +577,17 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
   lines.push({ type: "DEDUCTION", code: "PAYE", name: "PAYE", amount: paye.paye });
   lines.push({ type: "DEDUCTION", code: "PENSION_EE", name: "Employee Pension", amount: koboToNumber(employeePension) });
   if (employeeNhf) lines.push({ type: "DEDUCTION", code: "NHF", name: "NHF", amount: koboToNumber(employeeNhf) });
-  for (const a of acceptedKobo)
+  for (const a of acceptedKobo) {
+    const cut = a.kobo - a.taken;
     lines.push({
       type: "DEDUCTION",
       code: a.x.type,
-      name: `${labelDeduction(a.x.type)} — ${a.x.reason}`,
-      amount: koboToNumber(a.kobo),
+      name: `${labelDeduction(a.x.type)} — ${a.x.reason}${cut > 0 ? ` (${koboToString(cut as Kobo)} deferred: take-home floor)` : ""}`,
+      amount: koboToNumber(a.taken),
+      deductionId: a.x.id,
+      ...(cut > 0 ? { deferred: koboToNumber(cut as Kobo) } : {}),
     });
+  }
   lines.push({ type: "EMPLOYER", code: "PENSION_ER", name: "Employer Pension", amount: koboToNumber(employerPension) });
   if (itfAmount)
     lines.push({ type: "EMPLOYER", code: "ITF", name: "ITF (Industrial Training Fund)", amount: koboToNumber(itfAmount) });
@@ -712,6 +758,7 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
     pensionBase: koboToNumber(pensionBase),
     employeePension: koboToNumber(employeePension),
     employeeNhf: koboToNumber(employeeNhf),
+    deferredDeductions,
     employerPension: koboToNumber(employerPension),
     taxableIncome: koboToNumber(addKobo(regularTaxable, irregularTaxable)),
     paye,

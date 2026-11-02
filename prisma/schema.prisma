@@ -3294,6 +3294,8 @@ model PayrollRule {
   requirePayeState         Boolean        @default(false)
   /// The rate of the VOLUNTARY NHF (National Housing Fund) contribution, as a % of BASIC pay: 2.5 by the founder's rule (the tax adviser confirms it). It is taken only from employees who have chosen to contribute (Employee.nhfContributes), as its own deduction line, and is allowed against PAYE at the amount taken. 0 = none.
   nhfEmployeeRatePct       Decimal        @default(2.5) @db.Decimal(5, 3)
+  /// The take-home floor, % of gross: loan and salary-advance recoveries may not take net pay below this share of gross; the part not taken is carried forward by the loan book. 0 (the default) = no floor, as pay has always been worked. A client-specific policy, not a statutory one.
+  minTakeHomePctOfGross    Decimal        @default(0) @db.Decimal(5, 2)
   effectiveFrom            DateTime       @db.Date
   effectiveTo              DateTime?      @db.Date
   createdAt                DateTime       @default(now())
