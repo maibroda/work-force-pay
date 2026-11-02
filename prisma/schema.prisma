@@ -650,6 +650,12 @@ model Organization {
   crmAutomationRules        CrmAutomationRule[]
   crmAutomationRuns         CrmAutomationRun[]
   crmNotifications          CrmNotification[]
+  crmCases                  CrmCase[]
+  crmCaseEvents             CrmCaseEvent[]
+  crmSlaPolicies            CrmSlaPolicy[]
+  crmBusinessHours          CrmBusinessHours?
+  crmHolidays               CrmHoliday[]
+  crmRenewalLinks           CrmRenewalLink[]
   payslipSetting            PayslipSetting?
   payslipDeliveries         PayslipDelivery[]
   paymentFileExports        PaymentFileExport[]
@@ -5632,18 +5638,20 @@ enum CrmChannel {
 
 /// Whether the sales module is on for an organization (off until a company administrator switches it on) and how enquiries are handled.
 model CrmSetting {
-  id               String              @id @default(cuid())
-  organizationId   String              @unique
-  organization     Organization        @relation(fields: [organizationId], references: [id])
-  enabled          Boolean             @default(false)
-  mode             CrmMode             @default(CLASSIC)
+  id                String              @id @default(cuid())
+  organizationId    String              @unique
+  organization      Organization        @relation(fields: [organizationId], references: [id])
+  enabled           Boolean             @default(false)
+  mode              CrmMode             @default(CLASSIC)
   /// How new leads with no owner given (created by a manager) are assigned, and where round robin has got to.
-  assignmentMethod CrmAssignmentMethod @default(NONE)
+  assignmentMethod  CrmAssignmentMethod @default(NONE)
   /// The lowest gross margin (a share of the bill) a quote may have before a designated approver must approve it, in basis points (1500 = 15.00%). 0 = no minimum. A new organization starts at 15%.
-  minMarginBps     Int                 @default(1500)
-  assignmentCursor Int                 @default(0)
-  updatedBy        String
-  updatedAt        DateTime            @updatedAt
+  minMarginBps      Int                 @default(1500)
+  assignmentCursor  Int                 @default(0)
+  /// A contract ending within this many days gets a renewal deal opened for it.
+  renewalWindowDays Int                 @default(90)
+  updatedBy         String
+  updatedAt         DateTime            @updatedAt
 }
 
 /// A company the organization sells to or serves, as the sales side sees it. It links to the real Client only when a won deal is handed over.
@@ -5686,6 +5694,8 @@ model CrmAccount {
   opportunities CrmOpportunity[]
   activities    CrmActivity[]
   tasks         CrmTask[]
+  cases         CrmCase[]
+  slaPolicies   CrmSlaPolicy[]
 
   @@index([organizationId, ownerUserId, status])
   @@index([organizationId, normalizedName])
@@ -6436,4 +6446,163 @@ model CrmNotification {
   readAt         DateTime?
 
   @@index([organizationId, userId, readAt])
+}
+
+enum CrmCasePriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum CrmCaseCategory {
+  SERVICE_QUALITY
+  STAFFING
+  BILLING
+  COMPLAINT
+  REQUEST
+  OTHER
+}
+
+enum CrmCaseStatus {
+  OPEN
+  RESOLVED
+}
+
+enum CrmCaseEventKind {
+  OPENED
+  RESPONDED
+  NOTE
+  REASSIGNED
+  RESOLVED
+  REOPENED
+  WARNING
+  BREACH
+  ESCALATED
+}
+
+/// How quickly a case of a priority must be answered and resolved. A policy for an account wins over the organization's default for that priority.
+model CrmSlaPolicy {
+  id                   String          @id @default(cuid())
+  organizationId       String
+  organization         Organization    @relation(fields: [organizationId], references: [id])
+  /// Empty for the organization's default.
+  accountId            String?
+  account              CrmAccount?     @relation(fields: [accountId], references: [id])
+  /// The account's id, or empty for the default: lets the database allow one policy for each account and priority.
+  accountKey           String          @default("")
+  priority             CrmCasePriority
+  firstResponseMinutes Int
+  resolutionMinutes    Int
+  /// The clock runs only in business hours (not at night, at weekends or on holidays).
+  businessHoursOnly    Boolean         @default(true)
+  active               Boolean         @default(true)
+  createdBy            String
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  updatedBy            String?
+
+  @@unique([organizationId, accountKey, priority])
+}
+
+/// When the organization is open, in Lagos time. Without a row: Monday to Friday, 08:00 to 17:00.
+model CrmBusinessHours {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  openMinute     Int          @default(480)
+  closeMinute    Int          @default(1020)
+  /// ISO weekdays, 1 = Monday to 7 = Sunday.
+  workDays       Int[]        @default([1, 2, 3, 4, 5])
+  updatedBy      String
+  updatedAt      DateTime     @updatedAt
+}
+
+/// A day the organization is closed. Entered by an administrator: public holidays differ by year and are announced by government.
+model CrmHoliday {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  date           DateTime     @db.Date
+  name           String
+  createdBy      String
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, date])
+}
+
+/// A problem or request from a client account. The SLA deadlines are worked out when it opens and kept on the case, so a later change to a policy never moves them.
+model CrmCase {
+  id                      String          @id @default(cuid())
+  organizationId          String
+  organization            Organization    @relation(fields: [organizationId], references: [id])
+  number                  String
+  accountId               String
+  account                 CrmAccount      @relation(fields: [accountId], references: [id])
+  contactId               String?
+  opportunityId           String?
+  /// The client site (Beat) it is about, if any.
+  beatId                  String?
+  category                CrmCaseCategory
+  priority                CrmCasePriority
+  status                  CrmCaseStatus   @default(OPEN)
+  subject                 String
+  description             String?
+  ownerUserId             String
+  ownerName               String
+  openedAt                DateTime        @default(now())
+  slaPolicyId             String?
+  slaFirstResponseMinutes Int?
+  slaResolutionMinutes    Int?
+  slaBusinessHoursOnly    Boolean         @default(false)
+  firstResponseDueAt      DateTime?
+  firstResponseWarnAt     DateTime?
+  firstRespondedAt        DateTime?
+  firstResponseWarnedAt   DateTime?
+  firstResponseBreachedAt DateTime?
+  /// When the resolution clock last started: the opening, or the latest reopening.
+  resolutionStartedAt     DateTime        @default(now())
+  resolutionDueAt         DateTime?
+  resolutionWarnAt        DateTime?
+  resolvedAt              DateTime?
+  resolutionWarnedAt      DateTime?
+  resolutionBreachedAt    DateTime?
+  /// Reported separately, so closing cases early is not rewarded.
+  reopenedCount           Int             @default(0)
+  createdBy               String
+  createdByUserId         String
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+
+  events CrmCaseEvent[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status, priority])
+  @@index([organizationId, accountId])
+}
+
+/// Everything that happens to a case, in order. Never changed (the database refuses it).
+model CrmCaseEvent {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  caseId         String
+  case           CrmCase          @relation(fields: [caseId], references: [id])
+  kind           CrmCaseEventKind
+  byUserId       String?
+  byName         String
+  note           String?
+  at             DateTime         @default(now())
+
+  @@index([caseId, at])
+}
+
+/// The renewal deal opened for a contract: one for each contract, so the daily job can never open two.
+model CrmRenewalLink {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  contractId     String       @unique
+  opportunityId  String
+  createdAt      DateTime     @default(now())
 }

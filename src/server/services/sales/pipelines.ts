@@ -25,6 +25,24 @@ const NEW_BUSINESS_STAGES: Array<{ name: string; probability: number; type: "OPE
   { name: "Lost", probability: 0, type: "LOST", required: ["lostReason"] },
 ];
 
+const RENEWAL_STAGES: Array<{ name: string; probability: number; type: "OPEN" | "WON" | "LOST"; required: string[] }> = [
+  { name: "Review due", probability: 40, type: "OPEN", required: [] },
+  { name: "Proposal sent", probability: 60, type: "OPEN", required: [] },
+  { name: "Negotiation", probability: 75, type: "OPEN", required: [] },
+  { name: "Renewed", probability: 100, type: "WON", required: ["monthlyContractValue", "contractTermMonths", "expectedStartDate"] },
+  { name: "Not renewed", probability: 0, type: "LOST", required: ["lostReason"] },
+];
+
+/** Creates the organization's "Renewals" pipeline (the one renewal deals go in) if it has none. Safe to call again. */
+export async function ensureRenewalPipeline(orgId: string, tx: Client = db) {
+  const have = await tx.crmPipeline.findFirst({ where: { organizationId: orgId, kind: "RENEWAL" }, select: { id: true } });
+  if (have) return have.id;
+  const p = await tx.crmPipeline.create({
+    data: { organizationId: orgId, name: "Renewals", kind: "RENEWAL", sortOrder: 2, stages: { create: RENEWAL_STAGES.map((s, i) => ({ name: s.name, sortOrder: i + 1, stageType: s.type, defaultProbability: s.probability, requiredFields: s.required })) } },
+  });
+  return p.id;
+}
+
 /** Creates the organization's default "New business" pipeline if it has none. Safe to call again. The probabilities are starting values the organization can edit. */
 export async function ensureDefaultPipelines(orgId: string, tx: Client = db) {
   const have = await tx.crmPipeline.findFirst({ where: { organizationId: orgId, kind: "NEW_BUSINESS" }, select: { id: true } });
