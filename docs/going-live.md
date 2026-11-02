@@ -10,6 +10,7 @@ Set these where the app runs (see `.env.example`):
 |---|---|
 | `AUTH_SECRET` | A fresh random string of 32 or more characters. Never the example value: anyone who knows it can sign in as anybody. |
 | `CRON_SECRET` | A fresh random string of 16 or more characters. With none set, every scheduled job is switched off. |
+| `AUDIT_SEAL_KEY` | A fresh random string of 32 or more characters, **kept off the database server** and backed up separately. It seals the audit log so that any later change to it can be detected; without it old seals cannot be checked, and anyone holding both it and the database could rebuild the chain. Never the example value. |
 | `APP_URL` | The `https://` address clients will use. Invitations, reminders and password resets link to it. |
 | `RESEND_API_KEY` | Your Resend key. Without it emails are only written to the server log. |
 | `EMAIL_FROM` | An address on a domain **you have verified with Resend**, e.g. `ThreeRoots Payroll <payroll@yourdomain.ng>`. Resend's own test address delivers only to the Resend account owner, so clients would get nothing. |
@@ -27,6 +28,9 @@ The app does not schedule anything itself. Something outside has to call each jo
 | Records retention | `/api/cron/data-retention` | 02:00 daily |
 | Accrual reversals | `/api/cron/journal-reversals` | 01:00 daily |
 | Recurring journals | `/api/cron/recurring-journals` | 01:30 daily |
+| Audit log sealing | `/api/cron/audit-seal` | every minute (rows are sealed about a minute after they are written; a daily call also works but leaves a longer window in which a change goes unseen) |
+| Audit log check | `/api/cron/audit-verify` | 03:00 daily |
+| Audit chain heads emailed | `/api/cron/audit-heads` | 07:00 on Mondays. **Keep these emails**: they are the copy outside the system |
 
 On Vercel, `vercel.json` (Vercel sends the secret itself when `CRON_SECRET` is set):
 
@@ -37,10 +41,15 @@ On Vercel, `vercel.json` (Vercel sends the secret itself when `CRON_SECRET` is s
     { "path": "/api/cron/hr-digest", "schedule": "0 6 * * *" },
     { "path": "/api/cron/data-retention", "schedule": "0 2 * * *" },
     { "path": "/api/cron/journal-reversals", "schedule": "0 1 * * *" },
-    { "path": "/api/cron/recurring-journals", "schedule": "30 1 * * *" }
+    { "path": "/api/cron/recurring-journals", "schedule": "30 1 * * *" },
+    { "path": "/api/cron/audit-seal", "schedule": "* * * * *" },
+    { "path": "/api/cron/audit-verify", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/audit-heads", "schedule": "0 7 * * 1" }
   ]
 }
 ```
+
+The sealing job runs every minute; check that your Vercel plan allows a call that often (otherwise use a server's crontab for that one job).
 
 On any server, with `crontab -e`:
 
@@ -50,6 +59,9 @@ On any server, with `crontab -e`:
 0 2 * * *   curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://YOUR-APP/api/cron/data-retention
 0 1 * * *   curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://YOUR-APP/api/cron/journal-reversals
 30 1 * * *  curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://YOUR-APP/api/cron/recurring-journals
+* * * * *   curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://YOUR-APP/api/cron/audit-seal
+0 3 * * *   curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://YOUR-APP/api/cron/audit-verify
+0 7 * * 1   curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://YOUR-APP/api/cron/audit-heads
 ```
 
 The checklist item turns green once the reminders job has run, and amber if it stops for more than four days or fails.

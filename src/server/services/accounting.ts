@@ -107,6 +107,7 @@ const DEFAULT_MAPPINGS: Array<[string, string, Head, string | null, string | nul
   ["OTHER", "Other earnings", "EARNING", "5199", null],
   ["PAYE", "PAYE", "DEDUCTION", null, "2110"],
   ["PENSION_EE", "Employee Pension", "DEDUCTION", null, "2120"],
+  ["NHF", "Employee NHF", "DEDUCTION", null, "2148"],
   ["PENALTY", "Penalty", "DEDUCTION", null, "2130"],
   ["RECOVERY", "Recovery", "DEDUCTION", null, "2130"],
   ["LOAN", "Loan repayment", "DEDUCTION", null, "1210"],

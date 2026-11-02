@@ -572,6 +572,7 @@ model Organization {
   paymentTxns               PaymentTransaction[]
   remittances               StatutoryRemittance[]
   auditLogs                 AuditLog[]
+  auditSeals                AuditSeal[]
   leavePolicy               LeavePolicy?
   leaveRequests             LeaveRequest[]
   glAccounts                GlAccount[]
@@ -1804,6 +1805,10 @@ model Employee {
   phone              String?
   email              String?
   address            String?
+  /// Has chosen to contribute to the National Housing Fund (voluntary: 2.5% of basic pay, remitted by the end of the month). Off unless chosen.
+  nhfContributes     Boolean              @default(false)
+  /// The day they chose it; cleared when they stop.
+  nhfOptedInOn       DateTime?            @db.Date
   /// The state PAYE is due to (one of the 36 states or FCT, under its proper name). Copied onto each payroll record when it is calculated.
   stateOfResidence   String?
   employmentDate     DateTime             @db.Date
@@ -2078,6 +2083,11 @@ model HrPolicy {
   noticePayEnabled      Boolean @default(true) // employer ends employment short of notice → pay in lieu
   noticeRecoveryEnabled Boolean @default(true) // employee leaves short of notice → recover the shortfall
   noticePayTaxable      Boolean @default(true)
+
+  // Who is told when the audit log fails its integrity check, and who gets the weekly chain head (docs/plans/tamper-evident-audit-log.md)
+  /// Extra addresses (for example an outside auditor), on top of everyone who can view the audit log, or instead of them when the next field is false.
+  auditAlertEmails            String[] @default([])
+  auditAlertIncludeEveryone   Boolean  @default(true)
 
   // Staff loans & advances (0 = no limit)
   loanMaxGrossMultiple Decimal @default(3) @db.Decimal(4, 2)
@@ -3280,6 +3290,12 @@ model PayrollRule {
   maxDeductionPctOfGross   Decimal        @default(33.33) @db.Decimal(5, 2)
   /// Overhead allocation used in Contract Profitability — % of contract revenue charged as back-office cost.
   backOfficeChargePct      Decimal        @default(15) @db.Decimal(5, 2)
+  /// A worker with PAYE and no state of residence is a warning (false, the default) or a CRITICAL finding that blocks approval until fixed or overridden with a reason (true).
+  requirePayeState         Boolean        @default(false)
+  /// The rate of the VOLUNTARY NHF (National Housing Fund) contribution, as a % of BASIC pay: 2.5 by the founder's rule (the tax adviser confirms it). It is taken only from employees who have chosen to contribute (Employee.nhfContributes), as its own deduction line, and is allowed against PAYE at the amount taken. 0 = none.
+  nhfEmployeeRatePct       Decimal        @default(2.5) @db.Decimal(5, 3)
+  /// The take-home floor, % of gross: loan and salary-advance recoveries may not take net pay below this share of gross; the part not taken is carried forward by the loan book. 0 (the default) = no floor, as pay has always been worked. A client-specific policy, not a statutory one.
+  minTakeHomePctOfGross    Decimal        @default(0) @db.Decimal(5, 2)
   effectiveFrom            DateTime       @db.Date
   effectiveTo              DateTime?      @db.Date
   createdAt                DateTime       @default(now())
@@ -3893,11 +3909,33 @@ model AuditLog {
   reason         String?
   metadata       Json?
   createdAt      DateTime     @default(now())
+  /// The tamper-evidence seal (see AuditSeal); absent for a few minutes after the row is written.
+  seal           AuditSeal?
 
   @@index([organizationId, createdAt])
   @@index([organizationId, entity, entityId])
 }
 
+/// One seal per audit row (rule 5: tamper-evident): SHA-256 of the row's canonical content, chained to the previous seal of the same organization
+/// by an HMAC under AUDIT_SEAL_KEY. Append-only at the database. docs/plans/tamper-evident-audit-log.md.
+model AuditSeal {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  /// 1, 2, 3 ... per organization; unique, so two sealers at once cannot both succeed.
+  seq            Int
+  auditLogId     String       @unique
+  auditLog       AuditLog     @relation(fields: [auditLogId], references: [id], onDelete: Restrict)
+  contentHash    String
+  prevHash       String
+  chainHash      String
+  sealedAt       DateTime     @default(now())
+  /// Sealed long after the row was written (the log's history from before sealing began).
+  sealedLate     Boolean      @default(false)
+
+  @@unique([organizationId, seq])
+  @@index([organizationId, sealedAt])
+}
 
 // ─────────────────────────────── LEAVE ───────────────────────────────
 

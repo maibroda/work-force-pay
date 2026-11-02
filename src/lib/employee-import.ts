@@ -19,6 +19,7 @@ export type ImportKey =
   | "email"
   | "address"
   | "stateOfResidence"
+  | "nhfContributes"
   | "employmentDate"
   | "category"
   | "department"
@@ -39,6 +40,7 @@ export const IMPORT_COLUMNS: { key: ImportKey; header: string; required: boolean
   { key: "phone", header: "Phone", required: false, aliases: ["phone", "phonenumber", "mobile", "telephone"], example: "08031234567", help: "" },
   { key: "email", header: "Email", required: false, aliases: ["email", "emailaddress"], example: "", help: "" },
   { key: "stateOfResidence", header: "State of Residence", required: false, aliases: ["stateofresidence", "state", "residencestate", "residentstate"], example: "Lagos", help: "One of the 36 states or FCT. PAYE goes to this state" },
+  { key: "nhfContributes", header: "NHF Contribution", required: false, aliases: ["nhfcontribution", "nhf", "nationalhousingfund", "contributestonhf"], example: "No", help: "Yes only if the employee has chosen to contribute 2.5% of basic pay to the National Housing Fund (voluntary)" },
   { key: "address", header: "Address", required: false, aliases: ["address", "homeaddress"], example: "", help: "" },
   { key: "employmentDate", header: "Employment Date", required: true, aliases: ["employmentdate", "datejoined", "startdate", "dateofemployment", "joindate"], example: "01/02/2026", help: "Required. DD/MM/YYYY or YYYY-MM-DD" },
   { key: "category", header: "Category", required: true, aliases: ["category", "employeecategory", "grade", "jobcategory"], example: "GUARD", help: "Required. Category code or name, as set up for this client" },
@@ -196,6 +198,7 @@ export type ImportRowResult = {
     email?: string;
     address?: string;
     stateOfResidence?: string;
+    nhfContributes?: boolean;
     employmentDate: string;
     categoryId: string;
     departmentId?: string;
@@ -304,6 +307,9 @@ export function checkImport(
       if (!dep) errors.push(`Department "${get("department")}" is not one of: ${ref.departments.map((c) => c.code ?? c.name).join(", ") || "(none set up)"}.`);
     }
 
+    const nhfText = get("nhfContributes").trim().toLowerCase();
+    const nhfChoice = !["yes", "y", "true", "1"].includes(nhfText) ? (nhfText && !["no", "n", "false", "0"].includes(nhfText) ? undefined : false) : true;
+    if (nhfText && nhfChoice === undefined) warnings.push(`NHF contribution "${get("nhfContributes")}" is not Yes or No, so it was left as No (NHF is voluntary: only Yes starts it).`);
     const state = get("stateOfResidence") ? normaliseState(get("stateOfResidence")) : null;
     if (get("stateOfResidence") && !state)
       warnings.push(`State "${get("stateOfResidence")}" is not one of the 36 states or FCT, so it was left blank: this person's PAYE will go on the "State not recorded" line until it is set.`);
@@ -373,6 +379,7 @@ export function checkImport(
         ...(get("email") ? { email: get("email") } : {}),
         ...(get("address") ? { address: get("address") } : {}),
         ...(state ? { stateOfResidence: state } : {}),
+        ...(nhfChoice === true ? { nhfContributes: true } : {}),
         employmentDate,
         categoryId: cat.id,
         ...(dep ? { departmentId: dep.id } : {}),

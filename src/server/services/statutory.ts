@@ -3,6 +3,7 @@ import type { Ctx } from "@/lib/auth/context";
 import { d } from "@/lib/dates";
 import { num } from "@/lib/money";
 import { overlappingVersion, validateTiming } from "@/lib/paye-dates";
+import { NHF_STANDARD_RATE_PCT } from "@/lib/payroll/standard-rates";
 import type { TaxRuleDef } from "@/lib/payroll/paye";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
@@ -93,6 +94,9 @@ export async function copyStatutoryRules(tx: Tx, fromOrgId: string, toOrgId: str
         maxOvertimeHoursPerMonth: r.maxOvertimeHoursPerMonth,
         maxDeductionPctOfGross: r.maxDeductionPctOfGross,
         backOfficeChargePct: r.backOfficeChargePct,
+        requirePayeState: r.requirePayeState,
+        nhfEmployeeRatePct: r.nhfEmployeeRatePct,
+        minTakeHomePctOfGross: r.minTakeHomePctOfGross,
         effectiveFrom: r.effectiveFrom,
         effectiveTo: r.effectiveTo,
       },
@@ -156,6 +160,9 @@ export async function payrollRuleFor(tx: Tx, orgId: string, date: Date) {
     maxOvertimeHoursPerMonth: num(r.maxOvertimeHoursPerMonth),
     maxDeductionPctOfGross: num(r.maxDeductionPctOfGross),
     backOfficeChargePct: num(r.backOfficeChargePct),
+    requirePayeState: r.requirePayeState,
+    nhfEmployeeRatePct: num(r.nhfEmployeeRatePct),
+    minTakeHomePctOfGross: num(r.minTakeHomePctOfGross),
   };
 }
 
@@ -390,6 +397,12 @@ export const payrollRuleSchema = z.object({
   maxOvertimeHoursPerMonth: z.coerce.number().min(0),
   maxDeductionPctOfGross: z.coerce.number().min(0).max(100),
   backOfficeChargePct: z.coerce.number().min(0).max(100).default(15),
+  /** A worker with PAYE and no state of residence blocks approval (true) or is only a warning (false, the default). */
+  /** The VOLUNTARY NHF contribution rate, % of basic pay, for employees who chose it (2.5 by the founder's rule; 0 = none). */
+  nhfEmployeeRatePct: z.coerce.number().min(0).max(100).default(NHF_STANDARD_RATE_PCT),
+  /** The take-home floor, % of gross, for loan and salary-advance recoveries (0 = none). */
+  minTakeHomePctOfGross: z.coerce.number().min(0).max(100).default(0),
+  requirePayeState: z.preprocess((v) => v === true || v === "true" || v === "on", z.boolean()).default(false),
   effectiveFrom: z.string().min(10),
 });
 

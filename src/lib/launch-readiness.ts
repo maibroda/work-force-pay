@@ -38,6 +38,9 @@ export const JOBS = [
   { name: "data-retention", label: "Records retention", required: false },
   { name: "journal-reversals", label: "Accrual reversals", required: false },
   { name: "recurring-journals", label: "Recurring journals", required: false },
+  { name: "audit-seal", label: "Audit log sealing", required: false },
+  { name: "audit-verify", label: "Audit log check", required: false },
+  { name: "audit-heads", label: "Audit chain heads emailed", required: false },
 ] as const;
 export type JobName = (typeof JOBS)[number]["name"];
 
@@ -83,6 +86,23 @@ export function checkSecrets(env: Env): CheckResult {
   const cron = env.CRON_SECRET ?? "";
   if (cron.length < 16) out.push("CRON_SECRET is missing or shorter than 16 characters, so the scheduled jobs are switched off.");
   return out.length ? { status: "TODO", evidence: out } : { status: "DONE", evidence: ["AUTH_SECRET and CRON_SECRET are set."] };
+}
+
+// ─────────────────────────────── The audit seal ───────────────────────────────
+
+/** Whether the audit log is being sealed (rule 5): a real key, the sealing job running, and the last check clean. `runs` is each job's most recent run. */
+export function checkAuditSeal(env: Env, runs: readonly JobRunRow[], now: Date): CheckResult {
+  const key = env.AUDIT_SEAL_KEY ?? "";
+  if (key.length < 32) return { status: "TODO", evidence: ["AUDIT_SEAL_KEY is missing or shorter than 32 characters, so the audit log is not being sealed and cannot be checked for tampering."] };
+  if (/change-me|ci-only|example|secret-string/i.test(key)) return { status: "TODO", evidence: ["AUDIT_SEAL_KEY is still a placeholder from the example file; generate a fresh random one and keep it off the database server."] };
+  const last = new Map(runs.map((r) => [r.name, r]));
+  const seal = last.get("audit-seal");
+  const verify = last.get("audit-verify");
+  if (!seal) return { status: "TODO", evidence: ["AUDIT_SEAL_KEY is set, but the sealing job has never run. Call /api/cron/audit-seal every minute (docs/going-live.md)."] };
+  const evidence = [`Sealing ${seal.ok ? "ran" : "FAILED"} ${ago(seal.startedAt, now)}${seal.ok || !seal.error ? "" : ` — ${seal.error}`}.`, verify ? `The daily check ${verify.ok ? "ran" : "FAILED"} ${ago(verify.startedAt, now)}${verify.ok || !verify.error ? "" : ` — ${verify.error}`}.` : "The daily check has never run."];
+  if (!seal.ok || now.getTime() - seal.startedAt.getTime() > 24 * 3_600_000) return { status: "ATTENTION", evidence: ["The sealing job is not running reliably.", ...evidence] };
+  if (!verify || !verify.ok) return { status: "ATTENTION", evidence };
+  return { status: "DONE", evidence };
 }
 
 // ─────────────────────────────── The scheduler ───────────────────────────────

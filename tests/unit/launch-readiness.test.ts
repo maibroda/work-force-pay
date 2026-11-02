@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkAppUrl, checkEmail, checkRules, checkScheduler, checkSecrets, JOBS, MANUAL_CHECKS, RATE_POINTS, SCHEDULER_MAX_AGE_HOURS, summarise, type JobRunRow } from "@/lib/launch-readiness";
+import { checkAppUrl, checkAuditSeal, checkEmail, checkRules, checkScheduler, checkSecrets, JOBS, MANUAL_CHECKS, RATE_POINTS, SCHEDULER_MAX_AGE_HOURS, summarise, type JobRunRow } from "@/lib/launch-readiness";
 
 const now = new Date("2026-10-26T09:00:00Z");
 const hoursAgo = (h: number) => new Date(now.getTime() - h * 3_600_000);
@@ -103,5 +103,33 @@ describe("the checklist", () => {
     expect(new Set(MANUAL_CHECKS.map((c) => c.key)).size).toBe(MANUAL_CHECKS.length);
     for (const c of MANUAL_CHECKS) expect(c.how.length).toBeGreaterThan(40);
     expect(RATE_POINTS.length).toBeGreaterThanOrEqual(5);
+  });
+});
+
+describe("the audit seal", () => {
+  const KEY = "k3Jd9sLq2PzX7vBn4RtYw8UeA1oCmF6hZ0qWxE5c";
+  it("is to do without a real key, saying why and never repeating the key", () => {
+    expect(checkAuditSeal({}, [], now).status).toBe("TODO");
+    expect(checkAuditSeal({ AUDIT_SEAL_KEY: "short" }, [], now).evidence[0]).toMatch(/shorter than 32/);
+    expect(checkAuditSeal({ AUDIT_SEAL_KEY: "short" }, [], now).evidence.join()).not.toContain("short\"");
+    const placeholder = checkAuditSeal({ AUDIT_SEAL_KEY: "change-me-generate-a-long-random-string-of-at-least-32-chars" }, [], now);
+    expect(placeholder.status).toBe("TODO");
+    expect(placeholder.evidence[0]).toMatch(/placeholder/);
+  });
+  it("is to do while the sealing job has never run", () => {
+    const r = checkAuditSeal({ AUDIT_SEAL_KEY: KEY }, [], now);
+    expect(r.status).toBe("TODO");
+    expect(r.evidence[0]).toMatch(/never run/);
+  });
+  it("is done when sealing ran in the last day and the daily check ran fine", () => {
+    expect(checkAuditSeal({ AUDIT_SEAL_KEY: KEY }, [run("audit-seal", 0.1), run("audit-verify", 5)], now).status).toBe("DONE");
+  });
+  it("needs attention when sealing failed or went quiet, or the daily check failed or has never run", () => {
+    expect(checkAuditSeal({ AUDIT_SEAL_KEY: KEY }, [run("audit-seal", 0.1, false, "boom"), run("audit-verify", 5)], now).status).toBe("ATTENTION");
+    expect(checkAuditSeal({ AUDIT_SEAL_KEY: KEY }, [run("audit-seal", 30), run("audit-verify", 5)], now).status).toBe("ATTENTION");
+    expect(checkAuditSeal({ AUDIT_SEAL_KEY: KEY }, [run("audit-seal", 0.1), run("audit-verify", 5, false, "found problems")], now).status).toBe("ATTENTION");
+    const never = checkAuditSeal({ AUDIT_SEAL_KEY: KEY }, [run("audit-seal", 0.1)], now);
+    expect(never.status).toBe("ATTENTION");
+    expect(never.evidence.join()).toMatch(/daily check has never run/);
   });
 });
