@@ -22,6 +22,7 @@ import {
 } from "@/lib/payroll-reminders";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
+import { entitledOrgs } from "./entitlement-switch";
 import { milestonesFor, toDates } from "./payroll-calendar";
 
 // ─────────────────────────────── Setting ───────────────────────────────
@@ -189,7 +190,9 @@ export async function recentReminders(ctx: Ctx) {
 
 /** The scheduled job: every organization that has switched reminders on. One failing never stops the rest. */
 export async function runRemindersForAllOrgs(now = new Date()): Promise<ReminderRun[]> {
-  const orgs = await db.payrollReminderSetting.findMany({ where: { enabled: true }, select: { organizationId: true } });
+  const enabled = await db.payrollReminderSetting.findMany({ where: { enabled: true }, select: { organizationId: true } });
+  const allowed = new Set(await entitledOrgs(enabled.map((o) => o.organizationId), "payroll-reminders")); // a company whose module is enforced and was not bought is skipped
+  const orgs = enabled.filter((o) => allowed.has(o.organizationId));
   const out: ReminderRun[] = [];
   for (const o of orgs) {
     try {

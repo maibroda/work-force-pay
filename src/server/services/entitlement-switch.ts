@@ -7,7 +7,9 @@
 import type { Ctx } from "@/lib/auth/context";
 import { ForbiddenError } from "@/lib/auth/permissions";
 import { MODULES, MODULE_KEYS, type ModuleKey } from "@/lib/entitlements/catalogue";
-import type { Entitlements, Mode } from "@/lib/entitlements/guard";
+import { effectiveModule } from "@/lib/entitlements/entry-modules";
+import { decide, type Entitlements, type Mode } from "@/lib/entitlements/guard";
+import { logger } from "@/lib/logger";
 import { BusinessError, db } from "./_base";
 import { modulesOn } from "./subscriptions";
 
@@ -74,4 +76,27 @@ export async function loadEntitlements(orgId: string): Promise<Entitlements | un
   const modes: Entitlements["modes"] = {};
   for (const r of rows) if (r.mode !== "OFF") modes[r.moduleKey as ModuleKey] = r.mode;
   return { modules: await modulesOn(orgId), modes };
+}
+
+/**
+ * For the scheduled jobs (step E3c), which run for every company: the ones among these companies the job may run for. All of them while the job's module is OFF (and the core and
+ * a job still held to the core as a guess are never held back); in REPORT mode all of them, with a log line for each that would have been skipped; in ENFORCE mode only the
+ * companies that have the module today. `job` is the name in /api/cron/<job>; an unknown name throws, so a typo cannot let a job run for everyone unchecked.
+ */
+export async function entitledOrgs(orgIds: readonly string[], job: string): Promise<string[]> {
+  const mod = effectiveModule("job", `/api/cron/${job}`);
+  if (mod === "core" || mod === "bureau") return [...orgIds];
+  const row = await db.entitlementSwitch.findUnique({ where: { moduleKey: mod } });
+  if (!row || row.mode === "OFF") return [...orgIds];
+  const out: string[] = [];
+  for (const id of orgIds) {
+    const d = decide({ modules: await modulesOn(id), modes: { [mod]: row.mode } }, mod);
+    if (d.report) logger.warn("entitlement_would_refuse", { module: mod, kind: "job", entry: job, organizationId: id });
+    if (d.allow) out.push(id);
+  }
+  return out;
+}
+
+export async function orgEntitled(orgId: string, job: string): Promise<boolean> {
+  return (await entitledOrgs([orgId], job)).length === 1;
 }

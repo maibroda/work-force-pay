@@ -22,6 +22,7 @@ import { round2 } from "@/lib/money";
 import { MAX_CATCH_UP, nextAfter, occurrence, renderDescription, templateProblems, type Frequency } from "@/lib/recurring";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
+import { entitledOrgs } from "./entitlement-switch";
 import { approvalRequired, assertNoControlAccounts, submitInTx } from "./journals";
 import { nextNumber } from "./numbering";
 
@@ -251,7 +252,9 @@ export async function runDueNow(ctx: Ctx, today: Date) {
 
 /** For the scheduler: every organization, acting as the system. */
 export async function generateDueForAllOrgs(today = new Date()) {
-  const orgs = await db.organization.findMany({ select: { id: true, name: true } });
+  const everyone = await db.organization.findMany({ select: { id: true, name: true } });
+  const allowed = new Set(await entitledOrgs(everyone.map((o) => o.id), "recurring-journals")); // a company whose module is enforced and was not bought is skipped
+  const orgs = everyone.filter((o) => allowed.has(o.id));
   const out: Array<{ organization: string; templates: number; generated: number; submitted: number; held: number }> = [];
   for (const o of orgs) {
     const r = await generateDue({ userId: "system", orgId: o.id, role: "COMPANY_ADMIN", name: "System (recurring journals)", email: "system@invalid.local", employeeId: null }, today);

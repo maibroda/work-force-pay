@@ -13,6 +13,7 @@ import { logger } from "@/lib/logger";
 import { clockState, DEFAULT_CALENDAR, dueAt, warnAt, type Calendar } from "@/lib/sales/sla";
 import { BusinessError, db, type Tx } from "../_base";
 import { logAudit } from "../audit";
+import { entitledOrgs } from "../entitlement-switch";
 import { nextNumber } from "../numbering";
 import { ownerFilter, requireSales, resolveOwner } from "./access";
 import { refreshAccountHealthSafe } from "./health";
@@ -313,7 +314,9 @@ async function tell(orgId: string, people: Array<{ id: string; email: string }>,
  */
 export async function runCaseSlaJob(now = new Date(), opts: { orgId?: string } = {}) {
   const out = { warned: 0, breached: 0, escalated: 0 };
-  const open = await db.crmCase.findMany({ where: { status: "OPEN", ...(opts.orgId ? { organizationId: opts.orgId } : {}), OR: [{ firstResponseDueAt: { not: null } }, { resolutionDueAt: { not: null } }] }, take: 2000 });
+  const found = await db.crmCase.findMany({ where: { status: "OPEN", ...(opts.orgId ? { organizationId: opts.orgId } : {}), OR: [{ firstResponseDueAt: { not: null } }, { resolutionDueAt: { not: null } }] }, take: 2000 });
+  const allowed = new Set(await entitledOrgs([...new Set(found.map((c) => c.organizationId))], "sales-cases")); // a company whose module is enforced and was not bought is skipped
+  const open = found.filter((c) => allowed.has(c.organizationId));
   for (const c of open) {
     const clocks = [
       { name: "first response", due: c.firstResponseDueAt, warn: c.firstResponseWarnAt, done: c.firstRespondedAt, warned: "firstResponseWarnedAt", breached: "firstResponseBreachedAt", warnedAt: c.firstResponseWarnedAt, breachedAt: c.firstResponseBreachedAt },
@@ -355,7 +358,9 @@ export async function runCaseSlaJob(now = new Date(), opts: { orgId?: string } =
  */
 export async function runRenewalsJob(now = new Date(), opts: { orgId?: string } = {}) {
   const out = { created: 0, alreadyOpen: 0, noAccount: 0 };
-  const settings = await db.crmSetting.findMany({ where: { enabled: true, ...(opts.orgId ? { organizationId: opts.orgId } : {}) }, select: { organizationId: true, renewalWindowDays: true } });
+  const enabled = await db.crmSetting.findMany({ where: { enabled: true, ...(opts.orgId ? { organizationId: opts.orgId } : {}) }, select: { organizationId: true, renewalWindowDays: true } });
+  const allowed = new Set(await entitledOrgs(enabled.map((s) => s.organizationId), "sales-cases"));
+  const settings = enabled.filter((s) => allowed.has(s.organizationId));
   const today = new Date(`${now.toISOString().slice(0, 10)}T00:00:00Z`);
   for (const s of settings) {
     const contracts = await db.contract.findMany({ where: { organizationId: s.organizationId, status: "ACTIVE", endDate: { gte: today, lte: new Date(today.getTime() + s.renewalWindowDays * DAY) } }, take: 500 });

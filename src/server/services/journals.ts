@@ -26,6 +26,7 @@ import { canEditDocument, draftProblems, reversibility, STATUS_LABELS, type Docu
 import { round2 } from "@/lib/money";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
+import { entitledOrgs } from "./entitlement-switch";
 import { nextNumber } from "./numbering";
 import { GL_POSTING_ACCOUNTS } from "./gl-posting";
 import { mirrorLines, postJournal, validateJournal, type PostingInput } from "./posting";
@@ -340,7 +341,9 @@ export async function runDueReversals(ctx: Ctx, today: Date) {
 
 /** For the scheduler: every organization, acting as the system. */
 export async function runDueReversalsForAllOrgs(today = new Date()) {
-  const orgs = await db.organization.findMany({ select: { id: true, name: true } });
+  const everyone = await db.organization.findMany({ select: { id: true, name: true } });
+  const allowed = new Set(await entitledOrgs(everyone.map((o) => o.id), "journal-reversals")); // a company whose module is enforced and was not bought is skipped
+  const orgs = everyone.filter((o) => allowed.has(o.id));
   const out: Array<{ organization: string; due: number; posted: number; failed: number }> = [];
   for (const o of orgs) {
     const r = await postDueReversals({ userId: "system", orgId: o.id, role: "COMPANY_ADMIN", name: "System (automatic reversal)", email: "system@invalid.local", employeeId: null }, new Date(today.toISOString().slice(0, 10) + "T00:00:00Z"));

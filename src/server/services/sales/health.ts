@@ -10,6 +10,7 @@ import { logger } from "@/lib/logger";
 import { DEFAULT_WEIGHTS, scoreAccount, validateWeights, type Band, type Component, type HealthInputs, type Weights } from "@/lib/sales/health";
 import { daysPastDue } from "@/lib/statements";
 import { BusinessError, db } from "../_base";
+import { entitledOrgs } from "../entitlement-switch";
 import { logAudit } from "../audit";
 import { openInvoicesFor } from "../receipts";
 import { ownerFilter, requireSales } from "./access";
@@ -114,7 +115,9 @@ export async function refreshAccountHealthSafe(orgId: string, accountId: string)
 /** The nightly job: every client account of every organization that has the module on. */
 export async function runHealthJob(now = new Date(), opts: { orgId?: string } = {}) {
   const out = { scored: 0, atRisk: 0 };
-  const orgs = await db.crmSetting.findMany({ where: { enabled: true, ...(opts.orgId ? { organizationId: opts.orgId } : {}) }, select: { organizationId: true } });
+  const on = await db.crmSetting.findMany({ where: { enabled: true, ...(opts.orgId ? { organizationId: opts.orgId } : {}) }, select: { organizationId: true } });
+  const allowed = new Set(await entitledOrgs(on.map((o) => o.organizationId), "sales-health")); // a company whose module is enforced and was not bought is skipped
+  const orgs = on.filter((o) => allowed.has(o.organizationId));
   for (const o of orgs) {
     const accounts = await db.crmAccount.findMany({ where: { organizationId: o.organizationId, status: "ACTIVE", clientId: { not: null } }, select: { id: true }, take: 2000 });
     for (const a of accounts) {

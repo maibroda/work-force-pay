@@ -374,9 +374,6 @@ export const UNCONFIRMED: ReadonlySet<string> = new Set([
   "job /api/cron/audit-heads",
   "job /api/cron/audit-seal",
   "job /api/cron/audit-verify",
-  "job /api/cron/journal-reversals",
-  "job /api/cron/payroll-reminders",
-  "job /api/cron/recurring-journals",
 ]);
 
 const MAPS: Record<EntryKind, Record<string, EntryModule>> = { page: PAGE_MODULES, action: ACTION_MODULES, api: API_MODULES, job: JOB_MODULES };

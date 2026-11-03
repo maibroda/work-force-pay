@@ -14,6 +14,7 @@ import { logger } from "@/lib/logger";
 import { ACTIONS, conditionSchema, describeCondition, evaluateCondition, parseAction, renderTemplate, ruleShapeProblem, type ActionType, type Condition } from "@/lib/sales/automation";
 import { BusinessError, db, type Tx } from "../_base";
 import { logAudit } from "../audit";
+import { entitledOrgs, orgEntitled } from "../entitlement-switch";
 import { requireSales } from "./access";
 import { assertMayMessage, createTask, MARKETING_REFUSED, resolveTarget, SERVICE_REFUSED, sendEmailTo } from "./activities";
 import { moveOpportunity } from "./deals";
@@ -136,7 +137,8 @@ async function moduleOn(orgId: string): Promise<boolean> {
 /** The companies (or the one asked for) whose sales module is on. */
 async function orgsWithModuleOn(orgId?: string): Promise<Set<string>> {
   const rows = await db.crmSetting.findMany({ where: { enabled: true, ...(orgId ? { organizationId: orgId } : {}) }, select: { organizationId: true } });
-  return new Set(rows.map((r) => r.organizationId));
+  // and, once the CRM module is being enforced, only the companies that bought it
+  return new Set(await entitledOrgs(rows.map((r) => r.organizationId), "sales-automation"));
 }
 
 /** Queues the rules for an event (a quote or handover accepted) and carries them out. Never throws: a rule problem must not undo the event. */
@@ -275,6 +277,7 @@ async function decide(run: { organizationId: string; opportunityId: string; entr
   const inputs: Record<string, unknown> = { rule: rule.name, trigger: rule.trigger, action: rule.actionType };
   if (!rule.enabled) return { status: "CANCELLED", note: "The rule was switched off before this was due.", inputs };
   if (!(await moduleOn(run.organizationId))) return { status: "CANCELLED", note: "The sales module was switched off before this was due.", inputs };
+  if (!(await orgEntitled(run.organizationId, "sales-automation"))) return { status: "CANCELLED", note: "The sales module is not part of this company's plan.", inputs };
   const deal = await loadDeal(run.organizationId, run.opportunityId);
   if (!deal || deal.status !== "ACTIVE") return { status: "CANCELLED", note: "The deal is no longer active.", inputs };
   inputs.stage = deal.stage.name;
