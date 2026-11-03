@@ -148,7 +148,7 @@ export async function onboardClient(ctx: Ctx, raw: z.input<typeof onboardClientS
       const client = await tx.organization.create({ data: { name: v.name, code: v.code, bureauOrganizationId: bureau.id, currency: bureau.currency } });
       const rules = await copyStatutoryRules(tx, bureau.id, client.id, await startingRuleIds(tx, bureau.id));
       await ensureDefaultChart(tx, client.id);
-      // every company has a subscription from the day it exists (assumed: Payroll Essentials, the bureau's own service; the bureau can change it)
+      // every company has a subscription from the day it exists (assumed: the Payroll Core plan, key payroll_essentials; the bureau can change it)
       await ensureSubscription(tx, ctx, client.id, { planKey: "payroll_essentials", reason: "Onboarded by the bureau" });
       const engagement = await tx.clientEngagement.create({
         data: {
