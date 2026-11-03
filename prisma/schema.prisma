@@ -637,6 +637,8 @@ model Organization {
   calendarSetting           PayrollCalendarSetting?
   reminderSetting           PayrollReminderSetting?
   bankCodes                 BankCode[]
+  payingBanks               PayingBank[]
+  bankCodeSets              BankCodeSet[]
   crmSetting                CrmSetting?
   crmAccounts               CrmAccount[]
   crmContacts               CrmContact[]
@@ -1394,8 +1396,73 @@ model PaymentFileExport {
   createdBy       String
   createdByUserId String
   createdAt       DateTime     @default(now())
+  /// The bank this file was made for, the version of ITS code list the codes came from, and the layout's headers: so a file can always be traced to the list it used.
+  payingBankId    String?
+  payingBank      PayingBank?  @relation(fields: [payingBankId], references: [id])
+  codeSetVersion  Int?
+  layoutHeaders   String?
 
   @@index([organizationId, runId, createdAt])
+}
+
+/// A bank a client pays salaries FROM. It has its own list of bank codes (a bank's codes are valid only on its own list) and its own upload file layout, both as data,
+/// so adding a bank needs no code. docs/plans/paying-bank-files.md.
+model PayingBank {
+  id                 String       @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id])
+  name               String
+  /// The upload file's layout (columns and where each comes from). Null until the bank's upload template is known: such a bank cannot make a file.
+  layout             Json?
+  /// The company's own account at this bank that the payroll is paid from (some layouts put it on every row).
+  debitAccountNumber String?
+  active             Boolean      @default(true)
+  isDefault          Boolean      @default(false)
+  createdBy          String
+  createdAt          DateTime     @default(now())
+
+  codeSets     BankCodeSet[]
+  exports      PaymentFileExport[]
+  employees    Employee[]
+  transactions PaymentTransaction[]
+
+  @@unique([organizationId, name])
+}
+
+/// One imported version of a paying bank's code list. Never edited: a newer list from the bank is a new version, and a file records the version it used.
+model BankCodeSet {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  payingBankId   String
+  payingBank     PayingBank   @relation(fields: [payingBankId], references: [id])
+  version        Int
+  /// The file name, or the name of the list supplied with the app.
+  sourceName     String
+  /// SHA-256 of the list's text, so the list used can be proved.
+  sourceSha256   String
+  entryCount     Int
+  blockedCount   Int
+  importedBy     String
+  importedAt     DateTime     @default(now())
+
+  entries PayingBankCode[]
+
+  @@unique([payingBankId, version])
+}
+
+/// One bank on a paying bank's list. A blocked entry (a test bank, a code shared by two banks, a bank under two codes, a code that lost a leading zero) is never put in a file.
+model PayingBankCode {
+  id            String      @id @default(cuid())
+  codeSetId     String
+  codeSet       BankCodeSet @relation(fields: [codeSetId], references: [id])
+  name          String
+  code          String
+  aliases       String[]    @default([])
+  blocked       Boolean     @default(false)
+  blockedReason String?
+
+  @@index([codeSetId, code])
 }
 
 /// Whether, and to whom, payroll deadline reminders are emailed for a client. Off until someone switches it on.
@@ -1834,6 +1901,9 @@ model Employee {
   importBatch        EmployeeImportBatch? @relation(fields: [importBatchId], references: [id])
   clientInputRows    ClientInputRow[]
   employeeNumber     String
+  /// The paying bank this person's salary is paid from. Empty = the organization's default paying bank. It is copied onto the payment when the payment batches are made.
+  payingBankId       String?
+  payingBank         PayingBank?          @relation(fields: [payingBankId], references: [id])
   firstName          String
   middleName         String?
   lastName           String
@@ -2123,8 +2193,8 @@ model HrPolicy {
 
   // Who is told when the audit log fails its integrity check, and who gets the weekly chain head (docs/plans/tamper-evident-audit-log.md)
   /// Extra addresses (for example an outside auditor), on top of everyone who can view the audit log, or instead of them when the next field is false.
-  auditAlertEmails            String[] @default([])
-  auditAlertIncludeEveryone   Boolean  @default(true)
+  auditAlertEmails          String[] @default([])
+  auditAlertIncludeEveryone Boolean  @default(true)
 
   // Staff loans & advances (0 = no limit)
   loanMaxGrossMultiple Decimal @default(3) @db.Decimal(4, 2)
@@ -3241,17 +3311,17 @@ model OtherEarning {
 // ─────────────────────────── STATUTORY RULES ───────────────────────────
 
 model TaxRule {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  code           String
-  name           String
-  version        String
-  legalBasis     String?
-  effectiveFrom  DateTime     @db.Date
-  effectiveTo    DateTime?    @db.Date
-  active         Boolean      @default(true)
-  createdAt      DateTime     @default(now())
+  id                String       @id @default(cuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  code              String
+  name              String
+  version           String
+  legalBasis        String?
+  effectiveFrom     DateTime     @db.Date
+  effectiveTo       DateTime?    @db.Date
+  active            Boolean      @default(true)
+  createdAt         DateTime     @default(now())
   /// PAYE filing dates and the late penalty are RULE DATA, set from the tax adviser's verified values and never assumed. Blank = not set.
   /// Day of the month after the pay month on which PAYE is due (1 to 28).
   payeDueDay        Int?
@@ -3259,7 +3329,7 @@ model TaxRule {
   annualReturnMonth Int?
   annualReturnDay   Int?
   /// Percentage of unremitted PAYE charged when late (interest is not modelled).
-  latePenaltyPct    Decimal? @db.Decimal(6, 3)
+  latePenaltyPct    Decimal?     @db.Decimal(6, 3)
 
   bands      TaxBand[]
   reliefs    TaxRelief[]
@@ -3395,6 +3465,9 @@ model PaymentTransaction {
   bankName       String?
   accountNumber  String?
   accountName    String?
+  /// The paying bank this payment is made from, fixed when the batches are made. Empty = the default paying bank.
+  payingBankId   String?
+  payingBank     PayingBank?   @relation(fields: [payingBankId], references: [id])
   status         PaymentStatus @default(PENDING)
   bankReference  String?
   reconciled     Boolean       @default(false)

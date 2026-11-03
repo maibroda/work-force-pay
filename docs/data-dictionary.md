@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-201 tables and 158 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+204 tables and 158 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -105,6 +105,8 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | calendarSetting | → PayrollCalendarSetting |  |  |
 | reminderSetting | → PayrollReminderSetting |  |  |
 | bankCodes | → BankCode[] |  |  |
+| payingBanks | → PayingBank[] |  |  |
+| bankCodeSets | → BankCodeSet[] |  |  |
 | crmSetting | → CrmSetting |  |  |
 | crmAccounts | → CrmAccount[] |  |  |
 | crmContacts | → CrmContact[] |  |  |
@@ -726,6 +728,66 @@ A bank payment file produced for a payroll run: who produced it, when, how many 
 | createdBy | String | yes |  |
 | createdByUserId | String | yes |  |
 | createdAt | DateTime |  |  |
+| payingBankId | String |  | The bank this file was made for, the version of ITS code list the codes came from, and the layout's headers: so a file can always be traced to the list it used. |
+| payingBank | → PayingBank |  |  |
+| codeSetVersion | Int |  |  |
+| layoutHeaders | String |  |  |
+
+### PayingBank
+
+A bank a client pays salaries FROM. It has its own list of bank codes (a bank's codes are valid only on its own list) and its own upload file layout, both as data, so adding a bank needs no code. docs/plans/paying-bank-files.md.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| name | String | yes |  |
+| layout | Json |  | The upload file's layout (columns and where each comes from). Null until the bank's upload template is known: such a bank cannot make a file. |
+| debitAccountNumber | String |  | The company's own account at this bank that the payroll is paid from (some layouts put it on every row). |
+| active | Boolean |  |  |
+| isDefault | Boolean |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| codeSets | → BankCodeSet[] |  |  |
+| exports | → PaymentFileExport[] |  |  |
+| employees | → Employee[] |  |  |
+| transactions | → PaymentTransaction[] |  |  |
+
+### BankCodeSet
+
+One imported version of a paying bank's code list. Never edited: a newer list from the bank is a new version, and a file records the version it used.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| payingBankId | String | yes |  |
+| payingBank | → PayingBank |  |  |
+| version | Int | yes |  |
+| sourceName | String | yes | The file name, or the name of the list supplied with the app. |
+| sourceSha256 | String | yes | SHA-256 of the list's text, so the list used can be proved. |
+| entryCount | Int | yes |  |
+| blockedCount | Int | yes |  |
+| importedBy | String | yes |  |
+| importedAt | DateTime |  |  |
+| entries | → PayingBankCode[] |  |  |
+
+### PayingBankCode
+
+One bank on a paying bank's list. A blocked entry (a test bank, a code shared by two banks, a bank under two codes, a code that lost a leading zero) is never put in a file.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| codeSetId | String | yes |  |
+| codeSet | → BankCodeSet |  |  |
+| name | String | yes |  |
+| code | String | yes |  |
+| aliases | String[] |  |  |
+| blocked | Boolean |  |  |
+| blockedReason | String |  |  |
 
 ### PayrollReminderSetting
 
@@ -1094,6 +1156,8 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | importBatch | → EmployeeImportBatch |  |  |
 | clientInputRows | → ClientInputRow[] |  |  |
 | employeeNumber | String | yes |  |
+| payingBankId | String |  | The paying bank this person's salary is paid from. Empty = the organization's default paying bank. It is copied onto the payment when the payment batches are made. |
+| payingBank | → PayingBank |  |  |
 | firstName | String | yes |  |
 | middleName | String |  |  |
 | lastName | String | yes |  |
@@ -2492,6 +2556,8 @@ Employer add-on costs beyond employer pension, specific to guarding / outsourcin
 | bankName | String |  |  |
 | accountNumber | String |  |  |
 | accountName | String |  |  |
+| payingBankId | String |  | The paying bank this payment is made from, fixed when the batches are made. Empty = the default paying bank. |
+| payingBank | → PayingBank |  |  |
 | status | PaymentStatus |  |  |
 | bankReference | String |  |  |
 | reconciled | Boolean |  |  |
