@@ -16,6 +16,7 @@ import { CATALOGUE_VERSION, MODULE_KEYS, MODULES, PLANS, type ModuleKey, type Pl
 import { checkPlan, whatRemovalBreaks } from "@/lib/entitlements/resolve";
 import { BusinessError, db, toJson, type Tx } from "./_base";
 import { logAudit } from "./audit";
+import { changeBlockers } from "./subscription-blockers";
 
 const DAY = 86_400_000;
 const ORDER = new Map<string, number>(MODULE_KEYS.map((k, i) => [k, i]));
@@ -31,6 +32,8 @@ export interface Selection {
   employeeLimit?: number | null;
   crmUserLimit?: number | null;
   reason?: string;
+  /** Go ahead although work is in progress that the change leaves readable but unworkable (hard blockers still refuse). */
+  acknowledgeSoft?: boolean;
 }
 
 // ─────────────────────────────── Who may do what ───────────────────────────────
@@ -84,6 +87,17 @@ async function lockSubscription(tx: Tx, subscriptionId: string) {
 async function record(tx: Tx, ctx: Ctx, orgId: string, subscriptionId: string, kind: EventKind, detail: unknown, reason?: string | null) {
   await tx.subscriptionEvent.create({ data: { organizationId: orgId, subscriptionId, kind, reason: reason || null, byUserId: ctx.userId, byName: ctx.name, detail: toJson(detail) } });
   await logAudit({ ...ctx, orgId }, { action: `SUBSCRIPTION_${kind}`, entity: "Subscription", entityId: subscriptionId, newValue: detail, reason: reason || null }, tx);
+}
+
+/**
+ * Refuses the change while there is work in progress in a module it ends that would be stranded (E5a): a hard blocker always refuses, saying what to finish; a soft one refuses
+ * until it has been acknowledged. Reads only, inside the change's own transaction, for this company only.
+ */
+async function assertNoBlockers(tx: Tx, orgId: string, removing: readonly ModuleKey[], acknowledgeSoft: boolean | undefined) {
+  if (removing.length === 0) return;
+  const { hard, soft } = await changeBlockers(orgId, removing, tx);
+  if (hard.length) throw new BusinessError(`${removing.map((k) => MODULES[k].name).join(", ")} cannot be removed yet. ${hard.map((b) => b.message).join(" ")}`);
+  if (soft.length && !acknowledgeSoft) throw new BusinessError(`${soft.map((b) => b.message).join(" ")} To go ahead anyway, acknowledge this and repeat the change.`);
 }
 
 const isActive = (m: { startsOn: Date; endsOn: Date | null }, at: Date) => m.startsOn <= at && (!m.endsOn || m.endsOn > at);
@@ -183,7 +197,7 @@ export async function addModule(ctx: Ctx, orgId: string, moduleKey: string, reas
 }
 
 /** Ends a module (the row stays, with an end date). Refused if another module the company has needs it. `readOnlyDays` is how long its data stays readable afterwards (used by a later step). */
-export async function removeModule(ctx: Ctx, orgId: string, moduleKey: string, reason: string, opts: { readOnlyDays?: number } = {}) {
+export async function removeModule(ctx: Ctx, orgId: string, moduleKey: string, reason: string, opts: { readOnlyDays?: number; acknowledgeSoft?: boolean } = {}) {
   await assertManage(ctx, orgId);
   if (!isModule(moduleKey)) throw new BusinessError(`There is no module called "${moduleKey}".`);
   if (opts.readOnlyDays !== undefined && (!Number.isInteger(opts.readOnlyDays) || opts.readOnlyDays < 0)) throw new BusinessError("The read-only period is a whole number of days.");
@@ -192,6 +206,7 @@ export async function removeModule(ctx: Ctx, orgId: string, moduleKey: string, r
     if (refused.length) throw new BusinessError(refused[0].message);
     if (!active.includes(moduleKey)) throw new BusinessError(`${MODULES[moduleKey].name} is not part of this subscription.`);
     if (broken.length) throw new BusinessError(broken.map((b) => b.because).join(" "));
+    await assertNoBlockers(tx, orgId, [moduleKey], opts.acknowledgeSoft);
     await tx.subscriptionModule.updateMany({
       where: { subscriptionId: sub.id, moduleKey, startsOn: { lte: now }, OR: [{ endsOn: null }, { endsOn: { gt: now } }] },
       data: { endsOn: now, readOnlyUntil: opts.readOnlyDays ? new Date(now.getTime() + opts.readOnlyDays * DAY) : null },
@@ -207,6 +222,7 @@ export async function changePlan(ctx: Ctx, orgId: string, sel: Selection) {
   await change(ctx, orgId, async (tx, sub, active, now) => {
     const ending = active.filter((k) => !modules.includes(k));
     const starting = modules.filter((k) => !active.includes(k));
+    await assertNoBlockers(tx, orgId, ending, sel.acknowledgeSoft);
     if (ending.length) await tx.subscriptionModule.updateMany({ where: { subscriptionId: sub.id, moduleKey: { in: ending }, startsOn: { lte: now }, OR: [{ endsOn: null }, { endsOn: { gt: now } }] }, data: { endsOn: now } });
     if (starting.length) await tx.subscriptionModule.createMany({ data: starting.map((k) => ({ organizationId: orgId, subscriptionId: sub.id, moduleKey: k, source: addOns.includes(k) ? ("ADD_ON" as const) : ("PLAN" as const), startsOn: now })) });
     const kept = modules.filter((k) => active.includes(k));
