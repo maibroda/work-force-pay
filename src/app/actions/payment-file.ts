@@ -1,7 +1,8 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as pf from "@/server/services/payment-file";
 import * as pb from "@/server/services/paying-banks";
+const act = actFor("payment-file.ts");
 
 type V = Record<string, unknown>;
 

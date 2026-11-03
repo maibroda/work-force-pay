@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import { approveBelowMargin, createQuote, decideQuote, designateApprover, estimateLine, removeApprover, reviseQuote, sendQuote, setMinimumMargin } from "@/server/services/sales/quotes";
+const act = actFor("sales-quotes.ts");
 
 type V = Record<string, unknown>;
 const text = (x: unknown) => (typeof x === "string" && x.trim() ? x.trim() : undefined);

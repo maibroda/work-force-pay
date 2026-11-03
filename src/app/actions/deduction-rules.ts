@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as rules from "@/server/services/deduction-rules";
+const act = actFor("deduction-rules.ts");
 
 type V = Record<string, unknown>;
 const PATHS = ["/settings/recurring-deductions"];

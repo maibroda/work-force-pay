@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import { cancelTask, completeTask, createTask, logActivity, reopenTask, sendEmailTo, voidActivity } from "@/server/services/sales/activities";
+const act = actFor("sales-activities.ts");
 
 type V = Record<string, unknown>;
 const text = (x: unknown) => (typeof x === "string" && x.trim() ? x.trim() : undefined);

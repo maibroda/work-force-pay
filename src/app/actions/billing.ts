@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as billing from "@/server/services/billing";
+const act = actFor("billing.ts");
 
 type V = Record<string, unknown>;
 

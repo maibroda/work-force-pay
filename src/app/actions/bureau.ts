@@ -1,10 +1,11 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import { db } from "@/lib/db";
 import { createSession } from "@/lib/auth/session";
 import { BusinessError } from "@/server/services/_base";
 import { logAudit } from "@/server/services/audit";
 import * as bureau from "@/server/services/bureau";
+const act = actFor("bureau.ts");
 
 type V = Record<string, unknown>;
 const PATHS = ["/bureau"];

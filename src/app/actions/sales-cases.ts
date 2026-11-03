@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import { addCaseNote, addHoliday, createCase, createStarterPolicies, reassignCase, removeHoliday, removeSlaPolicy, reopenCase, resolveCase, respondToCase, saveBusinessHours, saveSlaPolicy, setRenewalWindow } from "@/server/services/sales/cases";
+const act = actFor("sales-cases.ts");
 
 type V = Record<string, unknown>;
 const text = (x: unknown) => (typeof x === "string" && x.trim() ? x.trim() : undefined);

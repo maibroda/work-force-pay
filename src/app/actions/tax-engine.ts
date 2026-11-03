@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as tax from "@/server/services/tax-engine";
+const act = actFor("tax-engine.ts");
 
 type V = Record<string, unknown>;
 const PATHS = ["/accounting", "/finance/invoices"];

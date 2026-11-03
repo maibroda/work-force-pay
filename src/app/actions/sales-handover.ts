@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import { acceptHandover, designateAcceptor, removeAcceptor, returnHandover, saveHandover, submitHandover } from "@/server/services/sales/handover";
+const act = actFor("sales-handover.ts");
 
 type V = Record<string, unknown>;
 const text = (x: unknown) => (typeof x === "string" ? x : undefined);

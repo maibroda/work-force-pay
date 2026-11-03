@@ -7,6 +7,7 @@ import { exportLimiter } from "@/lib/rate-limit";
 import { limitedResponse } from "@/lib/rate-limit-http";
 import { BusinessError } from "@/server/services/_base";
 import { exportCsv } from "@/server/services/sales/export";
+import { routeRefusal } from "@/server/services/entitlement-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ kind: s
   const ctx = await getSession();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if ((await twoFactorStateFor(ctx)).state === "BLOCKED") return NextResponse.json({ error: "Two-factor authentication is required for your role. Turn it on under My security." }, { status: 403 });
+  const off = routeRefusal(ctx, "/api/sales/export/[kind]");
+  if (off) return off;
   if (!can(ctx.role, "sales.view")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const slow = limitedResponse(exportLimiter, ctx.userId);
   if (slow) return slow;

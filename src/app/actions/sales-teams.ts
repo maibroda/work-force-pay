@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import { addTeamMember, createTeam, deactivateTeam, removeTeamMember } from "@/server/services/sales/teams";
+const act = actFor("sales-teams.ts");
 
 type V = Record<string, unknown>;
 const PATHS = ["/sales/teams"];

@@ -1,8 +1,9 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import type { PeriodAction } from "@/lib/fiscal";
 import * as periods from "@/server/services/periods";
 import * as yearEnd from "@/server/services/year-end";
+const act = actFor("periods.ts");
 
 type V = Record<string, unknown>;
 const PATHS = ["/accounting", "/payroll"];

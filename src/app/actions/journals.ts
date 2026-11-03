@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as jn from "@/server/services/journals";
+const act = actFor("journals.ts");
 
 type V = Record<string, unknown>;
 const PATHS = ["/accounting"];

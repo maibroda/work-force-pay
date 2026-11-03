@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as hc from "@/server/services/health-checks";
+const act = actFor("health-checks.ts");
 
 type V = Record<string, unknown>;
 const PATHS = ["/health-checks", "/crm"];

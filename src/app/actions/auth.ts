@@ -14,7 +14,8 @@ import { authenticate, completeSignIn } from "@/server/services/users";
 import * as security from "@/server/services/security";
 import { logAudit } from "@/server/services/audit";
 import type { AuthMeta } from "@/server/services/auth-audit";
-import { act } from "./_run";
+import { actFor } from "./_run";
+const act = actFor("auth.ts");
 
 /** Where the request came from, for the audit of failed sign-ins (the address header is the same one the session uses). */
 async function requestMeta(): Promise<AuthMeta> {

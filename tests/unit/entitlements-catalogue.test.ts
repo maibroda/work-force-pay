@@ -52,8 +52,8 @@ describe("the catalogue", () => {
     expect(MODULES.self_service.needsOneOf).toEqual([["payroll", "hr"]]);
     expect(MODULES.production_pay.needs).toEqual(["payroll"]);
     expect(MODULES.service_charge_pay.needs).toEqual(["payroll"]);
-    // the client portal is its own module, for a client's own people, and needs contracts and deployment (the founder's ruling of 2026-11-03)
-    expect(MODULES.client_portal.needs).toEqual(["contracts_deployment"]);
+    // the client portal is its own module, for a client's own people, and needs only payroll, because everything it does is payroll and it runs inside a bureau client's own organization, whose default plan has payroll and not deployment (decided 2026-11-03, on my recommendation, when E3 found the first version would lock every bureau client's portal)
+    expect(MODULES.client_portal.needs).toEqual(["payroll"]);
     expect(MODULES.client_portal.chargedPer).toBe("flat");
   });
 });
@@ -71,10 +71,10 @@ describe("working out what a selection needs", () => {
     expect(resolveModules(["hr"]).modules).toEqual(["core", "hr"]);
   });
 
-  it("adds contracts and deployment (and the core) when only the client portal is asked for, and says why", () => {
+  it("adds payroll (and the core) when only the client portal is asked for, and says why", () => {
     const r = resolveModules(["client_portal"]);
-    expect(r.modules).toEqual(["core", "contracts_deployment", "client_portal"]);
-    expect(r.added.find((a) => a.module === "contracts_deployment")!.because).toBe("Client portal needs Contracts & deployment, so Contracts & deployment was added.");
+    expect(r.modules).toEqual(["core", "payroll", "client_portal"]);
+    expect(r.added.find((a) => a.module === "payroll")!.because).toBe("Client portal needs Payroll, so Payroll was added.");
   });
 
   it("adds what is missing and says why in words a salesperson can repeat", () => {
@@ -216,9 +216,9 @@ describe("what removing a module would break", () => {
 
   it("says nothing breaks when nothing depends on what is removed, and refuses to remove the core", () => {
     expect(whatRemovalBreaks(set, ["analytics"]).broken).toEqual([]);
-    // removing contracts and deployment would leave the client portal without what it needs
-    const b = whatRemovalBreaks(["core", "contracts_deployment", "client_portal"], ["contracts_deployment"]);
-    expect(b.broken).toEqual([{ module: "client_portal", because: "Client portal needs Contracts & deployment." }]);
+    // removing payroll would leave the client portal without what it needs
+    const b = whatRemovalBreaks(["core", "payroll", "client_portal"], ["payroll"]);
+    expect(b.broken).toEqual([{ module: "client_portal", because: "Client portal needs Payroll." }]);
     expect(whatRemovalBreaks(set, ["core"]).refused).toEqual([{ module: "core", message: "The core platform is always on and cannot be removed." }]);
   });
 

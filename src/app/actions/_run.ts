@@ -8,6 +8,7 @@ import { requireAction, type GateOptions } from "@/lib/auth/session";
 import { ForbiddenError, type Permission } from "@/lib/auth/permissions";
 import type { Ctx } from "@/lib/auth/context";
 import { BusinessError } from "@/server/services/_base";
+import { assertEntry } from "@/server/services/entitlement-guard";
 import { logger } from "@/lib/logger";
 
 /** Wraps a server action: authorization, error → friendly message, revalidation. Pass permission
@@ -17,9 +18,12 @@ export async function act(
   fn: (ctx: Ctx) => Promise<Partial<ActionResult> | void>,
   revalidate: string[] = [],
   gate: GateOptions = {},
+  /** The action file this is called from, which says which module it belongs to (src/lib/entitlements/entry-modules.ts). */
+  file?: string,
 ): Promise<ActionResult> {
   try {
     const ctx = await requireAction(permission, gate);
+    if (file) assertEntry(ctx, "action", file);
     const r = (await fn(ctx)) ?? {};
     for (const p of revalidate) revalidatePath(p, "layout");
     return { ok: true, message: "Saved.", ...r };
@@ -41,5 +45,11 @@ export async function act(
     return { ok: false, error: "Something went wrong. This has been logged for investigation." };
   }
 }
+
+/** `const act = actFor("inventory.ts")` at the top of an action file: the same as `act`, held to the module that file belongs to. A test fails if a file does not. */
+export const actFor =
+  (file: string) =>
+  (permission: Permission | undefined, fn: (ctx: Ctx) => Promise<Partial<ActionResult> | void>, revalidate: string[] = [], gate: GateOptions = {}) =>
+    act(permission, fn, revalidate, gate, file);
 
 export const s = (v: unknown) => (v === undefined || v === null ? undefined : String(v));

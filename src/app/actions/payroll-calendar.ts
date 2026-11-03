@@ -1,7 +1,8 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as cal from "@/server/services/payroll-calendar";
 import * as rem from "@/server/services/payroll-reminders";
+const act = actFor("payroll-calendar.ts");
 
 type V = Record<string, unknown>;
 const PATHS = ["/payroll/calendar", "/bureau/deadlines"];

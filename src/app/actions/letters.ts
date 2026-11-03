@@ -1,7 +1,8 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as letters from "@/server/services/letters";
 import type { LetterTypeKey } from "@/lib/letters";
+const act = actFor("letters.ts");
 
 type V = Record<string, unknown>;
 const PATHS = ["/hr", "/employees", "/settings"];

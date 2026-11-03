@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as imp from "@/server/services/employee-import";
+const act = actFor("employee-import.ts");
 
 type V = Record<string, unknown>;
 const PATHS = ["/employees", "/employees/import"];

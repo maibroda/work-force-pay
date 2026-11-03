@@ -1,5 +1,5 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import { BusinessError } from "@/server/services/_base";
 import { removeAssignmentRule, setAssignmentMethod, setAssignmentRule, type AssignmentMethod } from "@/server/services/sales/assignment";
 import { convertLead } from "@/server/services/sales/conversion";
@@ -9,6 +9,7 @@ import { kickAutomation } from "@/server/services/sales/automation";
 import { createOpportunity } from "@/server/services/sales/pipelines";
 import * as records from "@/server/services/sales/records";
 import { updateSalesSetting } from "@/server/services/sales/setting";
+const act = actFor("sales.ts");
 
 type V = Record<string, unknown>;
 

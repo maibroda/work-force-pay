@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { can, ForbiddenError, type Permission, type Role } from "./permissions";
 import type { Ctx } from "./context";
 import { TwoFactorRequiredError, twoFactorStateFor } from "./two-factor-gate";
+import { pageRefusal } from "@/server/services/entitlement-guard";
 import { mayWorkIn } from "./bureau-access";
 
 const COOKIE = "wp_session";
@@ -108,6 +109,11 @@ export async function requirePage(permission?: Permission, opts: GateOptions = {
   const ctx = await getSession();
   if (!ctx) redirect("/login");
   if (permission && !can(ctx.role, permission)) redirect("/forbidden");
+  if (ctx.entitlements) {
+    // the middleware sets this from the request's own address (overwriting anything the browser sent), so it holds on every visit, soft navigations included
+    const off = pageRefusal(ctx, (await headers()).get("x-wfp-path"));
+    if (off) redirect(off);
+  }
   if (!opts.allowUnenrolled && (await twoFactorStateFor(ctx)).state === "BLOCKED") redirect("/settings/security");
   return ctx;
 }

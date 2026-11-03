@@ -1,7 +1,8 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as gl from "@/server/services/accounting";
 import { DIMENSION_KEYS } from "@/lib/dimensions";
+const act = actFor("accounting.ts");
 
 type V = Record<string, unknown>;
 

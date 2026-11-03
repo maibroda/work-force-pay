@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as br from "@/server/services/billing-rules";
+const act = actFor("billing-rules.ts");
 
 type V = Record<string, unknown>;
 const PATHS = ["/finance/billing-rules", "/finance/invoices"];

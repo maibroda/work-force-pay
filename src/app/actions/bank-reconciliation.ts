@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as bankRec from "@/server/services/bank-reconciliation";
+const act = actFor("bank-reconciliation.ts");
 
 type V = Record<string, unknown>;
 const PATHS = ["/finance/bank-accounts", "/finance/bank-reconciliation"];

@@ -5,6 +5,7 @@ import { can } from "@/lib/auth/permissions";
 import { statementCsv } from "@/lib/statements";
 import { logAudit } from "@/server/services/audit";
 import { clientStatement } from "@/server/services/receipts";
+import { routeRefusal } from "@/server/services/entitlement-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ clientId
   const ctx = await getSession();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if ((await twoFactorStateFor(ctx)).state === "BLOCKED") return NextResponse.json({ error: "Two-factor authentication is required for your role. Turn it on under My security." }, { status: 403 });
+  const off = routeRefusal(ctx, "/api/finance/statements/[clientId]");
+  if (off) return off;
   if (!can(ctx.role, "gl.view")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const s = await clientStatement(ctx, clientId, new URL(req.url).searchParams.get("asOf") ?? undefined).catch(() => null);
   if (!s) return NextResponse.json({ error: "Not found" }, { status: 404 });

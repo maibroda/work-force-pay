@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth/session";
 import { twoFactorStateFor } from "@/lib/auth/two-factor-gate";
 import { BusinessError } from "@/server/services/_base";
 import { exportMyData } from "@/server/services/data-requests";
+import { routeRefusal } from "@/server/services/entitlement-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,8 @@ export async function GET() {
   const ctx = await getSession();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if ((await twoFactorStateFor(ctx)).state === "BLOCKED") return NextResponse.json({ error: "Two-factor authentication is required for your role. Turn it on under My security." }, { status: 403 });
+  const off = routeRefusal(ctx, "/api/me/data-export");
+  if (off) return off;
   try {
     const out = await exportMyData(ctx);
     return new NextResponse(out.text, {
