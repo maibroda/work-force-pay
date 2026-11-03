@@ -161,9 +161,10 @@ async function closure(orgId: string, s: NonNullable<Awaited<ReturnType<typeof s
     if (s.row.convertedContactId) contactIds.add(s.row.convertedContactId);
   }
   // duplicates merged into any of the contacts, and leads converted into any of them
-  for (let round = 0; round < 3; round++) {
-    const merged = await tx.crmContact.findMany({ where: { organizationId: orgId, mergedIntoId: { in: [...contactIds] } }, select: { id: true } });
+  for (let found = true; found; ) {
+    const merged = await tx.crmContact.findMany({ where: { organizationId: orgId, mergedIntoId: { in: [...contactIds] }, id: { notIn: [...contactIds] } }, select: { id: true } });
     merged.forEach((m) => contactIds.add(m.id));
+    found = merged.length > 0; // until no further duplicate turns up, however long the chain
   }
   const leads = await tx.crmLead.findMany({ where: { organizationId: orgId, convertedContactId: { in: [...contactIds] } }, select: { id: true } });
   leads.forEach((l) => leadIds.add(l.id));

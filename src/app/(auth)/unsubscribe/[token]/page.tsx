@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { clientIp, limitKey, unsubscribeLimiter } from "@/lib/rate-limit";
+import { decodeLinkToken } from "@/lib/sales/link-token";
 import { unsubscribe } from "@/server/services/sales/privacy";
 
 export const dynamic = "force-dynamic";
@@ -10,11 +11,17 @@ export const metadata: Metadata = { title: "Unsubscribe", robots: { index: false
  * Opening this page withdraws the person's marketing consent at once, with no login. (A mail scanner that opens it only ever withdraws a marketing consent, the safe direction.)
  * The words are the same for every valid link, so the page reveals nothing about who is on file; an altered link does nothing.
  */
+/** A link whose address cannot even be read is simply not valid. */
+async function statusFor(token: string): Promise<"done" | "invalid"> {
+  const decoded = decodeLinkToken(token);
+  return decoded === null ? "invalid" : (await unsubscribe(decoded)).status;
+}
+
 export default async function UnsubscribePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   let status: "done" | "invalid" | "error" | "slow" = "error";
   try {
-    status = unsubscribeLimiter.check(limitKey(clientIp(await headers()), token)).ok ? (await unsubscribe(decodeURIComponent(token))).status : "slow";
+    status = unsubscribeLimiter.check(limitKey(clientIp(await headers()), token)).ok ? await statusFor(token) : "slow";
   } catch {
     status = "error";
   }
