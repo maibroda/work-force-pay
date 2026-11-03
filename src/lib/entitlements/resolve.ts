@@ -32,7 +32,7 @@ export interface Added {
  */
 export function resolveModules(selected: readonly string[], opts: { prefer?: readonly ModuleKey[] } = {}): { modules: ModuleKey[]; added: Added[]; problems: Problem[] } {
   const problems: Problem[] = [];
-  const set = new Set<ModuleKey>();
+  const set = new Set<ModuleKey>(["core"]); // always on, so it is never reported as added
   for (const s of selected) {
     if (isKey(s)) set.add(s);
     else if (!problems.some((p) => p.module === s)) problems.push({ kind: "UNKNOWN_MODULE", module: String(s), message: `There is no module called "${String(s)}".` });

@@ -86,10 +86,19 @@ describe("working out what a selection needs", () => {
     expect(r.added.find((a) => a.module === "payroll")!.because).toBe("Client portal needs Payroll, so Payroll was added.");
   });
 
+  it("never reports the core as added, however the selection is made, because it is always on", () => {
+    for (const sel of [["payroll"], ["crm"], ["hr", "payroll"], ["production_pay"], ["client_billing"], []]) {
+      const r = resolveModules(sel);
+      expect(r.added.map((a) => a.module), sel.join("+")).not.toContain("core");
+      expect(r.added.flatMap((a) => a.neededBy), sel.join("+")).not.toContain("core");
+      expect(r.added.some((a) => /Core platform/.test(a.because)), sel.join("+")).toBe(false);
+    }
+  });
+
   it("adds what is missing and says why in words a salesperson can repeat", () => {
     const r = resolveModules(["production_pay"]);
     expect(r.modules).toEqual(["core", "payroll", "production_pay"]);
-    expect(r.added.map((a) => a.module)).toEqual(["core", "payroll"]);
+    expect(r.added.map((a) => a.module)).toEqual(["payroll"]); // the core is always on, so it is never reported as "added" (it confused a salesperson: "Payroll needs Core platform, so Core platform was added")
     const payroll = r.added.find((a) => a.module === "payroll")!;
     expect(payroll.because).toBe("Production pay needs Payroll, so Payroll was added.");
     expect(payroll.neededBy).toEqual(["production_pay"]);
@@ -177,7 +186,9 @@ describe("plans", () => {
     expect(planModules("payroll_essentials")).toEqual(["core", "payroll"]);
     expect([...planModules("hr_payroll")].sort()).toEqual(["core", "hr", "payroll", "self_service"]);
     expect(planModules("crm")).toEqual(["core", "crm"]);
-    expect([...planModules("workforce_suite")].sort()).toEqual([...keys].sort()); // everything
+    // everything that exists: the three planned modules are not in it until they are built (the founder, 2026-11-03), so it never sells what does not exist
+    expect([...planModules("workforce_suite")].sort()).toEqual(keys.filter((k) => MODULES[k].status !== "planned").sort());
+    for (const k of keys.filter((x) => MODULES[x].status === "planned")) expect(planModules("workforce_suite"), k).not.toContain(k);
     expect(planModules("custom")).toEqual(["core"]);
   });
 

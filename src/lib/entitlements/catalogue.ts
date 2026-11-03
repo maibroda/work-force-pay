@@ -84,7 +84,7 @@ export const PLANS: Record<PlanKey, PlanDef> = {
   payroll_essentials: { key: "payroll_essentials", name: "Payroll Core", typicalClient: "A firm with its own HR system that only wants payroll done right", modules: ["core", "payroll"] },
   hr_payroll: { key: "hr_payroll", name: "HR + Payroll", typicalClient: "Small and mid-sized firms wanting one people system", modules: ["core", "hr", "payroll", "self_service"] },
   crm: { key: "crm", name: "CRM", typicalClient: "A firm wanting to manage prospects and clients only", modules: ["core", "crm"] },
-  workforce_suite: { key: "workforce_suite", name: "Workforce Suite", typicalClient: "Large security, outsourcing or manufacturing firms", modules: [...MODULE_KEYS] },
+  workforce_suite: { key: "workforce_suite", name: "Workforce Suite", typicalClient: "Large security, outsourcing or manufacturing firms", modules: MODULE_KEYS.filter((k) => MODULES[k].status !== "planned") }, // everything that exists: a planned module joins it when it is built (the founder, 2026-11-03)
   custom: { key: "custom", name: "Custom", typicalClient: "Negotiated contracts", modules: ["core"] },
 };
 /**
