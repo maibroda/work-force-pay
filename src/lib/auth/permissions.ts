@@ -104,6 +104,8 @@ export const PERMISSIONS = [
   "crm.manage", // add and move leads, log outreach, keep referral partners, record commission paid, and make and send proposals
   "healthcheck.view", // read the health checks of prospects' payroll processes and download their one-page summaries (never payroll data)
   "healthcheck.manage", // carry out a health check: assess the controls, record findings, send it for review, review and issue it (never your own)
+  "subscription.view", // see which plan and modules your company has, and the history of changes to them
+  "subscription.manage", // change a company's plan, modules and limits: platform staff only (and a bureau for its own clients, by the bureau.manage rule in the service). Withheld from COMPANY_ADMIN below
   "pricing.manage", // set the rate card (the bureau's costs, margin target, package prices and add-ons) and approve a proposal priced below the target margin
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
@@ -131,7 +133,8 @@ const READ_ALL: Permission[] = [
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   SUPER_ADMIN: ALL,
-  COMPANY_ADMIN: ALL,
+  // a company's administrator holds everything EXCEPT changing its own subscription: otherwise any company could give itself every module
+  COMPANY_ADMIN: ALL.filter((p) => p !== "subscription.manage"),
   HR_ADMIN: [
     "dashboard.view",
     "employee.view",

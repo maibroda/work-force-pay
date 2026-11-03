@@ -40,6 +40,7 @@ import { explainIssue } from "../src/server/services/payroll-controls";
 import { buildDemoClient, finishDemoMonth } from "./demo-client";
 import { buildDemoPipeline } from "./demo-crm";
 import { buildSalesDemo } from "./demo-sales";
+import { changePlan, ensureSubscription } from "../src/server/services/subscriptions";
 import { createPaymentBatches, generateRemittances, markBatchPaid } from "../src/server/services/payments";
 import { ensureDefaultChart } from "../src/server/services/accounting";
 import { applyForLeave, decideLeave } from "../src/server/services/leave";
@@ -1339,6 +1340,11 @@ async function main() {
   await buildDemoPipeline({ sales: staffCtx("BUSINESS_DEV"), founder: staffCtx("COMPANY_ADMIN"), officer: staffCtx("PAYROLL_ADMIN"), reviewer: staffCtx("FINANCE"), clientId: demo.client.id });
   // the demo approver signs in with the demo password (a real client would choose their own through the invitation link)
   for (const u of [demo.approver, demo.hrContact]) await db.user.update({ where: { id: u.userId }, data: { passwordHash: hash } });
+
+  // every demo company has a subscription, and all of them have the whole suite (the demo client was given Payroll Essentials on onboarding, and is moved up)
+  const demoCtx = staffCtx("COMPANY_ADMIN");
+  await changePlan(demoCtx, demo.client.id, { planKey: "workforce_suite", reason: "Demo data" });
+  for (const o of await db.organization.findMany({ select: { id: true } })) await ensureSubscription(db, demoCtx, o.id, { planKey: "workforce_suite", reason: "Demo data" });
 
   const counts = {
     employees: await db.employee.count({ where: { organizationId: org.id } }),

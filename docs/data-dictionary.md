@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-204 tables and 158 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+208 tables and 160 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -51,6 +51,10 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | paymentTxns | → PaymentTransaction[] |  |  |
 | remittances | → StatutoryRemittance[] |  |  |
 | auditLogs | → AuditLog[] |  |  |
+| subscription | → Subscription |  |  |
+| subscriptionModules | → SubscriptionModule[] |  |  |
+| subscriptionEvents | → SubscriptionEvent[] |  |  |
+| clientBlueprints | → ClientBlueprint[] |  |  |
 | auditSeals | → AuditSeal[] |  |  |
 | leavePolicy | → LeavePolicy |  |  |
 | leaveRequests | → LeaveRequest[] |  |  |
@@ -4490,6 +4494,7 @@ A specific bid for a client business: "24/7 guarding, 3 sites, 18 guards". Its m
 | Field | Type | Required | What it holds |
 | --- | --- | --- | --- |
 | id | String |  | (key) |
+| blueprints | → ClientBlueprint[] |  |  |
 | organizationId | String | yes |  |
 | organization | → Organization |  |  |
 | accountId | String | yes |  |
@@ -5151,6 +5156,83 @@ A person in a team. A person is in at most one team.
 | userId | String | yes |  |
 | createdAt | DateTime |  |  |
 
+### Subscription
+
+One per company. Changed only by platform staff, or by a bureau for its own clients; a company cannot change its own.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes | (unique) |
+| organization | → Organization |  |  |
+| planKey | String | yes | A key of PLANS in the catalogue. |
+| status | SubscriptionStatus |  |  |
+| catalogueVersion | String | yes | The catalogue version the plan was chosen from. |
+| employeeLimit | Int |  | Stored now and checked in a later step. Empty means no limit. |
+| crmUserLimit | Int |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+| modules | → SubscriptionModule[] |  |  |
+| events | → SubscriptionEvent[] |  |  |
+
+### SubscriptionModule
+
+A module a company has, with the days it was on. A module that is taken away is given an end date, never deleted, so what a company had on any day can be answered.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| subscriptionId | String | yes |  |
+| subscription | → Subscription |  |  |
+| moduleKey | String | yes | A key of MODULES in the catalogue. |
+| source | SubscriptionModuleSource | yes |  |
+| startsOn | DateTime | yes |  |
+| endsOn | DateTime |  |  |
+| readOnlyUntil | DateTime |  | After the end date the module's data can still be read until this day (a later step); empty means not at all. |
+| createdAt | DateTime |  |  |
+
+### SubscriptionEvent
+
+Every change to a subscription: append-only at the database (a trigger refuses any update or delete). Keys and plan names only; nothing personal.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| subscriptionId | String | yes |  |
+| subscription | → Subscription |  |  |
+| kind | String | yes | CREATED, PLAN_CHANGED, MODULE_ADDED, MODULE_REMOVED, LIMITS_CHANGED or GRANDFATHERED. |
+| reason | String |  |  |
+| byUserId | String |  |  |
+| byName | String | yes |  |
+| detail | Json |  |  |
+| createdAt | DateTime |  |  |
+
+### ClientBlueprint
+
+What was proposed to a prospect: the plan and modules chosen from the answers to the configurator's questions, and why. Kept so that what the client was told can be shown later.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes | The selling organization (the bureau or company that made the proposal), not the prospect. |
+| organization | → Organization |  |  |
+| opportunityId | String |  |  |
+| opportunity | → CrmOpportunity |  |  |
+| prospectName | String | yes |  |
+| planKey | String | yes |  |
+| modules | Json | yes |  |
+| answers | Json | yes |  |
+| reasons | Json | yes |  |
+| status | String |  | DRAFT, SENT, ACCEPTED or DROPPED. |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+
 ## Fixed sets of values
 
 ### Role
@@ -5806,4 +5888,12 @@ Whether an outbound message is a service message (about an active contract) or m
 ### CrmDataRequestStatus
 
 `OPEN`, `COMPLETED`, `REFUSED`
+
+### SubscriptionStatus
+
+`ACTIVE`, `SUSPENDED`, `ENDED`
+
+### SubscriptionModuleSource
+
+`PLAN`, `ADD_ON`, `GRANDFATHERED`
 
