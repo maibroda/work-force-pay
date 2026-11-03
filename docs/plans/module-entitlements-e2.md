@@ -1,6 +1,6 @@
 # Plan: entitlements step E2, a subscription for each company
 
-**Status: a plan only, for the founder's approval. Nothing is built, no migration is written.** Written 2026-11-03. It follows `docs/plans/module-entitlements.md` (the overall plan) and builds on E1, the catalogue of modules, plans and ports, which is merged (`src/lib/entitlements/`). E2 adds database tables, so under `CLAUDE.md` it needs your explicit "go" and a reversible migration; it touches who may change what a company can use, so it is access-control work and gets an explain-back note.
+**Status: a plan, with the founder's answers of 2026-11-03 recorded at the end (they accepted my recommendations). The founder's "go" for E2 was given in the same reply. Nothing is built yet, and no migration is written.** Written 2026-11-03. It follows `docs/plans/module-entitlements.md` (the overall plan) and builds on E1, the catalogue of modules, plans and ports, which is merged (`src/lib/entitlements/`). E2 adds database tables, so under `CLAUDE.md` it needs your explicit "go" and a reversible migration; it touches who may change what a company can use, so it is access-control work and gets an explain-back note.
 
 ## 1. What E2 is, and what it is not
 
@@ -55,4 +55,13 @@ Enforce anything, hide any menu item, refuse any action, change any price, or to
 5. **Grandfathering:** the "Custom plan with every built module" starting point is mine. Would you rather existing companies be put on **Workforce Suite** (which includes the three planned modules too) or on a plan you choose per company?
 6. **Prices and the price book are not in E2** (they belong to the configurator, E4). Agreed?
 
-When you answer 1 to 6 and say "go", I start with step 1, the tests.
+## 7. The founder's answers (2026-11-03: they accepted my recommendations)
+
+1. **Who may change a subscription:** platform staff (`SUPER_ADMIN`) and a bureau's administrator inside its own clients; a company's own administrator can only view. **One trap, to be built and pinned by a test:** `COMPANY_ADMIN` holds every permission automatically, so `subscription.manage` must be explicitly **withheld** from it, or any company could give itself every module.
+2. **A company with no subscription:** everything while enforcement is off. When it is switched on, a missing subscription means the core only, **and every way of creating a company also creates a subscription, and the switch refuses to turn on while any company lacks one** (so a new company can never be locked out by the switch).
+3. **Limits:** the fields are stored in E2 and checked only in E6.
+4. **A bureau's clients:** each company has its own subscription; a bureau has permission to change its clients'.
+5. **Grandfathering:** existing companies are put on the Custom plan with every module that is built or partly built (not the planned ones), each marked grandfathered, so they can be reviewed and given real plans later.
+6. **Prices:** not in E2.
+
+**Added by the ruling that the client portal is a module:** the migration's grandfathering step includes it (it exists today), and the catalogue has 16 modules.

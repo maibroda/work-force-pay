@@ -4,7 +4,7 @@
  *
  * NOTHING IN THE APP READS THIS YET. It does not switch anything on or off, change a screen, a permission or a price. Later steps (a subscription for each company, then
  * enforcement) will read it; until then it is a library with tests. Dependencies are the founder's: payroll needs only the core, the CRM needs neither HR nor payroll.
- * Entries marked `assumed` are mine, not the founder's, and are listed for confirmation.
+ * Entries marked `assumed` are mine, not the founder's, and are listed for confirmation (the founder accepted my recommendations on 2026-11-03).
  *
  * VERSION: this is one version of the catalogue, dated. Keeping every earlier version with its effective dates (as statutory settings are kept) needs a table, and comes
  * with the subscription tables in step E2.
@@ -27,6 +27,7 @@ export const MODULE_KEYS = [
   "accounting",
   "payables_procurement",
   "inventory",
+  "client_portal",
 ] as const;
 export type ModuleKey = (typeof MODULE_KEYS)[number];
 
@@ -65,6 +66,7 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
   integrations: m({ key: "integrations", name: "Integrations", summary: "Public API, accounting and GL export (for example Sage).", needs: ["core"], chargedPer: "flat", status: "planned", assumed: "There is no public API yet." }),
   accounting: m({ key: "accounting", name: "Accounting", summary: "General ledger, journals, periods and close, tax codes and withholding certificates, fixed assets, bank reconciliation.", needs: ["core"], chargedPer: "flat", status: "built", assumed: "Its own module by the founder's decision of 2026-11-02; what it needs and how it is charged are assumed." }),
   payables_procurement: m({ key: "payables_procurement", name: "Payables and procurement", summary: "Purchase orders, goods received and three-way match, suppliers' bills.", needs: ["accounting"], chargedPer: "flat", status: "built", assumed: "Its own module by the founder's decision of 2026-11-02; it is assumed to need Accounting (its bills post to the ledger) and to be charged flat." }),
+  client_portal: m({ key: "client_portal", name: "Client portal", summary: "The client's own people: approve payroll, download payslips and registers, send monthly inputs, raise queries.", needs: ["contracts_deployment"], chargedPer: "flat", status: "built", assumed: "Its own module by the founder's ruling of 2026-11-03 (they accepted that a client's own people use it separately and it is billed differently); that it needs Contracts & deployment and is charged flat is my recommendation, which they accepted." }),
   inventory: m({ key: "inventory", name: "Inventory", summary: "Stock and what is issued to employees.", needs: ["core"], chargedPer: "flat", status: "built", assumed: "Its own module by the founder's decision of 2026-11-02; what it needs and how it is charged are assumed." }),
 };
 
