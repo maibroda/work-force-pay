@@ -46,3 +46,16 @@ Turn a salesperson's answers about a prospect (how many employees, whether they 
 ## 7. If you say "go"
 
 I would start **E4a** (no migration, no money): tests first, then `configureClient`, with the table of worked cases. It needs your answer to question 1 first, because the questions and rules are yours.
+
+## 8. The founder's answers of 2026-11-03
+
+Four of the five questions are answered (on my recommendations); two things are still needed.
+
+| Question | Answer | What it changes |
+|---|---|---|
+| The client portal's dependency | **Needs only Payroll** (confirmed). | Already in the catalogue since E3. |
+| Where a blueprint links | **The bureau's lead / proposal.** | E4c changes `ClientBlueprint`: its link to a company-sales deal (`opportunityId`, empty and unused) is replaced by links to the bureau's `Lead` and `Proposal`. A small reversible migration, with E4c. |
+| Bureau packages and software plans | **Different names.** | **Done:** the software plan `payroll_essentials` is now called **Payroll Core** (display name only; the key stays, because subscriptions store it), and a test fails if any plan ever takes a bureau package's name again. |
+| Who may configure and price | **Platform staff and the bureau's sales people** (`BUSINESS_DEV`, for their own prospects); only platform staff change the price book. | A new permission pair for E4: one to configure and quote (platform staff, `BUSINESS_DEV`), one for the price book (platform staff only; withheld from `COMPANY_ADMIN`, as `subscription.manage` is). |
+
+**Still needed before E4a starts:** (1) **the questionnaire**: your list of questions and what each answer means, or your word to draft about eight for you to edit (the files from the original document are not in the repository); (2) **the price book** (E4b): who owns it, currency, the charge basis per module, minimum fee and discounts, whether it changes by date. I will not guess either.

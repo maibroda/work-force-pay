@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CATALOGUE_VERSION, MODULES, MODULE_KEYS, PLANS, PORTS, type ModuleKey } from "@/lib/entitlements/catalogue";
 import { checkPlan, planModules, portSource, resolveModules, whatRemovalBreaks } from "@/lib/entitlements/resolve";
+import { PACKAGE_NAMES } from "@/lib/pricing";
 
 const keys = MODULE_KEYS;
 const without = (xs: readonly ModuleKey[], k: ModuleKey) => xs.filter((x) => x !== k);
@@ -15,6 +16,14 @@ function complete(set: readonly ModuleKey[]) {
 }
 
 describe("the catalogue", () => {
+  it("never gives a software plan the name of one of the bureau's service packages, so nobody confuses what a client is paid for with what a company has bought (the founder, 2026-11-03)", () => {
+    const packageNames = new Set(Object.values(PACKAGE_NAMES).map((n) => n.toLowerCase()));
+    for (const p of Object.values(PLANS)) expect(packageNames.has(p.name.toLowerCase()), `${p.name} is also a bureau package`).toBe(false);
+    expect(new Set(Object.values(PLANS).map((p) => p.name)).size).toBe(Object.keys(PLANS).length); // and no two plans share a name
+    expect(PLANS.payroll_essentials.name).toBe("Payroll Core"); // renamed; the key stays, because subscriptions store it
+  });
+
+
   it("lists the twelve modules of the founder's document, the three they added (accounting, payables and procurement, inventory) and the client portal (their ruling of 2026-11-03)", () => {
     expect([...keys].sort()).toEqual(
       ["accounting", "analytics", "client_billing", "client_portal", "contracts_deployment", "core", "crm", "hr", "integrations", "inventory", "payables_procurement", "payroll", "production_pay", "self_service", "service_charge_pay", "time_attendance"].sort(),

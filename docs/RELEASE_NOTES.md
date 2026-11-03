@@ -2,6 +2,12 @@
 
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
+## Not yet merged (branch `entitlements-e4-decisions`, no migration)
+
+- **The software plan "Payroll Essentials" is now called "Payroll Core"; the bureau's service package keeps the name Payroll Essentials.** The founder's ruling of 2026-11-03, so that nobody confuses what a client is paid for (a ThreeRoots service package) with what a company has bought (a software plan). Display name only: the plan's key is unchanged, so no subscription or migration is touched, and the Subscription page and the plan lists show the new name. A test fails if a software plan ever takes a bureau package's name.
+- **The founder's other E4 rulings are recorded in `docs/plans/module-entitlements-e4.md`:** the client portal needs only Payroll (confirmed); a blueprint will link to the bureau's lead / proposal (E4c, with a small migration); platform staff and the bureau's sales people may configure and price a prospect, and only platform staff change the price book. Still needed before E4a: the questionnaire and the price book.
+- Tests: one new in `tests/unit/entitlements-catalogue.test.ts`; the bureau onboarding test's wording updated. No migration, no behaviour change.
+
 ## Not yet merged (branch `entitlements-e3c`, no migration)
 
 - **E3c: the scheduled jobs respect the module switch. Nothing is turned on, so every job runs for every company exactly as before.** The page, action and route guards (E3a) do not cover the jobs, which run for every company with nobody signed in. A shared function, `entitledOrgs(companies, job)`, now says which companies a job may run for: all while the module is OFF; all, with a log line for each that would have been skipped, in REPORT; only those that have the module today in ENFORCE (a company with no subscription counts as the core only; an unknown job name throws). It is used in the nine services behind the 12 jobs: HR digest and data retention; journal reversals and recurring journals; payroll reminders; and the four CRM jobs (sales digests, health scores, case SLA clocks and renewals, automation, where a queued run for a company that no longer has the module is cancelled with a plain note). The three audit jobs are the core and never held back.

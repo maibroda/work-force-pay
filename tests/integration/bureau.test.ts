@@ -110,7 +110,7 @@ describe("onboarding a client", () => {
 });
 
 describe("a new client's subscription", () => {
-  it("is made with the client, in the same step, as Payroll Essentials by the person who onboarded it, and appears in the client's own history", async () => {
+  it("is made with the client, in the same step, as the Payroll Core plan by the person who onboarded it, and appears in the client's own history", async () => {
     const w = await world();
     const { client } = await w.onboard();
     const sub = await db.subscription.findUniqueOrThrow({ where: { organizationId: client.id }, include: { modules: true, events: true } });
