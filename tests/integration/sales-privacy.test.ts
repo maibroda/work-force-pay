@@ -448,6 +448,24 @@ describe("erasing a person", () => {
     expect(await db.crmDataRequest.findUniqueOrThrow({ where: { id: req.id } })).toMatchObject({ status: "COMPLETED", requesterName: "Erased", identityNote: null, handledBy: w.admin.name });
   });
 
+  it("erases the duplicates merged into the person however deep the chain of merges goes (review finding F-06: it used to stop after three)", async () => {
+    const w = await world();
+    await grant(w);
+    let previous = w.contact.id;
+    for (let i = 1; i <= 6; i++) {
+      const d = await createContact(w.repA, { accountId: w.account.id, firstName: w.person.first, lastName: w.person.last, email: w.person.email });
+      await db.crmContact.update({ where: { id: d.id }, data: { status: "VOID", mergedIntoId: previous } }); // each one merged into the one before
+      previous = d.id;
+    }
+    const needles = [w.person.first, w.person.last, w.person.email];
+    expect((await mentions(w.t.org.id, needles)).length).toBeGreaterThan(0); // the premise
+    const req = await openRequest(w.admin, { kind: "ERASURE", subjectType: "CONTACT", subjectId: w.contact.id, requesterName: "Owner" });
+    await verifyIdentity(w.admin, req.id, "Called back on the number on file");
+    const r = await eraseSubject(w.admin, req.id);
+    expect(r.counts.contacts).toBe(7); // the person and all six merged duplicates, down the whole chain
+    expect(await mentions(w.t.org.id, needles)).toEqual([]);
+  });
+
   it("keeps the audit entries (they hold ids, never the person), and records the erasure with counts", async () => {
     const w = await world();
     await richPerson(w);
