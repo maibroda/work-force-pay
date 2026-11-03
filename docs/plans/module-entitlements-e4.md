@@ -59,3 +59,15 @@ Four of the five questions are answered (on my recommendations); two things are 
 | Who may configure and price | **Platform staff and the bureau's sales people** (`BUSINESS_DEV`, for their own prospects); only platform staff change the price book. | A new permission pair for E4: one to configure and quote (platform staff, `BUSINESS_DEV`), one for the price book (platform staff only; withheld from `COMPANY_ADMIN`, as `subscription.manage` is). |
 
 **Still needed before E4a starts:** (1) **the questionnaire**: your list of questions and what each answer means, or your word to draft about eight for you to edit (the files from the original document are not in the repository); (2) **the price book** (E4b): who owns it, currency, the charge basis per module, minimum fee and discounts, whether it changes by date. I will not guess either.
+
+## 9. The founder accepted my questionnaire recommendations (2026-11-03)
+
+The questionnaire in `module-entitlements-e4-questionnaire-draft.md` (the employee count and twelve yes-or-no questions) is **approved as drafted**, with these choices, all built in step E4a (`src/lib/entitlements/configure.ts`, tests first):
+
+1. **The plan to propose is the one with the fewest add-ons plus unasked modules; on a tie, fewer add-ons; then the order of the plans.** The runner-up (the next best by the same rule) is shown with it, so a salesperson can see the alternative and the reason.
+2. **Workforce Suite excludes the three planned modules** (Production pay, Sales and service-charge pay, Integrations) until they are built, and picks each up automatically when it is. Done in the catalogue, with a test.
+3. **The core is never reported as "added"** ("Payroll needs Core platform, so Core platform was added" is gone). Done in the rules, with a test.
+4. **Partly built modules are quoted honestly:** the blueprint carries a plain note ("Time & attendance is only partly built: ... clocking does not."). Done.
+5. **A bureau package that implies a plan** is shown first, marked as the package's default: deferred to E4c, and I will confirm the package-to-plan mapping with the founder then.
+
+**E4a is built:** the pure `configureClient` (answers in; modules, reasons, plan, add-ons, runner-up, notes and limits out), tested on the four worked prospects of the draft and on **every one of the 4,095 possible sets of answers** (complete, holds together, sells nothing planned, the same every time, and the proposal is exactly the rule's choice). **Still needed before E4b: the price book** (owner, currency, charge basis per module, minimum fee and discounts, whether it changes by date).
