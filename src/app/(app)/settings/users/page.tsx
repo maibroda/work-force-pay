@@ -40,6 +40,9 @@ export default async function UsersPage() {
                 "SUPERVISOR",
                 "EMPLOYEE",
                 "BUSINESS_DEV",
+                "SALES_REP",
+                "SALES_MANAGER",
+                "ACCOUNT_MANAGER",
               ]),
             },
             {

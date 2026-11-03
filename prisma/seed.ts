@@ -39,6 +39,7 @@ import {
 import { explainIssue } from "../src/server/services/payroll-controls";
 import { buildDemoClient, finishDemoMonth } from "./demo-client";
 import { buildDemoPipeline } from "./demo-crm";
+import { buildSalesDemo } from "./demo-sales";
 import { createPaymentBatches, generateRemittances, markBatchPaid } from "../src/server/services/payments";
 import { ensureDefaultChart } from "../src/server/services/accounting";
 import { applyForLeave, decideLeave } from "../src/server/services/leave";
@@ -166,6 +167,11 @@ async function seedStatutory(orgId: string) {
       code: "NG-PAYE-NTA2025",
       name: "Nigeria PAYE — Nigeria Tax Act 2025",
       version: "2026.1",
+      // PAYE filing dates and penalty: the founder's starting values (due on the 7th of the next month), NOT verified by the tax adviser
+      payeDueDay: 7,
+      annualReturnMonth: 1,
+      annualReturnDay: 31,
+      latePenaltyPct: 10,
       legalBasis:
         "Nigeria Tax Act 2025, personal income tax schedule effective 1 January 2026. Consolidated Relief Allowance abolished; rent relief 20% of annual rent capped at ₦500,000; pension contributions deductible. VERIFY against current law and NRS guidance before production use.",
       effectiveFrom: d("2026-01-01"),
@@ -786,6 +792,8 @@ async function main() {
         email: `${first}.${last}${n}@mail.test`.toLowerCase(),
         address: `${Math.floor(1 + rand() * 90)} ${pick(["Allen Avenue", "Herbert Macaulay Way", "Ogunlana Drive", "Aba Road", "Zik Avenue", "Isaac John Street"])}`,
         employmentDate: d(p.empDate),
+        // synthetic states chosen by position, NOT from the random stream, so every other seeded value is unchanged
+        stateOfResidence: n % 19 === 0 ? null : n % 7 === 0 ? "Ogun" : "Lagos",
         exitDate: p.exit ? d(p.exit) : null,
         status: p.status ?? "ACTIVE",
         categoryId: cat[p.cat].id,
@@ -1315,6 +1323,8 @@ async function main() {
   await seedJournalDemo(org.id);
   await seedRecurringDemo(org.id);
   await seedBillingDemo(org.id);
+  console.log("→ The demo company's sales module: accounts, leads, a deal, a quote, a case, a sales team");
+  await buildSalesDemo({ orgId: org.id, admin, passwordHash: hash, structureId: std.id });
 
   // the demo client: 30 employees, 3 sites, one full month (see prisma/demo-client.ts and the acceptance test)
   console.log("→ ThreeRoots demo client (Acme Facilities Ltd): onboarding, import, October 2026 payroll");

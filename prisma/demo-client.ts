@@ -30,7 +30,7 @@ export const DEMO_MONTH = { year: 2026, month: 10 };
 
 /** The 30 employees as the CSV a client would send: 3 sites, a few supervisors, two October joiners. */
 export function demoEmployeesCsv(): string {
-  const head = "First Name,Last Name,Gender,Date of Birth,Phone,Employment Date,Category,Department,Bank Name,Account Number,Account Name,Tax ID,Pension PIN,PFA";
+  const head = "First Name,Last Name,Gender,Date of Birth,Phone,Employment Date,Category,Department,Bank Name,Account Number,Account Name,Tax ID,Pension PIN,PFA,State of Residence";
   const rows = Array.from({ length: 30 }, (_, i) => {
     const n = i + 1;
     const first = FIRST[i];
@@ -40,6 +40,8 @@ export function demoEmployeesCsv(): string {
     return [
       first, last, i % 2 ? "Female" : "Male", dob, `0803${String(1000000 + i * 3571).slice(-7)}`, joined, n % 6 === 0 ? "SUPV" : "STAFF", SITES[i % 3].code,
       BANKS[i % BANKS.length], `20${String(10000000 + i * 7919).slice(-8)}`, `${first} ${last}`.toUpperCase(), `TIN${String(40000000 + i * 131)}`, `PEN${String(100000000000 + i * 977)}`, PFAS[i % PFAS.length],
+      // each site's staff live in that site's state (synthetic)
+      ["Lagos", "FCT", "Rivers"][i % 3],
     ].join(",");
   });
   return [head, ...rows].join("\r\n");

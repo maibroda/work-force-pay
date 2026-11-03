@@ -1,0 +1,106 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { requirePage } from "@/lib/auth/session";
+import { can } from "@/lib/auth/permissions";
+import { BusinessError } from "@/server/services/_base";
+import { countOpportunities, listOpportunities } from "@/server/services/sales/pipelines";
+import { Pager } from "@/components/sales/pager";
+import { DEFAULT_PAGE_SIZE, pagingOf, windowOf } from "@/lib/sales/paging";
+import { listAccounts } from "@/server/services/sales/records";
+import { naira } from "@/lib/money";
+import { PageHeader, Section } from "@/components/page";
+import { SmartForm } from "@/components/smart-form";
+import { Badge } from "@/components/ui/badge";
+import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
+import { createOpportunityAction } from "@/app/actions/sales";
+
+const SERVICES = ["GUARDING", "CLEANING", "FACILITY", "STAFFING", "OTHER"];
+const label = (s: string) => s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, " ");
+
+export default async function SalesOpportunitiesPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+  const ctx = await requirePage("sales.view");
+  const sp = await searchParams;
+  const paging = pagingOf({ page: sp.page ?? "1", pageSize: DEFAULT_PAGE_SIZE });
+  let deals: Awaited<ReturnType<typeof listOpportunities>> = [];
+  let accounts: Awaited<ReturnType<typeof listAccounts>> = [];
+  let total = 0;
+  let why = "";
+  try {
+    [deals, accounts, total] = await Promise.all([listOpportunities(ctx, paging), listAccounts(ctx), countOpportunities(ctx)]);
+  } catch (e) {
+    if (!(e instanceof BusinessError)) throw e;
+    why = e.message;
+  }
+  // a page past the end (a stale bookmark, an edited address) goes to the last page rather than showing an empty table
+  if (!why && !deals.length && total > 0 && paging.page > 1) redirect(`/sales/opportunities?page=${windowOf(total, paging).page}`);
+  return (
+    <>
+      <PageHeader title="Deals" description="Specific bids for a client's business. A deal starts in the first stage of the New business pipeline with that stage's probability. Move deals between stages on the board." />
+      {why && (
+        <p className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {why}{" "}
+          {can(ctx.role, "sales.configure") && (
+            <Link className="underline" href="/sales/settings">
+              Open Sales settings
+            </Link>
+          )}
+        </p>
+      )}
+      {!why && (
+        <Section title={`${total} deal(s)`} flush>
+          <Table>
+            <THead>
+              <TR>
+                <TH>Deal</TH>
+                <TH>Account</TH>
+                <TH>Service</TH>
+                <TH>Stage</TH>
+                <TH className="text-right">Monthly value</TH>
+                <TH className="text-right">Probability</TH>
+                <TH>Owner</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {deals.map((d) => (
+                <TR key={d.id}>
+                  <TD>
+                    <Link className="underline" href={`/sales/opportunities/${d.id}`}>
+                      {d.name}
+                    </Link>
+                  </TD>
+                  <TD className="text-xs">{d.account.name}</TD>
+                  <TD className="text-xs">{label(d.serviceType)}</TD>
+                  <TD>
+                    <Badge>{d.stage.name}</Badge>
+                  </TD>
+                  <TD className="text-right">{naira(d.monthlyContractValue)}</TD>
+                  <TD className="text-right text-xs">{d.probability}%</TD>
+                  <TD className="text-xs">{d.ownerName}</TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+          <Pager path="/sales/opportunities" total={total} page={paging.page} pageSize={paging.pageSize} />
+          {!deals.length && <p className="px-4 py-4 text-sm text-muted-foreground">No deals yet. Converting a lead creates one, or add one on an account below.</p>}
+        </Section>
+      )}
+      {!why && can(ctx.role, "sales.manage") && (
+        <Section title="Add a deal" description="The monthly value is in naira with at most two decimals; more than that is refused, never rounded.">
+          <SmartForm
+            columns={3}
+            submitLabel="Add deal"
+            resetOnSuccess
+            action={createOpportunityAction}
+            fields={[
+              { name: "name", label: "Deal name", required: true },
+              { name: "accountId", label: "Account", type: "select", required: true, options: [{ value: "", label: "— choose —" }, ...accounts.map((a) => ({ value: a.id, label: a.name }))] },
+              { name: "serviceType", label: "Service", type: "select", defaultValue: "GUARDING", options: SERVICES.map((s) => ({ value: s, label: label(s) })) },
+              { name: "monthlyContractValue", label: "Monthly value (naira)" },
+              { name: "expectedCloseDate", label: "Expected close date", type: "date" },
+            ]}
+          />
+        </Section>
+      )}
+    </>
+  );
+}

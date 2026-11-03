@@ -2,6 +2,8 @@ import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { d } from "@/lib/dates";
 import { num } from "@/lib/money";
+import { overlappingVersion, validateTiming } from "@/lib/paye-dates";
+import { NHF_STANDARD_RATE_PCT } from "@/lib/payroll/standard-rates";
 import type { TaxRuleDef } from "@/lib/payroll/paye";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
@@ -65,6 +67,10 @@ export async function copyStatutoryRules(tx: Tx, fromOrgId: string, toOrgId: str
         effectiveFrom: r.effectiveFrom,
         effectiveTo: r.effectiveTo,
         active: r.active,
+        payeDueDay: r.payeDueDay,
+        annualReturnMonth: r.annualReturnMonth,
+        annualReturnDay: r.annualReturnDay,
+        latePenaltyPct: r.latePenaltyPct,
         bands: { create: r.bands.map((b) => ({ sortOrder: b.sortOrder, lowerBound: b.lowerBound, upperBound: b.upperBound, rate: b.rate })) },
         reliefs: { create: r.reliefs.map((x) => ({ code: x.code, name: x.name, type: x.type, rate: x.rate, amount: x.amount, cap: x.cap, active: x.active })) },
         exemptions: { create: r.exemptions.map((x) => ({ code: x.code, description: x.description, annualGrossCeiling: x.annualGrossCeiling, active: x.active })) },
@@ -88,6 +94,9 @@ export async function copyStatutoryRules(tx: Tx, fromOrgId: string, toOrgId: str
         maxOvertimeHoursPerMonth: r.maxOvertimeHoursPerMonth,
         maxDeductionPctOfGross: r.maxDeductionPctOfGross,
         backOfficeChargePct: r.backOfficeChargePct,
+        requirePayeState: r.requirePayeState,
+        nhfEmployeeRatePct: r.nhfEmployeeRatePct,
+        minTakeHomePctOfGross: r.minTakeHomePctOfGross,
         effectiveFrom: r.effectiveFrom,
         effectiveTo: r.effectiveTo,
       },
@@ -151,6 +160,9 @@ export async function payrollRuleFor(tx: Tx, orgId: string, date: Date) {
     maxOvertimeHoursPerMonth: num(r.maxOvertimeHoursPerMonth),
     maxDeductionPctOfGross: num(r.maxDeductionPctOfGross),
     backOfficeChargePct: num(r.backOfficeChargePct),
+    requirePayeState: r.requirePayeState,
+    nhfEmployeeRatePct: num(r.nhfEmployeeRatePct),
+    minTakeHomePctOfGross: num(r.minTakeHomePctOfGross),
   };
 }
 
@@ -189,12 +201,20 @@ export async function listTaxRules(ctx: Ctx) {
   });
 }
 
+const blankToNull = (v: unknown) => (v === "" || v === undefined || v === null ? null : v);
+const optionalNumber = z.preprocess(blankToNull, z.coerce.number().nullable());
+
 export const taxRuleSchema = z.object({
   code: z.string().trim().min(2),
   name: z.string().trim().min(3),
   version: z.string().trim().min(1),
   legalBasis: z.string().optional(),
   effectiveFrom: z.string().min(10),
+  /** PAYE filing dates and the late penalty: rule data from the adviser's verified values; blank = not set. */
+  payeDueDay: optionalNumber.optional(),
+  annualReturnMonth: optionalNumber.optional(),
+  annualReturnDay: optionalNumber.optional(),
+  latePenaltyPct: optionalNumber.optional(),
   bands: z
     .array(
       z.object({
@@ -235,6 +255,9 @@ export async function createTaxRuleVersion(ctx: Ctx, raw: z.input<typeof taxRule
   assertCan(ctx, "settings.manage");
   await assertNotBureauManaged(db, ctx.orgId, "PAYE rules");
   const v = taxRuleSchema.parse(raw);
+  const timing = { dueDay: v.payeDueDay ?? null, annualReturnMonth: v.annualReturnMonth ?? null, annualReturnDay: v.annualReturnDay ?? null, latePenaltyPct: v.latePenaltyPct ?? null };
+  const timingProblems = validateTiming(timing);
+  if (timingProblems.length) throw new BusinessError(timingProblems.join(" "));
   const from = d(v.effectiveFrom);
   return db.$transaction(async (tx) => {
     const open = await tx.taxRule.findMany({
@@ -243,6 +266,13 @@ export async function createTaxRuleVersion(ctx: Ctx, raw: z.input<typeof taxRule
     for (const r of open) {
       if (r.effectiveFrom >= from)
         throw new BusinessError("An open tax rule already starts on or after this date.");
+    }
+    // The open version is ended the day before this one starts; any OTHER active version (one that is already closed) must not share a day with it.
+    const closed = await tx.taxRule.findMany({ where: { organizationId: ctx.orgId, active: true, effectiveTo: { not: null } } });
+    const clash = overlappingVersion(closed, from);
+    if (clash)
+      throw new BusinessError(`This version would be in force on the same days as version ${clash.version} (${clash.effectiveFrom.toISOString().slice(0, 10)} to ${clash.effectiveTo?.toISOString().slice(0, 10)}). Choose a start date after it ends.`);
+    for (const r of open) {
       await tx.taxRule.update({
         where: { id: r.id },
         data: { effectiveTo: new Date(from.getTime() - 86400000) },
@@ -256,6 +286,10 @@ export async function createTaxRuleVersion(ctx: Ctx, raw: z.input<typeof taxRule
         version: v.version,
         legalBasis: v.legalBasis,
         effectiveFrom: from,
+        payeDueDay: timing.dueDay,
+        annualReturnMonth: timing.annualReturnMonth,
+        annualReturnDay: timing.annualReturnDay,
+        latePenaltyPct: timing.latePenaltyPct,
         bands: {
           create: v.bands.map((b, i) => ({
             sortOrder: i + 1,
@@ -363,6 +397,12 @@ export const payrollRuleSchema = z.object({
   maxOvertimeHoursPerMonth: z.coerce.number().min(0),
   maxDeductionPctOfGross: z.coerce.number().min(0).max(100),
   backOfficeChargePct: z.coerce.number().min(0).max(100).default(15),
+  /** A worker with PAYE and no state of residence blocks approval (true) or is only a warning (false, the default). */
+  /** The VOLUNTARY NHF contribution rate, % of basic pay, for employees who chose it (2.5 by the founder's rule; 0 = none). */
+  nhfEmployeeRatePct: z.coerce.number().min(0).max(100).default(NHF_STANDARD_RATE_PCT),
+  /** The take-home floor, % of gross, for loan and salary-advance recoveries (0 = none). */
+  minTakeHomePctOfGross: z.coerce.number().min(0).max(100).default(0),
+  requirePayeState: z.preprocess((v) => v === true || v === "true" || v === "on", z.boolean()).default(false),
   effectiveFrom: z.string().min(10),
 });
 

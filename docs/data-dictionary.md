@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-168 tables and 125 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+204 tables and 158 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -51,6 +51,7 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | paymentTxns | → PaymentTransaction[] |  |  |
 | remittances | → StatutoryRemittance[] |  |  |
 | auditLogs | → AuditLog[] |  |  |
+| auditSeals | → AuditSeal[] |  |  |
 | leavePolicy | → LeavePolicy |  |  |
 | leaveRequests | → LeaveRequest[] |  |  |
 | glAccounts | → GlAccount[] |  |  |
@@ -106,6 +107,37 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | bankCodes | → BankCode[] |  |  |
 | payingBanks | → PayingBank[] |  |  |
 | bankCodeSets | → BankCodeSet[] |  |  |
+| crmSetting | → CrmSetting |  |  |
+| crmAccounts | → CrmAccount[] |  |  |
+| crmContacts | → CrmContact[] |  |  |
+| crmLeads | → CrmLead[] |  |  |
+| crmConsents | → CrmConsent[] |  |  |
+| crmPipelines | → CrmPipeline[] |  |  |
+| crmOpportunities | → CrmOpportunity[] |  |  |
+| crmStageHistory | → CrmStageHistory[] |  |  |
+| crmAssignmentRules | → CrmAssignmentRule[] |  |  |
+| crmQuotes | → CrmQuote[] |  |  |
+| crmQuoteApprovers | → CrmQuoteApprover[] |  |  |
+| crmHandovers | → CrmHandover[] |  |  |
+| crmHandoverEvents | → CrmHandoverEvent[] |  |  |
+| crmHandoverAcceptors | → CrmHandoverAcceptor[] |  |  |
+| crmActivities | → CrmActivity[] |  |  |
+| crmTasks | → CrmTask[] |  |  |
+| crmDigestRuns | → CrmDigestRun[] |  |  |
+| crmAutomationRules | → CrmAutomationRule[] |  |  |
+| crmAutomationRuns | → CrmAutomationRun[] |  |  |
+| crmNotifications | → CrmNotification[] |  |  |
+| crmCases | → CrmCase[] |  |  |
+| crmCaseEvents | → CrmCaseEvent[] |  |  |
+| crmSlaPolicies | → CrmSlaPolicy[] |  |  |
+| crmBusinessHours | → CrmBusinessHours |  |  |
+| crmHolidays | → CrmHoliday[] |  |  |
+| crmRenewalLinks | → CrmRenewalLink[] |  |  |
+| crmAccountHealth | → CrmAccountHealth[] |  |  |
+| crmSuppressions | → CrmSuppression[] |  |  |
+| crmDataRequests | → CrmDataRequest[] |  |  |
+| crmTeams | → CrmTeam[] |  |  |
+| crmTeamMembers | → CrmTeamMember[] |  |  |
 | payslipSetting | → PayslipSetting |  |  |
 | payslipDeliveries | → PayslipDelivery[] |  |  |
 | paymentFileExports | → PaymentFileExport[] |  |  |
@@ -1134,6 +1166,9 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | phone | String |  |  |
 | email | String |  |  |
 | address | String |  |  |
+| nhfContributes | Boolean |  | Has chosen to contribute to the National Housing Fund (voluntary: 2.5% of basic pay, remitted by the end of the month). Off unless chosen. |
+| nhfOptedInOn | DateTime |  | The day they chose it; cleared when they stop. |
+| stateOfResidence | String |  | The state PAYE is due to (one of the 36 states or FCT, under its proper name). Copied onto each payroll record when it is calculated. |
 | employmentDate | DateTime | yes |  |
 | exitDate | DateTime |  |  |
 | anonymizedAt | DateTime |  | Set when the personal details were removed after the retention period (the record, employee number and pay figures stay). |
@@ -1371,6 +1406,8 @@ One per organization — every number a buyer might want to change without a cod
 | noticePayEnabled | Boolean |  |  |
 | noticeRecoveryEnabled | Boolean |  |  |
 | noticePayTaxable | Boolean |  |  |
+| auditAlertEmails | String[] |  | Extra addresses (for example an outside auditor), on top of everyone who can view the audit log, or instead of them when the next field is false. |
+| auditAlertIncludeEveryone | Boolean |  |  |
 | loanMaxGrossMultiple | Decimal |  |  |
 | loanMaxDeductionPct | Int |  |  |
 | advanceMaxGrossPct | Int |  |  |
@@ -2133,6 +2170,7 @@ Operational source of truth for WHERE an employee worked on each day.
 | pensionPin | String |  |  |
 | pfa | String |  |  |
 | taxId | String |  |  |
+| payeState | String |  | Copy of the employee's state of residence when the payroll was calculated, so a locked payroll never changes if the employee moves (like pfa). |
 | basisDays | Int | yes |  |
 | daysWorked | Decimal | yes |  |
 | daysAbsent | Int |  |  |
@@ -2377,6 +2415,10 @@ Recurring payroll deductions applied automatically on every REGULAR run — dist
 | effectiveTo | DateTime |  |  |
 | active | Boolean |  |  |
 | createdAt | DateTime |  |  |
+| payeDueDay | Int |  | PAYE filing dates and the late penalty are RULE DATA, set from the tax adviser's verified values and never assumed. Blank = not set. Day of the month after the pay month on which PAYE is due (1 to 28). |
+| annualReturnMonth | Int |  | The annual return is due on this month and day of the year after the tax year. |
+| annualReturnDay | Int |  |  |
+| latePenaltyPct | Decimal |  | Percentage of unremitted PAYE charged when late (interest is not modelled). |
 | bands | → TaxBand[] |  |  |
 | reliefs | → TaxRelief[] |  |  |
 | exemptions | → TaxExemption[] |  |  |
@@ -2450,6 +2492,9 @@ Recurring payroll deductions applied automatically on every REGULAR run — dist
 | maxOvertimeHoursPerMonth | Decimal |  |  |
 | maxDeductionPctOfGross | Decimal |  |  |
 | backOfficeChargePct | Decimal |  | Overhead allocation used in Contract Profitability — % of contract revenue charged as back-office cost. |
+| requirePayeState | Boolean |  | A worker with PAYE and no state of residence is a warning (false, the default) or a CRITICAL finding that blocks approval until fixed or overridden with a reason (true). |
+| nhfEmployeeRatePct | Decimal |  | The rate of the VOLUNTARY NHF (National Housing Fund) contribution, as a % of BASIC pay: 2.5 by the founder's rule (the tax adviser confirms it). It is taken only from employees who have chosen to contribute (Employee.nhfContributes), as its own deduction line, and is allowed against PAYE at the amount taken. 0 = none. |
+| minTakeHomePctOfGross | Decimal |  | The take-home floor, % of gross: loan and salary-advance recoveries may not take net pay below this share of gross; the part not taken is carried forward by the loan book. 0 (the default) = no floor, as pay has always been worked. A client-specific policy, not a statutory one. |
 | effectiveFrom | DateTime | yes |  |
 | effectiveTo | DateTime |  |  |
 | createdAt | DateTime |  |  |
@@ -2967,6 +3012,25 @@ One imported bank statement line. Positive amount = money in, negative = money o
 | reason | String |  |  |
 | metadata | Json |  |  |
 | createdAt | DateTime |  |  |
+| seal | → AuditSeal |  | The tamper-evidence seal (see AuditSeal); absent for a few minutes after the row is written. |
+
+### AuditSeal
+
+One seal per audit row (rule 5: tamper-evident): SHA-256 of the row's canonical content, chained to the previous seal of the same organization by an HMAC under AUDIT_SEAL_KEY. Append-only at the database. docs/plans/tamper-evident-audit-log.md.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| seq | Int | yes | 1, 2, 3 ... per organization; unique, so two sealers at once cannot both succeed. |
+| auditLogId | String | yes | (unique) |
+| auditLog | → AuditLog |  |  |
+| contentHash | String | yes |  |
+| prevHash | String | yes |  |
+| chainHash | String | yes |  |
+| sealedAt | DateTime |  |  |
+| sealedLate | Boolean |  | Sealed long after the row was written (the log's history from before sealing began). |
 
 ### LeavePolicy
 
@@ -4215,11 +4279,883 @@ A request to reverse a posted manual journal. Someone else approves; approving p
 | decidedAt | DateTime |  |  |
 | decisionNote | String |  |  |
 
+### CrmSetting
+
+Whether the sales module is on for an organization (off until a company administrator switches it on) and how enquiries are handled.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes | (unique) |
+| organization | → Organization |  |  |
+| enabled | Boolean |  |  |
+| mode | CrmMode |  |  |
+| assignmentMethod | CrmAssignmentMethod |  | How new leads with no owner given (created by a manager) are assigned, and where round robin has got to. |
+| minMarginBps | Int |  | The lowest gross margin (a share of the bill) a quote may have before a designated approver must approve it, in basis points (1500 = 15.00%). 0 = no minimum. A new organization starts at 15%. |
+| assignmentCursor | Int |  |  |
+| renewalWindowDays | Int |  | A contract ending within this many days gets a renewal deal opened for it. |
+| healthWeights | Json |  | The weight of each of the six health-score measures (whole numbers adding up to 100). Empty means the starting weights. |
+| leadRetentionMonths | Int |  | An unconverted lead with no activity for this many months is listed for review (keep or erase). Empty means no review. |
+| updatedBy | String | yes |  |
+| updatedAt | DateTime |  |  |
+
+### CrmAccount
+
+A company the organization sells to or serves, as the sales side sees it. It links to the real Client only when a won deal is handed over.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| name | String | yes |  |
+| normalizedName | String | yes | The name reduced to what identifies it (no case, punctuation or company ending), to find duplicates. |
+| industry | String |  |  |
+| accountType | CrmAccountType |  |  |
+| ownerUserId | String | yes |  |
+| ownerName | String | yes |  |
+| parentAccountId | String |  |  |
+| parent | → CrmAccount |  |  |
+| children | → CrmAccount[] |  |  |
+| source | CrmSource |  |  |
+| sourceDetail | String |  |  |
+| state | String |  |  |
+| lga | String |  |  |
+| address | String |  |  |
+| rcNumber | String |  |  |
+| emailDomain | String |  |  |
+| clientId | String |  | The existing Client this became, set only at handover. |
+| mergedIntoId | String |  | Set when this account was merged into another (it is then voided). |
+| mergedInto | → CrmAccount |  |  |
+| mergedFrom | → CrmAccount[] |  |  |
+| status | CrmRecordStatus |  |  |
+| voidedAt | DateTime |  |  |
+| voidedBy | String |  |  |
+| voidReason | String |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+| contacts | → CrmContact[] |  |  |
+| opportunities | → CrmOpportunity[] |  |  |
+| activities | → CrmActivity[] |  |  |
+| tasks | → CrmTask[] |  |  |
+| cases | → CrmCase[] |  |  |
+| slaPolicies | → CrmSlaPolicy[] |  |  |
+| health | → CrmAccountHealth |  |  |
+
+### CrmContact
+
+A person at an account (or not yet attached to one). Phones are stored as E.164 (+234...).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| accountId | String |  |  |
+| account | → CrmAccount |  |  |
+| firstName | String | yes |  |
+| lastName | String | yes |  |
+| jobTitle | String |  |  |
+| roleInDecision | CrmDecisionRole |  |  |
+| phoneE164 | String |  |  |
+| whatsappE164 | String |  |  |
+| email | String |  |  |
+| isPrimary | Boolean |  |  |
+| ownerUserId | String | yes |  |
+| ownerName | String | yes |  |
+| status | CrmRecordStatus |  |  |
+| mergedIntoId | String |  | Set when this contact was merged into another (it is then voided; its consent history is read through the survivor). |
+| mergedInto | → CrmContact |  |  |
+| mergedFrom | → CrmContact[] |  |  |
+| voidedAt | DateTime |  |  |
+| voidedBy | String |  |  |
+| voidReason | String |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| erasedAt | DateTime |  | Set when the person was erased on a data request: the record stays (so deals and cases keep their links) but holds no personal detail. |
+| updatedAt | DateTime |  |  |
+| consents | → CrmConsent[] |  |  |
+| opportunities | → CrmOpportunity[] |  |  |
+| activities | → CrmActivity[] |  |  |
+| tasks | → CrmTask[] |  |  |
+
+### CrmLead
+
+An enquiry not yet known to be real. Becomes an account and contact (and a deal) when converted (a later phase).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| number | String | yes |  |
+| companyName | String | yes |  |
+| contactName | String |  |  |
+| jobTitle | String |  |  |
+| phoneE164 | String |  |  |
+| email | String |  |  |
+| industry | String |  |  |
+| state | String |  |  |
+| lga | String |  |  |
+| address | String |  |  |
+| source | CrmSource |  |  |
+| sourceDetail | String |  |  |
+| estimatedGuards | Int |  |  |
+| serviceInterest | CrmServiceInterest |  |  |
+| status | CrmLeadStatus |  |  |
+| unqualifiedReason | String |  |  |
+| ownerUserId | String | yes |  |
+| ownerName | String | yes |  |
+| convertedAccountId | String |  |  |
+| convertedContactId | String |  |  |
+| convertedOpportunityId | String |  |  |
+| convertedAt | DateTime |  |  |
+| convertedBy | String |  |  |
+| voidedAt | DateTime |  |  |
+| voidedBy | String |  |  |
+| voidReason | String |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| erasedAt | DateTime |  |  |
+| retentionKeepUntil | DateTime |  | A lead past the retention period stays until this date once someone has reviewed it and decided to keep it. |
+| updatedAt | DateTime |  |  |
+| consents | → CrmConsent[] |  |  |
+| activities | → CrmActivity[] |  |  |
+| tasks | → CrmTask[] |  |  |
+
+### CrmConsent
+
+One consent or withdrawal, never changed (the database refuses it). The latest row for a person and purpose decides; none means unknown.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| seq | Int |  | Orders the rows; the latest has the highest number. (unique) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| contactId | String |  |  |
+| contact | → CrmContact |  |  |
+| leadId | String |  |  |
+| lead | → CrmLead |  |  |
+| purpose | CrmConsentPurpose | yes |  |
+| status | CrmConsentStatus | yes |  |
+| channel | CrmChannel | yes |  |
+| source | String | yes |  |
+| evidenceRef | String |  |  |
+| recordedBy | String | yes |  |
+| recordedByUserId | String | yes |  |
+| recordedAt | DateTime |  |  |
+
+### CrmPipeline
+
+A sales process (new business, later renewal and rate review) made of stages. Each organization has its own copy; the starting stages and probabilities are editable defaults.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| name | String | yes |  |
+| kind | CrmPipelineKind | yes |  |
+| isDefault | Boolean |  |  |
+| sortOrder | Int |  |  |
+| active | Boolean |  |  |
+| createdAt | DateTime |  |  |
+| stages | → CrmStage[] |  |  |
+| opportunities | → CrmOpportunity[] |  |  |
+| automationRules | → CrmAutomationRule[] |  |  |
+
+### CrmStage
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| pipelineId | String | yes |  |
+| pipeline | → CrmPipeline |  |  |
+| name | String | yes |  |
+| sortOrder | Int | yes |  |
+| stageType | CrmStageType |  |  |
+| defaultProbability | Int | yes | 0 to 100: what a deal entering this stage is given as its probability. |
+| requiredFields | Json |  | Field keys that must be filled before a deal may enter this stage (enforced from the board phase). |
+| rottingDays | Int |  | Days without activity after which a card on this stage is flagged. |
+| active | Boolean |  |  |
+| opportunities | → CrmOpportunity[] |  |  |
+| automationRules | → CrmAutomationRule[] |  |  |
+
+### CrmOpportunity
+
+A specific bid for a client business: "24/7 guarding, 3 sites, 18 guards". Its monthly value is a money amount (Decimal 16,2, whole kobo).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| accountId | String | yes |  |
+| account | → CrmAccount |  |  |
+| primaryContactId | String |  |  |
+| primaryContact | → CrmContact |  |  |
+| pipelineId | String | yes |  |
+| pipeline | → CrmPipeline |  |  |
+| stageId | String | yes |  |
+| stage | → CrmStage |  |  |
+| name | String | yes |  |
+| serviceType | CrmServiceInterest |  |  |
+| monthlyContractValue | Decimal |  |  |
+| probability | Int | yes | 0 to 100; starts as the stage default and the owner may change it. |
+| expectedCloseDate | DateTime |  |  |
+| expectedStartDate | DateTime |  |  |
+| contractTermMonths | Int |  |  |
+| source | CrmSource |  |  |
+| sourceDetail | String |  |  |
+| ownerUserId | String | yes |  |
+| ownerName | String | yes |  |
+| fromLeadId | String |  | The lead this deal came from, if it came from one. |
+| nextStep | String |  | What happens next on this deal; required every time it moves. |
+| lostReason | CrmLostReason |  |  |
+| lostReasonDetail | String |  |  |
+| competitor | String |  |  |
+| wonAt | DateTime |  |  |
+| lostAt | DateTime |  |  |
+| stageEnteredAt | DateTime |  | When the deal entered its current stage (days in stage on the board). |
+| status | CrmRecordStatus |  |  |
+| lastActivityAt | DateTime |  |  |
+| voidedAt | DateTime |  |  |
+| voidedBy | String |  |  |
+| voidReason | String |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+| history | → CrmStageHistory[] |  |  |
+| quotes | → CrmQuote[] |  |  |
+| handovers | → CrmHandover[] |  |  |
+| activities | → CrmActivity[] |  |  |
+| tasks | → CrmTask[] |  |  |
+| automationRuns | → CrmAutomationRun[] |  |  |
+
+### CrmStageHistory
+
+Every move of a deal between stages, with who and when. Never changed (the database refuses it).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| opportunityId | String | yes |  |
+| opportunity | → CrmOpportunity |  |  |
+| fromStageId | String |  |  |
+| toStageId | String | yes |  |
+| changedBy | String | yes |  |
+| changedByUserId | String | yes |  |
+| changedAt | DateTime |  |  |
+| daysInPreviousStage | Int |  |  |
+
+### CrmAssignmentRule
+
+Leads in this state (or wanting this service) go to this person.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| kind | CrmAssignmentKind | yes |  |
+| key | String | yes |  |
+| keyNorm | String | yes | The key in lower case with single spaces, so "Lagos" and "lagos" are the same rule. |
+| userId | String | yes |  |
+| userName | String | yes |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+
+### CrmQuote
+
+A priced bid for a deal: posts, guards and bill rates, with what the guards cost the company and the margin. Only a DRAFT can be changed (the database refuses to change the lines of any other); a new version is made to change a sent quote. The costs are saved with the rule versions they used.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| opportunityId | String | yes |  |
+| opportunity | → CrmOpportunity |  |  |
+| number | String | yes | Shared by every version of the same quote. |
+| versionNo | Int | yes |  |
+| status | CrmQuoteStatus |  |  |
+| validUntil | DateTime |  |  |
+| notes | String |  |  |
+| monthlyBill | Decimal |  |  |
+| monthlyCost | Decimal |  |  |
+| monthlyMargin | Decimal |  |  |
+| marginBps | Int |  | Margin as basis points of the bill (905 = 9.05%). |
+| minMarginBpsAtQuote | Int |  | The minimum margin in force when the quote was priced, and whether this quote is below it. |
+| belowMinimum | Boolean |  |  |
+| belowMarginApproved | Boolean |  |  |
+| approvedBy | String |  |  |
+| approvedByUserId | String |  |  |
+| approvedAt | DateTime |  |  |
+| approvalNote | String |  |  |
+| createdBy | String | yes |  |
+| createdByUserId | String | yes |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+| sentAt | DateTime |  |  |
+| sentBy | String |  |  |
+| decidedAt | DateTime |  |  |
+| decidedBy | String |  |  |
+| decisionNote | String |  |  |
+| lines | → CrmQuoteLine[] |  |  |
+| handover | → CrmHandover |  |  |
+
+### CrmQuoteLine
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| quoteId | String | yes |  |
+| quote | → CrmQuote |  |  |
+| sortOrder | Int | yes |  |
+| siteName | String | yes |  |
+| siteAddress | String |  |  |
+| postLabel | String |  |  |
+| shiftPattern | String |  | A label only (24/7, Day 12h): it changes no sum. The headcount is what the client pays for. |
+| salaryStructureId | String | yes |  |
+| structureName | String | yes |  |
+| businessLine | String | yes |  |
+| headcount | Int | yes | The guards the client pays for (revenue is billed on this). |
+| requiredPersonnel | Int | yes | The people actually needed to cover the agreed shifts (cost follows this). Often more than the billed headcount, for example on a 24/7 post. |
+| billPerHead | Decimal | yes |  |
+| operativeSharePct | Decimal | yes |  |
+| grossPerHead | Decimal | yes |  |
+| employerCostPerHead | Decimal | yes |  |
+| costPerHead | Decimal | yes |  |
+| lineBill | Decimal | yes |  |
+| lineCost | Decimal | yes |  |
+| lineMargin | Decimal | yes |  |
+| costBreakdown | Json | yes | Every part of the employer cost as worked out, so the figure can be explained later. |
+| ruleVersions | Json | yes | The versions of the pension and employer-cost rules the figures came from. |
+| estimatedOn | DateTime | yes |  |
+
+### CrmQuoteApprover
+
+A person formally designated to approve a quote below the minimum margin. Only a designated approver (never the quote's maker) can approve one.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| userId | String | yes |  |
+| userName | String | yes |  |
+| active | Boolean |  |  |
+| designatedBy | String | yes |  |
+| designatedAt | DateTime |  |  |
+| removedBy | String |  |  |
+| removedAt | DateTime |  |  |
+
+### CrmHandover
+
+What an accepted quote hands over to Operations: the agreed scope, the client's requirements, the sites, headcount, shifts, pricing, start date, equipment and service-level obligations. One per deal. Sales prepares and submits it; Operations accepts it (or returns it with questions); only on acceptance are the client, contract (a draft), rates and sites created. The quote facts are copied in and never change; once ACCEPTED nothing can change (the database refuses). It holds no cost and no margin.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| number | String | yes |  |
+| opportunityId | String | yes |  |
+| opportunity | → CrmOpportunity |  |  |
+| quoteId | String | yes | (unique) |
+| quote | → CrmQuote |  |  |
+| accountId | String | yes |  |
+| status | CrmHandoverStatus |  |  |
+| revisionNo | Int |  | Goes up every time the handover is edited. Operations accepts only the revision it was sent. |
+| submittedRevision | Int |  |  |
+| quoteNumber | String | yes | From the accepted quote, copied in: never changes. |
+| quoteVersion | Int | yes |  |
+| monthlyBill | Decimal | yes |  |
+| validUntil | DateTime |  |  |
+| scope | String |  | Entered in the handover. |
+| clientRequirements | String |  |  |
+| startDate | DateTime |  |  |
+| termMonths | Int |  |  |
+| serviceLevels | Json |  | Special service-level obligations: lines of { obligation, measure, consequence }. noSpecialSla says there are none (an explicit answer). |
+| noSpecialSla | Boolean |  |  |
+| preparedBy | String | yes |  |
+| preparedByUserId | String | yes |  |
+| submittedAt | DateTime |  |  |
+| submittedBy | String |  |  |
+| submittedByUserId | String |  |  |
+| returnedAt | DateTime |  |  |
+| returnedBy | String |  |  |
+| returnNote | String |  |  |
+| acceptedAt | DateTime |  |  |
+| acceptedBy | String |  |  |
+| acceptedByUserId | String |  |  |
+| acceptanceNote | String |  |  |
+| acceptedRevision | Int |  |  |
+| clientId | String |  | The real records made on acceptance. |
+| contractId | String |  |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+| sites | → CrmHandoverSite[] |  |  |
+| posts | → CrmHandoverPost[] |  |  |
+| events | → CrmHandoverEvent[] |  |  |
+
+### CrmHandoverSite
+
+One client site named on the quote. The address, state, local government, the client's site contact and the equipment are entered in the handover.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| handoverId | String | yes |  |
+| handover | → CrmHandover |  |  |
+| sortOrder | Int | yes |  |
+| name | String | yes |  |
+| address | String |  |  |
+| state | String |  |  |
+| lga | String |  |  |
+| contactName | String |  |  |
+| contactRole | String |  |  |
+| contactPhoneE164 | String |  |  |
+| contactEmail | String |  |  |
+| equipment | Json |  | Lines of { item, quantity }. noEquipment says none is needed (an explicit answer). |
+| noEquipment | Boolean |  |  |
+| beatId | String |  | The site (Beat) made on acceptance. |
+| posts | → CrmHandoverPost[] |  |  |
+
+### CrmHandoverPost
+
+One quote line, copied in with its billed guards, the personnel needed, the shift and the bill rate (never the cost or margin). Only the employee category is entered.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| handoverId | String | yes |  |
+| handover | → CrmHandover |  |  |
+| siteId | String | yes |  |
+| site | → CrmHandoverSite |  |  |
+| quoteLineId | String | yes |  |
+| sortOrder | Int | yes |  |
+| postLabel | String |  |  |
+| shiftPattern | String |  |  |
+| salaryStructureId | String | yes |  |
+| structureName | String | yes |  |
+| businessLine | String | yes |  |
+| headcount | Int | yes |  |
+| requiredPersonnel | Int | yes |  |
+| billPerHead | Decimal | yes |  |
+| operativeSharePct | Decimal | yes |  |
+| categoryId | String |  | The employee category the contract rate is made for (entered). |
+
+### CrmHandoverEvent
+
+Who did what to a handover and when: submitted, returned (with the question), accepted. Never changed (the database refuses it).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| handoverId | String | yes |  |
+| handover | → CrmHandover |  |  |
+| kind | CrmHandoverEventKind | yes |  |
+| revisionNo | Int | yes |  |
+| byUserId | String | yes |  |
+| byName | String | yes |  |
+| note | String |  |  |
+| at | DateTime |  |  |
+
+### CrmHandoverAcceptor
+
+A person formally designated to accept a handover for Operations (the Executive Director, Operations, or the Operations Manager). Never the person who prepared it.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| userId | String | yes |  |
+| userName | String | yes |  |
+| active | Boolean |  |  |
+| designatedBy | String | yes |  |
+| designatedAt | DateTime |  |  |
+| removedBy | String |  |  |
+| removedAt | DateTime |  |  |
+
+### CrmActivity
+
+Something that happened with a lead, contact, account or deal: a call, meeting, site survey, WhatsApp, email or note. Never deleted and its content never changed (the database refuses both); a mistaken one is voided with a reason and stays on the timeline.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| kind | CrmActivityKind | yes |  |
+| leadId | String |  |  |
+| lead | → CrmLead |  |  |
+| accountId | String |  |  |
+| account | → CrmAccount |  |  |
+| contactId | String |  |  |
+| contact | → CrmContact |  |  |
+| opportunityId | String |  |  |
+| opportunity | → CrmOpportunity |  |  |
+| occurredAt | DateTime |  |  |
+| subject | String |  |  |
+| body | String |  |  |
+| callOutcome | CrmCallOutcome |  | A call's result; empty while a call started from a link has not yet been written up. |
+| survey | Json |  | A site survey's checklist: site type, entry points, existing guards, risk notes, photo links. |
+| purpose | CrmMessagePurpose |  | For a WhatsApp or an email: service or marketing. |
+| viaLink | Boolean |  | Logged automatically by using a call or WhatsApp link. |
+| createdBy | String | yes |  |
+| createdByUserId | String | yes |  |
+| createdAt | DateTime |  |  |
+| voidedAt | DateTime |  |  |
+| voidedBy | String |  |  |
+| voidReason | String |  |  |
+
+### CrmTask
+
+Something to do, by a date and time, for one person, optionally about a lead, contact, account or deal.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| title | String | yes |  |
+| notes | String |  |  |
+| dueAt | DateTime | yes |  |
+| reminderAt | DateTime |  | Brings the task into that morning's digest; there is no push notification. |
+| status | CrmTaskStatus |  |  |
+| ownerUserId | String | yes |  |
+| ownerName | String | yes |  |
+| leadId | String |  |  |
+| lead | → CrmLead |  |  |
+| accountId | String |  |  |
+| account | → CrmAccount |  |  |
+| contactId | String |  |  |
+| contact | → CrmContact |  |  |
+| opportunityId | String |  |  |
+| opportunity | → CrmOpportunity |  |  |
+| completedAt | DateTime |  |  |
+| completedBy | String |  |  |
+| createdBy | String | yes |  |
+| createdByUserId | String | yes |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+
+### CrmDigestRun
+
+One row for each user and day the digest email was sent, so it is never sent twice in a day.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| userId | String | yes |  |
+| forDate | DateTime | yes | The Lagos day it was for. |
+| sentAt | DateTime |  |  |
+
+### CrmAutomationRule
+
+When something happens to a deal (it enters a stage, its quote or handover is accepted, or it goes quiet), do one thing, at once or after a delay, if the condition holds. Starts switched off. Changed by switching it off and making a new one, so the run log stays true.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| name | String | yes |  |
+| trigger | CrmAutomationTrigger | yes |  |
+| pipelineId | String | yes |  |
+| pipeline | → CrmPipeline |  |  |
+| stageId | String |  | For a stage-entry rule: the stage. |
+| stage | → CrmStage |  |  |
+| delayMinutes | Int |  | How long after the trigger the action runs (0 = at once). |
+| quietDays | Int |  | For a no-activity rule: how many quiet days. |
+| condition | Json |  | { field, op, value }: the rule acts only if it holds when the run is due. |
+| actionType | CrmAutomationAction | yes |  |
+| actionParams | Json | yes |  |
+| enabled | Boolean |  |  |
+| isStarter | Boolean |  | One of the rules offered to every organization (all start off). |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+| updatedBy | String |  |  |
+| runs | → CrmAutomationRun[] |  |  |
+
+### CrmAutomationRun
+
+One carrying-out of a rule for a deal and a stage entry (or quote, handover, quiet spell). The database allows one per rule, deal and entry, so a rule never fires twice for the same entry. Holds ids and figures, never message text.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| ruleId | String | yes |  |
+| rule | → CrmAutomationRule |  |  |
+| opportunityId | String | yes |  |
+| opportunity | → CrmOpportunity |  |  |
+| entryKey | String | yes | What this run is for: the stage-history row of the entry, the quote or handover, or the last-activity moment of a quiet spell. |
+| status | CrmAutomationRunStatus |  |  |
+| runAt | DateTime | yes |  |
+| startedAt | DateTime |  |  |
+| finishedAt | DateTime |  |  |
+| durationMs | Int |  |  |
+| inputs | Json |  |  |
+| outputs | Json |  |  |
+| error | String |  |  |
+| createdAt | DateTime |  |  |
+
+### CrmNotification
+
+A message to a person inside the app (the email goes separately).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| userId | String | yes |  |
+| title | String | yes |  |
+| body | String | yes |  |
+| href | String |  |  |
+| createdAt | DateTime |  |  |
+| readAt | DateTime |  |  |
+
+### CrmSlaPolicy
+
+How quickly a case of a priority must be answered and resolved. A policy for an account wins over the organization's default for that priority.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| accountId | String |  | Empty for the organization's default. |
+| account | → CrmAccount |  |  |
+| accountKey | String |  | The account's id, or empty for the default: lets the database allow one policy for each account and priority. |
+| priority | CrmCasePriority | yes |  |
+| firstResponseMinutes | Int | yes |  |
+| resolutionMinutes | Int | yes |  |
+| businessHoursOnly | Boolean |  | The clock runs only in business hours (not at night, at weekends or on holidays). |
+| active | Boolean |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+| updatedBy | String |  |  |
+
+### CrmBusinessHours
+
+When the organization is open, in Lagos time. Without a row: Monday to Friday, 08:00 to 17:00.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes | (unique) |
+| organization | → Organization |  |  |
+| openMinute | Int |  |  |
+| closeMinute | Int |  |  |
+| workDays | Int[] |  | ISO weekdays, 1 = Monday to 7 = Sunday. |
+| updatedBy | String | yes |  |
+| updatedAt | DateTime |  |  |
+
+### CrmHoliday
+
+A day the organization is closed. Entered by an administrator: public holidays differ by year and are announced by government.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| date | DateTime | yes |  |
+| name | String | yes |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+
+### CrmCase
+
+A problem or request from a client account. The SLA deadlines are worked out when it opens and kept on the case, so a later change to a policy never moves them.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| number | String | yes |  |
+| accountId | String | yes |  |
+| account | → CrmAccount |  |  |
+| contactId | String |  |  |
+| opportunityId | String |  |  |
+| beatId | String |  | The client site (Beat) it is about, if any. |
+| category | CrmCaseCategory | yes |  |
+| priority | CrmCasePriority | yes |  |
+| status | CrmCaseStatus |  |  |
+| subject | String | yes |  |
+| description | String |  |  |
+| ownerUserId | String | yes |  |
+| ownerName | String | yes |  |
+| openedAt | DateTime |  |  |
+| slaPolicyId | String |  |  |
+| slaFirstResponseMinutes | Int |  |  |
+| slaResolutionMinutes | Int |  |  |
+| slaBusinessHoursOnly | Boolean |  |  |
+| firstResponseDueAt | DateTime |  |  |
+| firstResponseWarnAt | DateTime |  |  |
+| firstRespondedAt | DateTime |  |  |
+| firstResponseWarnedAt | DateTime |  |  |
+| firstResponseBreachedAt | DateTime |  |  |
+| resolutionStartedAt | DateTime |  | When the resolution clock last started: the opening, or the latest reopening. |
+| resolutionDueAt | DateTime |  |  |
+| resolutionWarnAt | DateTime |  |  |
+| resolvedAt | DateTime |  |  |
+| resolutionWarnedAt | DateTime |  |  |
+| resolutionBreachedAt | DateTime |  |  |
+| reopenedCount | Int |  | Reported separately, so closing cases early is not rewarded. |
+| createdBy | String | yes |  |
+| createdByUserId | String | yes |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+| events | → CrmCaseEvent[] |  |  |
+
+### CrmCaseEvent
+
+Everything that happens to a case, in order. Never changed (the database refuses it).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| caseId | String | yes |  |
+| case | → CrmCase |  |  |
+| kind | CrmCaseEventKind | yes |  |
+| byUserId | String |  |  |
+| byName | String | yes |  |
+| note | String |  |  |
+| at | DateTime |  |  |
+
+### CrmRenewalLink
+
+The renewal deal opened for a contract: one for each contract, so the daily job can never open two.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| contractId | String | yes | (unique) |
+| opportunityId | String | yes |  |
+| createdAt | DateTime |  |  |
+
+### CrmAccountHealth
+
+The latest health score of a client account (0 to 100) with what each measure found, and when its band last changed. Recomputed nightly and when a case on the account changes.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| accountId | String | yes | (unique) |
+| account | → CrmAccount |  |  |
+| score | Int | yes |  |
+| band | CrmHealthBand | yes |  |
+| components | Json | yes | Each measure: its weight, its sub-score (empty when there was no data), and a sentence on what it found. |
+| previousBand | CrmHealthBand |  |  |
+| bandChangedAt | DateTime |  |  |
+| computedAt | DateTime | yes |  |
+
+### CrmSuppression
+
+An email address or phone number that must receive no marketing, kept as a KEYED HASH (never the address), so it still works after the person has been erased.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| kind | CrmSuppressionKind | yes |  |
+| valueHash | String | yes |  |
+| reason | String | yes | UNSUBSCRIBED, WITHDRAWN or ERASED. |
+| source | String | yes |  |
+| createdAt | DateTime |  |  |
+
+### CrmDataRequest
+
+A request about the personal data held on a contact or lead: a copy (ACCESS), erasure (ERASURE), or erasure at the end of the retention period (RETENTION).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| number | String | yes |  |
+| kind | CrmDataRequestKind | yes |  |
+| subjectType | String | yes | CONTACT or LEAD. |
+| subjectId | String | yes |  |
+| requesterName | String |  | Who asked: replaced with a note once the person has been erased. |
+| channel | String |  |  |
+| receivedOn | DateTime | yes |  |
+| dueOn | DateTime | yes |  |
+| status | CrmDataRequestStatus |  |  |
+| identityVerified | Boolean |  |  |
+| identityNote | String |  |  |
+| verifiedBy | String |  |  |
+| verifiedByUserId | String |  | Who recorded the identity check (by id, so the person who erases can be told apart from them). |
+| exportedAt | DateTime |  |  |
+| exportChecksum | String |  | SHA-256 of the file generated, and how many records each section held. |
+| exportSections | Json |  |  |
+| reviewList | Json |  | Records that may still mention the person in free text and need a person's review after an erasure (ids by kind, never the text). |
+| handledBy | String |  |  |
+| completedOn | DateTime |  |  |
+| outcomeNote | String |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+
+### CrmTeam
+
+A sales team: one manager (a sales manager) and its members. A team is closed, not deleted; closing it removes its members.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| name | String | yes |  |
+| managerUserId | String | yes |  |
+| active | Boolean |  |  |
+| assignmentCursor | Int |  | Where this team's round robin has got to: each new lead a manager adds goes to the next member. |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| members | → CrmTeamMember[] |  |  |
+
+### CrmTeamMember
+
+A person in a team. A person is in at most one team.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| teamId | String | yes |  |
+| team | → CrmTeam |  |  |
+| userId | String | yes |  |
+| createdAt | DateTime |  |  |
+
 ## Fixed sets of values
 
 ### Role
 
-`SUPER_ADMIN`, `COMPANY_ADMIN`, `HR_ADMIN`, `OPERATIONS`, `PAYROLL_ADMIN`, `FINANCE`, `AUDITOR`, `SUPERVISOR`, `EMPLOYEE`, `CLIENT_APPROVER`, `CLIENT_HR`, `BUSINESS_DEV`
+`SUPER_ADMIN`, `COMPANY_ADMIN`, `HR_ADMIN`, `OPERATIONS`, `PAYROLL_ADMIN`, `FINANCE`, `AUDITOR`, `SUPERVISOR`, `EMPLOYEE`, `CLIENT_APPROVER`, `CLIENT_HR`, `BUSINESS_DEV`, `SALES_REP`, `SALES_MANAGER`, `ACCOUNT_MANAGER`
 
 ### EmployeeStatus
 
@@ -4736,4 +5672,138 @@ What the controller concluded about the harm a breach could do to the people aff
 ### JournalReversalStatus
 
 `PENDING`, `APPROVED`, `REJECTED`
+
+### CrmMode
+
+`CLASSIC`, `SIMPLE`
+
+### CrmRecordStatus
+
+`ACTIVE`, `VOID`
+
+### CrmAccountType
+
+`PROSPECT`, `CLIENT`, `FORMER_CLIENT`
+
+### CrmSource
+
+`REFERRAL`, `WALK_IN`, `PHONE`, `WEBSITE`, `WHATSAPP`, `TENDER`, `EVENT`, `EXISTING_CLIENT`, `OTHER`
+
+### CrmServiceInterest
+
+`GUARDING`, `CLEANING`, `FACILITY`, `STAFFING`, `OTHER`
+
+### CrmDecisionRole
+
+`DECISION_MAKER`, `INFLUENCER`, `USER`, `FINANCE`, `PROCUREMENT`, `GATEKEEPER`
+
+### CrmLeadStatus
+
+`NEW`, `CONTACTED`, `QUALIFIED`, `UNQUALIFIED`, `CONVERTED`, `VOID`
+
+### CrmConsentPurpose
+
+`MARKETING`, `SERVICE`
+
+### CrmConsentStatus
+
+`GRANTED`, `WITHDRAWN`
+
+### CrmChannel
+
+`EMAIL`, `WHATSAPP`, `SMS`, `PHONE`, `IN_PERSON`, `WEB_FORM`, `OTHER`
+
+### CrmPipelineKind
+
+`NEW_BUSINESS`, `RENEWAL`, `RATE_REVIEW`, `EXPANSION`
+
+### CrmStageType
+
+`OPEN`, `WON`, `LOST`
+
+### CrmAssignmentMethod
+
+`NONE`, `ROUND_ROBIN`, `BY_STATE`, `BY_SERVICE`
+
+### CrmAssignmentKind
+
+`STATE`, `SERVICE`
+
+### CrmLostReason
+
+`PRICE`, `QUALITY`, `RELATIONSHIP`, `INCUMBENT_RETAINED`, `NO_DECISION`, `BUDGET`, `OTHER`
+
+### CrmQuoteStatus
+
+`DRAFT`, `SENT`, `ACCEPTED`, `REJECTED`, `SUPERSEDED`
+
+### CrmHandoverStatus
+
+`DRAFT`, `SUBMITTED`, `RETURNED`, `ACCEPTED`
+
+### CrmHandoverEventKind
+
+`CREATED`, `SUBMITTED`, `RETURNED`, `ACCEPTED`
+
+### CrmActivityKind
+
+`CALL`, `MEETING`, `SITE_SURVEY`, `WHATSAPP`, `EMAIL`, `NOTE`
+
+### CrmCallOutcome
+
+`REACHED`, `NO_ANSWER`, `CALLBACK`, `WRONG_NUMBER`
+
+### CrmMessagePurpose
+
+Whether an outbound message is a service message (about an active contract) or marketing (needs the person's consent).
+
+`SERVICE`, `MARKETING`
+
+### CrmTaskStatus
+
+`OPEN`, `DONE`, `CANCELLED`
+
+### CrmAutomationTrigger
+
+`STAGE_ENTRY`, `QUOTE_ACCEPTED`, `HANDOVER_ACCEPTED`, `NO_ACTIVITY`
+
+### CrmAutomationAction
+
+`CREATE_TASK`, `NOTIFY`, `SEND_EMAIL`, `CHANGE_OWNER`, `SET_FIELD`, `CREATE_FOLLOW_UP`, `MOVE_TO_STAGE`
+
+### CrmAutomationRunStatus
+
+`PENDING`, `RUNNING`, `DONE`, `FAILED`, `CANCELLED`, `SKIPPED`
+
+### CrmCasePriority
+
+`LOW`, `NORMAL`, `HIGH`, `CRITICAL`
+
+### CrmCaseCategory
+
+`SERVICE_QUALITY`, `STAFFING`, `BILLING`, `COMPLAINT`, `REQUEST`, `OTHER`
+
+### CrmCaseStatus
+
+`OPEN`, `RESOLVED`
+
+### CrmCaseEventKind
+
+`OPENED`, `RESPONDED`, `NOTE`, `REASSIGNED`, `RESOLVED`, `REOPENED`, `WARNING`, `BREACH`, `ESCALATED`
+
+### CrmHealthBand
+
+`HEALTHY`, `WATCH`, `AT_RISK`
+
+### CrmSuppressionKind
+
+`EMAIL`, `PHONE`
+
+### CrmDataRequestKind
+
+`ACCESS`, `ERASURE`, `RETENTION`
+
+### CrmDataRequestStatus
+
+`OPEN`, `COMPLETED`, `REFUSED`
 

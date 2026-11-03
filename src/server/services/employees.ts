@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import type { Ctx } from "@/lib/auth/context";
 import { d } from "@/lib/dates";
+import { normaliseState } from "@/lib/nigeria-states";
 import { fullName } from "@/lib/utils";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
@@ -28,6 +29,19 @@ export const employeeSchema = z.object({
     .optional()
     .or(z.literal("").transform(() => undefined)),
   address: opt,
+  /** Has chosen to contribute to the National Housing Fund (voluntary). */
+  nhfContributes: z.preprocess((v) => v === true || v === "true" || v === "on" || v === "Yes" || v === "yes", z.boolean()).default(false),
+  /** One of the 36 states or FCT, however it was typed; stored under its proper name. Blank means not recorded. */
+  stateOfResidence: z
+    .string()
+    .trim()
+    .optional()
+    .transform((s, ctx) => {
+      if (!s) return undefined;
+      const state = normaliseState(s);
+      if (!state) ctx.addIssue({ code: "custom", message: "The state of residence isn't a recognised Nigerian state (use one of the 36 states or FCT)." });
+      return state ?? undefined;
+    }),
   employmentDate: z.string().min(10, "Employment date is required"),
   status: z
     .enum(["ACTIVE", "INACTIVE", "SUSPENDED", "ON_LEAVE", "TERMINATED", "RESIGNED", "EXITED"])
@@ -60,6 +74,8 @@ function toData(v: z.output<typeof employeeSchema>) {
     phone: v.phone ?? null,
     email: v.email ?? null,
     address: v.address ?? null,
+    stateOfResidence: v.stateOfResidence ?? null,
+    nhfContributes: v.nhfContributes,
     employmentDate: d(v.employmentDate),
     status: v.status,
     exitDate: v.exitDate ? d(v.exitDate) : null,
@@ -110,7 +126,7 @@ export async function createEmployee(ctx: Ctx, raw: EmployeeInput) {
 export async function createEmployeeInTx(ctx: Ctx, tx: Tx, v: z.output<typeof employeeSchema>, extra: { importBatchId?: string } = {}) {
   const employeeNumber = await nextNumber(tx, ctx.orgId, "EMPLOYEE");
   const emp = await tx.employee.create({
-    data: { organizationId: ctx.orgId, employeeNumber, ...toData(v), importBatchId: extra.importBatchId ?? null },
+    data: { organizationId: ctx.orgId, employeeNumber, ...toData(v), nhfOptedInOn: v.nhfContributes ? d(new Date().toISOString().slice(0, 10)) : null, importBatchId: extra.importBatchId ?? null },
   });
   await logAudit(
     ctx,
@@ -139,7 +155,7 @@ export async function updateEmployee(ctx: Ctx, id: string, raw: EmployeeInput, r
   return db.$transaction(async (tx) => {
     const old = await tx.employee.findFirst({ where: { id, organizationId: ctx.orgId } });
     if (!old) throw new BusinessError("Employee not found.");
-    const data = toData(v);
+    const data = { ...toData(v), nhfOptedInOn: v.nhfContributes ? (old.nhfContributes && old.nhfOptedInOn ? old.nhfOptedInOn : d(new Date().toISOString().slice(0, 10))) : null };
     const emp = await tx.employee.update({ where: { id }, data });
     await logAudit(
       ctx,

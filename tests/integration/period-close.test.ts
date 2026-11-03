@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { db } from "@/lib/db";
 import { num } from "@/lib/money";
 import { billingWorld } from "../billing-fixture";
@@ -114,7 +114,15 @@ describe("close is blocked while the books are out", () => {
 
   it("counts an invoice cancelled later as still owed on the earlier date, so the books agree as at that date", async () => {
     const { fin, invoices } = await world();
-    await cancelInvoice(fin, invoices[2].id, "Billed to the wrong client entirely"); // cancelled in October
+    // A cancellation is dated the day it is made. The test needs it made in October, whatever day it is run, so the clock is set to 15 October for that one call. (It used the real
+    // date and so failed from 1 November on: the books as at 31 October then rightly still owed the invoice.) Only Date is faked, so nothing else waits on a timer.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-15T10:00:00Z"));
+    try {
+      await cancelInvoice(fin, invoices[2].id, "Billed to the wrong client entirely");
+    } finally {
+      vi.useRealTimers();
+    }
     const august = await reconciliationsAsAt(fin, day("2026-08-31"));
     expect(august.lines.find((l) => l.code === "AR_GL")).toMatchObject({ subledger: 12_000_000, ledger: 12_000_000, agrees: true });
     const october = await reconciliationsAsAt(fin, day("2026-10-31"));

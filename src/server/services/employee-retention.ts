@@ -94,7 +94,7 @@ export async function anonymizeEmployee(tx: Tx, orgId: string, employeeId: strin
 
   await tx.employee.update({
     where: { id: employeeId },
-    data: { firstName: "Former", middleName: null, lastName: "Employee", gender: null, dateOfBirth: null, phone: null, email: null, address: null, bankName: null, accountNumber: null, accountName: null, taxId: null, pensionPin: null, pfa: null, annualRent: null, anonymizedAt: now },
+    data: { firstName: "Former", middleName: null, lastName: "Employee", gender: null, dateOfBirth: null, phone: null, email: null, address: null, stateOfResidence: null, bankName: null, accountNumber: null, accountName: null, taxId: null, pensionPin: null, pfa: null, annualRent: null, anonymizedAt: now },
   });
   counts.employee = 1;
   return counts;

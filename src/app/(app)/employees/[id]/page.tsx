@@ -129,6 +129,7 @@ export default async function EmployeePage({
                 ["Phone", e.phone],
                 ["Email", e.email],
                 ["Address", e.address],
+                ["State of residence (PAYE)", e.stateOfResidence ?? "— not recorded"],
                 ["Employment date", fmtDate(e.employmentDate)],
                 ["Exit date", fmtDate(e.exitDate)],
                 ["Department", e.department?.name],
@@ -150,6 +151,7 @@ export default async function EmployeePage({
                 ["Tax ID", sensitive ? e.taxId : "••••"],
                 ["Pension PIN", sensitive ? e.pensionPin : "••••"],
                 ["PFA", sensitive ? e.pfa : "••••"],
+                ["NHF (voluntary)", e.nhfContributes ? `Contributes since ${fmtDate(e.nhfOptedInOn)}` : "Not contributing"],
                 ["Annual rent (relief)", sensitive && e.annualRent ? naira(e.annualRent) : "—"],
               ]}
             />

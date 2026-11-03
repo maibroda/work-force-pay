@@ -1,6 +1,7 @@
 import type { Field } from "@/components/smart-form";
 import { enumOptions } from "@/server/options";
 import { iso } from "@/lib/dates";
+import { NIGERIA_STATES } from "@/lib/nigeria-states";
 
 type Opts = { value: string; label: string }[];
 const NUBAN = { pattern: "^\\d{10}$", patternMessage: "Account number must be 10 digits (NUBAN)" };
@@ -61,6 +62,14 @@ export function employeeFields(
     { name: "phone", label: "Phone", defaultValue: v("phone") },
     { name: "email", label: "Email", type: "email", defaultValue: v("email") },
     { name: "address", label: "Residential address", defaultValue: v("address"), span: 2 },
+    {
+      name: "stateOfResidence",
+      label: "State of residence (PAYE goes here)",
+      type: "select",
+      options: NIGERIA_STATES.map((s) => ({ value: s, label: s })),
+      defaultValue: v("stateOfResidence"),
+      help: "PAYE is paid to the tax authority of the state the worker lives in",
+    },
     {
       name: "employmentDate",
       label: "Employment date",
@@ -131,6 +140,14 @@ export function employeeFields(
       defaultValue: v("annualRent"),
     },
     { name: "pensionPin", label: "Pension PIN", defaultValue: v("pensionPin") },
+    {
+      name: "nhfContributes",
+      label: "Contributes to the National Housing Fund (NHF)",
+      type: "checkbox",
+      defaultValue: v("nhfContributes") === "true",
+      help: "Voluntary: only if the employee has chosen it. 2.5% of basic pay is taken and remitted by the end of the month.",
+      span: 3,
+    },
     {
       name: "pfa",
       label: "Pension Fund Administrator",

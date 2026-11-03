@@ -30,6 +30,12 @@ enum Role {
   CLIENT_HR
   /// The bureau's sales person: the CRM, pipeline and proposals, and no payroll data.
   BUSINESS_DEV
+  /// A company's own salesperson (the sales module only): sees and changes their own records.
+  SALES_REP
+  /// Sees and changes their own records and those of the people in the teams they manage; may be named a quote approver.
+  SALES_MANAGER
+  /// A salesperson who looks after client accounts: their own accounts and the cases, renewals and deals on them.
+  ACCOUNT_MANAGER
 }
 
 enum EmployeeStatus {
@@ -572,6 +578,7 @@ model Organization {
   paymentTxns               PaymentTransaction[]
   remittances               StatutoryRemittance[]
   auditLogs                 AuditLog[]
+  auditSeals                AuditSeal[]
   leavePolicy               LeavePolicy?
   leaveRequests             LeaveRequest[]
   glAccounts                GlAccount[]
@@ -632,6 +639,37 @@ model Organization {
   bankCodes                 BankCode[]
   payingBanks               PayingBank[]
   bankCodeSets              BankCodeSet[]
+  crmSetting                CrmSetting?
+  crmAccounts               CrmAccount[]
+  crmContacts               CrmContact[]
+  crmLeads                  CrmLead[]
+  crmConsents               CrmConsent[]
+  crmPipelines              CrmPipeline[]
+  crmOpportunities          CrmOpportunity[]
+  crmStageHistory           CrmStageHistory[]
+  crmAssignmentRules        CrmAssignmentRule[]
+  crmQuotes                 CrmQuote[]
+  crmQuoteApprovers         CrmQuoteApprover[]
+  crmHandovers              CrmHandover[]
+  crmHandoverEvents         CrmHandoverEvent[]
+  crmHandoverAcceptors      CrmHandoverAcceptor[]
+  crmActivities             CrmActivity[]
+  crmTasks                  CrmTask[]
+  crmDigestRuns             CrmDigestRun[]
+  crmAutomationRules        CrmAutomationRule[]
+  crmAutomationRuns         CrmAutomationRun[]
+  crmNotifications          CrmNotification[]
+  crmCases                  CrmCase[]
+  crmCaseEvents             CrmCaseEvent[]
+  crmSlaPolicies            CrmSlaPolicy[]
+  crmBusinessHours          CrmBusinessHours?
+  crmHolidays               CrmHoliday[]
+  crmRenewalLinks           CrmRenewalLink[]
+  crmAccountHealth          CrmAccountHealth[]
+  crmSuppressions           CrmSuppression[]
+  crmDataRequests           CrmDataRequest[]
+  crmTeams                  CrmTeam[]
+  crmTeamMembers            CrmTeamMember[]
   payslipSetting            PayslipSetting?
   payslipDeliveries         PayslipDelivery[]
   paymentFileExports        PaymentFileExport[]
@@ -1874,6 +1912,12 @@ model Employee {
   phone              String?
   email              String?
   address            String?
+  /// Has chosen to contribute to the National Housing Fund (voluntary: 2.5% of basic pay, remitted by the end of the month). Off unless chosen.
+  nhfContributes     Boolean              @default(false)
+  /// The day they chose it; cleared when they stop.
+  nhfOptedInOn       DateTime?            @db.Date
+  /// The state PAYE is due to (one of the 36 states or FCT, under its proper name). Copied onto each payroll record when it is calculated.
+  stateOfResidence   String?
   employmentDate     DateTime             @db.Date
   exitDate           DateTime?            @db.Date
   /// Set when the personal details were removed after the retention period (the record, employee number and pay figures stay).
@@ -2146,6 +2190,11 @@ model HrPolicy {
   noticePayEnabled      Boolean @default(true) // employer ends employment short of notice → pay in lieu
   noticeRecoveryEnabled Boolean @default(true) // employee leaves short of notice → recover the shortfall
   noticePayTaxable      Boolean @default(true)
+
+  // Who is told when the audit log fails its integrity check, and who gets the weekly chain head (docs/plans/tamper-evident-audit-log.md)
+  /// Extra addresses (for example an outside auditor), on top of everyone who can view the audit log, or instead of them when the next field is false.
+  auditAlertEmails          String[] @default([])
+  auditAlertIncludeEveryone Boolean  @default(true)
 
   // Staff loans & advances (0 = no limit)
   loanMaxGrossMultiple Decimal @default(3) @db.Decimal(4, 2)
@@ -3011,6 +3060,8 @@ model PayrollRecord {
   pensionPin                      String?
   pfa                             String?
   taxId                           String?
+  /// Copy of the employee's state of residence when the payroll was calculated, so a locked payroll never changes if the employee moves (like pfa).
+  payeState                       String?
   basisDays                       Int
   daysWorked                      Decimal      @db.Decimal(6, 2)
   daysAbsent                      Int          @default(0)
@@ -3260,17 +3311,25 @@ model OtherEarning {
 // ─────────────────────────── STATUTORY RULES ───────────────────────────
 
 model TaxRule {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  code           String
-  name           String
-  version        String
-  legalBasis     String?
-  effectiveFrom  DateTime     @db.Date
-  effectiveTo    DateTime?    @db.Date
-  active         Boolean      @default(true)
-  createdAt      DateTime     @default(now())
+  id                String       @id @default(cuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  code              String
+  name              String
+  version           String
+  legalBasis        String?
+  effectiveFrom     DateTime     @db.Date
+  effectiveTo       DateTime?    @db.Date
+  active            Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+  /// PAYE filing dates and the late penalty are RULE DATA, set from the tax adviser's verified values and never assumed. Blank = not set.
+  /// Day of the month after the pay month on which PAYE is due (1 to 28).
+  payeDueDay        Int?
+  /// The annual return is due on this month and day of the year after the tax year.
+  annualReturnMonth Int?
+  annualReturnDay   Int?
+  /// Percentage of unremitted PAYE charged when late (interest is not modelled).
+  latePenaltyPct    Decimal?     @db.Decimal(6, 3)
 
   bands      TaxBand[]
   reliefs    TaxRelief[]
@@ -3338,6 +3397,12 @@ model PayrollRule {
   maxDeductionPctOfGross   Decimal        @default(33.33) @db.Decimal(5, 2)
   /// Overhead allocation used in Contract Profitability — % of contract revenue charged as back-office cost.
   backOfficeChargePct      Decimal        @default(15) @db.Decimal(5, 2)
+  /// A worker with PAYE and no state of residence is a warning (false, the default) or a CRITICAL finding that blocks approval until fixed or overridden with a reason (true).
+  requirePayeState         Boolean        @default(false)
+  /// The rate of the VOLUNTARY NHF (National Housing Fund) contribution, as a % of BASIC pay: 2.5 by the founder's rule (the tax adviser confirms it). It is taken only from employees who have chosen to contribute (Employee.nhfContributes), as its own deduction line, and is allowed against PAYE at the amount taken. 0 = none.
+  nhfEmployeeRatePct       Decimal        @default(2.5) @db.Decimal(5, 3)
+  /// The take-home floor, % of gross: loan and salary-advance recoveries may not take net pay below this share of gross; the part not taken is carried forward by the loan book. 0 (the default) = no floor, as pay has always been worked. A client-specific policy, not a statutory one.
+  minTakeHomePctOfGross    Decimal        @default(0) @db.Decimal(5, 2)
   effectiveFrom            DateTime       @db.Date
   effectiveTo              DateTime?      @db.Date
   createdAt                DateTime       @default(now())
@@ -3954,9 +4019,32 @@ model AuditLog {
   reason         String?
   metadata       Json?
   createdAt      DateTime     @default(now())
+  /// The tamper-evidence seal (see AuditSeal); absent for a few minutes after the row is written.
+  seal           AuditSeal?
 
   @@index([organizationId, createdAt])
   @@index([organizationId, entity, entityId])
+}
+
+/// One seal per audit row (rule 5: tamper-evident): SHA-256 of the row's canonical content, chained to the previous seal of the same organization
+/// by an HMAC under AUDIT_SEAL_KEY. Append-only at the database. docs/plans/tamper-evident-audit-log.md.
+model AuditSeal {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  /// 1, 2, 3 ... per organization; unique, so two sealers at once cannot both succeed.
+  seq            Int
+  auditLogId     String       @unique
+  auditLog       AuditLog     @relation(fields: [auditLogId], references: [id], onDelete: Restrict)
+  contentHash    String
+  prevHash       String
+  chainHash      String
+  sealedAt       DateTime     @default(now())
+  /// Sealed long after the row was written (the log's history from before sealing began).
+  sealedLate     Boolean      @default(false)
+
+  @@unique([organizationId, seq])
+  @@index([organizationId, sealedAt])
 }
 
 // ─────────────────────────────── LEAVE ───────────────────────────────
@@ -5604,4 +5692,1204 @@ model JournalReversal {
 
   @@index([organizationId, status])
   @@index([journalId])
+}
+
+// ─────────────────────────────── SALES AND ACCOUNT MANAGEMENT (a company's own CRM for the clients it serves; see docs/crm) ───────────────────────────────
+// Separate from the bureau's own payroll-sales pipeline above (Lead, Proposal, ...): these models are all prefixed Crm and used through the sales.* permissions.
+
+enum CrmMode {
+  CLASSIC
+  SIMPLE
+}
+
+enum CrmRecordStatus {
+  ACTIVE
+  VOID
+}
+
+enum CrmAccountType {
+  PROSPECT
+  CLIENT
+  FORMER_CLIENT
+}
+
+enum CrmSource {
+  REFERRAL
+  WALK_IN
+  PHONE
+  WEBSITE
+  WHATSAPP
+  TENDER
+  EVENT
+  EXISTING_CLIENT
+  OTHER
+}
+
+enum CrmServiceInterest {
+  GUARDING
+  CLEANING
+  FACILITY
+  STAFFING
+  OTHER
+}
+
+enum CrmDecisionRole {
+  DECISION_MAKER
+  INFLUENCER
+  USER
+  FINANCE
+  PROCUREMENT
+  GATEKEEPER
+}
+
+enum CrmLeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  UNQUALIFIED
+  CONVERTED
+  VOID
+}
+
+enum CrmConsentPurpose {
+  MARKETING
+  SERVICE
+}
+
+enum CrmConsentStatus {
+  GRANTED
+  WITHDRAWN
+}
+
+enum CrmChannel {
+  EMAIL
+  WHATSAPP
+  SMS
+  PHONE
+  IN_PERSON
+  WEB_FORM
+  OTHER
+}
+
+/// Whether the sales module is on for an organization (off until a company administrator switches it on) and how enquiries are handled.
+model CrmSetting {
+  id                  String              @id @default(cuid())
+  organizationId      String              @unique
+  organization        Organization        @relation(fields: [organizationId], references: [id])
+  enabled             Boolean             @default(false)
+  mode                CrmMode             @default(CLASSIC)
+  /// How new leads with no owner given (created by a manager) are assigned, and where round robin has got to.
+  assignmentMethod    CrmAssignmentMethod @default(NONE)
+  /// The lowest gross margin (a share of the bill) a quote may have before a designated approver must approve it, in basis points (1500 = 15.00%). 0 = no minimum. A new organization starts at 15%.
+  minMarginBps        Int                 @default(1500)
+  assignmentCursor    Int                 @default(0)
+  /// A contract ending within this many days gets a renewal deal opened for it.
+  renewalWindowDays   Int                 @default(90)
+  /// The weight of each of the six health-score measures (whole numbers adding up to 100). Empty means the starting weights.
+  healthWeights       Json?
+  /// An unconverted lead with no activity for this many months is listed for review (keep or erase). Empty means no review.
+  leadRetentionMonths Int?
+  updatedBy           String
+  updatedAt           DateTime            @updatedAt
+}
+
+/// A company the organization sells to or serves, as the sales side sees it. It links to the real Client only when a won deal is handed over.
+model CrmAccount {
+  id              String          @id @default(cuid())
+  organizationId  String
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  name            String
+  /// The name reduced to what identifies it (no case, punctuation or company ending), to find duplicates.
+  normalizedName  String
+  industry        String?
+  accountType     CrmAccountType  @default(PROSPECT)
+  ownerUserId     String
+  ownerName       String
+  parentAccountId String?
+  parent          CrmAccount?     @relation("CrmAccountParent", fields: [parentAccountId], references: [id])
+  children        CrmAccount[]    @relation("CrmAccountParent")
+  source          CrmSource?
+  sourceDetail    String?
+  state           String?
+  lga             String?
+  address         String?
+  rcNumber        String?
+  emailDomain     String?
+  /// The existing Client this became, set only at handover.
+  clientId        String?
+  /// Set when this account was merged into another (it is then voided).
+  mergedIntoId    String?
+  mergedInto      CrmAccount?     @relation("CrmAccountMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom      CrmAccount[]    @relation("CrmAccountMerge")
+  status          CrmRecordStatus @default(ACTIVE)
+  voidedAt        DateTime?
+  voidedBy        String?
+  voidReason      String?
+  createdBy       String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  contacts      CrmContact[]
+  opportunities CrmOpportunity[]
+  activities    CrmActivity[]
+  tasks         CrmTask[]
+  cases         CrmCase[]
+  slaPolicies   CrmSlaPolicy[]
+  health        CrmAccountHealth?
+
+  @@index([organizationId, ownerUserId, status])
+  @@index([organizationId, normalizedName])
+  @@index([organizationId, status, name])
+  @@index([organizationId, accountType, status])
+}
+
+/// A person at an account (or not yet attached to one). Phones are stored as E.164 (+234...).
+model CrmContact {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  accountId      String?
+  account        CrmAccount?      @relation(fields: [accountId], references: [id])
+  firstName      String
+  lastName       String
+  jobTitle       String?
+  roleInDecision CrmDecisionRole?
+  phoneE164      String?
+  whatsappE164   String?
+  email          String?
+  isPrimary      Boolean          @default(false)
+  ownerUserId    String
+  ownerName      String
+  status         CrmRecordStatus  @default(ACTIVE)
+  /// Set when this contact was merged into another (it is then voided; its consent history is read through the survivor).
+  mergedIntoId   String?
+  mergedInto     CrmContact?      @relation("CrmContactMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom     CrmContact[]     @relation("CrmContactMerge")
+  voidedAt       DateTime?
+  voidedBy       String?
+  voidReason     String?
+  createdBy      String
+  createdAt      DateTime         @default(now())
+  /// Set when the person was erased on a data request: the record stays (so deals and cases keep their links) but holds no personal detail.
+  erasedAt       DateTime?
+  updatedAt      DateTime         @updatedAt
+
+  consents      CrmConsent[]
+  opportunities CrmOpportunity[]
+  activities    CrmActivity[]
+  tasks         CrmTask[]
+
+  @@index([organizationId, ownerUserId, status])
+  @@index([organizationId, phoneE164])
+  @@index([organizationId, email])
+  @@index([accountId])
+  @@index([organizationId, status, lastName, firstName])
+}
+
+/// An enquiry not yet known to be real. Becomes an account and contact (and a deal) when converted (a later phase).
+model CrmLead {
+  id                     String             @id @default(cuid())
+  organizationId         String
+  organization           Organization       @relation(fields: [organizationId], references: [id])
+  number                 String
+  companyName            String
+  contactName            String?
+  jobTitle               String?
+  phoneE164              String?
+  email                  String?
+  industry               String?
+  state                  String?
+  lga                    String?
+  address                String?
+  source                 CrmSource          @default(OTHER)
+  sourceDetail           String?
+  estimatedGuards        Int?
+  serviceInterest        CrmServiceInterest @default(OTHER)
+  status                 CrmLeadStatus      @default(NEW)
+  unqualifiedReason      String?
+  ownerUserId            String
+  ownerName              String
+  convertedAccountId     String?
+  convertedContactId     String?
+  convertedOpportunityId String?
+  convertedAt            DateTime?
+  convertedBy            String?
+  voidedAt               DateTime?
+  voidedBy               String?
+  voidReason             String?
+  createdBy              String
+  createdAt              DateTime           @default(now())
+  erasedAt               DateTime?
+  /// A lead past the retention period stays until this date once someone has reviewed it and decided to keep it.
+  retentionKeepUntil     DateTime?          @db.Date
+  updatedAt              DateTime           @updatedAt
+
+  consents   CrmConsent[]
+  activities CrmActivity[]
+  tasks      CrmTask[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId, ownerUserId, status])
+  @@index([organizationId, phoneE164])
+  @@index([organizationId, email])
+  @@index([organizationId, status, createdAt])
+  @@index([organizationId, source, status])
+}
+
+/// One consent or withdrawal, never changed (the database refuses it). The latest row for a person and purpose decides; none means unknown.
+model CrmConsent {
+  id               String            @id @default(cuid())
+  /// Orders the rows; the latest has the highest number.
+  seq              Int               @unique @default(autoincrement())
+  organizationId   String
+  organization     Organization      @relation(fields: [organizationId], references: [id])
+  contactId        String?
+  contact          CrmContact?       @relation(fields: [contactId], references: [id])
+  leadId           String?
+  lead             CrmLead?          @relation(fields: [leadId], references: [id])
+  purpose          CrmConsentPurpose
+  status           CrmConsentStatus
+  channel          CrmChannel
+  source           String
+  evidenceRef      String?
+  recordedBy       String
+  recordedByUserId String
+  recordedAt       DateTime          @default(now())
+
+  @@index([contactId, purpose, seq])
+  @@index([leadId, purpose, seq])
+  @@index([organizationId])
+}
+
+enum CrmPipelineKind {
+  NEW_BUSINESS
+  RENEWAL
+  RATE_REVIEW
+  EXPANSION
+}
+
+enum CrmStageType {
+  OPEN
+  WON
+  LOST
+}
+
+enum CrmAssignmentMethod {
+  NONE
+  ROUND_ROBIN
+  BY_STATE
+  BY_SERVICE
+}
+
+enum CrmAssignmentKind {
+  STATE
+  SERVICE
+}
+
+/// A sales process (new business, later renewal and rate review) made of stages. Each organization has its own copy; the starting stages and probabilities are editable defaults.
+model CrmPipeline {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  name           String
+  kind           CrmPipelineKind
+  isDefault      Boolean         @default(false)
+  sortOrder      Int             @default(0)
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+
+  stages          CrmStage[]
+  opportunities   CrmOpportunity[]
+  automationRules CrmAutomationRule[]
+
+  @@unique([organizationId, name])
+}
+
+model CrmStage {
+  id                 String       @id @default(cuid())
+  pipelineId         String
+  pipeline           CrmPipeline  @relation(fields: [pipelineId], references: [id])
+  name               String
+  sortOrder          Int
+  stageType          CrmStageType @default(OPEN)
+  /// 0 to 100: what a deal entering this stage is given as its probability.
+  defaultProbability Int
+  /// Field keys that must be filled before a deal may enter this stage (enforced from the board phase).
+  requiredFields     Json         @default("[]")
+  /// Days without activity after which a card on this stage is flagged.
+  rottingDays        Int?
+  active             Boolean      @default(true)
+
+  opportunities   CrmOpportunity[]
+  automationRules CrmAutomationRule[]
+
+  @@index([pipelineId, sortOrder])
+}
+
+/// A specific bid for a client business: "24/7 guarding, 3 sites, 18 guards". Its monthly value is a money amount (Decimal 16,2, whole kobo).
+model CrmOpportunity {
+  id                   String             @id @default(cuid())
+  organizationId       String
+  organization         Organization       @relation(fields: [organizationId], references: [id])
+  accountId            String
+  account              CrmAccount         @relation(fields: [accountId], references: [id])
+  primaryContactId     String?
+  primaryContact       CrmContact?        @relation(fields: [primaryContactId], references: [id])
+  pipelineId           String
+  pipeline             CrmPipeline        @relation(fields: [pipelineId], references: [id])
+  stageId              String
+  stage                CrmStage           @relation(fields: [stageId], references: [id])
+  name                 String
+  serviceType          CrmServiceInterest @default(OTHER)
+  monthlyContractValue Decimal            @default(0) @db.Decimal(16, 2)
+  /// 0 to 100; starts as the stage default and the owner may change it.
+  probability          Int
+  expectedCloseDate    DateTime?          @db.Date
+  expectedStartDate    DateTime?          @db.Date
+  contractTermMonths   Int?
+  source               CrmSource?
+  sourceDetail         String?
+  ownerUserId          String
+  ownerName            String
+  /// The lead this deal came from, if it came from one.
+  fromLeadId           String?
+  /// What happens next on this deal; required every time it moves.
+  nextStep             String?
+  lostReason           CrmLostReason?
+  lostReasonDetail     String?
+  competitor           String?
+  wonAt                DateTime?
+  lostAt               DateTime?
+  /// When the deal entered its current stage (days in stage on the board).
+  stageEnteredAt       DateTime           @default(now())
+  status               CrmRecordStatus    @default(ACTIVE)
+  lastActivityAt       DateTime           @default(now())
+  voidedAt             DateTime?
+  voidedBy             String?
+  voidReason           String?
+  createdBy            String
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  history        CrmStageHistory[]
+  quotes         CrmQuote[]
+  handovers      CrmHandover[]
+  activities     CrmActivity[]
+  tasks          CrmTask[]
+  automationRuns CrmAutomationRun[]
+
+  @@index([organizationId, ownerUserId, status])
+  @@index([organizationId, stageId])
+  @@index([accountId])
+  @@index([organizationId, status, createdAt])
+  @@index([organizationId, pipelineId, status])
+  @@index([organizationId, status, lastActivityAt])
+}
+
+/// Every move of a deal between stages, with who and when. Never changed (the database refuses it).
+model CrmStageHistory {
+  id                  String         @id @default(cuid())
+  organizationId      String
+  organization        Organization   @relation(fields: [organizationId], references: [id])
+  opportunityId       String
+  opportunity         CrmOpportunity @relation(fields: [opportunityId], references: [id])
+  fromStageId         String?
+  toStageId           String
+  changedBy           String
+  changedByUserId     String
+  changedAt           DateTime       @default(now())
+  daysInPreviousStage Int?
+
+  @@index([opportunityId, changedAt])
+  @@index([organizationId, toStageId, changedAt])
+}
+
+/// Leads in this state (or wanting this service) go to this person.
+model CrmAssignmentRule {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  kind           CrmAssignmentKind
+  key            String
+  /// The key in lower case with single spaces, so "Lagos" and "lagos" are the same rule.
+  keyNorm        String
+  userId         String
+  userName       String
+  createdBy      String
+  createdAt      DateTime          @default(now())
+
+  @@unique([organizationId, kind, keyNorm])
+}
+
+enum CrmLostReason {
+  PRICE
+  QUALITY
+  RELATIONSHIP
+  INCUMBENT_RETAINED
+  NO_DECISION
+  BUDGET
+  OTHER
+}
+
+enum CrmQuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  SUPERSEDED
+}
+
+/// A priced bid for a deal: posts, guards and bill rates, with what the guards cost the company and the margin. Only a DRAFT can be changed (the database
+/// refuses to change the lines of any other); a new version is made to change a sent quote. The costs are saved with the rule versions they used.
+model CrmQuote {
+  id                  String         @id @default(cuid())
+  organizationId      String
+  organization        Organization   @relation(fields: [organizationId], references: [id])
+  opportunityId       String
+  opportunity         CrmOpportunity @relation(fields: [opportunityId], references: [id])
+  /// Shared by every version of the same quote.
+  number              String
+  versionNo           Int
+  status              CrmQuoteStatus @default(DRAFT)
+  validUntil          DateTime?      @db.Date
+  notes               String?
+  monthlyBill         Decimal        @default(0) @db.Decimal(16, 2)
+  monthlyCost         Decimal        @default(0) @db.Decimal(16, 2)
+  monthlyMargin       Decimal        @default(0) @db.Decimal(16, 2)
+  /// Margin as basis points of the bill (905 = 9.05%).
+  marginBps           Int            @default(0)
+  /// The minimum margin in force when the quote was priced, and whether this quote is below it.
+  minMarginBpsAtQuote Int            @default(0)
+  belowMinimum        Boolean        @default(false)
+  belowMarginApproved Boolean        @default(false)
+  approvedBy          String?
+  approvedByUserId    String?
+  approvedAt          DateTime?
+  approvalNote        String?
+  createdBy           String
+  createdByUserId     String
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  sentAt              DateTime?
+  sentBy              String?
+  decidedAt           DateTime?
+  decidedBy           String?
+  decisionNote        String?
+
+  lines    CrmQuoteLine[]
+  handover CrmHandover?
+
+  @@unique([organizationId, number, versionNo])
+  @@index([opportunityId, status])
+}
+
+model CrmQuoteLine {
+  id                  String   @id @default(cuid())
+  quoteId             String
+  quote               CrmQuote @relation(fields: [quoteId], references: [id])
+  sortOrder           Int
+  siteName            String
+  siteAddress         String?
+  postLabel           String?
+  /// A label only (24/7, Day 12h): it changes no sum. The headcount is what the client pays for.
+  shiftPattern        String?
+  salaryStructureId   String
+  structureName       String
+  businessLine        String
+  /// The guards the client pays for (revenue is billed on this).
+  headcount           Int
+  /// The people actually needed to cover the agreed shifts (cost follows this). Often more than the billed headcount, for example on a 24/7 post.
+  requiredPersonnel   Int
+  billPerHead         Decimal  @db.Decimal(16, 2)
+  operativeSharePct   Decimal  @db.Decimal(5, 2)
+  grossPerHead        Decimal  @db.Decimal(16, 2)
+  employerCostPerHead Decimal  @db.Decimal(16, 2)
+  costPerHead         Decimal  @db.Decimal(16, 2)
+  lineBill            Decimal  @db.Decimal(16, 2)
+  lineCost            Decimal  @db.Decimal(16, 2)
+  lineMargin          Decimal  @db.Decimal(16, 2)
+  /// Every part of the employer cost as worked out, so the figure can be explained later.
+  costBreakdown       Json
+  /// The versions of the pension and employer-cost rules the figures came from.
+  ruleVersions        Json
+  estimatedOn         DateTime @db.Date
+
+  @@index([quoteId, sortOrder])
+}
+
+/// A person formally designated to approve a quote below the minimum margin. Only a designated approver (never the quote's maker) can approve one.
+model CrmQuoteApprover {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  userId         String
+  userName       String
+  active         Boolean      @default(true)
+  designatedBy   String
+  designatedAt   DateTime     @default(now())
+  removedBy      String?
+  removedAt      DateTime?
+
+  @@unique([organizationId, userId])
+}
+
+enum CrmHandoverStatus {
+  DRAFT
+  SUBMITTED
+  RETURNED
+  ACCEPTED
+}
+
+enum CrmHandoverEventKind {
+  CREATED
+  SUBMITTED
+  RETURNED
+  ACCEPTED
+}
+
+/// What an accepted quote hands over to Operations: the agreed scope, the client's requirements, the sites, headcount, shifts, pricing, start date, equipment
+/// and service-level obligations. One per deal. Sales prepares and submits it; Operations accepts it (or returns it with questions); only on acceptance are the
+/// client, contract (a draft), rates and sites created. The quote facts are copied in and never change; once ACCEPTED nothing can change (the database refuses).
+/// It holds no cost and no margin.
+model CrmHandover {
+  id                 String            @id @default(cuid())
+  organizationId     String
+  organization       Organization      @relation(fields: [organizationId], references: [id])
+  number             String
+  opportunityId      String
+  opportunity        CrmOpportunity    @relation(fields: [opportunityId], references: [id])
+  quoteId            String            @unique
+  quote              CrmQuote          @relation(fields: [quoteId], references: [id])
+  accountId          String
+  status             CrmHandoverStatus @default(DRAFT)
+  /// Goes up every time the handover is edited. Operations accepts only the revision it was sent.
+  revisionNo         Int               @default(1)
+  submittedRevision  Int?
+  /// From the accepted quote, copied in: never changes.
+  quoteNumber        String
+  quoteVersion       Int
+  monthlyBill        Decimal           @db.Decimal(16, 2)
+  validUntil         DateTime?         @db.Date
+  /// Entered in the handover.
+  scope              String?
+  clientRequirements String?
+  startDate          DateTime?         @db.Date
+  termMonths         Int?
+  /// Special service-level obligations: lines of { obligation, measure, consequence }. noSpecialSla says there are none (an explicit answer).
+  serviceLevels      Json              @default("[]")
+  noSpecialSla       Boolean           @default(false)
+  preparedBy         String
+  preparedByUserId   String
+  submittedAt        DateTime?
+  submittedBy        String?
+  submittedByUserId  String?
+  returnedAt         DateTime?
+  returnedBy         String?
+  returnNote         String?
+  acceptedAt         DateTime?
+  acceptedBy         String?
+  acceptedByUserId   String?
+  acceptanceNote     String?
+  acceptedRevision   Int?
+  /// The real records made on acceptance.
+  clientId           String?
+  contractId         String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  sites  CrmHandoverSite[]
+  posts  CrmHandoverPost[]
+  events CrmHandoverEvent[]
+
+  @@unique([organizationId, number])
+  @@unique([opportunityId])
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt])
+}
+
+/// One client site named on the quote. The address, state, local government, the client's site contact and the equipment are entered in the handover.
+model CrmHandoverSite {
+  id               String            @id @default(cuid())
+  handoverId       String
+  handover         CrmHandover       @relation(fields: [handoverId], references: [id])
+  sortOrder        Int
+  name             String
+  address          String?
+  state            String?
+  lga              String?
+  contactName      String?
+  contactRole      String?
+  contactPhoneE164 String?
+  contactEmail     String?
+  /// Lines of { item, quantity }. noEquipment says none is needed (an explicit answer).
+  equipment        Json              @default("[]")
+  noEquipment      Boolean           @default(false)
+  /// The site (Beat) made on acceptance.
+  beatId           String?
+  posts            CrmHandoverPost[]
+
+  @@index([handoverId, sortOrder])
+}
+
+/// One quote line, copied in with its billed guards, the personnel needed, the shift and the bill rate (never the cost or margin). Only the employee category is entered.
+model CrmHandoverPost {
+  id                String          @id @default(cuid())
+  handoverId        String
+  handover          CrmHandover     @relation(fields: [handoverId], references: [id])
+  siteId            String
+  site              CrmHandoverSite @relation(fields: [siteId], references: [id])
+  quoteLineId       String
+  sortOrder         Int
+  postLabel         String?
+  shiftPattern      String?
+  salaryStructureId String
+  structureName     String
+  businessLine      String
+  headcount         Int
+  requiredPersonnel Int
+  billPerHead       Decimal         @db.Decimal(16, 2)
+  operativeSharePct Decimal         @db.Decimal(5, 2)
+  /// The employee category the contract rate is made for (entered).
+  categoryId        String?
+
+  @@index([handoverId, sortOrder])
+}
+
+/// Who did what to a handover and when: submitted, returned (with the question), accepted. Never changed (the database refuses it).
+model CrmHandoverEvent {
+  id             String               @id @default(cuid())
+  organizationId String
+  organization   Organization         @relation(fields: [organizationId], references: [id])
+  handoverId     String
+  handover       CrmHandover          @relation(fields: [handoverId], references: [id])
+  kind           CrmHandoverEventKind
+  revisionNo     Int
+  byUserId       String
+  byName         String
+  note           String?
+  at             DateTime             @default(now())
+
+  @@index([handoverId, at])
+}
+
+/// A person formally designated to accept a handover for Operations (the Executive Director, Operations, or the Operations Manager). Never the person who prepared it.
+model CrmHandoverAcceptor {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  userId         String
+  userName       String
+  active         Boolean      @default(true)
+  designatedBy   String
+  designatedAt   DateTime     @default(now())
+  removedBy      String?
+  removedAt      DateTime?
+
+  @@unique([organizationId, userId])
+}
+
+enum CrmActivityKind {
+  CALL
+  MEETING
+  SITE_SURVEY
+  WHATSAPP
+  EMAIL
+  NOTE
+}
+
+enum CrmCallOutcome {
+  REACHED
+  NO_ANSWER
+  CALLBACK
+  WRONG_NUMBER
+}
+
+/// Whether an outbound message is a service message (about an active contract) or marketing (needs the person's consent).
+enum CrmMessagePurpose {
+  SERVICE
+  MARKETING
+}
+
+enum CrmTaskStatus {
+  OPEN
+  DONE
+  CANCELLED
+}
+
+/// Something that happened with a lead, contact, account or deal: a call, meeting, site survey, WhatsApp, email or note. Never deleted and its content never
+/// changed (the database refuses both); a mistaken one is voided with a reason and stays on the timeline.
+model CrmActivity {
+  id              String             @id @default(cuid())
+  organizationId  String
+  organization    Organization       @relation(fields: [organizationId], references: [id])
+  kind            CrmActivityKind
+  leadId          String?
+  lead            CrmLead?           @relation(fields: [leadId], references: [id])
+  accountId       String?
+  account         CrmAccount?        @relation(fields: [accountId], references: [id])
+  contactId       String?
+  contact         CrmContact?        @relation(fields: [contactId], references: [id])
+  opportunityId   String?
+  opportunity     CrmOpportunity?    @relation(fields: [opportunityId], references: [id])
+  occurredAt      DateTime           @default(now())
+  subject         String?
+  body            String?
+  /// A call's result; empty while a call started from a link has not yet been written up.
+  callOutcome     CrmCallOutcome?
+  /// A site survey's checklist: site type, entry points, existing guards, risk notes, photo links.
+  survey          Json?
+  /// For a WhatsApp or an email: service or marketing.
+  purpose         CrmMessagePurpose?
+  /// Logged automatically by using a call or WhatsApp link.
+  viaLink         Boolean            @default(false)
+  createdBy       String
+  createdByUserId String
+  createdAt       DateTime           @default(now())
+  voidedAt        DateTime?
+  voidedBy        String?
+  voidReason      String?
+
+  @@index([organizationId, leadId, occurredAt])
+  @@index([organizationId, accountId, occurredAt])
+  @@index([organizationId, contactId, occurredAt])
+  @@index([organizationId, opportunityId, occurredAt])
+  @@index([organizationId, occurredAt])
+}
+
+/// Something to do, by a date and time, for one person, optionally about a lead, contact, account or deal.
+model CrmTask {
+  id              String          @id @default(cuid())
+  organizationId  String
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  title           String
+  notes           String?
+  dueAt           DateTime
+  /// Brings the task into that morning's digest; there is no push notification.
+  reminderAt      DateTime?
+  status          CrmTaskStatus   @default(OPEN)
+  ownerUserId     String
+  ownerName       String
+  leadId          String?
+  lead            CrmLead?        @relation(fields: [leadId], references: [id])
+  accountId       String?
+  account         CrmAccount?     @relation(fields: [accountId], references: [id])
+  contactId       String?
+  contact         CrmContact?     @relation(fields: [contactId], references: [id])
+  opportunityId   String?
+  opportunity     CrmOpportunity? @relation(fields: [opportunityId], references: [id])
+  completedAt     DateTime?
+  completedBy     String?
+  createdBy       String
+  createdByUserId String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([organizationId, ownerUserId, status, dueAt])
+  @@index([opportunityId])
+  @@index([leadId])
+  @@index([contactId])
+  @@index([accountId])
+}
+
+/// One row for each user and day the digest email was sent, so it is never sent twice in a day.
+model CrmDigestRun {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  userId         String
+  /// The Lagos day it was for.
+  forDate        DateTime     @db.Date
+  sentAt         DateTime     @default(now())
+
+  @@unique([organizationId, userId, forDate])
+}
+
+enum CrmAutomationTrigger {
+  STAGE_ENTRY
+  QUOTE_ACCEPTED
+  HANDOVER_ACCEPTED
+  NO_ACTIVITY
+}
+
+enum CrmAutomationAction {
+  CREATE_TASK
+  NOTIFY
+  SEND_EMAIL
+  CHANGE_OWNER
+  SET_FIELD
+  CREATE_FOLLOW_UP
+  MOVE_TO_STAGE
+}
+
+enum CrmAutomationRunStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+  CANCELLED
+  SKIPPED
+}
+
+/// When something happens to a deal (it enters a stage, its quote or handover is accepted, or it goes quiet), do one thing, at once or after a delay,
+/// if the condition holds. Starts switched off. Changed by switching it off and making a new one, so the run log stays true.
+model CrmAutomationRule {
+  id             String               @id @default(cuid())
+  organizationId String
+  organization   Organization         @relation(fields: [organizationId], references: [id])
+  name           String
+  trigger        CrmAutomationTrigger
+  pipelineId     String
+  pipeline       CrmPipeline          @relation(fields: [pipelineId], references: [id])
+  /// For a stage-entry rule: the stage.
+  stageId        String?
+  stage          CrmStage?            @relation(fields: [stageId], references: [id])
+  /// How long after the trigger the action runs (0 = at once).
+  delayMinutes   Int                  @default(0)
+  /// For a no-activity rule: how many quiet days.
+  quietDays      Int?
+  /// { field, op, value }: the rule acts only if it holds when the run is due.
+  condition      Json?
+  actionType     CrmAutomationAction
+  actionParams   Json
+  enabled        Boolean              @default(false)
+  /// One of the rules offered to every organization (all start off).
+  isStarter      Boolean              @default(false)
+  createdBy      String
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  updatedBy      String?
+
+  runs CrmAutomationRun[]
+
+  @@index([organizationId, trigger, enabled])
+}
+
+/// One carrying-out of a rule for a deal and a stage entry (or quote, handover, quiet spell). The database allows one per rule, deal and entry, so a rule never
+/// fires twice for the same entry. Holds ids and figures, never message text.
+model CrmAutomationRun {
+  id             String                 @id @default(cuid())
+  organizationId String
+  organization   Organization           @relation(fields: [organizationId], references: [id])
+  ruleId         String
+  rule           CrmAutomationRule      @relation(fields: [ruleId], references: [id])
+  opportunityId  String
+  opportunity    CrmOpportunity         @relation(fields: [opportunityId], references: [id])
+  /// What this run is for: the stage-history row of the entry, the quote or handover, or the last-activity moment of a quiet spell.
+  entryKey       String
+  status         CrmAutomationRunStatus @default(PENDING)
+  runAt          DateTime
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  durationMs     Int?
+  inputs         Json?
+  outputs        Json?
+  error          String?
+  createdAt      DateTime               @default(now())
+
+  @@unique([ruleId, opportunityId, entryKey])
+  @@index([organizationId, status, runAt])
+  @@index([organizationId, createdAt])
+}
+
+/// A message to a person inside the app (the email goes separately).
+model CrmNotification {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  userId         String
+  title          String
+  body           String
+  href           String?
+  createdAt      DateTime     @default(now())
+  readAt         DateTime?
+
+  @@index([organizationId, userId, readAt])
+  @@index([organizationId, userId, createdAt])
+}
+
+enum CrmCasePriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum CrmCaseCategory {
+  SERVICE_QUALITY
+  STAFFING
+  BILLING
+  COMPLAINT
+  REQUEST
+  OTHER
+}
+
+enum CrmCaseStatus {
+  OPEN
+  RESOLVED
+}
+
+enum CrmCaseEventKind {
+  OPENED
+  RESPONDED
+  NOTE
+  REASSIGNED
+  RESOLVED
+  REOPENED
+  WARNING
+  BREACH
+  ESCALATED
+}
+
+/// How quickly a case of a priority must be answered and resolved. A policy for an account wins over the organization's default for that priority.
+model CrmSlaPolicy {
+  id                   String          @id @default(cuid())
+  organizationId       String
+  organization         Organization    @relation(fields: [organizationId], references: [id])
+  /// Empty for the organization's default.
+  accountId            String?
+  account              CrmAccount?     @relation(fields: [accountId], references: [id])
+  /// The account's id, or empty for the default: lets the database allow one policy for each account and priority.
+  accountKey           String          @default("")
+  priority             CrmCasePriority
+  firstResponseMinutes Int
+  resolutionMinutes    Int
+  /// The clock runs only in business hours (not at night, at weekends or on holidays).
+  businessHoursOnly    Boolean         @default(true)
+  active               Boolean         @default(true)
+  createdBy            String
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  updatedBy            String?
+
+  @@unique([organizationId, accountKey, priority])
+}
+
+/// When the organization is open, in Lagos time. Without a row: Monday to Friday, 08:00 to 17:00.
+model CrmBusinessHours {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  openMinute     Int          @default(480)
+  closeMinute    Int          @default(1020)
+  /// ISO weekdays, 1 = Monday to 7 = Sunday.
+  workDays       Int[]        @default([1, 2, 3, 4, 5])
+  updatedBy      String
+  updatedAt      DateTime     @updatedAt
+}
+
+/// A day the organization is closed. Entered by an administrator: public holidays differ by year and are announced by government.
+model CrmHoliday {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  date           DateTime     @db.Date
+  name           String
+  createdBy      String
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, date])
+}
+
+/// A problem or request from a client account. The SLA deadlines are worked out when it opens and kept on the case, so a later change to a policy never moves them.
+model CrmCase {
+  id                      String          @id @default(cuid())
+  organizationId          String
+  organization            Organization    @relation(fields: [organizationId], references: [id])
+  number                  String
+  accountId               String
+  account                 CrmAccount      @relation(fields: [accountId], references: [id])
+  contactId               String?
+  opportunityId           String?
+  /// The client site (Beat) it is about, if any.
+  beatId                  String?
+  category                CrmCaseCategory
+  priority                CrmCasePriority
+  status                  CrmCaseStatus   @default(OPEN)
+  subject                 String
+  description             String?
+  ownerUserId             String
+  ownerName               String
+  openedAt                DateTime        @default(now())
+  slaPolicyId             String?
+  slaFirstResponseMinutes Int?
+  slaResolutionMinutes    Int?
+  slaBusinessHoursOnly    Boolean         @default(false)
+  firstResponseDueAt      DateTime?
+  firstResponseWarnAt     DateTime?
+  firstRespondedAt        DateTime?
+  firstResponseWarnedAt   DateTime?
+  firstResponseBreachedAt DateTime?
+  /// When the resolution clock last started: the opening, or the latest reopening.
+  resolutionStartedAt     DateTime        @default(now())
+  resolutionDueAt         DateTime?
+  resolutionWarnAt        DateTime?
+  resolvedAt              DateTime?
+  resolutionWarnedAt      DateTime?
+  resolutionBreachedAt    DateTime?
+  /// Reported separately, so closing cases early is not rewarded.
+  reopenedCount           Int             @default(0)
+  createdBy               String
+  createdByUserId         String
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+
+  events CrmCaseEvent[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status, priority])
+  @@index([organizationId, accountId])
+  @@index([organizationId, openedAt])
+  @@index([contactId])
+}
+
+/// Everything that happens to a case, in order. Never changed (the database refuses it).
+model CrmCaseEvent {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  caseId         String
+  case           CrmCase          @relation(fields: [caseId], references: [id])
+  kind           CrmCaseEventKind
+  byUserId       String?
+  byName         String
+  note           String?
+  at             DateTime         @default(now())
+
+  @@index([caseId, at])
+}
+
+/// The renewal deal opened for a contract: one for each contract, so the daily job can never open two.
+model CrmRenewalLink {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  contractId     String       @unique
+  opportunityId  String
+  createdAt      DateTime     @default(now())
+}
+
+enum CrmHealthBand {
+  HEALTHY
+  WATCH
+  AT_RISK
+}
+
+/// The latest health score of a client account (0 to 100) with what each measure found, and when its band last changed. Recomputed nightly and when a case on the account changes.
+model CrmAccountHealth {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  accountId      String         @unique
+  account        CrmAccount     @relation(fields: [accountId], references: [id])
+  score          Int
+  band           CrmHealthBand
+  /// Each measure: its weight, its sub-score (empty when there was no data), and a sentence on what it found.
+  components     Json
+  previousBand   CrmHealthBand?
+  bandChangedAt  DateTime?
+  computedAt     DateTime
+
+  @@index([organizationId, band, score])
+}
+
+enum CrmSuppressionKind {
+  EMAIL
+  PHONE
+}
+
+enum CrmDataRequestKind {
+  ACCESS
+  ERASURE
+  RETENTION
+}
+
+enum CrmDataRequestStatus {
+  OPEN
+  COMPLETED
+  REFUSED
+}
+
+/// An email address or phone number that must receive no marketing, kept as a KEYED HASH (never the address), so it still works after the person has been erased.
+model CrmSuppression {
+  id             String             @id @default(cuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  kind           CrmSuppressionKind
+  valueHash      String
+  /// UNSUBSCRIBED, WITHDRAWN or ERASED.
+  reason         String
+  source         String
+  createdAt      DateTime           @default(now())
+
+  @@unique([organizationId, kind, valueHash])
+}
+
+/// A request about the personal data held on a contact or lead: a copy (ACCESS), erasure (ERASURE), or erasure at the end of the retention period (RETENTION).
+model CrmDataRequest {
+  id               String               @id @default(cuid())
+  organizationId   String
+  organization     Organization         @relation(fields: [organizationId], references: [id])
+  number           String
+  kind             CrmDataRequestKind
+  /// CONTACT or LEAD.
+  subjectType      String
+  subjectId        String
+  /// Who asked: replaced with a note once the person has been erased.
+  requesterName    String?
+  channel          String?
+  receivedOn       DateTime             @db.Date
+  dueOn            DateTime             @db.Date
+  status           CrmDataRequestStatus @default(OPEN)
+  identityVerified Boolean              @default(false)
+  identityNote     String?
+  verifiedBy       String?
+  /// Who recorded the identity check (by id, so the person who erases can be told apart from them).
+  verifiedByUserId String?
+  exportedAt       DateTime?
+  /// SHA-256 of the file generated, and how many records each section held.
+  exportChecksum   String?
+  exportSections   Json?
+  /// Records that may still mention the person in free text and need a person's review after an erasure (ids by kind, never the text).
+  reviewList       Json?
+  handledBy        String?
+  completedOn      DateTime?
+  outcomeNote      String?
+  createdBy        String
+  createdAt        DateTime             @default(now())
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status])
+  @@index([organizationId, subjectType, subjectId])
+}
+
+/// A sales team: one manager (a sales manager) and its members. A team is closed, not deleted; closing it removes its members.
+model CrmTeam {
+  id               String          @id @default(cuid())
+  organizationId   String
+  organization     Organization    @relation(fields: [organizationId], references: [id])
+  name             String
+  managerUserId    String
+  active           Boolean         @default(true)
+  /// Where this team's round robin has got to: each new lead a manager adds goes to the next member.
+  assignmentCursor Int             @default(0)
+  createdBy        String
+  createdAt        DateTime        @default(now())
+  members          CrmTeamMember[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, managerUserId, active])
+}
+
+/// A person in a team. A person is in at most one team.
+model CrmTeamMember {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  teamId         String
+  team           CrmTeam      @relation(fields: [teamId], references: [id])
+  userId         String
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, userId])
+  @@index([teamId])
 }

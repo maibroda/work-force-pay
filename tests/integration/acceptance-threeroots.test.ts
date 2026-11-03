@@ -228,9 +228,10 @@ describe("5. Payslips, register, bank file and remittance schedule export correc
   it("has a remittance schedule: PAYE and each pension fund administrator, adding up to the run", async () => {
     const run = await db.payrollRun.findUniqueOrThrow({ where: { id: demo.run.id } });
     const rem = await db.statutoryRemittance.findMany({ where: { runId: run.id } });
+    // PAYE now goes to each worker's state of residence: the demo client's staff live in Lagos (Lagos HQ), FCT (Abuja Office) and Rivers (Port Harcourt Depot)
     const paye = rem.filter((r) => r.type === "PAYE");
-    expect(paye).toHaveLength(1);
-    expect(Number(paye[0].totalAmount)).toBeCloseTo(Number(run.totalPaye), 2);
+    expect(paye.map((p) => p.payee).sort()).toEqual(["FCT Internal Revenue Service (PAYE)", "Lagos Internal Revenue Service (PAYE)", "Rivers Internal Revenue Service (PAYE)"]);
+    expect(paye.reduce((a, p) => a + Math.round(Number(p.totalAmount) * 100), 0)).toBe(Math.round(Number(run.totalPaye) * 100));
     const pension = rem.filter((r) => r.type === "PENSION");
     expect(pension.map((p) => p.payee).sort()).toEqual(["ARM Pension", "Premium Pension", "Stanbic IBTC Pension"]);
     expect(pension.reduce((a, p) => a + Number(p.employeeAmount), 0)).toBeCloseTo(Number(run.totalEmployeePension), 2);
