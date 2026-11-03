@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Ctx } from "@/lib/auth/context";
 import { MODULES, type ModuleKey } from "@/lib/entitlements/catalogue";
 import { API_MODULES } from "@/lib/entitlements/entry-modules";
-import { decide, pageRouteFor, refusalMessage, type Entitlements } from "@/lib/entitlements/guard";
+import { decide, pageAllowed, pageRouteFor, refusalMessage, type Entitlements } from "@/lib/entitlements/guard";
 import { discoverPages } from "../../scripts/routes";
 
 /**
@@ -77,6 +77,17 @@ describe("finding which page a request is for", () => {
 
   it("finds a route for every page the app has", () => {
     for (const p of discoverPages()) expect(pageRouteFor(p.route.replace(/\[[^\]]+\]/g, "x1")), p.route).not.toBeNull();
+  });
+});
+
+describe("what a menu shows", () => {
+  it("shows every page when nothing is being checked, and hides a page of a module that is enforced and not bought", () => {
+    expect(pageAllowed(undefined, "/accounting/accounts")).toBe(true);
+    expect(pageAllowed(ent(["core", "payroll"], { accounting: "ENFORCE" }), "/accounting/accounts")).toBe(false);
+    expect(pageAllowed(ent(["core", "payroll", "accounting"], { accounting: "ENFORCE" }), "/accounting/accounts")).toBe(true);
+    expect(pageAllowed(ent(["core", "payroll"], { accounting: "REPORT" }), "/accounting/accounts")).toBe(true); // reporting hides nothing
+    expect(pageAllowed(ent(["core"], { payroll: "ENFORCE" }), "/settings/subscription")).toBe(true); // the core stays
+    expect(pageAllowed(ent(["core"], { payroll: "ENFORCE" }), "/not/a/page")).toBe(true); // an address that is no page of ours is not decided here
   });
 });
 
@@ -157,6 +168,11 @@ describe("the wiring, so that a guard cannot be quietly left out", () => {
       if (s.includes("requirePage(")) continue;
       expect(s, `${p.route} neither calls requirePage nor is a plain redirect`).toMatch(/^import \{ redirect \} from "next\/navigation";\s*export default function \w+\(\) \{\s*redirect\("[^"]+"\);\s*\}\s*$/);
     }
+  });
+
+  it("hides a refused page from the menu, and shows the person which module a refusal was about", () => {
+    expect(src("src", "app", "(app)", "layout.tsx")).toContain("pageAllowed(ctx.entitlements, ");
+    expect(src("src", "app", "forbidden", "page.tsx")).toContain("refusalMessage(");
   });
 
   it("sets the address the page guard reads in the middleware, overwriting anything the browser sent", () => {
