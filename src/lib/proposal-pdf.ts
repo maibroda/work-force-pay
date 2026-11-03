@@ -110,10 +110,11 @@ function wrap(text: string, font: PDFFont, size: number, width: number): string[
   return out.length ? out : [""];
 }
 
-export async function proposalPdf(p: ProposalDoc): Promise<Uint8Array> {
+/** Any document laid out as blocks, drawn as a PDF (the proposal and the sales quote both use it). */
+export async function blocksPdf(blocks: Block[], meta: { title: string; author: string; footer: string }): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
-  doc.setTitle(pdfSafe(`Proposal ${p.number} for ${p.preparedFor.company}`));
-  doc.setAuthor(pdfSafe(p.bureauName));
+  doc.setTitle(pdfSafe(meta.title));
+  doc.setAuthor(pdfSafe(meta.author));
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   let page = doc.addPage([PAGE.w, PAGE.h]);
@@ -126,7 +127,7 @@ export async function proposalPdf(p: ProposalDoc): Promise<Uint8Array> {
     }
   };
 
-  for (const b of proposalBlocks(p)) {
+  for (const b of blocks) {
     if (b.kind === "gap") {
       y -= 8;
       continue;
@@ -170,7 +171,11 @@ export async function proposalPdf(p: ProposalDoc): Promise<Uint8Array> {
   }
   const pages = doc.getPages();
   pages.forEach((pg, i) => {
-    pg.drawText(pdfSafe(`${p.bureauName}  |  Proposal ${p.number}  |  Page ${i + 1} of ${pages.length}`), { x: M, y: 28, size: 8, font, color: MUTED });
+    pg.drawText(pdfSafe(`${meta.footer}  |  Page ${i + 1} of ${pages.length}`), { x: M, y: 28, size: 8, font, color: MUTED });
   });
   return doc.save();
+}
+
+export function proposalPdf(p: ProposalDoc): Promise<Uint8Array> {
+  return blocksPdf(proposalBlocks(p), { title: `Proposal ${p.number} for ${p.preparedFor.company}`, author: p.bureauName, footer: `${p.bureauName}  |  Proposal ${p.number}` });
 }

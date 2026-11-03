@@ -12,6 +12,7 @@ Set these where the app runs (see `.env.example`):
 | `CRON_SECRET` | A fresh random string of 16 or more characters. With none set, every scheduled job is switched off. |
 | `AUDIT_SEAL_KEY` | A fresh random string of 32 or more characters, **kept off the database server** and backed up separately. It seals the audit log so that any later change to it can be detected; without it old seals cannot be checked, and anyone holding both it and the database could rebuild the chain. Never the example value. |
 | `APP_URL` | The `https://` address clients will use. Invitations, reminders and password resets link to it. |
+| `TRUSTED_PROXY_HOPS` or `TRUSTED_IP_HEADER` | Only if the app sits behind a proxy or CDN. Without one of them the public unsubscribe address cannot tell visitors apart and counts each by their own link. `TRUSTED_PROXY_HOPS=1` takes the address the nearest proxy saw; `TRUSTED_IP_HEADER` names the one header your proxy sets (for example `cf-connecting-ip`). Set the wrong one and a visitor can pick their own address, so check it against your host's documentation. |
 | `RESEND_API_KEY` | Your Resend key. Without it emails are only written to the server log. |
 | `EMAIL_FROM` | An address on a domain **you have verified with Resend**, e.g. `ThreeRoots Payroll <payroll@yourdomain.ng>`. Resend's own test address delivers only to the Resend account owner, so clients would get nothing. |
 

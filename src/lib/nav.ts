@@ -10,6 +10,8 @@ export interface NavItem {
   bureauOnly?: boolean;
   /** Shown only to a client's own people (the portal roles). */
   clientOnly?: boolean;
+  /** Shown only while the organization has switched the sales module on. */
+  salesOnly?: boolean;
 }
 export interface NavGroup {
   title: string;
@@ -18,6 +20,29 @@ export interface NavGroup {
 
 export const NAV: NavGroup[] = [
   { title: "Dashboard", items: [{ href: "/", label: "Dashboard", perm: "dashboard.view" }] },
+  {
+    title: "Sales",
+    items: [
+      { href: "/sales/leads", label: "Leads", perm: "sales.view", salesOnly: true },
+      { href: "/sales/accounts", label: "Accounts", perm: "sales.view", salesOnly: true },
+      { href: "/sales/board", label: "Deals Board", perm: "sales.view", salesOnly: true },
+      { href: "/sales/opportunities", label: "Deals", perm: "sales.view", salesOnly: true },
+      { href: "/sales/tasks", label: "My Tasks", perm: "sales.view", salesOnly: true },
+      { href: "/sales/notifications", label: "Notifications", perm: "sales.view", salesOnly: true },
+      { href: "/sales/cases", label: "Cases", perm: "sales.view", salesOnly: true },
+      { href: "/sales/health", label: "Account Health", perm: "sales.view", salesOnly: true },
+      { href: "/sales/reports", label: "Reports", perm: "sales.view", salesOnly: true },
+      { href: "/sales/handovers", label: "Handovers", perm: "sales.view", salesOnly: true },
+      { href: "/sales/contacts", label: "Contacts", perm: "sales.view", salesOnly: true },
+      { href: "/sales/import", label: "Import and Export", perm: "sales.manage", salesOnly: true },
+      { href: "/sales/merge", label: "Merge Records", perm: "sales.view.all", salesOnly: true },
+      { href: "/sales/automation", label: "Automation", perm: "sales.configure" },
+      { href: "/sales/cases/settings", label: "Case Settings", perm: "sales.configure" },
+      { href: "/sales/teams", label: "Teams", perm: "sales.configure", salesOnly: true },
+      { href: "/sales/privacy", label: "Privacy", perm: "sales.privacy.manage" },
+      { href: "/sales/settings", label: "Sales Settings", perm: "sales.configure" },
+    ],
+  },
   {
     title: "Your payroll",
     items: [

@@ -41,6 +41,10 @@ export const JOBS = [
   { name: "audit-seal", label: "Audit log sealing", required: false },
   { name: "audit-verify", label: "Audit log check", required: false },
   { name: "audit-heads", label: "Audit chain heads emailed", required: false },
+  { name: "sales-digest", label: "Sales digest", required: false },
+  { name: "sales-automation", label: "Sales automation", required: false },
+  { name: "sales-cases", label: "Cases and renewals", required: false },
+  { name: "sales-health", label: "Account health", required: false },
 ] as const;
 export type JobName = (typeof JOBS)[number]["name"];
 

@@ -10,7 +10,10 @@ export type Role =
   | "EMPLOYEE"
   | "CLIENT_APPROVER"
   | "CLIENT_HR"
-  | "BUSINESS_DEV";
+  | "BUSINESS_DEV"
+  | "SALES_REP"
+  | "SALES_MANAGER"
+  | "ACCOUNT_MANAGER";
 
 export const PERMISSIONS = [
   "dashboard.view",
@@ -91,6 +94,13 @@ export const PERMISSIONS = [
   "portal.inputs", // send the month's overtime, allowances, bonuses and deductions as a file, and follow what happened to it (the client's HR contact)
   "query.respond", // answer clients' queries and close them (bureau staff)
   "crm.view", // the bureau's sales pipeline, outreach log and referral partners (never payroll data)
+  "sales.view", // the company's own sales module: accounts, contacts and leads (own records; with sales.view.all, everyone's)
+  "sales.view.all", // see every sales record in the organization, not only your own, and reassign an owner
+  "sales.manage", // add, change and void accounts, contacts and leads, and record consent
+  "sales.configure", // switch the sales module on or off and choose how enquiries are handled
+  "sales.privacy.manage", // answer data subject requests about a contact or lead (a copy, erasure), review leads past the retention period, and set it: the company administrator only
+  "sales.case.manage", // open, answer, resolve and reopen a client's cases (sales people, Operations, the company administrator)
+  "sales.handover.accept", // for Operations: accept (or return with a question) the handover of an accepted quote; only people also designated by the company administrator
   "crm.manage", // add and move leads, log outreach, keep referral partners, record commission paid, and make and send proposals
   "healthcheck.view", // read the health checks of prospects' payroll processes and download their one-page summaries (never payroll data)
   "healthcheck.manage", // carry out a health check: assess the controls, record findings, send it for review, review and issue it (never your own)
@@ -158,6 +168,10 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "query.respond",
   ],
   OPERATIONS: [
+    "sales.view",
+    "sales.view.all", // read-only: they see the sales records but change nothing
+    "sales.handover.accept", // and, once designated, accept the handover of an accepted quote
+    "sales.case.manage", // open and answer clients' cases
     "dashboard.view",
     "employee.view",
     "client.view",
@@ -205,6 +219,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "query.respond",
   ],
   FINANCE: [
+    "sales.view",
+    "sales.view.all", // read-only: they see the sales records but change nothing
     ...READ_ALL,
     "healthcheck.view",
     "healthcheck.manage",
@@ -242,7 +258,12 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
   EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise"],
   // the bureau's sales person sees the CRM and nothing else: no payroll, employee, client or finance data
-  BUSINESS_DEV: ["crm.view", "crm.manage", "healthcheck.view", "self.security"],
+  BUSINESS_DEV: ["crm.view", "crm.manage", "sales.view", "sales.manage", "sales.case.manage", "healthcheck.view", "self.security"],
+  // a company's own sales people see the sales module and nothing else: no bureau pipeline, payroll, employee, client or finance data. They differ only in WHICH records they see:
+  // a rep and an account manager their own; a sales manager their own and those of the people in the teams they manage (src/server/services/sales/access.ts)
+  SALES_REP: ["sales.view", "sales.manage", "sales.case.manage", "self.security"],
+  SALES_MANAGER: ["sales.view", "sales.manage", "sales.case.manage", "self.security"],
+  ACCOUNT_MANAGER: ["sales.view", "sales.manage", "sales.case.manage", "self.security"],
   // clients' own people see only their portal
   CLIENT_APPROVER: ["portal.view", "portal.approve", "portal.query", "portal.download", "self.security"],
   CLIENT_HR: ["portal.view", "portal.query", "portal.download", "portal.changes", "portal.inputs", "self.security"],
