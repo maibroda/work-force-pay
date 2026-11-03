@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as lv from "@/server/services/leave";
+const act = actFor("leave.ts");
 
 type V = Record<string, unknown>;
 

@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as cert from "@/server/services/certificates";
+const act = actFor("certificates.ts");
 
 type V = Record<string, unknown>;
 const PATHS = ["/accounting/wht-certificates"];

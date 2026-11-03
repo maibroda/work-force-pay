@@ -1,8 +1,9 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import { errorsCsv, type ImportKind } from "@/lib/sales/import";
 import { recordConsent } from "@/server/services/sales/consent";
 import { commitImport, previewImport } from "@/server/services/sales/import";
+const act = actFor("sales-import.ts");
 
 type V = Record<string, unknown>;
 

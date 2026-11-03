@@ -1,5 +1,5 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as emp from "@/server/services/employees";
 import * as nr from "@/server/services/numbering";
 import * as users from "@/server/services/users";
@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { logAudit } from "@/server/services/audit";
 import { BusinessError } from "@/server/services/_base";
 import { CURRENCY_CODES, type CurrencyCode } from "@/lib/money";
+const act = actFor("workforce.ts");
 
 type V = Record<string, unknown>;
 

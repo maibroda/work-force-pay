@@ -1,7 +1,8 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as cr from "@/server/services/change-requests";
 import type { ChangeKindName } from "@/lib/change-control";
+const act = actFor("change-requests.ts");
 
 type V = Record<string, unknown>;
 const PAGES = ["/employees", "/me", "/hr", "/payroll"];

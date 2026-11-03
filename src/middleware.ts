@@ -13,7 +13,10 @@ export function middleware(req: NextRequest) {
   )
     return NextResponse.next();
   if (!req.cookies.get("wp_session")) return NextResponse.redirect(new URL("/login", req.url));
-  return NextResponse.next();
+  // the address this request is for, for the module guard on pages; set here so whatever the browser sent under this name is overwritten
+  const headers = new Headers(req.headers);
+  headers.set("x-wfp-path", pathname);
+  return NextResponse.next({ request: { headers } });
 }
 
 export const config = { matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"] };

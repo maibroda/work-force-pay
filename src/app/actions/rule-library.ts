@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as lib from "@/server/services/rule-library";
+const act = actFor("rule-library.ts");
 
 type V = Record<string, unknown>;
 const PATHS = ["/bureau/rules"];

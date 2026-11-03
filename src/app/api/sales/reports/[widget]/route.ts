@@ -6,6 +6,7 @@ import { exportLimiter } from "@/lib/rate-limit";
 import { limitedResponse } from "@/lib/rate-limit-http";
 import { BusinessError } from "@/server/services/_base";
 import { reportCsv, WIDGET_KEYS } from "@/server/services/sales/reports";
+import { routeRefusal } from "@/server/services/entitlement-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ widget: 
   const ctx = await getSession();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if ((await twoFactorStateFor(ctx)).state === "BLOCKED") return NextResponse.json({ error: "Two-factor authentication is required for your role. Turn it on under My security." }, { status: 403 });
+  const off = routeRefusal(ctx, "/api/sales/reports/[widget]");
+  if (off) return off;
   if (!can(ctx.role, "sales.view")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const slow = limitedResponse(exportLimiter, ctx.userId);
   if (slow) return slow;

@@ -1,5 +1,5 @@
 "use server";
-import { act, s } from "./_run";
+import { actFor, s } from "./_run";
 import * as policy from "@/server/services/hr-policy";
 import * as contracts from "@/server/services/contracts";
 import * as recruit from "@/server/services/recruitment";
@@ -8,6 +8,7 @@ import * as hr from "@/server/services/hr";
 import * as eos from "@/server/services/settlements";
 import * as reminders from "@/server/services/reminders";
 import * as retention from "@/server/services/retention";
+const act = actFor("hr-lifecycle.ts");
 
 type V = Record<string, unknown>;
 const HR = ["/hr", "/employees", "/me"];

@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as rj from "@/server/services/recurring-journals";
+const act = actFor("recurring-journals.ts");
 
 type V = Record<string, unknown>;
 const PATHS = ["/accounting"];

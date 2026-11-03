@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as dr from "@/server/services/data-requests";
+const act = actFor("data-requests.ts");
 
 type V = Record<string, unknown>;
 const PAGES = ["/hr", "/me"];

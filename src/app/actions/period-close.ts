@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as close from "@/server/services/period-close";
+const act = actFor("period-close.ts");
 
 const PATHS = ["/accounting"];
 

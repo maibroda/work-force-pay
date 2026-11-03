@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as portal from "@/server/services/portal";
+const act = actFor("portal.ts");
 
 type V = Record<string, unknown>;
 const PATHS = ["/portal", "/settings/client-portal", "/payroll/runs"];

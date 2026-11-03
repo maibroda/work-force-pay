@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as pol from "@/server/services/policies";
+const act = actFor("policies.ts");
 
 type V = Record<string, unknown>;
 const PAGES = ["/hr", "/me", "/employees"];

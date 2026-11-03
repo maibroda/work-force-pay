@@ -1,6 +1,7 @@
 "use server";
 import { setAuditAlertRecipients, verifyAuditNow } from "@/server/services/audit-seal";
-import { act } from "./_run";
+import { actFor } from "./_run";
+const act = actFor("audit-seal.ts");
 
 /** "Check now" on the Audit integrity screen: seals what is waiting, checks the chain, and says what it found. */
 export async function verifyAuditNowAction() {

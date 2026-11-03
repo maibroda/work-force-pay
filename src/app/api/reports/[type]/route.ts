@@ -6,12 +6,15 @@ import { buildReport, REPORT_TYPES, type ReportType } from "@/server/report-regi
 import { toCsv } from "@/server/services/reports";
 import { reportPermission } from "@/lib/report-access";
 import { logAudit } from "@/server/services/audit";
+import { routeRefusal } from "@/server/services/entitlement-guard";
 
 export async function GET(req: Request, { params }: { params: Promise<{ type: string }> }) {
   const { type } = await params;
   const ctx = await getSession();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if ((await twoFactorStateFor(ctx)).state === "BLOCKED") return NextResponse.json({ error: "Two-factor authentication is required for your role. Turn it on under My security." }, { status: 403 });
+  const off = routeRefusal(ctx, "/api/reports/[type]");
+  if (off) return off;
   if (!can(ctx.role, reportPermission(type)))
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!REPORT_TYPES.includes(type as ReportType))

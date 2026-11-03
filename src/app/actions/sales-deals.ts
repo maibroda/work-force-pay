@@ -1,7 +1,8 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import { kickAutomation } from "@/server/services/sales/automation";
 import { moveOpportunity, updateOpportunity, LOST_REASONS } from "@/server/services/sales/deals";
+const act = actFor("sales-deals.ts");
 
 type V = Record<string, unknown>;
 const text = (x: unknown) => (typeof x === "string" && x.trim() ? x.trim() : undefined);

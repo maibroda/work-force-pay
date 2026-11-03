@@ -4,6 +4,7 @@ import { twoFactorStateFor } from "@/lib/auth/two-factor-gate";
 import { can } from "@/lib/auth/permissions";
 import { BusinessError } from "@/server/services/_base";
 import { quotePdfFile } from "@/server/services/sales/quotes";
+import { routeRefusal } from "@/server/services/entitlement-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const ctx = await getSession();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if ((await twoFactorStateFor(ctx)).state === "BLOCKED") return NextResponse.json({ error: "Two-factor authentication is required for your role. Turn it on under My security." }, { status: 403 });
+  const off = routeRefusal(ctx, "/api/sales/quotes/[id]/pdf");
+  if (off) return off;
   if (!can(ctx.role, "sales.view")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   try {
     const f = await quotePdfFile(ctx, id);

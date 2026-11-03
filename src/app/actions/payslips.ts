@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as ps from "@/server/services/payslips";
+const act = actFor("payslips.ts");
 
 const PATHS = ["/payroll/runs"];
 

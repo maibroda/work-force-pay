@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as launch from "@/server/services/launch-readiness";
+const act = actFor("launch-readiness.ts");
 
 type V = Record<string, unknown>;
 const PATHS = ["/bureau/readiness", "/bureau"];

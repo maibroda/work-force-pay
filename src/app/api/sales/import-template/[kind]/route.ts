@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth/session";
 import { twoFactorStateFor } from "@/lib/auth/two-factor-gate";
 import { can } from "@/lib/auth/permissions";
 import { IMPORT_KINDS, importTemplateCsv, type ImportKind } from "@/lib/sales/import";
+import { routeRefusal } from "@/server/services/entitlement-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ kind: s
   const ctx = await getSession();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if ((await twoFactorStateFor(ctx)).state === "BLOCKED") return NextResponse.json({ error: "Two-factor authentication is required for your role. Turn it on under My security." }, { status: 403 });
+  const off = routeRefusal(ctx, "/api/sales/import-template/[kind]");
+  if (off) return off;
   if (!can(ctx.role, "sales.manage")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   return new NextResponse(`﻿${importTemplateCsv(k)}`, {
     headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="sales-${kind}-import-template.csv"`, "Cache-Control": "no-store" },

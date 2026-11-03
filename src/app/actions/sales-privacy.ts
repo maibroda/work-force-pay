@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import { completeAccess, eraseForRetention, eraseSubject, keepLead, openRequest, refuseRequest, setRetention, verifyIdentity } from "@/server/services/sales/privacy";
+const act = actFor("sales-privacy.ts");
 
 type V = Record<string, unknown>;
 const text = (x: unknown) => (typeof x === "string" && x.trim() ? x.trim() : undefined);

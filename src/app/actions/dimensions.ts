@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as dims from "@/server/services/dimensions";
+const act = actFor("dimensions.ts");
 
 type V = Record<string, unknown>;
 const PATHS = ["/accounting"];

@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import { createRule, markNotificationsRead, setRuleEnabled, testRule } from "@/server/services/sales/automation";
+const act = actFor("sales-automation.ts");
 
 type V = Record<string, unknown>;
 const text = (x: unknown) => (typeof x === "string" && x.trim() ? x.trim() : undefined);

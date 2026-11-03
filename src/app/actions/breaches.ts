@@ -1,8 +1,9 @@
 "use server";
-import { act, s } from "./_run";
+import { actFor, s } from "./_run";
 import { DATA_CATEGORIES, type Assessment } from "@/lib/breaches";
 import { BusinessError } from "@/server/services/_base";
 import * as br from "@/server/services/breaches";
+const act = actFor("breaches.ts");
 
 type V = Record<string, unknown>;
 const PAGES = ["/hr"];

@@ -1,6 +1,7 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as svc from "@/server/services/operations";
+const act = actFor("operations.ts");
 
 type V = Record<string, unknown>;
 

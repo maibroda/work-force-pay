@@ -1,11 +1,12 @@
 "use server";
-import { act } from "./_run";
+import { actFor } from "./_run";
 import * as st from "@/server/services/structures";
 import * as inp from "@/server/services/inputs";
 import * as pr from "@/server/services/payroll";
 import * as controls from "@/server/services/payroll-controls";
 import * as pay from "@/server/services/payments";
 import * as stat from "@/server/services/statutory";
+const act = actFor("payroll.ts");
 
 type V = Record<string, unknown>;
 

@@ -4,6 +4,7 @@ import { twoFactorStateFor } from "@/lib/auth/two-factor-gate";
 import { ForbiddenError } from "@/lib/auth/permissions";
 import { BusinessError } from "@/server/services/_base";
 import { portalRegisterCsv } from "@/server/services/payslips";
+import { routeRefusal } from "@/server/services/entitlement-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ runId: 
   const ctx = await getSession();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if ((await twoFactorStateFor(ctx)).state === "BLOCKED") return NextResponse.json({ error: "Two-factor authentication is required. Set it up under My security." }, { status: 403 });
+  const off = routeRefusal(ctx, "/api/portal/runs/[runId]/register");
+  if (off) return off;
   try {
     const f = await portalRegisterCsv(ctx, runId);
     return new NextResponse(f.csv, { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${f.fileName}"`, "Cache-Control": "no-store" } });
