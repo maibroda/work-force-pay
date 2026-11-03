@@ -106,6 +106,8 @@ export const PERMISSIONS = [
   "healthcheck.manage", // carry out a health check: assess the controls, record findings, send it for review, review and issue it (never your own)
   "subscription.view", // see which plan and modules your company has, and the history of changes to them
   "subscription.manage", // change a company's plan, modules and limits: platform staff only (and a bureau for its own clients, by the bureau.manage rule in the service). Withheld from COMPANY_ADMIN below
+  "pricebook.manage", // keep the software price book (what each module costs) and verify a version: platform staff only, and never the person who made it. Withheld from COMPANY_ADMIN below
+  "blueprint.manage", // configure a prospect and quote it from the price book: platform staff and sales people in a bureau (the service also checks the organization is a bureau)
   "pricing.manage", // set the rate card (the bureau's costs, margin target, package prices and add-ons) and approve a proposal priced below the target margin
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
@@ -134,7 +136,7 @@ const READ_ALL: Permission[] = [
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   SUPER_ADMIN: ALL,
   // a company's administrator holds everything EXCEPT changing its own subscription: otherwise any company could give itself every module
-  COMPANY_ADMIN: ALL.filter((p) => p !== "subscription.manage"),
+  COMPANY_ADMIN: ALL.filter((p) => p !== "subscription.manage" && p !== "pricebook.manage"),
   HR_ADMIN: [
     "dashboard.view",
     "employee.view",
@@ -261,7 +263,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
   EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise"],
   // the bureau's sales person sees the CRM and nothing else: no payroll, employee, client or finance data
-  BUSINESS_DEV: ["crm.view", "crm.manage", "sales.view", "sales.manage", "sales.case.manage", "healthcheck.view", "self.security"],
+  BUSINESS_DEV: ["blueprint.manage", "crm.view", "crm.manage", "sales.view", "sales.manage", "sales.case.manage", "healthcheck.view", "self.security"],
   // a company's own sales people see the sales module and nothing else: no bureau pipeline, payroll, employee, client or finance data. They differ only in WHICH records they see:
   // a rep and an account manager their own; a sales manager their own and those of the people in the teams they manage (src/server/services/sales/access.ts)
   SALES_REP: ["sales.view", "sales.manage", "sales.case.manage", "self.security"],

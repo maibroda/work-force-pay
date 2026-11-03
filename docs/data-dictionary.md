@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-210 tables and 161 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+212 tables and 161 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -5258,6 +5258,36 @@ Every change to the switch: append-only at the database (a trigger refuses any u
 | byUserId | String |  |  |
 | byName | String | yes |  |
 | createdAt | DateTime |  |  |
+
+### SoftwarePriceBook
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| currency | String |  | An ISO currency code from CURRENCIES in src/lib/money.ts. |
+| effectiveFrom | DateTime | yes |  |
+| minimumMonthly | Decimal |  | The least the whole monthly quote can be; 0 for none. |
+| note | String |  |  |
+| createdBy | String | yes |  |
+| createdByUserId | String | yes |  |
+| createdAt | DateTime |  |  |
+| verifiedBy | String |  | Set by a second person; the database refuses the maker, and refuses any change to a version once this is set. |
+| verifiedByUserId | String |  |  |
+| verifiedAt | DateTime |  |  |
+| lines | → SoftwarePriceLine[] |  |  |
+
+### SoftwarePriceLine
+
+One price in a version: per employee, per CRM user or flat, per month, by the way the catalogue charges the module (kept here so a later change in how a module is charged cannot silently reinterpret an old price).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| bookId | String | yes |  |
+| book | → SoftwarePriceBook |  |  |
+| moduleKey | String | yes |  |
+| basis | String | yes | active_employee, crm_user or flat. |
+| amount | Decimal | yes |  |
 
 ## Fixed sets of values
 
