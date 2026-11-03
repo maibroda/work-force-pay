@@ -6998,3 +6998,36 @@ model ClientBlueprint {
   @@index([organizationId, createdAt])
   @@index([opportunityId])
 }
+
+// ───────────────────────────── The module switch (docs/plans/module-entitlements-e3.md, step E3b) ─────────────────────────────
+// Platform-wide, not per company: whether a company's modules are checked at all, module by module. No row means OFF.
+
+enum EntitlementMode {
+  OFF
+  /// Let the request through and log that it would have been refused.
+  REPORT
+  /// Refuse a company that did not buy the module.
+  ENFORCE
+}
+
+/// One row per module that is not OFF. Changed only by platform staff, and not turned on while a company has no subscription.
+model EntitlementSwitch {
+  moduleKey String          @id
+  mode      EntitlementMode
+  updatedBy String
+  updatedAt DateTime        @updatedAt
+}
+
+/// Every change to the switch: append-only at the database (a trigger refuses any update or delete). Module keys and modes only, nothing personal.
+model EntitlementSwitchEvent {
+  id        String          @id @default(cuid())
+  moduleKey String
+  fromMode  EntitlementMode
+  toMode    EntitlementMode
+  reason    String
+  byUserId  String?
+  byName    String
+  createdAt DateTime        @default(now())
+
+  @@index([createdAt])
+}

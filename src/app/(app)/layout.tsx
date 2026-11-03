@@ -6,6 +6,7 @@ import { twoFactorStateFor } from "@/lib/auth/two-factor-gate";
 import { twoFactorReminder } from "@/lib/two-factor-policy";
 import { can } from "@/lib/auth/permissions";
 import { NAV, SELF_NAV } from "@/lib/nav";
+import { pageAllowed } from "@/lib/entitlements/guard";
 import { db } from "@/lib/db";
 import { Sidebar } from "@/components/sidebar";
 import { logoutAction } from "@/app/actions/auth";
@@ -28,7 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .map((g) => ({
       title: g.title,
       items: g.items
-        .filter((i) => can(ctx.role, i.perm) && (!i.bureauOnly || showBureau) && (!i.salesOnly || salesOn) && (!i.clientOnly || ctx.role === "CLIENT_APPROVER" || ctx.role === "CLIENT_HR"))
+        .filter((i) => can(ctx.role, i.perm) && (!i.bureauOnly || showBureau) && (!i.salesOnly || salesOn) && (!i.clientOnly || ctx.role === "CLIENT_APPROVER" || ctx.role === "CLIENT_HR") && pageAllowed(ctx.entitlements, i.href))
         .map(({ href, label, section }) => ({ href, label, section })),
     }))
     .filter((g) => g.items.length);

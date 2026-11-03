@@ -3,7 +3,7 @@
  * request go ahead, and should it only be reported. Nothing gives a signed-in person an `Entitlements` yet, so in the app today every guard allows everything.
  */
 import { MODULES, type ModuleKey } from "./catalogue";
-import { PAGE_MODULES, type EntryModule } from "./entry-modules";
+import { PAGE_MODULES, effectiveModule, type EntryModule } from "./entry-modules";
 
 /** OFF is the absence of a mode. REPORT lets the request through and says what would have been refused; ENFORCE refuses. */
 export type Mode = "REPORT" | "ENFORCE";
@@ -32,6 +32,13 @@ export function decide(ent: Entitlements | undefined, module: EntryModule): Deci
   if (!mode) return allow;
   if ((ent.modules ?? ["core"]).includes(module)) return allow;
   return mode === "REPORT" ? { allow: true, report: true, module } : { allow: false, report: false, module, message: refusalMessage(module) };
+}
+
+/** Whether a menu should show a link: false only for a page of a module that is being enforced and was not bought. An address that is no page of ours is left to its own page. */
+export function pageAllowed(ent: Entitlements | undefined, href: string): boolean {
+  if (!ent) return true;
+  const route = pageRouteFor(href);
+  return !route || decide(ent, effectiveModule("page", route)).allow;
 }
 
 const PATTERNS = Object.keys(PAGE_MODULES).map((route) => ({ route, parts: route.split("/"), dynamic: route.split("/").filter((s) => s.startsWith("[")).length }));

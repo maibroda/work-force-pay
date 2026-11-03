@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-208 tables and 160 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+210 tables and 161 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -5233,6 +5233,32 @@ What was proposed to a prospect: the plan and modules chosen from the answers to
 | createdAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |
 
+### EntitlementSwitch
+
+One row per module that is not OFF. Changed only by platform staff, and not turned on while a company has no subscription.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| moduleKey | String | yes | (key) |
+| mode | EntitlementMode | yes |  |
+| updatedBy | String | yes |  |
+| updatedAt | DateTime |  |  |
+
+### EntitlementSwitchEvent
+
+Every change to the switch: append-only at the database (a trigger refuses any update or delete). Module keys and modes only, nothing personal.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| moduleKey | String | yes |  |
+| fromMode | EntitlementMode | yes |  |
+| toMode | EntitlementMode | yes |  |
+| reason | String | yes |  |
+| byUserId | String |  |  |
+| byName | String | yes |  |
+| createdAt | DateTime |  |  |
+
 ## Fixed sets of values
 
 ### Role
@@ -5896,4 +5922,8 @@ Whether an outbound message is a service message (about an active contract) or m
 ### SubscriptionModuleSource
 
 `PLAN`, `ADD_ON`, `GRANDFATHERED`
+
+### EntitlementMode
+
+`OFF`, `REPORT`, `ENFORCE`
 

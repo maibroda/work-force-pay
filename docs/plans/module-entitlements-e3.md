@@ -52,3 +52,5 @@ E3a and E3b change nothing a user can see. E3c is where a mistake could lock a c
 ## 7. Progress on E3a (2026-11-03)
 
 Built, with tests first: the portal now needs Payroll; the entry-point declarations with their coverage tests; and the guards (the page header, the `act` wrapper, the route helper), all reading "everything on" until E3b sets something. The 12 scheduled jobs are declared, not guarded (E3c). Explain-back note: `module-entitlements-e3a-explain-back.md`.
+
+**E3b (2026-11-03):** built on the revised design: the switch is a platform setting in the database (two small tables), platform staff only, refused while a company lacks a subscription, REPORT before ENFORCE. Explain-back note: `module-entitlements-e3b-explain-back.md`. Still to do: E3c (turn modules on one at a time, and guard the scheduled jobs), only on your word.

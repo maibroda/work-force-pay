@@ -7,6 +7,7 @@ import { can, ForbiddenError, type Permission, type Role } from "./permissions";
 import type { Ctx } from "./context";
 import { TwoFactorRequiredError, twoFactorStateFor } from "./two-factor-gate";
 import { pageRefusal } from "@/server/services/entitlement-guard";
+import { loadEntitlements } from "@/server/services/entitlement-switch";
 import { mayWorkIn } from "./bureau-access";
 
 const COOKIE = "wp_session";
@@ -72,6 +73,8 @@ export async function getSession(): Promise<Ctx | null> {
       email: String(payload.email),
       employeeId: (payload.employeeId as string) ?? null,
       ip: h.get("x-forwarded-for") ?? null,
+      // undefined while every module's switch is OFF (the state until platform staff turn one on), which is what makes every guard allow
+      entitlements: await loadEntitlements(orgId),
     };
   } catch {
     return null;
