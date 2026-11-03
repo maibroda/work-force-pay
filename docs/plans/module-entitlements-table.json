@@ -1,0 +1,2886 @@
+[
+ {
+  "kind": "page",
+  "path": "/accounting/accounts",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/ar-report",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/balance-sheet",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/dimensions",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/income-statement",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/journals",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/journals/[id]",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/ledger-by-dimension",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/manual-journals/new",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/manual-journals",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/manual-journals/[id]",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/mapping",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/periods",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/periods/[id]",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/reconciliations",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/recurring-journals/new",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/recurring-journals",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/recurring-journals/[id]",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/reversals",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/tax-codes",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/tax-reports",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/trial-balance",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/accounting/wht-certificates",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/analytics/client-cost",
+  "module": "analytics",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/analytics/contract-profitability",
+  "module": "analytics",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/analytics/cost-centers",
+  "module": "analytics",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/analytics/locations",
+  "module": "analytics",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/analytics/payroll",
+  "module": "analytics",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/analytics/profitability",
+  "module": "analytics",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/analytics/variance",
+  "module": "analytics",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/analytics/workforce-cost",
+  "module": "analytics",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/beats/bids",
+  "module": "contracts_deployment",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/beats",
+  "module": "contracts_deployment",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/beats/strength",
+  "module": "contracts_deployment",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/bureau/clients/new",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": "a bureau tool, not a module a client buys"
+ },
+ {
+  "kind": "page",
+  "path": "/bureau/clients/[id]",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": "a bureau tool, not a module a client buys"
+ },
+ {
+  "kind": "page",
+  "path": "/bureau/deadlines",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": "a bureau tool, not a module a client buys"
+ },
+ {
+  "kind": "page",
+  "path": "/bureau",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": "a bureau tool, not a module a client buys"
+ },
+ {
+  "kind": "page",
+  "path": "/bureau/queries",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": "a bureau tool, not a module a client buys"
+ },
+ {
+  "kind": "page",
+  "path": "/bureau/readiness",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": "a bureau tool, not a module a client buys"
+ },
+ {
+  "kind": "page",
+  "path": "/bureau/rules",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": "a bureau tool, not a module a client buys"
+ },
+ {
+  "kind": "page",
+  "path": "/bureau/rules/[id]",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": "a bureau tool, not a module a client buys"
+ },
+ {
+  "kind": "page",
+  "path": "/clients",
+  "module": "contracts_deployment",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/clients/[id]",
+  "module": "contracts_deployment",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/contracts",
+  "module": "contracts_deployment",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/contracts/rates",
+  "module": "contracts_deployment",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/crm/leads",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": "ThreeRoots' own payroll-services pipeline, not the CRM module"
+ },
+ {
+  "kind": "page",
+  "path": "/crm/leads/[id]",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": "ThreeRoots' own payroll-services pipeline, not the CRM module"
+ },
+ {
+  "kind": "page",
+  "path": "/crm/outreach",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": "ThreeRoots' own payroll-services pipeline, not the CRM module"
+ },
+ {
+  "kind": "page",
+  "path": "/crm",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": "ThreeRoots' own payroll-services pipeline, not the CRM module"
+ },
+ {
+  "kind": "page",
+  "path": "/crm/partners",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": "ThreeRoots' own payroll-services pipeline, not the CRM module"
+ },
+ {
+  "kind": "page",
+  "path": "/crm/pricing",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": "ThreeRoots' own payroll-services pipeline, not the CRM module"
+ },
+ {
+  "kind": "page",
+  "path": "/crm/proposals",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": "ThreeRoots' own payroll-services pipeline, not the CRM module"
+ },
+ {
+  "kind": "page",
+  "path": "/crm/proposals/[id]",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": "ThreeRoots' own payroll-services pipeline, not the CRM module"
+ },
+ {
+  "kind": "page",
+  "path": "/employees/bank",
+  "module": "core",
+  "confidence": "decided",
+  "note": "payroll needs them, so they stay in Core"
+ },
+ {
+  "kind": "page",
+  "path": "/employees/categories",
+  "module": "core",
+  "confidence": "sure",
+  "note": "the employee master record"
+ },
+ {
+  "kind": "page",
+  "path": "/employees/change-requests",
+  "module": "core",
+  "confidence": "sure",
+  "note": "the employee master record"
+ },
+ {
+  "kind": "page",
+  "path": "/employees/departments",
+  "module": "hr",
+  "confidence": "decided",
+  "note": "a payroll-only client needs a simple department list (a port)"
+ },
+ {
+  "kind": "page",
+  "path": "/employees/dependants",
+  "module": "hr",
+  "confidence": "decided",
+  "note": "a payroll-only client needs a simple department list (a port)"
+ },
+ {
+  "kind": "page",
+  "path": "/employees/guarantors",
+  "module": "hr",
+  "confidence": "decided",
+  "note": "a payroll-only client needs a simple department list (a port)"
+ },
+ {
+  "kind": "page",
+  "path": "/employees/import",
+  "module": "core",
+  "confidence": "sure",
+  "note": "the employee master record"
+ },
+ {
+  "kind": "page",
+  "path": "/employees/new",
+  "module": "core",
+  "confidence": "sure",
+  "note": "the employee master record"
+ },
+ {
+  "kind": "page",
+  "path": "/employees/next-of-kin",
+  "module": "hr",
+  "confidence": "decided",
+  "note": "a payroll-only client needs a simple department list (a port)"
+ },
+ {
+  "kind": "page",
+  "path": "/employees/org-chart",
+  "module": "hr",
+  "confidence": "decided",
+  "note": "a payroll-only client needs a simple department list (a port)"
+ },
+ {
+  "kind": "page",
+  "path": "/employees",
+  "module": "core",
+  "confidence": "sure",
+  "note": "the employee master record"
+ },
+ {
+  "kind": "page",
+  "path": "/employees/pension",
+  "module": "core",
+  "confidence": "decided",
+  "note": "payroll needs them, so they stay in Core"
+ },
+ {
+  "kind": "page",
+  "path": "/employees/tax",
+  "module": "core",
+  "confidence": "decided",
+  "note": "payroll needs them, so they stay in Core"
+ },
+ {
+  "kind": "page",
+  "path": "/employees/[id]",
+  "module": "core",
+  "confidence": "sure",
+  "note": "the employee master record"
+ },
+ {
+  "kind": "page",
+  "path": "/finance/bank-accounts",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/finance/bank-reconciliation",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/finance/billing-rules",
+  "module": "client_billing",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/finance/fixed-assets",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/finance/fixed-assets/[id]",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": "founder: accounting is its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/finance/invoices",
+  "module": "client_billing",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/finance/invoices/[id]",
+  "module": "client_billing",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/finance/notes/new",
+  "module": "client_billing",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/finance/notes",
+  "module": "client_billing",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/finance/notes/[id]",
+  "module": "client_billing",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/finance/payables/new",
+  "module": "payables_procurement",
+  "confidence": "decided",
+  "note": "founder: its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/finance/payables",
+  "module": "payables_procurement",
+  "confidence": "decided",
+  "note": "founder: its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/finance/payables/[id]",
+  "module": "payables_procurement",
+  "confidence": "decided",
+  "note": "founder: its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/finance/proforma",
+  "module": "client_billing",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/finance/purchase-orders/new",
+  "module": "payables_procurement",
+  "confidence": "decided",
+  "note": "founder: its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/finance/purchase-orders",
+  "module": "payables_procurement",
+  "confidence": "decided",
+  "note": "founder: its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/finance/purchase-orders/[id]",
+  "module": "payables_procurement",
+  "confidence": "decided",
+  "note": "founder: its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/finance/receipts/new",
+  "module": "client_billing",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/finance/receipts",
+  "module": "client_billing",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/finance/receipts/[id]",
+  "module": "client_billing",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/finance/statements",
+  "module": "client_billing",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/finance/statements/[clientId]",
+  "module": "client_billing",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/finance/vendors",
+  "module": "payables_procurement",
+  "confidence": "decided",
+  "note": "founder: its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/health-checks",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": "a bureau tool, not a module a client buys"
+ },
+ {
+  "kind": "page",
+  "path": "/health-checks/[id]",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": "a bureau tool, not a module a client buys"
+ },
+ {
+  "kind": "page",
+  "path": "/hr/appraisals/cycle/[id]",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/appraisals",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/appraisals/[id]",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/attrition",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/breaches",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/breaches/[id]",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/candidates",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/candidates/[id]",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/contracts",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/contracts/[id]",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/data-requests",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/exits",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/exits/[id]",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/letters",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/letters/[id]",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/onboarding",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/policies",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/policies/[id]",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/relations",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/relations/[id]",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/requisitions",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/requisitions/[id]",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/retention",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/hr/training",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/inventory/outstanding",
+  "module": "inventory",
+  "confidence": "decided",
+  "note": "founder: its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/inventory/packs",
+  "module": "inventory",
+  "confidence": "decided",
+  "note": "founder: its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/inventory",
+  "module": "inventory",
+  "confidence": "decided",
+  "note": "founder: its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/inventory/[id]",
+  "module": "inventory",
+  "confidence": "decided",
+  "note": "founder: its own module"
+ },
+ {
+  "kind": "page",
+  "path": "/leave/balances",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/leave",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/me/appraisals",
+  "module": "self_service",
+  "confidence": "sure",
+  "note": "an employee's own pages"
+ },
+ {
+  "kind": "page",
+  "path": "/me/contacts",
+  "module": "self_service",
+  "confidence": "sure",
+  "note": "an employee's own pages"
+ },
+ {
+  "kind": "page",
+  "path": "/me/details",
+  "module": "self_service",
+  "confidence": "sure",
+  "note": "an employee's own pages"
+ },
+ {
+  "kind": "page",
+  "path": "/me/grievances",
+  "module": "self_service",
+  "confidence": "sure",
+  "note": "an employee's own pages"
+ },
+ {
+  "kind": "page",
+  "path": "/me/leave",
+  "module": "self_service",
+  "confidence": "sure",
+  "note": "an employee's own pages"
+ },
+ {
+  "kind": "page",
+  "path": "/me/my-data",
+  "module": "self_service",
+  "confidence": "sure",
+  "note": "an employee's own pages"
+ },
+ {
+  "kind": "page",
+  "path": "/me",
+  "module": "self_service",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/me/policies",
+  "module": "self_service",
+  "confidence": "sure",
+  "note": "an employee's own pages"
+ },
+ {
+  "kind": "page",
+  "path": "/operations/absence",
+  "module": "time_attendance",
+  "confidence": "guess",
+  "note": "partly built: work register, attendance, rosters"
+ },
+ {
+  "kind": "page",
+  "path": "/operations/activation",
+  "module": "contracts_deployment",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/operations/attendance",
+  "module": "time_attendance",
+  "confidence": "guess",
+  "note": "partly built: work register, attendance, rosters"
+ },
+ {
+  "kind": "page",
+  "path": "/operations/deployments",
+  "module": "contracts_deployment",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/operations/movements",
+  "module": "contracts_deployment",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/operations/rosters",
+  "module": "time_attendance",
+  "confidence": "guess",
+  "note": "partly built: work register, attendance, rosters"
+ },
+ {
+  "kind": "page",
+  "path": "/operations/work-register",
+  "module": "time_attendance",
+  "confidence": "guess",
+  "note": "partly built: work register, attendance, rosters"
+ },
+ {
+  "kind": "page",
+  "path": "/",
+  "module": "core",
+  "confidence": "sure",
+  "note": "dashboard"
+ },
+ {
+  "kind": "page",
+  "path": "/payments/bank-codes",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": "bank files and payment batches"
+ },
+ {
+  "kind": "page",
+  "path": "/payments/bank-file/[runId]",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": "bank files and payment batches"
+ },
+ {
+  "kind": "page",
+  "path": "/payments/batches",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": "bank files and payment batches"
+ },
+ {
+  "kind": "page",
+  "path": "/payments/paying-banks",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": "bank files and payment batches"
+ },
+ {
+  "kind": "page",
+  "path": "/payments/reconciliation",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": "bank files and payment batches"
+ },
+ {
+  "kind": "page",
+  "path": "/payments/remittance",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": "bank files and payment batches"
+ },
+ {
+  "kind": "page",
+  "path": "/payments/transactions",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": "bank files and payment batches"
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/approval",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/arrears",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/calendar",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/calendar/[periodId]",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/client-inputs",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/client-inputs/[id]",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/components",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/control",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/deductions",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/earnings",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/loans",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/loans/[id]",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/lock",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/overtime",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/paye",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/pension",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/periods",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/quick-payslip",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/runs",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/runs/[id]",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/settlements",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/settlements/[id]",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/structures/new",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/structures",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/structures/[id]",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payroll/supplementary",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/payslips/[id]",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/portal/employees",
+  "module": "client_portal",
+  "confidence": "decided",
+  "note": "the client's own people; its own module or part of Contracts and deployment"
+ },
+ {
+  "kind": "page",
+  "path": "/portal/employees/[id]",
+  "module": "client_portal",
+  "confidence": "decided",
+  "note": "the client's own people; its own module or part of Contracts and deployment"
+ },
+ {
+  "kind": "page",
+  "path": "/portal/inputs",
+  "module": "client_portal",
+  "confidence": "decided",
+  "note": "the client's own people; its own module or part of Contracts and deployment"
+ },
+ {
+  "kind": "page",
+  "path": "/portal/inputs/[id]",
+  "module": "client_portal",
+  "confidence": "decided",
+  "note": "the client's own people; its own module or part of Contracts and deployment"
+ },
+ {
+  "kind": "page",
+  "path": "/portal",
+  "module": "client_portal",
+  "confidence": "decided",
+  "note": "the client's own people; its own module or part of Contracts and deployment"
+ },
+ {
+  "kind": "page",
+  "path": "/portal/payroll/[runId]",
+  "module": "client_portal",
+  "confidence": "decided",
+  "note": "the client's own people; its own module or part of Contracts and deployment"
+ },
+ {
+  "kind": "page",
+  "path": "/portal/queries",
+  "module": "client_portal",
+  "confidence": "decided",
+  "note": "the client's own people; its own module or part of Contracts and deployment"
+ },
+ {
+  "kind": "page",
+  "path": "/portal/queries/[id]",
+  "module": "client_portal",
+  "confidence": "decided",
+  "note": "the client's own people; its own module or part of Contracts and deployment"
+ },
+ {
+  "kind": "page",
+  "path": "/reports",
+  "module": "analytics",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/reports/[type]",
+  "module": "analytics",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/sales/accounts",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/accounts/[id]",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/automation",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/board",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/cases",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/cases/settings",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/cases/[id]",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/contacts",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/contacts/[id]",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/handovers",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/handovers/[id]",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/health",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/import",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/leads",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/leads/[id]",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/merge",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/notifications",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/opportunities",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/opportunities/[id]",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/opportunities/[id]/quote",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/privacy",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/quotes/[id]",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/reports",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/settings",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/tasks",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/sales/teams",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "the company's own CRM"
+ },
+ {
+  "kind": "page",
+  "path": "/service-desk",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": "a bureau tool, not a module a client buys"
+ },
+ {
+  "kind": "page",
+  "path": "/service-desk/[id]",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": "a bureau tool, not a module a client buys"
+ },
+ {
+  "kind": "page",
+  "path": "/settings/appraisal-criteria",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/settings/audit",
+  "module": "core",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/settings/audit-integrity",
+  "module": "core",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/settings/checklists",
+  "module": "hr",
+  "confidence": "decided",
+  "note": "onboarding and exit checklists"
+ },
+ {
+  "kind": "page",
+  "path": "/settings/client-portal",
+  "module": "client_portal",
+  "confidence": "decided",
+  "note": "switches the client's portal"
+ },
+ {
+  "kind": "page",
+  "path": "/settings/cost-centers",
+  "module": "analytics",
+  "confidence": "decided",
+  "note": "could be Accounting (dimensions)"
+ },
+ {
+  "kind": "page",
+  "path": "/settings/employer-costs",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/settings/hr-policy",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/settings/leave",
+  "module": "hr",
+  "confidence": "decided",
+  "note": "unclassified setting"
+ },
+ {
+  "kind": "page",
+  "path": "/settings/letter-templates",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/settings/numbering",
+  "module": "core",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/settings/organization",
+  "module": "core",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/settings/payroll-rules",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/settings/recurring-deductions",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/settings/roles",
+  "module": "core",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/settings/security",
+  "module": "core",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/settings/sensitive-access",
+  "module": "core",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/settings/statutory",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/settings/training-requirements",
+  "module": "hr",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/settings/users",
+  "module": "core",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "page",
+  "path": "/supervisor",
+  "module": "time_attendance",
+  "confidence": "guess",
+  "note": "supervisor capture on a phone"
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/accounting.ts",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/appraisals.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/audit-seal.ts",
+  "module": "core",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/auth.ts",
+  "module": "core",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/bank-reconciliation.ts",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/billing-rules.ts",
+  "module": "client_billing",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/billing.ts",
+  "module": "client_billing",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/breaches.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/bureau.ts",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/certificates.ts",
+  "module": "accounting",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/change-requests.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/client-inputs.ts",
+  "module": "payroll",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/client-notes.ts",
+  "module": "client_billing",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/client-queries.ts",
+  "module": "client_portal",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/clients.ts",
+  "module": "contracts_deployment",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/cost-centers.ts",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/crm.ts",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/data-requests.ts",
+  "module": "core",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/deduction-rules.ts",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/dimensions.ts",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/employee-import.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/employee-retention.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/fixed-assets.ts",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/health-checks.ts",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/hr-lifecycle.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": "a mixed file: split by function"
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/hr.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": "a mixed file: split by function"
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/inventory.ts",
+  "module": "inventory",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/journals.ts",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/launch-readiness.ts",
+  "module": "core",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/leave.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/letters.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/loans.ts",
+  "module": "payroll",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/matching.ts",
+  "module": "payables_procurement",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/operations.ts",
+  "module": "contracts_deployment",
+  "confidence": "guess",
+  "note": "a mixed file: split by function"
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/payables.ts",
+  "module": "payables_procurement",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/payment-file.ts",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/payroll-calendar.ts",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/payroll.ts",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/payslips.ts",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/period-close.ts",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/periods.ts",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/personal-records.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/policies.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/portal.ts",
+  "module": "client_portal",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/proposals.ts",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/purchase-orders.ts",
+  "module": "payables_procurement",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/receipts.ts",
+  "module": "client_billing",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/recurring-journals.ts",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/rule-library.ts",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/sales-activities.ts",
+  "module": "crm",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/sales-automation.ts",
+  "module": "crm",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/sales-cases.ts",
+  "module": "crm",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/sales-deals.ts",
+  "module": "crm",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/sales-handover.ts",
+  "module": "crm",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/sales-health.ts",
+  "module": "crm",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/sales-import.ts",
+  "module": "crm",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/sales-privacy.ts",
+  "module": "crm",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/sales-quotes.ts",
+  "module": "crm",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/sales-teams.ts",
+  "module": "crm",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/sales.ts",
+  "module": "crm",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/tax-engine.ts",
+  "module": "accounting",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/training.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "actions",
+  "path": "src/app/actions/workforce.ts",
+  "module": "contracts_deployment",
+  "confidence": "guess",
+  "note": "a mixed file: split by function"
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/accounting.ts",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/analytics.ts",
+  "module": "analytics",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/appraisals.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/attrition.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/audit-seal.ts",
+  "module": "core",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/audit.ts",
+  "module": "core",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/auth-audit.ts",
+  "module": "core",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/bank-reconciliation.ts",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/billing-rules.ts",
+  "module": "client_billing",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/billing.ts",
+  "module": "client_billing",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/breaches.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/bureau.ts",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/certificates.ts",
+  "module": "accounting",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/change-requests.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/client-inputs.ts",
+  "module": "payroll",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/client-notes.ts",
+  "module": "client_billing",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/client-queries.ts",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/clients.ts",
+  "module": "contracts_deployment",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/contracts.ts",
+  "module": "contracts_deployment",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/cost-centers.ts",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/crm.ts",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/data-requests.ts",
+  "module": "core",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/deduction-rules.ts",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/dimensions.ts",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/employee-import.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/employee-retention.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/employees.ts",
+  "module": "core",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/financial-statements.ts",
+  "module": "accounting",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/fixed-assets.ts",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/gl-posting.ts",
+  "module": "accounting",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/health-checks.ts",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/hr-overview.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/hr-policy.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/hr-reports.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/hr.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/inputs.ts",
+  "module": "payroll",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/inventory.ts",
+  "module": "inventory",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/job-runs.ts",
+  "module": "core",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/journals.ts",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/launch-readiness.ts",
+  "module": "core",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/leave.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/ledger-integrity.ts",
+  "module": "accounting",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/letters.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/loans.ts",
+  "module": "payroll",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/matching.ts",
+  "module": "payables_procurement",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/numbering.ts",
+  "module": "core",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/operations.ts",
+  "module": "contracts_deployment",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/payables.ts",
+  "module": "payables_procurement",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/paying-banks.ts",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/payment-file.ts",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/payments.ts",
+  "module": "payroll",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/payroll-calendar.ts",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/payroll-controls.ts",
+  "module": "payroll",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/payroll-reminders.ts",
+  "module": "payroll",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/payroll.ts",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/payslips.ts",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/period-close.ts",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/periods.ts",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/personal-records.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/policies.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/portal.ts",
+  "module": "client_portal",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/posting.ts",
+  "module": "accounting",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/proposals.ts",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/purchase-orders.ts",
+  "module": "payables_procurement",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/quick-payslip.ts",
+  "module": "payroll",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/rates.ts",
+  "module": "contracts_deployment",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/receipts.ts",
+  "module": "client_billing",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/recruitment.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/recurring-journals.ts",
+  "module": "accounting",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/relations.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/reminders.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/reports.ts",
+  "module": "analytics",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/retention.ts",
+  "module": "core",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/rule-library.ts",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/security.ts",
+  "module": "core",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/sensitive-access.ts",
+  "module": "core",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/settlements.ts",
+  "module": "payroll",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/statutory-verification.ts",
+  "module": "payroll",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/statutory.ts",
+  "module": "payroll",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/structures.ts",
+  "module": "payroll",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/tax-engine.ts",
+  "module": "accounting",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/training.ts",
+  "module": "hr",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/users.ts",
+  "module": "core",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/year-end.ts",
+  "module": "payroll",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "service",
+  "path": "src/server/services/sales/*",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "24 files"
+ },
+ {
+  "kind": "api",
+  "path": "/api/crm/proposals/[id]/pdf",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "job",
+  "path": "/api/cron/audit-heads",
+  "module": "core",
+  "confidence": "guess",
+  "note": "a job that runs for every company: must skip one without the module"
+ },
+ {
+  "kind": "job",
+  "path": "/api/cron/audit-seal",
+  "module": "core",
+  "confidence": "guess",
+  "note": "a job that runs for every company: must skip one without the module"
+ },
+ {
+  "kind": "job",
+  "path": "/api/cron/audit-verify",
+  "module": "core",
+  "confidence": "guess",
+  "note": "a job that runs for every company: must skip one without the module"
+ },
+ {
+  "kind": "job",
+  "path": "/api/cron/data-retention",
+  "module": "hr",
+  "confidence": "decided",
+  "note": "a job that runs for every company: must skip one without the module"
+ },
+ {
+  "kind": "job",
+  "path": "/api/cron/hr-digest",
+  "module": "hr",
+  "confidence": "decided",
+  "note": "a job that runs for every company: must skip one without the module"
+ },
+ {
+  "kind": "job",
+  "path": "/api/cron/journal-reversals",
+  "module": "accounting",
+  "confidence": "guess",
+  "note": "a job that runs for every company: must skip one without the module"
+ },
+ {
+  "kind": "job",
+  "path": "/api/cron/payroll-reminders",
+  "module": "payroll",
+  "confidence": "guess",
+  "note": "a job that runs for every company: must skip one without the module"
+ },
+ {
+  "kind": "job",
+  "path": "/api/cron/recurring-journals",
+  "module": "accounting",
+  "confidence": "guess",
+  "note": "a job that runs for every company: must skip one without the module"
+ },
+ {
+  "kind": "job",
+  "path": "/api/cron/sales-automation",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "a job that runs for every company: must skip one without the module"
+ },
+ {
+  "kind": "job",
+  "path": "/api/cron/sales-cases",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "a job that runs for every company: must skip one without the module"
+ },
+ {
+  "kind": "job",
+  "path": "/api/cron/sales-digest",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "a job that runs for every company: must skip one without the module"
+ },
+ {
+  "kind": "job",
+  "path": "/api/cron/sales-health",
+  "module": "crm",
+  "confidence": "sure",
+  "note": "a job that runs for every company: must skip one without the module"
+ },
+ {
+  "kind": "api",
+  "path": "/api/data-requests/[id]/export",
+  "module": "core",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "api",
+  "path": "/api/employees/import-template",
+  "module": "core",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "api",
+  "path": "/api/finance/statements/[clientId]",
+  "module": "client_billing",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "api",
+  "path": "/api/health-checks/[id]/summary",
+  "module": "bureau",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "api",
+  "path": "/api/me/data-export",
+  "module": "core",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "api",
+  "path": "/api/payments/runs/[runId]/bank-file",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "api",
+  "path": "/api/payroll/runs/[runId]/payslips",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "api",
+  "path": "/api/payslips/[recordId]/pdf",
+  "module": "payroll",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "api",
+  "path": "/api/portal/inputs/template",
+  "module": "client_portal",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "api",
+  "path": "/api/portal/runs/[runId]/payslips",
+  "module": "client_portal",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "api",
+  "path": "/api/portal/runs/[runId]/register",
+  "module": "client_portal",
+  "confidence": "decided",
+  "note": ""
+ },
+ {
+  "kind": "api",
+  "path": "/api/reports/[type]",
+  "module": "analytics",
+  "confidence": "guess",
+  "note": ""
+ },
+ {
+  "kind": "api",
+  "path": "/api/sales/export/[kind]",
+  "module": "crm",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "api",
+  "path": "/api/sales/import-template/[kind]",
+  "module": "crm",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "api",
+  "path": "/api/sales/privacy/[id]",
+  "module": "crm",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "api",
+  "path": "/api/sales/quotes/[id]/pdf",
+  "module": "crm",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "api",
+  "path": "/api/sales/reports/[widget]",
+  "module": "crm",
+  "confidence": "sure",
+  "note": ""
+ },
+ {
+  "kind": "api",
+  "path": "/api/unsubscribe/[token]",
+  "module": "crm",
+  "confidence": "sure",
+  "note": ""
+ }
+]

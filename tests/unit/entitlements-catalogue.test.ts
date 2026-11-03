@@ -15,9 +15,9 @@ function complete(set: readonly ModuleKey[]) {
 }
 
 describe("the catalogue", () => {
-  it("lists the twelve modules of the founder's document and the three they added (accounting, payables and procurement, inventory)", () => {
+  it("lists the twelve modules of the founder's document, the three they added (accounting, payables and procurement, inventory) and the client portal (their ruling of 2026-11-03)", () => {
     expect([...keys].sort()).toEqual(
-      ["accounting", "analytics", "client_billing", "contracts_deployment", "core", "crm", "hr", "integrations", "inventory", "payables_procurement", "payroll", "production_pay", "self_service", "service_charge_pay", "time_attendance"].sort(),
+      ["accounting", "analytics", "client_billing", "client_portal", "contracts_deployment", "core", "crm", "hr", "integrations", "inventory", "payables_procurement", "payroll", "production_pay", "self_service", "service_charge_pay", "time_attendance"].sort(),
     );
     expect(CATALOGUE_VERSION).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
@@ -52,6 +52,9 @@ describe("the catalogue", () => {
     expect(MODULES.self_service.needsOneOf).toEqual([["payroll", "hr"]]);
     expect(MODULES.production_pay.needs).toEqual(["payroll"]);
     expect(MODULES.service_charge_pay.needs).toEqual(["payroll"]);
+    // the client portal is its own module, for a client's own people, and needs contracts and deployment (the founder's ruling of 2026-11-03)
+    expect(MODULES.client_portal.needs).toEqual(["contracts_deployment"]);
+    expect(MODULES.client_portal.chargedPer).toBe("flat");
   });
 });
 
@@ -66,6 +69,12 @@ describe("working out what a selection needs", () => {
     expect(resolveModules(["payroll"]).modules).toEqual(["core", "payroll"]);
     expect(resolveModules(["crm"]).modules).toEqual(["core", "crm"]);
     expect(resolveModules(["hr"]).modules).toEqual(["core", "hr"]);
+  });
+
+  it("adds contracts and deployment (and the core) when only the client portal is asked for, and says why", () => {
+    const r = resolveModules(["client_portal"]);
+    expect(r.modules).toEqual(["core", "contracts_deployment", "client_portal"]);
+    expect(r.added.find((a) => a.module === "contracts_deployment")!.because).toBe("Client portal needs Contracts & deployment, so Contracts & deployment was added.");
   });
 
   it("adds what is missing and says why in words a salesperson can repeat", () => {
@@ -117,7 +126,7 @@ describe("working out what a selection needs", () => {
   it("is complete for every single module and every pair of modules, and never adds more than is needed", () => {
     const nonCore = keys.filter((k) => k !== "core");
     const sets: ModuleKey[][] = [...nonCore.map((k) => [k]), ...nonCore.flatMap((a, i) => nonCore.slice(i + 1).map((b) => [a, b]))];
-    expect(sets.length).toBe(14 + (14 * 13) / 2); // 14 singles and 91 pairs
+    expect(sets.length).toBe(15 + (15 * 14) / 2); // 15 singles and 105 pairs
     for (const s of sets) {
       const r = resolveModules(s);
       expect(r.problems, s.join("+")).toEqual([]);
@@ -132,7 +141,7 @@ describe("working out what a selection needs", () => {
     }
   });
 
-  it("is complete for every combination of the 14 optional modules that are NOT all picked (a spot check of 2,000 random sets)", () => {
+  it("is complete for a spot check of 2,000 random sets of the optional modules", () => {
     let seed = 12345;
     const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
     const nonCore = keys.filter((k) => k !== "core");
@@ -207,6 +216,9 @@ describe("what removing a module would break", () => {
 
   it("says nothing breaks when nothing depends on what is removed, and refuses to remove the core", () => {
     expect(whatRemovalBreaks(set, ["analytics"]).broken).toEqual([]);
+    // removing contracts and deployment would leave the client portal without what it needs
+    const b = whatRemovalBreaks(["core", "contracts_deployment", "client_portal"], ["contracts_deployment"]);
+    expect(b.broken).toEqual([{ module: "client_portal", because: "Client portal needs Contracts & deployment." }]);
     expect(whatRemovalBreaks(set, ["core"]).refused).toEqual([{ module: "core", message: "The core platform is always on and cannot be removed." }]);
   });
 

@@ -52,7 +52,7 @@ When you answer 1 to 5 and say "go", I will start with **E0, the map**, which ne
 
 `src/lib/entitlements/catalogue.ts` (the data) and `src/lib/entitlements/resolve.ts` (the rules), with 27 unit tests (`tests/unit/entitlements-catalogue.test.ts`). Pure code, no database.
 
-- **15 modules:** the founder's twelve plus Accounting, Payables and procurement, and Inventory. Each has its needs, what it is charged per, and whether it is built (built, partial, planned).
+- **16 modules:** the founder's twelve plus Accounting, Payables and procurement, Inventory and (the founder's ruling of 2026-11-03) the Client portal. Each has its needs, what it is charged per, and whether it is built (built, partial, planned).
 - **The founder's dependencies, kept exactly:** payroll needs only the core; the CRM needs neither HR nor payroll; production pay and service-charge pay need payroll; client billing needs contracts and deployment **or** the CRM; employee self-service needs payroll **or** HR.
 - **What the rules do:** `resolveModules` says what a selection needs and why, in words a salesperson can repeat (an either-or need is met by what the client already has, otherwise the first choice is added and the reason says so; the salesperson may prefer the other); `checkPlan` says whether a plan with add-ons holds together and what to add if not; `whatRemovalBreaks` names what would stop working if modules were removed (an either-or need survives while one choice remains; the core cannot be removed); `portSource` says where each of the four ports gets its answer for a client with these modules, with the fallback.
 - **Tested:** every module, **every pair of modules** (105 selections) and 2,000 random selections come out complete, minimal and unchanged when resolved again; payroll alone is core and payroll, the CRM alone is core and CRM; every plan is complete by itself; every port has a source for every selection.
@@ -61,7 +61,11 @@ When you answer 1 to 5 and say "go", I will start with **E0, the map**, which ne
 1. **Accounting needs only the core; Payables and procurement needs Accounting** (its bills post to the ledger); Inventory needs only the core; all three are charged flat.
 2. **"Any plan can take add-ons within its allowed list"**: the document gives no list, so any module can be added to any plan if its needs are met. A restriction per plan can be added later.
 3. **Build status** is from the E0 map: Time and attendance, and Employee self-service, are partial (no clocking; no SMS or WhatsApp payslips); Production pay, Sales and service-charge pay and Integrations are planned (not built; there is no public API).
-4. **The client portal and the bureau tools are not modules here** (they are guesses in the table awaiting your decision).
+4. **The client portal is its own module** (it needs Contracts and deployment and is charged flat: **decided 2026-11-03**), and **the bureau tools are not modules** (bureau mode only: **decided 2026-11-03**).
 5. **One dated version of the catalogue** is kept in the code. Keeping every earlier version with effective dates, as statutory settings are kept, needs a table, and comes with E2.
 
 **Next, E2:** the subscription and blueprint tables (a migration, so it needs your "go").
+
+## The founder's rulings of 2026-11-03
+
+The founder accepted my recommendations for the open questions. **E1's five assumptions are confirmed** (assumption 4 as now written above); **the six questions of E2 are answered as in `docs/plans/module-entitlements-e2.md`**; and the module table's guesses are ruled on as follows (the table, `module-entitlements-table.md`, is regenerated, and its guesses fall from 136 to 48): **HR management covers recruitment, appraisals, training, grievances, data-breach handling, policies, letters and attrition; staff loans go under Payroll; the employee bank, pension and tax pages stay in the core; each settings page follows its module; the client portal is its own module; the bureau tools are bureau mode only.**
