@@ -4,12 +4,14 @@ import type { Ctx } from "@/lib/auth/context";
 import { daysInMonth, eachDay, iso, monthEnd, monthStart, periodName } from "@/lib/dates";
 import { num } from "@/lib/money";
 import { roundPlaces } from "@/lib/money-exact";
+import { missingStateSeverity, normaliseState } from "@/lib/nigeria-states";
 import { percentOfAmount, totalOf } from "@/lib/payroll/pay-inputs";
 import { fullName } from "@/lib/utils";
 import {
   calculateEmployeePayroll,
   type AttendanceStatus,
   type EngineResult,
+  type PayrollLine,
   type WorkDay,
 } from "@/lib/payroll/engine";
 import type { ComponentOverride } from "@/lib/payroll/structure";
@@ -368,6 +370,8 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
         employerRate: a.pension.employerRate,
         version: a.pension.version,
       },
+      nhfEmployeeRatePct: emp.nhfContributes ? a.rules.nhfEmployeeRatePct : 0, // voluntary: only an employee who chose it
+      minTakeHomePct: a.rules.minTakeHomePctOfGross,
       taxRule: a.tax.def,
       annualRent: emp.annualRent ? num(emp.annualRent) : 0,
     });
@@ -543,6 +547,7 @@ function recordRow(
     pensionPin: string | null;
     pfa: string | null;
     taxId: string | null;
+    stateOfResidence: string | null;
   },
   res: EngineResult,
   taxVersion: string,
@@ -562,6 +567,7 @@ function recordRow(
     pensionPin: emp.pensionPin,
     pfa: emp.pfa,
     taxId: emp.taxId,
+    payeState: normaliseState(emp.stateOfResidence),
     basisDays: res.basisDays,
     daysWorked: res.daysWorked,
     daysAbsent: res.daysAbsent,
@@ -781,6 +787,10 @@ async function validate(
       );
     if (res.paye.paye > 0 && !emp.taxId)
       add(emp.id, "PAYE", "WARNING", "TAX_ID_MISSING", `${tag}: Tax ID missing for PAYE remittance.`);
+    for (const cut of res.deferredDeductions)
+      add(emp.id, "DEDUCTIONS", "WARNING", "DEDUCTION_DEFERRED", `${tag}: ${cut.type === "SALARY_ADVANCE" ? "salary advance recovery" : "loan repayment"} cut to ${cut.taken} of ${cut.requested} to keep take-home at ${a.rules.minTakeHomePctOfGross}% of gross; the rest ${cut.type === "SALARY_ADVANCE" ? "stays owed" : "is carried forward on the loan"} when the payroll is locked.`);
+    if (res.paye.paye > 0 && !normaliseState(emp.stateOfResidence))
+      add(emp.id, "PAYE", missingStateSeverity(a.rules.requirePayeState), "STATE_MISSING", `${tag}: state of residence missing — their PAYE goes on the "State not recorded" line of the remittance, not to a state${a.rules.requirePayeState ? "; the payroll rule requires a state, so set it and recalculate or have Finance override with a reason" : ""}.`);
     // DEDUCTIONS
     if (res.netPay < 0)
       add(
@@ -1052,6 +1062,18 @@ export async function lockRun(ctx: Ctx, runId: string) {
         status: "APPROVED" as const,
         employeeId: { in: empIds },
       };
+      // A recovery cut by the take-home floor is recorded as what was really taken, so the loan book's balance (worked out from its instalments) still shows the
+      // rest as owed and the next schedule picks it up. Done before the deductions become PROCESSED.
+      const cutRecords = await tx.payrollRecord.findMany({ where: { runId }, select: { employeeId: true, employeeNumber: true, lines: true } });
+      for (const rec of cutRecords)
+        for (const l of rec.lines as unknown as PayrollLine[]) {
+          if (l.type !== "DEDUCTION" || !l.deductionId || !(Number(l.deferred) > 0)) continue;
+          const before = await tx.deduction.findFirst({ where: { id: l.deductionId, organizationId: ctx.orgId } });
+          if (!before) continue;
+          await tx.deduction.update({ where: { id: before.id }, data: { amount: l.amount } });
+          await tx.loanInstallment.updateMany({ where: { deductionId: before.id, organizationId: ctx.orgId }, data: { amount: l.amount } });
+          await logAudit(ctx, { action: "DEDUCTION_DEFERRED", entity: "Deduction", entityId: before.id, oldValue: { amount: num(before.amount) }, newValue: { amount: l.amount, deferred: l.deferred }, reason: `Take-home floor, ${rec.employeeNumber}, ${run.period.name}` }, tx);
+        }
       await tx.overtime.updateMany({ where: w, data: { status: "PROCESSED" } });
       await tx.deduction.updateMany({ where: w, data: { status: "PROCESSED" } });
       await tx.otherEarning.updateMany({ where: w, data: { status: "PROCESSED" } });

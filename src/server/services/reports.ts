@@ -1,6 +1,7 @@
 import type { Ctx } from "@/lib/auth/context";
 import { iso } from "@/lib/dates";
 import { num, round2 } from "@/lib/money";
+import { normaliseState, STATE_NOT_RECORDED } from "@/lib/nigeria-states";
 import { db } from "./_base";
 import { payrollRuleFor } from "./statutory";
 
@@ -391,6 +392,7 @@ export async function payeSchedule(ctx: Ctx, runId: string) {
     employeeNumber: r.employeeNumber,
     employeeName: r.employeeName,
     taxId: r.taxId ?? "—",
+    payeState: normaliseState(r.payeState) ?? STATE_NOT_RECORDED,
     totalEarnings: num(r.totalEarnings),
     taxableIncome: num(r.taxableIncome),
     paye: num(r.paye),

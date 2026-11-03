@@ -10,6 +10,7 @@ import type { Prisma } from "@prisma/client";
 import type { Ctx } from "@/lib/auth/context";
 import { iso } from "@/lib/dates";
 import { num } from "@/lib/money";
+import { overlappingVersion } from "@/lib/paye-dates";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
 
@@ -18,6 +19,7 @@ export type RuleKindName = (typeof RULE_KINDS)[number];
 export const RULE_KIND_LABELS: Record<RuleKindName, string> = { TAX: "PAYE (income tax)", PENSION: "Pension", EMPLOYER_COST: "Employer contributions" };
 
 const dayBefore = (d: Date) => new Date(d.getTime() - 86400000);
+const day = (d: Date | null) => (d ? iso(d) : "");
 
 // ─────────────────────────────── The master rule and its fingerprint ───────────────────────────────
 
@@ -50,6 +52,10 @@ export function fingerprintOf(m: Master): string {
       bands: [...r.bands].sort((a, b) => a.sortOrder - b.sortOrder).map((b) => [b.sortOrder, num(b.lowerBound), b.upperBound === null ? null : num(b.upperBound), num(b.rate)]),
       reliefs: [...r.reliefs].sort((a, b) => a.code.localeCompare(b.code)).map((x) => [x.code, x.name, x.type, x.rate === null ? null : num(x.rate), x.amount === null ? null : num(x.amount), x.cap === null ? null : num(x.cap), x.active]),
       exemptions: [...r.exemptions].sort((a, b) => a.code.localeCompare(b.code)).map((x) => [x.code, x.description, num(x.annualGrossCeiling), x.active]),
+      // PAYE filing dates and the penalty count as part of the rule, but only when set: a rule signed before they existed keeps the fingerprint it was signed with
+      ...(r.payeDueDay !== null || r.annualReturnMonth !== null || r.annualReturnDay !== null || r.latePenaltyPct !== null
+        ? { filing: [r.payeDueDay, r.annualReturnMonth, r.annualReturnDay, r.latePenaltyPct === null ? null : num(r.latePenaltyPct)] }
+        : {}),
     };
   } else if (m.kind === "PENSION") {
     const r = m.row;
@@ -157,10 +163,13 @@ async function installInto(tx: Tx, m: Master, clientId: string): Promise<"PUBLIS
     if (await tx.taxRule.findFirst({ where: { organizationId: clientId, code: r.code, version: r.version } })) return "ALREADY_HELD";
     const open = await tx.taxRule.findMany({ where: { organizationId: clientId, effectiveTo: null, active: true } });
     if (open.some((o) => o.effectiveFrom >= from)) throw new BusinessError("The client already has an open PAYE rule starting on or after this date.");
+    const clash = overlappingVersion(await tx.taxRule.findMany({ where: { organizationId: clientId, active: true, effectiveTo: { not: null } } }), from);
+    if (clash) throw new BusinessError(`The client already has PAYE version ${clash.version} in force on some of the same days (${day(clash.effectiveFrom)} to ${day(clash.effectiveTo)}).`);
     for (const o of open) await tx.taxRule.update({ where: { id: o.id }, data: { effectiveTo: end } });
     await tx.taxRule.create({
       data: {
         organizationId: clientId, code: r.code, name: r.name, version: r.version, legalBasis: r.legalBasis, effectiveFrom: from, effectiveTo: r.effectiveTo, active: r.active,
+        payeDueDay: r.payeDueDay, annualReturnMonth: r.annualReturnMonth, annualReturnDay: r.annualReturnDay, latePenaltyPct: r.latePenaltyPct,
         bands: { create: r.bands.map((b) => ({ sortOrder: b.sortOrder, lowerBound: b.lowerBound, upperBound: b.upperBound, rate: b.rate })) },
         reliefs: { create: r.reliefs.map((x) => ({ code: x.code, name: x.name, type: x.type, rate: x.rate, amount: x.amount, cap: x.cap, active: x.active })) },
         exemptions: { create: r.exemptions.map((x) => ({ code: x.code, description: x.description, annualGrossCeiling: x.annualGrossCeiling, active: x.active })) },
@@ -173,6 +182,8 @@ async function installInto(tx: Tx, m: Master, clientId: string): Promise<"PUBLIS
     if (await tx.pensionRule.findFirst({ where: { organizationId: clientId, version: r.version } })) return "ALREADY_HELD";
     const open = await tx.pensionRule.findMany({ where: { organizationId: clientId, effectiveTo: null } });
     if (open.some((o) => o.effectiveFrom >= from)) throw new BusinessError("The client already has an open pension rule starting on or after this date.");
+    const clash = overlappingVersion(await tx.pensionRule.findMany({ where: { organizationId: clientId, effectiveTo: { not: null } } }), from);
+    if (clash) throw new BusinessError(`The client already has pension version ${clash.version} in force on some of the same days (${day(clash.effectiveFrom)} to ${day(clash.effectiveTo)}).`);
     for (const o of open) await tx.pensionRule.update({ where: { id: o.id }, data: { effectiveTo: end } });
     await tx.pensionRule.create({ data: { organizationId: clientId, version: r.version, employeeRate: r.employeeRate, employerRate: r.employerRate, pensionableCodes: r.pensionableCodes, effectiveFrom: from, effectiveTo: r.effectiveTo } });
     return "PUBLISHED";
@@ -181,6 +192,8 @@ async function installInto(tx: Tx, m: Master, clientId: string): Promise<"PUBLIS
   if (await tx.employerCostRule.findFirst({ where: { organizationId: clientId, version: r.version } })) return "ALREADY_HELD";
   const open = await tx.employerCostRule.findMany({ where: { organizationId: clientId, effectiveTo: null } });
   if (open.some((o) => o.effectiveFrom >= from)) throw new BusinessError("The client already has an open employer-contribution rule starting on or after this date.");
+  const clash = overlappingVersion(await tx.employerCostRule.findMany({ where: { organizationId: clientId, effectiveTo: { not: null } } }), from);
+  if (clash) throw new BusinessError(`The client already has employer-contribution version ${clash.version} in force on some of the same days (${day(clash.effectiveFrom)} to ${day(clash.effectiveTo)}).`);
   for (const o of open) await tx.employerCostRule.update({ where: { id: o.id }, data: { effectiveTo: end } });
   await tx.employerCostRule.create({
     data: {

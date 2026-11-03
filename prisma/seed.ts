@@ -167,6 +167,11 @@ async function seedStatutory(orgId: string) {
       code: "NG-PAYE-NTA2025",
       name: "Nigeria PAYE — Nigeria Tax Act 2025",
       version: "2026.1",
+      // PAYE filing dates and penalty: the founder's starting values (due on the 7th of the next month), NOT verified by the tax adviser
+      payeDueDay: 7,
+      annualReturnMonth: 1,
+      annualReturnDay: 31,
+      latePenaltyPct: 10,
       legalBasis:
         "Nigeria Tax Act 2025, personal income tax schedule effective 1 January 2026. Consolidated Relief Allowance abolished; rent relief 20% of annual rent capped at ₦500,000; pension contributions deductible. VERIFY against current law and NRS guidance before production use.",
       effectiveFrom: d("2026-01-01"),
@@ -787,6 +792,8 @@ async function main() {
         email: `${first}.${last}${n}@mail.test`.toLowerCase(),
         address: `${Math.floor(1 + rand() * 90)} ${pick(["Allen Avenue", "Herbert Macaulay Way", "Ogunlana Drive", "Aba Road", "Zik Avenue", "Isaac John Street"])}`,
         employmentDate: d(p.empDate),
+        // synthetic states chosen by position, NOT from the random stream, so every other seeded value is unchanged
+        stateOfResidence: n % 19 === 0 ? null : n % 7 === 0 ? "Ogun" : "Lagos",
         exitDate: p.exit ? d(p.exit) : null,
         status: p.status ?? "ACTIVE",
         categoryId: cat[p.cat].id,

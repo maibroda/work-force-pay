@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-200 tables and 158 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+201 tables and 158 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -51,6 +51,7 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | paymentTxns | → PaymentTransaction[] |  |  |
 | remittances | → StatutoryRemittance[] |  |  |
 | auditLogs | → AuditLog[] |  |  |
+| auditSeals | → AuditSeal[] |  |  |
 | leavePolicy | → LeavePolicy |  |  |
 | leaveRequests | → LeaveRequest[] |  |  |
 | glAccounts | → GlAccount[] |  |  |
@@ -1101,6 +1102,9 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | phone | String |  |  |
 | email | String |  |  |
 | address | String |  |  |
+| nhfContributes | Boolean |  | Has chosen to contribute to the National Housing Fund (voluntary: 2.5% of basic pay, remitted by the end of the month). Off unless chosen. |
+| nhfOptedInOn | DateTime |  | The day they chose it; cleared when they stop. |
+| stateOfResidence | String |  | The state PAYE is due to (one of the 36 states or FCT, under its proper name). Copied onto each payroll record when it is calculated. |
 | employmentDate | DateTime | yes |  |
 | exitDate | DateTime |  |  |
 | anonymizedAt | DateTime |  | Set when the personal details were removed after the retention period (the record, employee number and pay figures stay). |
@@ -1338,6 +1342,8 @@ One per organization — every number a buyer might want to change without a cod
 | noticePayEnabled | Boolean |  |  |
 | noticeRecoveryEnabled | Boolean |  |  |
 | noticePayTaxable | Boolean |  |  |
+| auditAlertEmails | String[] |  | Extra addresses (for example an outside auditor), on top of everyone who can view the audit log, or instead of them when the next field is false. |
+| auditAlertIncludeEveryone | Boolean |  |  |
 | loanMaxGrossMultiple | Decimal |  |  |
 | loanMaxDeductionPct | Int |  |  |
 | advanceMaxGrossPct | Int |  |  |
@@ -2100,6 +2106,7 @@ Operational source of truth for WHERE an employee worked on each day.
 | pensionPin | String |  |  |
 | pfa | String |  |  |
 | taxId | String |  |  |
+| payeState | String |  | Copy of the employee's state of residence when the payroll was calculated, so a locked payroll never changes if the employee moves (like pfa). |
 | basisDays | Int | yes |  |
 | daysWorked | Decimal | yes |  |
 | daysAbsent | Int |  |  |
@@ -2344,6 +2351,10 @@ Recurring payroll deductions applied automatically on every REGULAR run — dist
 | effectiveTo | DateTime |  |  |
 | active | Boolean |  |  |
 | createdAt | DateTime |  |  |
+| payeDueDay | Int |  | PAYE filing dates and the late penalty are RULE DATA, set from the tax adviser's verified values and never assumed. Blank = not set. Day of the month after the pay month on which PAYE is due (1 to 28). |
+| annualReturnMonth | Int |  | The annual return is due on this month and day of the year after the tax year. |
+| annualReturnDay | Int |  |  |
+| latePenaltyPct | Decimal |  | Percentage of unremitted PAYE charged when late (interest is not modelled). |
 | bands | → TaxBand[] |  |  |
 | reliefs | → TaxRelief[] |  |  |
 | exemptions | → TaxExemption[] |  |  |
@@ -2417,6 +2428,9 @@ Recurring payroll deductions applied automatically on every REGULAR run — dist
 | maxOvertimeHoursPerMonth | Decimal |  |  |
 | maxDeductionPctOfGross | Decimal |  |  |
 | backOfficeChargePct | Decimal |  | Overhead allocation used in Contract Profitability — % of contract revenue charged as back-office cost. |
+| requirePayeState | Boolean |  | A worker with PAYE and no state of residence is a warning (false, the default) or a CRITICAL finding that blocks approval until fixed or overridden with a reason (true). |
+| nhfEmployeeRatePct | Decimal |  | The rate of the VOLUNTARY NHF (National Housing Fund) contribution, as a % of BASIC pay: 2.5 by the founder's rule (the tax adviser confirms it). It is taken only from employees who have chosen to contribute (Employee.nhfContributes), as its own deduction line, and is allowed against PAYE at the amount taken. 0 = none. |
+| minTakeHomePctOfGross | Decimal |  | The take-home floor, % of gross: loan and salary-advance recoveries may not take net pay below this share of gross; the part not taken is carried forward by the loan book. 0 (the default) = no floor, as pay has always been worked. A client-specific policy, not a statutory one. |
 | effectiveFrom | DateTime | yes |  |
 | effectiveTo | DateTime |  |  |
 | createdAt | DateTime |  |  |
@@ -2932,6 +2946,25 @@ One imported bank statement line. Positive amount = money in, negative = money o
 | reason | String |  |  |
 | metadata | Json |  |  |
 | createdAt | DateTime |  |  |
+| seal | → AuditSeal |  | The tamper-evidence seal (see AuditSeal); absent for a few minutes after the row is written. |
+
+### AuditSeal
+
+One seal per audit row (rule 5: tamper-evident): SHA-256 of the row's canonical content, chained to the previous seal of the same organization by an HMAC under AUDIT_SEAL_KEY. Append-only at the database. docs/plans/tamper-evident-audit-log.md.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| seq | Int | yes | 1, 2, 3 ... per organization; unique, so two sealers at once cannot both succeed. |
+| auditLogId | String | yes | (unique) |
+| auditLog | → AuditLog |  |  |
+| contentHash | String | yes |  |
+| prevHash | String | yes |  |
+| chainHash | String | yes |  |
+| sealedAt | DateTime |  |  |
+| sealedLate | Boolean |  | Sealed long after the row was written (the log's history from before sealing began). |
 
 ### LeavePolicy
 

@@ -31,6 +31,9 @@ export default async function PayrollRulesPage() {
               <TH>Max OT hrs/month</TH>
               <TH>Max deductions % of earnings</TH>
               <TH>Back office charge %</TH>
+              <TH>NHF rate (voluntary)</TH>
+              <TH>Take-home floor</TH>
+              <TH>State of residence</TH>
               <TH>Effective</TH>
             </TR>
           </THead>
@@ -47,6 +50,9 @@ export default async function PayrollRulesPage() {
                 <TD>{num(x.maxOvertimeHoursPerMonth)}</TD>
                 <TD>{num(x.maxDeductionPctOfGross)}%</TD>
                 <TD>{num(x.backOfficeChargePct)}%</TD>
+                <TD>{num(x.nhfEmployeeRatePct) > 0 ? `${num(x.nhfEmployeeRatePct)}% of basic` : <span className="text-muted-foreground text-xs">not offered</span>}</TD>
+                <TD>{num(x.minTakeHomePctOfGross) > 0 ? `${num(x.minTakeHomePctOfGross)}% of gross` : <span className="text-muted-foreground text-xs">no floor</span>}</TD>
+                <TD>{x.requirePayeState ? <Badge tone="amber">required to approve</Badge> : <span className="text-muted-foreground text-xs">warning only</span>}</TD>
                 <TD>
                   {fmtDate(x.effectiveFrom)} →{" "}
                   {x.effectiveTo ? fmtDate(x.effectiveTo) : <Badge tone="green">current</Badge>}
@@ -116,6 +122,33 @@ export default async function PayrollRulesPage() {
                 min: 0,
                 max: 100,
                 defaultValue: num(r.backOfficeChargePct),
+              },
+              {
+                name: "nhfEmployeeRatePct",
+                label: "NHF contribution rate % of basic pay (voluntary)",
+                type: "number",
+                min: 0,
+                max: 100,
+                defaultValue: num(r.nhfEmployeeRatePct),
+                help: "The National Housing Fund is voluntary: this rate (2.5 as shipped) is taken ONLY from employees marked as contributing, as its own deduction, and is remitted by the end of the month. Set 0 to stop offering it.",
+              },
+              {
+                name: "minTakeHomePctOfGross",
+                label: "Take-home floor % of gross (loan and salary-advance recoveries)",
+                type: "number",
+                min: 0,
+                max: 100,
+                defaultValue: num(r.minTakeHomePctOfGross),
+                help: "0 = no floor. Above 0, loan and salary-advance recoveries are limited so net pay is not taken below this share of gross; the part not taken stays owed on the loan and is scheduled again next month. Penalties and other deductions are never reduced. A client-specific policy, not a statutory one.",
+                span: 3,
+              },
+              {
+                name: "requirePayeState",
+                label: "Require every taxed worker to have a state of residence before approval",
+                type: "checkbox",
+                defaultValue: r.requirePayeState,
+                help: "Off (the default): a worker with PAYE and no state is a warning and their PAYE goes on a 'State not recorded' line. On: it is a critical finding that blocks approval until the state is set, or Finance overrides it with a reason.",
+                span: 3,
               },
               { name: "effectiveFrom", label: "Effective from", type: "date", required: true },
             ]}
