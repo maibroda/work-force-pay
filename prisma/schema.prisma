@@ -578,6 +578,10 @@ model Organization {
   paymentTxns               PaymentTransaction[]
   remittances               StatutoryRemittance[]
   auditLogs                 AuditLog[]
+  subscription              Subscription?
+  subscriptionModules       SubscriptionModule[]
+  subscriptionEvents        SubscriptionEvent[]
+  clientBlueprints          ClientBlueprint[]
   auditSeals                AuditSeal[]
   leavePolicy               LeavePolicy?
   leaveRequests             LeaveRequest[]
@@ -6029,6 +6033,7 @@ model CrmStage {
 /// A specific bid for a client business: "24/7 guarding, 3 sites, 18 guards". Its monthly value is a money amount (Decimal 16,2, whole kobo).
 model CrmOpportunity {
   id                   String             @id @default(cuid())
+  blueprints           ClientBlueprint[]
   organizationId       String
   organization         Organization       @relation(fields: [organizationId], references: [id])
   accountId            String
@@ -6892,4 +6897,104 @@ model CrmTeamMember {
 
   @@unique([organizationId, userId])
   @@index([teamId])
+}
+
+// ───────────────────────────── Modules, plans and subscriptions (docs/plans/module-entitlements-e2.md) ─────────────────────────────
+// What each company has bought. The catalogue (src/lib/entitlements/catalogue.ts) says what a module is; these tables say who has which, from when to when.
+// Nothing reads them to switch anything on or off yet (that is a later step).
+
+enum SubscriptionStatus {
+  ACTIVE
+  SUSPENDED
+  ENDED
+}
+
+enum SubscriptionModuleSource {
+  PLAN
+  ADD_ON
+  /// Given to a company that existed before subscriptions did, so nothing it used stopped; to be reviewed and given a real plan.
+  GRANDFATHERED
+}
+
+/// One per company. Changed only by platform staff, or by a bureau for its own clients; a company cannot change its own.
+model Subscription {
+  id               String             @id @default(cuid())
+  organizationId   String             @unique
+  organization     Organization       @relation(fields: [organizationId], references: [id])
+  /// A key of PLANS in the catalogue.
+  planKey          String
+  status           SubscriptionStatus @default(ACTIVE)
+  /// The catalogue version the plan was chosen from.
+  catalogueVersion String
+  /// Stored now and checked in a later step. Empty means no limit.
+  employeeLimit    Int?
+  crmUserLimit     Int?
+  createdBy        String
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  modules SubscriptionModule[]
+  events  SubscriptionEvent[]
+}
+
+/// A module a company has, with the days it was on. A module that is taken away is given an end date, never deleted, so what a company had on any day can be answered.
+model SubscriptionModule {
+  id             String                   @id @default(cuid())
+  organizationId String
+  organization   Organization             @relation(fields: [organizationId], references: [id])
+  subscriptionId String
+  subscription   Subscription             @relation(fields: [subscriptionId], references: [id])
+  /// A key of MODULES in the catalogue.
+  moduleKey      String
+  source         SubscriptionModuleSource
+  startsOn       DateTime
+  endsOn         DateTime?
+  /// After the end date the module's data can still be read until this day (a later step); empty means not at all.
+  readOnlyUntil  DateTime?
+  createdAt      DateTime                 @default(now())
+
+  @@index([subscriptionId, moduleKey])
+  @@index([organizationId])
+}
+
+/// Every change to a subscription: append-only at the database (a trigger refuses any update or delete). Keys and plan names only; nothing personal.
+model SubscriptionEvent {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id])
+  /// CREATED, PLAN_CHANGED, MODULE_ADDED, MODULE_REMOVED, LIMITS_CHANGED or GRANDFATHERED.
+  kind           String
+  reason         String?
+  byUserId       String?
+  byName         String
+  detail         Json?
+  createdAt      DateTime     @default(now())
+
+  @@index([subscriptionId, createdAt])
+  @@index([organizationId])
+}
+
+/// What was proposed to a prospect: the plan and modules chosen from the answers to the configurator's questions, and why. Kept so that what the client was told can be shown later.
+model ClientBlueprint {
+  id             String          @id @default(cuid())
+  /// The selling organization (the bureau or company that made the proposal), not the prospect.
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  opportunityId  String?
+  opportunity    CrmOpportunity? @relation(fields: [opportunityId], references: [id])
+  prospectName   String
+  planKey        String
+  modules        Json
+  answers        Json
+  reasons        Json
+  /// DRAFT, SENT, ACCEPTED or DROPPED.
+  status         String          @default("DRAFT")
+  createdBy      String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([organizationId, createdAt])
+  @@index([opportunityId])
 }

@@ -315,6 +315,7 @@ export const NAV: NavGroup[] = [
       { href: "/settings/organization", label: "Organization", perm: "dashboard.view" },
       { href: "/settings/users", label: "Users", perm: "users.manage" },
       { href: "/settings/roles", label: "Roles", perm: "dashboard.view" },
+      { href: "/settings/subscription", label: "Subscription", perm: "subscription.view" },
       { href: "/settings/statutory", label: "Statutory Rules", perm: "payroll.view" },
       { href: "/settings/payroll-rules", label: "Payroll Rules", perm: "payroll.view" },
       { href: "/settings/employer-costs", label: "Employer Cost Rules", perm: "payroll.view" },

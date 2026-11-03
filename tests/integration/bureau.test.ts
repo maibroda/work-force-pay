@@ -109,6 +109,25 @@ describe("onboarding a client", () => {
   });
 });
 
+describe("a new client's subscription", () => {
+  it("is made with the client, in the same step, as Payroll Essentials by the person who onboarded it, and appears in the client's own history", async () => {
+    const w = await world();
+    const { client } = await w.onboard();
+    const sub = await db.subscription.findUniqueOrThrow({ where: { organizationId: client.id }, include: { modules: true, events: true } });
+    expect(sub).toMatchObject({ planKey: "payroll_essentials", status: "ACTIVE", createdBy: w.admin.name });
+    expect(sub.modules.map((m) => m.moduleKey).sort()).toEqual(["core", "payroll"]);
+    expect(sub.events.map((e) => [e.kind, e.byUserId])).toEqual([["CREATED", w.admin.userId]]);
+    const audit = await db.auditLog.findFirst({ where: { organizationId: client.id, action: "SUBSCRIPTION_CREATED" } });
+    expect(audit).not.toBeNull();
+  });
+
+  it("is not left behind when the onboarding fails: nothing is made for a client that was refused", async () => {
+    const w = await world();
+    await expect(w.onboard("Odd term", { termMonths: 9 })).rejects.toThrow(/6 or 12 months/);
+    expect(await db.subscription.count({ where: { organization: { bureauOrganizationId: w.t.org.id } } })).toBe(0);
+  });
+});
+
 describe("who can work in which client", () => {
   it("lets a manager into every client of the bureau, and staff only into the ones they are given", async () => {
     const w = await world();
