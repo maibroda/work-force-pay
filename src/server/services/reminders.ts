@@ -16,6 +16,7 @@ import { naira } from "@/lib/money";
 import { fullName } from "@/lib/utils";
 import { assertCan, db } from "./_base";
 import { logAudit } from "./audit";
+import { entitledOrgs } from "./entitlement-switch";
 import { getHrPolicy, todayUtc } from "./hr-policy";
 import { kitHeldByLeavers } from "./inventory";
 import { loansOwedByLeavers } from "./loans";
@@ -373,7 +374,9 @@ export async function sendHrDigest(orgId: string, opts: { force?: boolean; now?:
 
 /** The scheduled job: every organization, in turn. One organization failing never stops the rest. */
 export async function runDigestForAllOrgs(now = new Date()): Promise<DigestResult[]> {
-  const orgs = await db.organization.findMany({ select: { id: true, name: true } });
+  const everyone = await db.organization.findMany({ select: { id: true, name: true } });
+  const allowed = new Set(await entitledOrgs(everyone.map((o) => o.id), "hr-digest")); // a company whose module is enforced and was not bought is skipped
+  const orgs = everyone.filter((o) => allowed.has(o.id));
   const out: DigestResult[] = [];
   for (const o of orgs) {
     try {

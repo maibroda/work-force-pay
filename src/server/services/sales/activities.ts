@@ -14,6 +14,7 @@ import { emailSendLimiter } from "@/lib/rate-limit";
 import { filterTimeline, groupTasks, mergeTimeline, surveySchema, watDayStart, type TimelineItem, type TimelineType } from "@/lib/sales/activity";
 import { BusinessError, db, type Tx } from "../_base";
 import { logAudit } from "../audit";
+import { entitledOrgs } from "../entitlement-switch";
 import { isManager, ownerFilter, requireSales, resolveOwner, seesAll } from "./access";
 import { canSendMarketing } from "./consent";
 import { DEFAULT_ROTTING_DAYS } from "./deals";
@@ -376,7 +377,9 @@ export async function myDigest(ctx: Ctx, now = new Date()) {
  */
 export async function sendSalesDigests(now = new Date(), opts: { orgId?: string } = {}) {
   const forDate = new Date(watDayStart(now).getTime() + HOUR); // the Lagos date, as a date
-  const orgs = await db.crmSetting.findMany({ where: { enabled: true, ...(opts.orgId ? { organizationId: opts.orgId } : {}) }, select: { organizationId: true } });
+  const on = await db.crmSetting.findMany({ where: { enabled: true, ...(opts.orgId ? { organizationId: opts.orgId } : {}) }, select: { organizationId: true } });
+  const allowed = new Set(await entitledOrgs(on.map((o) => o.organizationId), "sales-digest")); // a company whose module is enforced and was not bought is skipped
+  const orgs = on.filter((o) => allowed.has(o.organizationId));
   let sent = 0;
   let skipped = 0;
   for (const o of orgs) {

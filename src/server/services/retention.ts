@@ -14,6 +14,7 @@ import { addMonths } from "@/lib/leave";
 import { logger } from "@/lib/logger";
 import { assertCan, db } from "./_base";
 import { logAudit } from "./audit";
+import { entitledOrgs } from "./entitlement-switch";
 import { getHrPolicy } from "./hr-policy";
 
 const REMOVED = "[removed]";
@@ -70,7 +71,9 @@ export async function anonymizeStaleCandidates(orgId: string, now = new Date()):
 
 /** The scheduled job: every organization in turn; one failing never stops the rest. */
 export async function runRetentionForAllOrgs(now = new Date()): Promise<RetentionResult[]> {
-  const orgs = await db.organization.findMany({ select: { id: true, name: true } });
+  const everyone = await db.organization.findMany({ select: { id: true, name: true } });
+  const allowed = new Set(await entitledOrgs(everyone.map((o) => o.id), "data-retention")); // a company whose module is enforced and was not bought is skipped
+  const orgs = everyone.filter((o) => allowed.has(o.id));
   const out: RetentionResult[] = [];
   for (const o of orgs) {
     try {
