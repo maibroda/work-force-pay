@@ -120,11 +120,16 @@ describe("the sales summary", () => {
 describe("what a sales person can reach", () => {
   it("is the pipeline and their own security, and nothing else", () => {
     // the company's own sales module (sales.*, own records only, off until switched on) is a separate module from the bureau pipeline (crm.*)
-    expect([...ROLE_PERMISSIONS.BUSINESS_DEV].sort()).toEqual(["crm.manage", "crm.view", "healthcheck.view", "sales.case.manage", "sales.manage", "sales.view", "self.security"]);
+    // plus blueprint.manage (E4b, the founder's ruling of 2026-11-03: the bureau's sales people may configure a prospect and quote it from the software price book)
+    expect([...ROLE_PERMISSIONS.BUSINESS_DEV].sort()).toEqual(["blueprint.manage", "crm.manage", "crm.view", "healthcheck.view", "sales.case.manage", "sales.manage", "sales.view", "self.security"]);
   });
   it("is never given payroll, employee, client or finance permissions", () => {
-    const other = PERMISSIONS.filter((p) => !["crm.view", "crm.manage", "sales.view", "sales.manage", "sales.case.manage", "healthcheck.view", "self.security"].includes(p));
+    const other = PERMISSIONS.filter((p) => !["blueprint.manage", "crm.view", "crm.manage", "sales.view", "sales.manage", "sales.case.manage", "healthcheck.view", "self.security"].includes(p));
     for (const p of other) expect(ROLE_PERMISSIONS.BUSINESS_DEV.includes(p), p).toBe(false);
+  });
+  it("can quote a prospect from the software price book but never keep it: the price book (pricebook.manage) and the subscription (subscription.manage) are platform staff's", () => {
+    expect(ROLE_PERMISSIONS.BUSINESS_DEV.includes("blueprint.manage")).toBe(true);
+    for (const p of ["pricebook.manage", "subscription.manage", "subscription.view"] as const) expect(ROLE_PERMISSIONS.BUSINESS_DEV.includes(p), p).toBe(false);
   });
   it("is held only by the founder (everything) and the sales role among the staff roles", () => {
     const holders = Object.entries(ROLE_PERMISSIONS).filter(([, ps]) => ps.includes("crm.manage")).map(([r]) => r).sort();
