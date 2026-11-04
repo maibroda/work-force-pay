@@ -85,7 +85,16 @@ describe("what the rules add, and the reasons given in words", () => {
     const r = configureClient(ask(["payroll", "time_attendance", "self_service"]));
     expect(r.notes).toContain("Time & attendance is only partly built: Work register, attendance and rosters exist; clocking does not.");
     expect(r.notes).toContain("Employee self-service is only partly built: The employee's own pages exist; SMS and WhatsApp payslips do not.");
-    expect(configureClient(ask(["payroll"])).notes).toEqual([]);
+    expect(configureClient(ask(["hr"])).notes).toEqual([]);
+  });
+
+  it("says plainly that payroll cannot yet run for a company with no Contracts and deployment, because it pays only for days recorded against a client contract and site", () => {
+    const NOTE = "Payroll currently pays employees only for days recorded against a client contract and site. Without Contracts & deployment there is nothing to pay from yet, so this cannot run payroll for a company that does not place workers at client sites.";
+    expect(configureClient(ask(["payroll"])).notes).toEqual([NOTE]);
+    expect(configureClient(ask(["payroll", "hr", "self_service"])).notes).toContain(NOTE); // HR + Payroll for an office-based firm: the same gap
+    expect(configureClient(ask(["payroll", "contracts_deployment"])).notes).toEqual([]); // with deployment it can
+    expect(configureClient(ask(["crm"], { crmUsers: 2 })).notes).toEqual([]); // not about payroll
+    expect(configureClient(ask(["inventory", "analytics"])).notes).toEqual([]);
   });
 });
 

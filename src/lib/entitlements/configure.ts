@@ -58,6 +58,8 @@ export interface Configured {
 }
 
 const PLAN_ORDER = Object.keys(PLANS) as PlanKey[];
+const PAYROLL_NEEDS_SITES =
+  "Payroll currently pays employees only for days recorded against a client contract and site. Without Contracts & deployment there is nothing to pay from yet, so this cannot run payroll for a company that does not place workers at client sites.";
 const isCount = (n: unknown): n is number => typeof n === "number" && Number.isInteger(n) && n >= 1;
 const fail = (problems: string[]): Configured => ({ ok: false, problems, modules: [], reasons: [], proposed: null, runnerUp: null, notes: [], limits: { employeeLimit: null, crmUserLimit: null } });
 const names = (ks: readonly ModuleKey[]) => ks.map((k) => MODULES[k].name).join(", ");
@@ -107,6 +109,10 @@ export function configureClient(answers: Answers): Configured {
   const check = checkPlan(proposed.planKey, proposed.addOns);
   if (!check.ok) return fail(check.problems.map((p) => p.message));
   const notes = resolved.modules.filter((m) => MODULES[m].status === "partial").map((m) => `${MODULES[m].name} is only partly built: ${MODULES[m].assumed ?? "some of it is not built yet."}`);
+  // What the payroll engine does today (checked in src/server/services/payroll.ts and the work register): it pays an employee only for days in the work register, and every such day is
+  // tied to a client, a contract and a site. So payroll needs Contracts & deployment in practice, although the catalogue lists it as needing only the core. Said here, so that a salesperson
+  // does not offer payroll to a company that cannot be paid through it; removed when payroll without deployment is built (docs/plans/module-entitlements-e6.md).
+  if (resolved.modules.includes("payroll") && !resolved.modules.includes("contracts_deployment")) notes.push(PAYROLL_NEEDS_SITES);
   return {
     ok: true,
     problems: [],
