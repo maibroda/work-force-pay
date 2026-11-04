@@ -95,6 +95,7 @@ function resolvers(orgId: string): Record<string, () => Promise<string | undefin
     "/health-checks/[id]": () => first(db.healthCheck.findFirst({ where, select: { id: true } })),
     "/crm/proposals/[id]": () => first(db.proposal.findFirst({ where, select: { id: true } })),
     "/crm/leads/[id]": () => first(db.lead.findFirst({ where, select: { id: true } })),
+    "/crm/blueprints/[id]": () => first(db.clientBlueprint.findFirst({ where, select: { id: true } })),
     "/portal/queries/[id]": () => first(db.clientQuery.findFirst({ where, select: { id: true } })),
     "/service-desk/[id]": () => first(db.clientQuery.findFirst({ where, select: { id: true } })),
     "/portal/employees/[id]": () => first(db.employee.findFirst({ where, select: { id: true } })),

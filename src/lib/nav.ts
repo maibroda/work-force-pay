@@ -59,6 +59,7 @@ export const NAV: NavGroup[] = [
       { href: "/crm/leads", label: "Leads", perm: "crm.view", bureauOnly: true },
       { href: "/crm/outreach", label: "Outreach", perm: "crm.view", bureauOnly: true },
       { href: "/crm/proposals", label: "Proposals", perm: "crm.view", bureauOnly: true },
+      { href: "/crm/blueprints", label: "Blueprints and quotes", perm: "blueprint.manage", bureauOnly: true },
       { href: "/crm/pricing", label: "Pricing", perm: "crm.view", bureauOnly: true },
       { href: "/health-checks", label: "Health Checks", perm: "healthcheck.view", bureauOnly: true },
       { href: "/crm/partners", label: "Referral Partners", perm: "crm.view", bureauOnly: true },
