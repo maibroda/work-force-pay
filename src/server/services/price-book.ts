@@ -31,11 +31,22 @@ function assertKeeper(ctx: Ctx) {
 }
 
 /** The organization quoting: platform staff, or someone with `blueprint.manage` whose organization (their bureau, when they are working in a client) is a bureau. */
-async function assertSeller(ctx: Ctx) {
+export async function assertSeller(ctx: Ctx) {
   if (ctx.role === "SUPER_ADMIN") return;
   if (!can(ctx.role, "blueprint.manage")) throw new ForbiddenError("blueprint.manage");
   const org = await db.organization.findUnique({ where: { id: ctx.homeOrgId ?? ctx.orgId }, select: { isBureau: true } });
   if (!org?.isBureau) throw new ForbiddenError("blueprint.manage");
+}
+
+/** Whether this person may quote, without throwing: for a page that explains itself to someone who holds the permission but works in an ordinary company. */
+export async function isSeller(ctx: Ctx): Promise<boolean> {
+  try {
+    await assertSeller(ctx);
+    return true;
+  } catch (e) {
+    if (e instanceof ForbiddenError) return false;
+    throw e;
+  }
 }
 
 const dateOnly = (iso: string): Date => {

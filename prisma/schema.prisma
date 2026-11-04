@@ -892,6 +892,7 @@ model Lead {
 
   stageChanges LeadStageChange[]
   proposals    Proposal[]
+  blueprints   ClientBlueprint[]
   healthChecks HealthCheck[]
   activities   OutreachActivity[]
   payouts      ReferralPayout[]
@@ -1067,6 +1068,8 @@ model Proposal {
   createdByUserId  String
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
+
+  blueprints ClientBlueprint[]
 
   @@unique([organizationId, number])
   @@index([leadId])
@@ -6033,7 +6036,6 @@ model CrmStage {
 /// A specific bid for a client business: "24/7 guarding, 3 sites, 18 guards". Its monthly value is a money amount (Decimal 16,2, whole kobo).
 model CrmOpportunity {
   id                   String             @id @default(cuid())
-  blueprints           ClientBlueprint[]
   organizationId       String
   organization         Organization       @relation(fields: [organizationId], references: [id])
   accountId            String
@@ -6978,25 +6980,33 @@ model SubscriptionEvent {
 
 /// What was proposed to a prospect: the plan and modules chosen from the answers to the configurator's questions, and why. Kept so that what the client was told can be shown later.
 model ClientBlueprint {
-  id             String          @id @default(cuid())
+  id             String       @id @default(cuid())
   /// The selling organization (the bureau or company that made the proposal), not the prospect.
   organizationId String
-  organization   Organization    @relation(fields: [organizationId], references: [id])
-  opportunityId  String?
-  opportunity    CrmOpportunity? @relation(fields: [opportunityId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  /// The bureau's own lead and proposal this blueprint is for (ThreeRoots sells through its own pipeline, not a company's sales module).
+  leadId         String?
+  lead           Lead?        @relation(fields: [leadId], references: [id])
+  proposalId     String?
+  proposal       Proposal?    @relation(fields: [proposalId], references: [id])
   prospectName   String
   planKey        String
   modules        Json
   answers        Json
   reasons        Json
+  /// Everything the configurator computed (plan, add-ons, runner-up, notes, limits), as it was when saved.
+  configured     Json         @default("{}")
+  /// The quote as it was given, with the price book version it used. A snapshot: a later price change never rewrites it.
+  quote          Json?
   /// DRAFT, SENT, ACCEPTED or DROPPED.
-  status         String          @default("DRAFT")
+  status         String       @default("DRAFT")
   createdBy      String
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([organizationId, createdAt])
-  @@index([opportunityId])
+  @@index([leadId])
+  @@index([proposalId])
 }
 
 // ───────────────────────────── The module switch (docs/plans/module-entitlements-e3.md, step E3b) ─────────────────────────────

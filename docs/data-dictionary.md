@@ -297,6 +297,7 @@ A prospect. Its stage changes are recorded; a won lead is final.
 | updatedAt | DateTime |  |  |
 | stageChanges | → LeadStageChange[] |  |  |
 | proposals | → Proposal[] |  |  |
+| blueprints | → ClientBlueprint[] |  |  |
 | healthChecks | → HealthCheck[] |  |  |
 | activities | → OutreachActivity[] |  |  |
 | payouts | → ReferralPayout[] |  |  |
@@ -457,6 +458,7 @@ An offer to a lead. What it says (the quote, with the rate card, scope and respo
 | createdByUserId | String | yes |  |
 | createdAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |
+| blueprints | → ClientBlueprint[] |  |  |
 
 ### HealthCheck
 
@@ -4494,7 +4496,6 @@ A specific bid for a client business: "24/7 guarding, 3 sites, 18 guards". Its m
 | Field | Type | Required | What it holds |
 | --- | --- | --- | --- |
 | id | String |  | (key) |
-| blueprints | → ClientBlueprint[] |  |  |
 | organizationId | String | yes |  |
 | organization | → Organization |  |  |
 | accountId | String | yes |  |
@@ -5221,13 +5222,17 @@ What was proposed to a prospect: the plan and modules chosen from the answers to
 | id | String |  | (key) |
 | organizationId | String | yes | The selling organization (the bureau or company that made the proposal), not the prospect. |
 | organization | → Organization |  |  |
-| opportunityId | String |  |  |
-| opportunity | → CrmOpportunity |  |  |
+| leadId | String |  | The bureau's own lead and proposal this blueprint is for (ThreeRoots sells through its own pipeline, not a company's sales module). |
+| lead | → Lead |  |  |
+| proposalId | String |  |  |
+| proposal | → Proposal |  |  |
 | prospectName | String | yes |  |
 | planKey | String | yes |  |
 | modules | Json | yes |  |
 | answers | Json | yes |  |
 | reasons | Json | yes |  |
+| configured | Json |  | Everything the configurator computed (plan, add-ons, runner-up, notes, limits), as it was when saved. |
+| quote | Json |  | The quote as it was given, with the price book version it used. A snapshot: a later price change never rewrites it. |
 | status | String |  | DRAFT, SENT, ACCEPTED or DROPPED. |
 | createdBy | String | yes |  |
 | createdAt | DateTime |  |  |
