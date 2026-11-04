@@ -408,7 +408,7 @@ export interface JumpPage {
   where: string;
 }
 
-/** The Go to search: pages whose label (or place) contains what was typed, best first: a label that starts with it, then one with a word that starts with it, then the rest; a shorter label (a closer match) before a longer one. At most eight. */
+/** The Go to search: pages whose label (or place) contains what was typed, best first: a label that starts with it, then one with a word that starts with it, then the rest (a match on where a page sits only if no title matches); a shorter label (a closer match) before a longer one. At most eight. */
 export function searchPages<T extends JumpPage>(pages: T[], query: string, limit = 8): T[] {
   const q = query.trim().toLowerCase().replace(/\s+/g, " ");
   if (!q) return [];
@@ -420,9 +420,10 @@ export function searchPages<T extends JumpPage>(pages: T[], query: string, limit
     if (p.where.toLowerCase().includes(q)) return 3;
     return null;
   };
-  return pages
-    .map((p, i) => ({ p, i, s: score(p) }))
-    .filter((x): x is { p: T; i: number; s: number } => x.s !== null)
+  const scored = pages.map((p, i) => ({ p, i, s: score(p) })).filter((x): x is { p: T; i: number; s: number } => x.s !== null);
+  // where a page sits counts only when no page title matches, so a group's name does not drag in unrelated pages
+  const hits = scored.some((x) => x.s < 3) ? scored.filter((x) => x.s < 3) : scored;
+  return hits
     .sort((a, b) => a.s - b.s || a.p.label.length - b.p.label.length || a.i - b.i)
     .slice(0, limit)
     .map((x) => x.p);

@@ -183,6 +183,14 @@ describe("the Go to search", () => {
     expect(searchPages(pages, "run")[0].href).toBe("/payroll/runs");
     expect(searchPages(pages, "fund admin")[0].href).toBe("/employees/pfas");
   });
+  it("matches where a page sits only when no page title matches, so a group name does not drag in unrelated pages", () => {
+    const grouped = [
+      { href: "/a", label: "Pension", where: "Payroll › Tax, pension & schedules" },
+      { href: "/b", label: "PAYE schedule", where: "Payroll › Tax, pension & schedules" },
+      { href: "/c", label: "ITF schedule", where: "Payroll › Tax, pension & schedules" },
+    ];
+    expect(searchPages(grouped, "pens").map((p) => p.href)).toEqual(["/a"]); // /b and /c only share the group's name
+  });
   it("also matches where a page sits, shows nothing for a blank or unmatched search, and at most eight", () => {
     expect(searchPages(pages, "accounting").map((p) => p.href)).toEqual(["/accounting/journals"]);
     expect(searchPages(pages, "   ")).toEqual([]);
