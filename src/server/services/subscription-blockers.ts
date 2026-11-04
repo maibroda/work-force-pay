@@ -5,7 +5,8 @@
  * A HARD blocker refuses the change until the work is finished or cancelled (a pay run waiting for approval, a journal waiting to be posted). A SOFT one is reported and the person
  * making the change has to acknowledge it (open deals, pending leave: they stay readable but can no longer be worked). The lists are the ones proposed in the plan, built on the
  * founder's instruction to continue on those recommendations (2026-11-03); they are for the founder to confirm, and each has its own test. Stock issued to employees is not
- * checked yet: "still issued" has no definition in the data, and I will not invent one.
+ * checked yet: "still issued" has no definition in the data, and I will not invent one. The HR cycle and Payroll (the founder's focal point, 2026-11-04) are covered end to end:
+ * from requisition to final settlement.
  */
 import { MODULE_KEYS, MODULES, type ModuleKey } from "@/lib/entitlements/catalogue";
 import { db, type Tx } from "./_base";
@@ -23,7 +24,7 @@ const be = (n: number) => (n === 1 ? "is" : "are");
 const it = (n: number) => (n === 1 ? "it" : "them");
 const stays = (n: number) => (n === 1 ? "It stays readable" : "They stay readable");
 
-type Model = "payrollRun" | "paymentBatch" | "journalDocument" | "accountingPeriod" | "purchaseOrder" | "purchaseInvoice" | "clientInvoice" | "crmOpportunity" | "crmAutomationRun" | "leaveRequest" | "onboardingTask" | "exitTask";
+type Model = "payrollRun" | "paymentBatch" | "journalDocument" | "accountingPeriod" | "purchaseOrder" | "purchaseInvoice" | "clientInvoice" | "crmOpportunity" | "crmAutomationRun" | "leaveRequest" | "onboardingTask" | "exitTask" | "exitSettlement" | "exitRecord" | "disciplinaryRecord" | "appraisalCycle" | "appraisal" | "jobRequisition";
 
 interface Spec {
   module: ModuleKey;
@@ -36,6 +37,9 @@ interface Spec {
 const SPECS: Spec[] = [
   { module: "payroll", kind: "HARD", model: "payrollRun", where: (organizationId) => ({ organizationId, status: { in: ["DRAFT", "CALCULATED", "PENDING_APPROVAL", "APPROVED"] } }), text: (n) => `${n} ${pl(n, "pay run")} ${be(n)} still in progress (not yet locked or paid). Finish or cancel ${it(n)} first.` },
   { module: "payroll", kind: "HARD", model: "paymentBatch", where: (organizationId) => ({ organizationId, status: "PENDING" }), text: (n) => `${n} ${pl(n, "payment batch", "payment batches")} ${be(n)} still awaiting confirmation. Confirm or cancel ${it(n)} first.` },
+  // a final settlement is a leaver's last pay: hard while it waits for approval or release, soft while it is only being prepared (the HR cycle ends here, in Payroll)
+  { module: "payroll", kind: "HARD", model: "exitSettlement", where: (organizationId) => ({ organizationId, status: { in: ["PENDING_APPROVAL", "APPROVED"] } }), text: (n) => `${n} final ${pl(n, "settlement")} ${be(n)} awaiting approval or release. Approve and release, or cancel, ${it(n)} first.` },
+  { module: "payroll", kind: "SOFT", model: "exitSettlement", where: (organizationId) => ({ organizationId, status: "DRAFT" }), text: (n) => `${n} final ${pl(n, "settlement")} ${be(n)} still being prepared. ${stays(n)} but cannot be completed once the module ends.` },
   { module: "accounting", kind: "HARD", model: "journalDocument", where: (organizationId) => ({ organizationId, status: { in: ["SUBMITTED", "APPROVED"] } }), text: (n) => `${n} manual ${pl(n, "journal")} ${be(n)} waiting for approval or posting. Post or reject ${it(n)} first.` },
   { module: "accounting", kind: "HARD", model: "accountingPeriod", where: (organizationId) => ({ organizationId, status: "SOFT_CLOSED" }), text: (n) => `${n} accounting ${pl(n, "period")} ${be(n)} still being closed. Close or reopen ${it(n)} first.` },
   { module: "payables_procurement", kind: "HARD", model: "purchaseOrder", where: (organizationId) => ({ organizationId, status: "PENDING_APPROVAL" }), text: (n) => `${n} purchase ${pl(n, "order")} ${be(n)} waiting for approval. Approve or reject ${it(n)} first.` },
@@ -47,6 +51,12 @@ const SPECS: Spec[] = [
   { module: "hr", kind: "SOFT", model: "leaveRequest", where: (organizationId) => ({ organizationId, status: "PENDING" }), text: (n) => `${n} leave ${pl(n, "request")} ${be(n)} still pending. ${stays(n)} but cannot be decided once the module ends.` },
   { module: "hr", kind: "SOFT", model: "onboardingTask", where: (organizationId) => ({ organizationId, status: "PENDING" }), text: (n) => `${n} onboarding ${pl(n, "task")} ${be(n)} still open. ${stays(n)} but cannot be completed once the module ends.` },
   { module: "hr", kind: "SOFT", model: "exitTask", where: (organizationId) => ({ organizationId, status: "PENDING" }), text: (n) => `${n} exit ${pl(n, "task")} ${be(n)} still open. ${stays(n)} but cannot be completed once the module ends.` },
+  // the rest of the cycle: an exit waiting for its decision is hard (the leaver's final pay follows it); discipline, appraisal and recruitment in progress are soft
+  { module: "hr", kind: "HARD", model: "exitRecord", where: (organizationId) => ({ organizationId, status: "PENDING" }), text: (n) => `${n} ${pl(n, "exit")} ${be(n)} awaiting approval. Approve or reject ${it(n)} first.` },
+  { module: "hr", kind: "SOFT", model: "disciplinaryRecord", where: (organizationId) => ({ organizationId, status: "PENDING" }), text: (n) => `${n} disciplinary ${pl(n, "record")} ${be(n)} awaiting a decision. ${stays(n)} but cannot be decided once the module ends.` },
+  { module: "hr", kind: "SOFT", model: "appraisalCycle", where: (organizationId) => ({ organizationId, status: "OPEN" }), text: (n) => `${n} appraisal ${pl(n, "cycle")} ${be(n)} still open. ${stays(n)} but cannot be completed once the module ends.` },
+  { module: "hr", kind: "SOFT", model: "appraisal", where: (organizationId) => ({ organizationId, status: { in: ["DRAFT", "SUBMITTED"] } }), text: (n) => `${n} ${pl(n, "appraisal")} ${be(n)} not yet approved. ${stays(n)} but cannot be completed once the module ends.` },
+  { module: "hr", kind: "SOFT", model: "jobRequisition", where: (organizationId) => ({ organizationId, status: { in: ["PENDING_APPROVAL", "APPROVED", "ON_HOLD"] } }), text: (n) => `${n} job ${pl(n, "requisition")} ${be(n)} still open. ${stays(n)} but cannot be decided once the module ends.` },
 ];
 
 /** The work in progress that removing these modules from this company would strand: hard and soft, in plain words. `client` is the database (or a transaction), so a change can check inside its own transaction. */
