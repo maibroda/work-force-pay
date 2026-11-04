@@ -5234,6 +5234,8 @@ What was proposed to a prospect: the plan and modules chosen from the answers to
 | configured | Json |  | Everything the configurator computed (plan, add-ons, runner-up, notes, limits), as it was when saved. |
 | quote | Json |  | The quote as it was given, with the price book version it used. A snapshot: a later price change never rewrites it. |
 | status | String |  | DRAFT, SENT, ACCEPTED or DROPPED. |
+| provisionedAt | DateTime |  | Set once, when the blueprint is applied to the client it became (its plan, add-ons and limits become that client's subscription). The client's id is kept as text: a blueprint is a record. |
+| provisionedOrganizationId | String |  |  |
 | createdBy | String | yes |  |
 | createdAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |

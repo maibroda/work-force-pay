@@ -30,3 +30,11 @@ export async function setBlueprintStatusAction(id: string, status: bp.BlueprintS
     return { message: `Marked ${status.toLowerCase()}.` };
   }, [...PATHS, `/crm/blueprints/${id}`]);
 }
+
+/** For platform staff and a bureau's administrator (the service checks it again). Applies an accepted blueprint's plan, add-ons and limits to the client its lead became. */
+export async function provisionBlueprintAction(id: string, acknowledgeSoft: boolean) {
+  return act("blueprint.manage", async (ctx) => {
+    await bp.provisionFromBlueprint(ctx, id, { acknowledgeSoft });
+    return { message: "Applied: the client's plan, add-ons and limits are now what the blueprint proposed." };
+  }, [...PATHS, `/crm/blueprints/${id}`, "/settings/subscription"]);
+}

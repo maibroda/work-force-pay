@@ -6,10 +6,11 @@
  * A blueprint belongs to the selling organization: the bureau (or platform organization) of the person who made it, whichever client they happen to be working in.
  */
 import type { Ctx } from "@/lib/auth/context";
-import type { Answers } from "@/lib/entitlements/configure";
-import { BusinessError, db } from "./_base";
+import type { Answers, Configured } from "@/lib/entitlements/configure";
+import { BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
 import { assertSeller, quoteBlueprint } from "./price-book";
+import { changePlan, createSubscription } from "./subscriptions";
 
 export const BLUEPRINT_STATUSES = ["DRAFT", "SENT", "ACCEPTED", "DROPPED"] as const;
 export type BlueprintStatus = (typeof BLUEPRINT_STATUSES)[number];
@@ -96,4 +97,43 @@ export async function setBlueprintStatus(ctx: Ctx, id: string, status: Blueprint
     if (done.count !== 1) throw new BusinessError("That blueprint was changed by someone else a moment ago: look again.");
     await logAudit({ ...ctx, orgId: org }, { action: "BLUEPRINT_STATUS_CHANGED", entity: "ClientBlueprint", entityId: id, oldValue: { status: from }, newValue: { status } }, tx);
   });
+}
+
+/**
+ * Applies an accepted blueprint to the client its lead became (step E5c of docs/plans/module-entitlements-e5.md): the proposed plan, add-ons and limits become that client's
+ * subscription (made if it has none, changed if it has one), the history names the blueprint, and the blueprint is marked as applied, all in ONE transaction, so it is
+ * all or nothing. Changing a client's modules is subscription work: platform staff and a bureau's administrator may do it, not the sales person who made the blueprint. The
+ * blockers of E5a apply: a module with work in progress is not ended. Nothing is sent, and the blueprint stays "accepted".
+ */
+export async function provisionFromBlueprint(ctx: Ctx, id: string, opts: { acknowledgeSoft?: boolean } = {}): Promise<void> {
+  const bp = await getBlueprint(ctx, id); // the seller's own blueprint, or "not found"
+  if (bp.status !== "ACCEPTED") throw new BusinessError("Only an accepted blueprint can be applied to a client.");
+  if (bp.provisionedAt) throw new BusinessError("This blueprint has already been applied to a client.");
+  const lead = bp.leadId ? await db.lead.findFirst({ where: { id: bp.leadId, organizationId: bp.organizationId }, select: { clientOrganizationId: true } }) : null;
+  const clientId = lead?.clientOrganizationId;
+  if (!clientId) throw new BusinessError("Link the blueprint to a lead that has been onboarded as a client first.");
+  const client = await db.organization.findUnique({ where: { id: clientId }, select: { bureauOrganizationId: true } });
+  if (!client || client.bureauOrganizationId !== bp.organizationId) throw new BusinessError("That client is not one of this bureau's clients.");
+  const proposed = (bp.configured as unknown as Configured).proposed;
+  const limits = (bp.configured as unknown as Configured).limits;
+  if (!proposed) throw new BusinessError("This blueprint has no plan to apply.");
+  const selection = {
+    planKey: proposed.planKey,
+    addOns: proposed.addOns,
+    employeeLimit: limits?.employeeLimit ?? null,
+    crmUserLimit: limits?.crmUserLimit ?? null,
+    reason: "Applied from an accepted blueprint",
+    blueprintId: bp.id,
+    acknowledgeSoft: opts.acknowledgeSoft,
+    inTx: async (tx: Tx) => {
+      // compare-and-set, so two people applying it at once cannot both succeed; failing here undoes the plan change too
+      const done = await tx.clientBlueprint.updateMany({ where: { id: bp.id, provisionedAt: null }, data: { provisionedAt: new Date(), provisionedOrganizationId: clientId } });
+      if (done.count !== 1) throw new BusinessError("This blueprint has already been applied to a client.");
+      await logAudit({ ...ctx, orgId: bp.organizationId }, { action: "BLUEPRINT_PROVISIONED", entity: "ClientBlueprint", entityId: bp.id, newValue: { clientOrganizationId: clientId, planKey: proposed.planKey } }, tx);
+    },
+  };
+  // both of these check that this person may manage the client's subscription (platform staff, or the administrator of the bureau it is a client of)
+  const existing = await db.subscription.findUnique({ where: { organizationId: clientId }, select: { id: true } });
+  if (existing) await changePlan(ctx, clientId, selection);
+  else await createSubscription(ctx, clientId, selection);
 }

@@ -34,6 +34,10 @@ export interface Selection {
   reason?: string;
   /** Go ahead although work is in progress that the change leaves readable but unworkable (hard blockers still refuse). */
   acknowledgeSoft?: boolean;
+  /** The accepted blueprint this change applies (E5c): recorded in the history. */
+  blueprintId?: string;
+  /** Runs inside the same transaction, after the change is made, so a caller can record that it happened and have both succeed or neither (E5c). */
+  inTx?: (tx: Tx) => Promise<void>;
 }
 
 // ─────────────────────────────── Who may do what ───────────────────────────────
@@ -116,7 +120,8 @@ async function createIn(tx: Tx, ctx: Ctx, orgId: string, sel: Selection) {
   await tx.subscriptionModule.createMany({
     data: modules.map((k) => ({ organizationId: orgId, subscriptionId: sub.id, moduleKey: k, source: addOns.includes(k) ? ("ADD_ON" as const) : ("PLAN" as const), startsOn: now })),
   });
-  await record(tx, ctx, orgId, sub.id, "CREATED", { plan, modules, employeeLimit: sub.employeeLimit, crmUserLimit: sub.crmUserLimit }, sel.reason);
+  await record(tx, ctx, orgId, sub.id, "CREATED", { plan, modules, employeeLimit: sub.employeeLimit, crmUserLimit: sub.crmUserLimit, ...(sel.blueprintId ? { blueprintId: sel.blueprintId } : {}) }, sel.reason);
+  await sel.inTx?.(tx);
   return sub;
 }
 
@@ -227,8 +232,12 @@ export async function changePlan(ctx: Ctx, orgId: string, sel: Selection) {
     if (starting.length) await tx.subscriptionModule.createMany({ data: starting.map((k) => ({ organizationId: orgId, subscriptionId: sub.id, moduleKey: k, source: addOns.includes(k) ? ("ADD_ON" as const) : ("PLAN" as const), startsOn: now })) });
     const kept = modules.filter((k) => active.includes(k));
     for (const k of kept) await tx.subscriptionModule.updateMany({ where: { subscriptionId: sub.id, moduleKey: k, endsOn: null }, data: { source: addOns.includes(k) ? "ADD_ON" : "PLAN" } });
-    await tx.subscription.update({ where: { id: sub.id }, data: { planKey: plan, catalogueVersion: CATALOGUE_VERSION } });
-    await record(tx, ctx, orgId, sub.id, "PLAN_CHANGED", { from: sub.planKey, to: plan, added: starting, removed: ending }, sel.reason);
+    // limits are changed only when the selection gives them (a plain change of plan leaves them as they are); null means no limit
+    const limits = parseLimits({ employeeLimit: sel.employeeLimit, crmUserLimit: sel.crmUserLimit });
+    const limitData = { ...(limits.employeeLimit !== undefined ? { employeeLimit: limits.employeeLimit } : {}), ...(limits.crmUserLimit !== undefined ? { crmUserLimit: limits.crmUserLimit } : {}) };
+    await tx.subscription.update({ where: { id: sub.id }, data: { planKey: plan, catalogueVersion: CATALOGUE_VERSION, ...limitData } });
+    await record(tx, ctx, orgId, sub.id, "PLAN_CHANGED", { from: sub.planKey, to: plan, added: starting, removed: ending, ...(Object.keys(limitData).length ? { limits: limitData } : {}), ...(sel.blueprintId ? { blueprintId: sel.blueprintId } : {}) }, sel.reason);
+    await sel.inTx?.(tx);
   });
 }
 
