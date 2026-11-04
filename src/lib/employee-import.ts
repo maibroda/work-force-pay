@@ -42,7 +42,7 @@ export const IMPORT_COLUMNS: { key: ImportKey; header: string; required: boolean
   { key: "stateOfResidence", header: "State of Residence", required: false, aliases: ["stateofresidence", "state", "residencestate", "residentstate"], example: "Lagos", help: "One of the 36 states or FCT. PAYE goes to this state" },
   { key: "nhfContributes", header: "NHF Contribution", required: false, aliases: ["nhfcontribution", "nhf", "nationalhousingfund", "contributestonhf"], example: "No", help: "Yes only if the employee has chosen to contribute 2.5% of basic pay to the National Housing Fund (voluntary)" },
   { key: "address", header: "Address", required: false, aliases: ["address", "homeaddress"], example: "", help: "" },
-  { key: "employmentDate", header: "Employment Date", required: true, aliases: ["employmentdate", "datejoined", "startdate", "dateofemployment", "joindate"], example: "01/02/2026", help: "Required. DD/MM/YYYY or YYYY-MM-DD" },
+  { key: "employmentDate", header: "Employment Date", required: true, aliases: ["employmentdate", "datejoined", "startdate", "dateofemployment", "joindate", "datehired", "hiredate", "dateofjoining", "joiningdate"], example: "01/02/2026", help: "Required. DD/MM/YYYY or YYYY-MM-DD" },
   { key: "category", header: "Category", required: true, aliases: ["category", "employeecategory", "grade", "jobcategory"], example: "GUARD", help: "Required. Category code or name, as set up for this client" },
   { key: "department", header: "Department", required: false, aliases: ["department", "dept"], example: "", help: "Department code or name" },
   { key: "bankName", header: "Bank Name", required: false, aliases: ["bankname", "bank"], example: "GTBank", help: "" },
@@ -54,12 +54,55 @@ export const IMPORT_COLUMNS: { key: ImportKey; header: string; required: boolean
   { key: "annualRent", header: "Annual Rent", required: false, aliases: ["annualrent", "rent"], example: "", help: "Naira, for rent relief" },
 ];
 
+/** The other names a required column goes by, as a person would write them (the stored aliases are normalised: lower case, no spaces), for the message that says what is missing. */
+const REQUIRED_ALSO: Partial<Record<ImportKey, string[]>> = {
+  firstName: ["First name", "Forename", "Given name"],
+  lastName: ["Last name", "Surname", "Family name"],
+  employmentDate: ["Date joined", "Start date", "Date of employment", "Join date", "Date hired", "Hire date", "Date of joining", "Joining date"],
+  category: ["Employee category", "Grade", "Job category"],
+};
+
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 // ─────────────────────────────── CSV ───────────────────────────────
 
-/** Parses CSV text: quoted fields, doubled quotes, commas and line breaks inside quotes, a leading byte-order mark, CRLF or LF. */
-export function parseCsv(text: string): string[][] {
+/**
+ * Turns the bytes of an uploaded file into text, the way Excel may have saved it: UTF-16 (`Unicode Text`, little- or big-endian, with its byte-order mark), UTF-8 with or without
+ * a byte-order mark, and otherwise (not valid UTF-8) Windows ANSI, which is what a plain "CSV" is on Windows, so an accented letter survives.
+ */
+export function decodeCsvBytes(bytes: Uint8Array): string {
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder("utf-16le").decode(bytes.subarray(2));
+  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder("utf-16be").decode(bytes.subarray(2));
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes).replace(/^﻿/, "");
+  } catch {
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
+}
+
+/** The separator a file uses: comma, semicolon or tab, from its first lines, ignoring anything inside quotes (Excel uses a semicolon in many regional settings). The usual comma when there is nothing to go on. */
+export function detectDelimiter(text: string): string {
+  const counts: Record<string, number> = { ",": 0, ";": 0, "\t": 0 };
+  let quoted = false;
+  let lines = 0;
+  let sawAny = false;
+  for (const c of text.replace(/^﻿/, "")) {
+    if (c === '"') quoted = !quoted;
+    else if (quoted) continue;
+    else if (c === "\n" || c === "\r") {
+      if (sawAny && ++lines >= 10) break;
+      sawAny = false;
+    } else {
+      sawAny = true;
+      if (c in counts) counts[c]++;
+    }
+  }
+  const best = Object.entries(counts).sort((a, b) => b[1] - a[1] || (a[0] === "," ? -1 : 1))[0];
+  return best[1] > 0 ? best[0] : ",";
+}
+
+/** Parses CSV text: quoted fields, doubled quotes, separators and line breaks inside quotes, a leading byte-order mark, CRLF or LF. The separator is found from the file unless given. */
+export function parseCsv(text: string, delimiter: string = detectDelimiter(text)): string[][] {
   const src = text.replace(/^﻿/, "");
   const rows: string[][] = [];
   let row: string[] = [];
@@ -80,7 +123,7 @@ export function parseCsv(text: string): string[][] {
     if (c === '"') {
       quoted = true;
       any = true;
-    } else if (c === ",") {
+    } else if (c === delimiter) {
       row.push(field);
       field = "";
       any = true;
@@ -120,12 +163,32 @@ export function importTemplateCsv(): string {
 
 export type HeaderMap = { byIndex: (ImportKey | null)[]; unknown: string[]; missingRequired: string[] };
 
-export function mapHeaders(header: string[]): HeaderMap {
+function headerLookup(): Map<string, ImportKey> {
   const lookup = new Map<string, ImportKey>();
   for (const c of IMPORT_COLUMNS) {
     lookup.set(norm(c.header), c.key);
     for (const a of c.aliases) lookup.set(a, c.key);
   }
+  return lookup;
+}
+
+/** Which of the first rows is the header: the one with the most recognised column names (a title or a note may come first). The first row when none stands out. */
+export function findHeaderRow(table: string[][]): number {
+  const lookup = headerLookup();
+  let best = 0;
+  let bestCount = 0;
+  table.slice(0, 10).forEach((row, i) => {
+    const n = new Set(row.map((h) => lookup.get(norm(h))).filter(Boolean)).size;
+    if (n > bestCount) {
+      best = i;
+      bestCount = n;
+    }
+  });
+  return bestCount >= 2 ? best : 0;
+}
+
+export function mapHeaders(header: string[]): HeaderMap {
+  const lookup = headerLookup();
   const seen = new Set<ImportKey>();
   const unknown: string[] = [];
   const byIndex = header.map((h) => {
@@ -232,9 +295,14 @@ export function checkImport(
   const empty = (fatal: string): ImportCheck => ({ fatal, headers: null, rows: [], summary: { total: 0, ok: 0, warnings: 0, errors: 0 } });
   const table = parseCsv(csv);
   if (table.length < 2) return empty("The file has no rows. It needs a header row and at least one employee.");
-  const headers = mapHeaders(table[0]);
-  if (headers.missingRequired.length) return { ...empty(`The file is missing required column(s): ${headers.missingRequired.join(", ")}.`), headers };
-  const body = table.slice(1).filter((r) => r.some((c) => c.trim() !== ""));
+  const headerRow = findHeaderRow(table);
+  const headers = mapHeaders(table[headerRow]);
+  if (headers.missingRequired.length) {
+    const found = table[headerRow].map((h) => h.trim()).filter(Boolean).map((h) => `"${h}"`).join(", ") || "(nothing)";
+    const also = IMPORT_COLUMNS.filter((c) => headers.missingRequired.includes(c.header)).map((c) => `${c.header} (also accepted: ${(REQUIRED_ALSO[c.key] ?? []).join(", ")})`).join("; ");
+    return { ...empty(`The file is missing required column(s): ${headers.missingRequired.join(", ")}. I found: ${found}. Rename the columns to match (case and spacing do not matter): ${also}.`), headers };
+  }
+  const body = table.slice(headerRow + 1).filter((r) => r.some((c) => c.trim() !== ""));
   if (body.length > MAX_IMPORT_ROWS) return { ...empty(`The file has ${body.length} rows; the limit is ${MAX_IMPORT_ROWS} per import. Split it.`), headers };
 
   // keys already taken, by people on the books (active staff only matter for payroll, but a leaver's number can't be reused either)
@@ -258,7 +326,7 @@ export function checkImport(
       if (k) raw[k] = (cells[idx] ?? "").trim();
     });
     const get = (k: ImportKey) => raw[k] ?? "";
-    const line = i + 2;
+    const line = headerRow + i + 2;
     const errors: string[] = [];
     const warnings: string[] = [];
 

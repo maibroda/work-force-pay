@@ -2,7 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { commitEmployeeImportAction, previewEmployeeImportAction } from "@/app/actions/employee-import";
-import type { ImportCheck } from "@/lib/employee-import";
+import { decodeCsvBytes, type ImportCheck } from "@/lib/employee-import";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +23,8 @@ export function ImportForm() {
     if (!file) return;
     setFileName(file.name);
     start(async () => {
-      const text = await file.text();
+      // the bytes, not file.text(): Excel may have saved the file as UTF-16 or Windows ANSI, and with semicolons or tabs; the importer reads them all
+      const text = decodeCsvBytes(new Uint8Array(await file.arrayBuffer()));
       setCsv(text);
       const res = await previewEmployeeImportAction({ csv: text });
       if (!res.ok) return toast(false, res.error ?? "Could not check the file.");
@@ -52,7 +53,7 @@ export function ImportForm() {
       <div className="space-y-1">
         <Label htmlFor="file">CSV file</Label>
         <Input id="file" type="file" accept=".csv,text/csv" disabled={pending} onChange={(e) => pick(e.target.files?.[0])} />
-        <p className="text-xs text-muted-foreground">In Excel, use Save As → CSV (UTF-8). Nothing is saved until you press Import.</p>
+        <p className="text-xs text-muted-foreground">In Excel, use Save As → CSV (UTF-8). A CSV with commas or semicolons, or Unicode Text, is read too, and a title row above the column names is fine. Nothing is saved until you press Import.</p>
       </div>
 
       {check?.fatal && <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-800">{check.fatal}</p>}
