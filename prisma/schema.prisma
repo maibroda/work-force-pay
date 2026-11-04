@@ -7031,3 +7031,41 @@ model EntitlementSwitchEvent {
 
   @@index([createdAt])
 }
+
+// ───────────────────────────── The software price book (docs/plans/module-entitlements-e4.md, step E4b) ─────────────────────────────
+// What the platform charges for each module, as dated versions: platform-wide, not per company. Starts EMPTY: every amount is the founder's, entered through the screen.
+// A version needs a second person to verify it, and once verified it can never be changed or deleted (a trigger refuses): a price change is a new version from a later date.
+
+model SoftwarePriceBook {
+  id               String    @id @default(cuid())
+  /// An ISO currency code from CURRENCIES in src/lib/money.ts.
+  currency         String    @default("NGN")
+  effectiveFrom    DateTime  @db.Date
+  /// The least the whole monthly quote can be; 0 for none.
+  minimumMonthly   Decimal   @default(0) @db.Decimal(16, 2)
+  note             String?
+  createdBy        String
+  createdByUserId  String
+  createdAt        DateTime  @default(now())
+  /// Set by a second person; the database refuses the maker, and refuses any change to a version once this is set.
+  verifiedBy       String?
+  verifiedByUserId String?
+  verifiedAt       DateTime?
+
+  lines SoftwarePriceLine[]
+
+  @@unique([currency, effectiveFrom])
+}
+
+/// One price in a version: per employee, per CRM user or flat, per month, by the way the catalogue charges the module (kept here so a later change in how a module is charged cannot silently reinterpret an old price).
+model SoftwarePriceLine {
+  id        String            @id @default(cuid())
+  bookId    String
+  book      SoftwarePriceBook @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  moduleKey String
+  /// active_employee, crm_user or flat.
+  basis     String
+  amount    Decimal           @db.Decimal(16, 2)
+
+  @@unique([bookId, moduleKey])
+}
