@@ -80,19 +80,8 @@ export const NAV: NavGroup[] = [
   {
     title: "Workforce / Personnel",
     items: [
+      // everything about employees sits inside this one entry, as a row of tabs across the top of its pages (EMPLOYEE_SECTIONS below)
       { href: "/employees", label: "Employees", perm: "employee.view" },
-      { href: "/employees/import", label: "Import Employees", perm: "employee.manage" },
-      { href: "/employees/categories", label: "Employee Categories", perm: "employee.view" },
-      { href: "/employees/departments", label: "Departments", perm: "employee.view" },
-      { href: "/employees/bank", label: "Bank Information", perm: "employee.sensitive" },
-      { href: "/employees/pension", label: "Pension Information", perm: "employee.sensitive" },
-      { href: "/employees/tax", label: "Tax Information", perm: "employee.sensitive" },
-      { href: "/employees/change-requests", label: "Detail Change Requests", perm: "employee.sensitive" },
-      { href: "/employees/next-of-kin", label: "Next of Kin & Emergency", perm: "employee.sensitive" },
-      { href: "/employees/guarantors", label: "Guarantors", perm: "employee.sensitive" },
-      { href: "/employees/dependants", label: "Dependants & Beneficiaries", perm: "employee.sensitive" },
-      { href: "/operations/deployments", label: "Employee Assignments", perm: "operations.view" },
-      { href: "/employees/org-chart", label: "Org Chart", perm: "employee.view" },
       {
         href: "/reports/location-history",
         label: "Employee Location History",
@@ -403,3 +392,43 @@ export const REPORT_LINKS: Array<{ href: string; label: string; group: string }>
   { href: "/finance/invoices", label: "Billing & Receivables", group: "Finance / Accounting" },
   { href: "/reports/audit", label: "Audit Report", group: "Settings / Support" },
 ];
+
+export interface EmployeeSection {
+  href: string;
+  label: string;
+  perm: Permission;
+}
+
+/**
+ * What sits inside "Employees" (the founder, 2026-11-04: one menu entry, with Import Employees and the rest as its sections). Shown as a row of tabs across the top of the Employees
+ * pages, each only to people whose role may open it, and only while its module is on for the company. The employee's own record has its own tabs and shows all of that person's
+ * information, so the row is not shown there.
+ */
+export const EMPLOYEE_SECTIONS: EmployeeSection[] = [
+  { href: "/employees", label: "All employees", perm: "employee.view" },
+  { href: "/employees/import", label: "Import employees", perm: "employee.manage" },
+  { href: "/employees/categories", label: "Employee categories", perm: "employee.view" },
+  { href: "/employees/departments", label: "Departments", perm: "employee.view" },
+  { href: "/employees/bank", label: "Bank information", perm: "employee.sensitive" },
+  { href: "/employees/pension", label: "Pension information", perm: "employee.sensitive" },
+  { href: "/employees/tax", label: "Tax information", perm: "employee.sensitive" },
+  { href: "/employees/change-requests", label: "Detail change requests", perm: "employee.sensitive" },
+  { href: "/employees/next-of-kin", label: "Next of kin & emergency", perm: "employee.sensitive" },
+  { href: "/employees/guarantors", label: "Guarantors", perm: "employee.sensitive" },
+  { href: "/employees/dependants", label: "Dependants & beneficiaries", perm: "employee.sensitive" },
+  { href: "/operations/deployments", label: "Assignments", perm: "operations.view" },
+  { href: "/employees/org-chart", label: "Org chart", perm: "employee.view" },
+];
+
+const trimSlash = (p: string) => p.replace(/\/+$/, "") || "/";
+const SECTION_PAGES = new Set(EMPLOYEE_SECTIONS.map((s) => s.href).filter((h) => h.startsWith("/employees")));
+
+/** Whether the row of Employees tabs is shown on this page: on the section pages, not on an employee's own record or anywhere else. */
+export function showEmployeesSections(pathname: string): boolean {
+  return SECTION_PAGES.has(trimSlash(pathname));
+}
+
+/** Whether a tab is the page being shown. */
+export function employeesSectionActive(href: string, pathname: string): boolean {
+  return trimSlash(href) === trimSlash(pathname);
+}
