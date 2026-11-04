@@ -6980,29 +6980,32 @@ model SubscriptionEvent {
 
 /// What was proposed to a prospect: the plan and modules chosen from the answers to the configurator's questions, and why. Kept so that what the client was told can be shown later.
 model ClientBlueprint {
-  id             String       @id @default(cuid())
+  id                        String       @id @default(cuid())
   /// The selling organization (the bureau or company that made the proposal), not the prospect.
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId            String
+  organization              Organization @relation(fields: [organizationId], references: [id])
   /// The bureau's own lead and proposal this blueprint is for (ThreeRoots sells through its own pipeline, not a company's sales module).
-  leadId         String?
-  lead           Lead?        @relation(fields: [leadId], references: [id])
-  proposalId     String?
-  proposal       Proposal?    @relation(fields: [proposalId], references: [id])
-  prospectName   String
-  planKey        String
-  modules        Json
-  answers        Json
-  reasons        Json
+  leadId                    String?
+  lead                      Lead?        @relation(fields: [leadId], references: [id])
+  proposalId                String?
+  proposal                  Proposal?    @relation(fields: [proposalId], references: [id])
+  prospectName              String
+  planKey                   String
+  modules                   Json
+  answers                   Json
+  reasons                   Json
   /// Everything the configurator computed (plan, add-ons, runner-up, notes, limits), as it was when saved.
-  configured     Json         @default("{}")
+  configured                Json         @default("{}")
   /// The quote as it was given, with the price book version it used. A snapshot: a later price change never rewrites it.
-  quote          Json?
+  quote                     Json?
   /// DRAFT, SENT, ACCEPTED or DROPPED.
-  status         String       @default("DRAFT")
-  createdBy      String
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  status                    String       @default("DRAFT")
+  /// Set once, when the blueprint is applied to the client it became (its plan, add-ons and limits become that client's subscription). The client's id is kept as text: a blueprint is a record.
+  provisionedAt             DateTime?
+  provisionedOrganizationId String?
+  createdBy                 String
+  createdAt                 DateTime     @default(now())
+  updatedAt                 DateTime     @updatedAt
 
   @@index([organizationId, createdAt])
   @@index([leadId])

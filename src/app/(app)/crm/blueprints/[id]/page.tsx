@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
+import { can } from "@/lib/auth/permissions";
 import { fmtDate } from "@/lib/dates";
 import { MODULES, type ModuleKey } from "@/lib/entitlements/catalogue";
 import type { Configured } from "@/lib/entitlements/configure";
@@ -12,7 +13,7 @@ import { ActionButton } from "@/components/action-button";
 import { KV, PageHeader, Section } from "@/components/page";
 import { StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { setBlueprintStatusAction } from "@/app/actions/blueprints";
+import { provisionBlueprintAction, setBlueprintStatusAction } from "@/app/actions/blueprints";
 
 const name = (k: string) => MODULES[k as ModuleKey]?.name ?? k;
 const names = (ks: string[]) => (ks.length ? ks.map(name).join(", ") : "none");
@@ -27,6 +28,8 @@ export default async function BlueprintPage({ params }: { params: Promise<{ id: 
     if (e instanceof BusinessError) notFound();
     throw e;
   });
+  // applying changes the client's modules: subscription work, for platform staff and a bureau's administrator (the service checks it again)
+  const canApply = b.status === "ACCEPTED" && !b.provisionedAt && !!b.leadId && (can(ctx.role, "subscription.manage") || can(ctx.role, "bureau.manage"));
   const c = b.configured as unknown as Configured;
   const q = b.quote as unknown as Quote | null;
   return (
@@ -35,11 +38,25 @@ export default async function BlueprintPage({ params }: { params: Promise<{ id: 
         title={b.prospectName}
         crumbs={[{ href: "/crm/blueprints", label: "Blueprints and quotes" }]}
         description={`Saved ${fmtDate(b.createdAt)} by ${b.createdBy}. The quote is as it was given on that day: a later price change does not change it.`}
-        actions={NEXT[b.status]?.map((s) => (
-          <ActionButton key={s} action={setBlueprintStatusAction.bind(null, b.id, s as never)} confirm={s === "DROPPED" ? "Drop this blueprint? It cannot be reopened." : undefined} variant={s === "DROPPED" ? "outline" : undefined}>
-            {LABEL[s]}
-          </ActionButton>
-        ))}
+        actions={
+          <>
+            {NEXT[b.status]?.map((s) => (
+              <ActionButton key={s} action={setBlueprintStatusAction.bind(null, b.id, s as never)} confirm={s === "DROPPED" ? "Drop this blueprint? It cannot be reopened." : undefined} variant={s === "DROPPED" ? "outline" : undefined}>
+                {LABEL[s]}
+              </ActionButton>
+            ))}
+            {canApply && (
+              <>
+                <ActionButton action={provisionBlueprintAction.bind(null, b.id, false)} confirm="Apply this blueprint to the client? Its plan, add-ons and limits become the client's subscription.">
+                  Apply to the client
+                </ActionButton>
+                <ActionButton action={provisionBlueprintAction.bind(null, b.id, true)} confirm="Apply it although the client has work in progress in a module that would end? That work stays readable but can no longer be worked." variant="outline">
+                  Apply, acknowledging work in progress
+                </ActionButton>
+              </>
+            )}
+          </>
+        }
       />
       <Section title="Summary">
         <KV
@@ -51,7 +68,8 @@ export default async function BlueprintPage({ params }: { params: Promise<{ id: 
             ["Sales users", c.limits?.crmUserLimit ?? "—"],
           ]}
         />
-        <p className="mt-3 text-xs text-muted-foreground">Sending and accepting are only recorded here: the app sends nothing and makes no subscription.</p>
+        <p className="mt-3 text-xs text-muted-foreground">Sending and accepting are only recorded here: the app sends nothing. Once accepted, and its lead has become a client, it can be applied to that client.</p>
+        {b.provisionedAt && <p className="mt-2 text-sm">Applied to the client on {fmtDate(b.provisionedAt)}: its plan, add-ons and limits became the client&apos;s subscription.</p>}
       </Section>
       <Section title="The plan proposed">
         {c.proposed ? (
