@@ -27,6 +27,7 @@ async function reference(ctx: Ctx) {
     existing: people.map((p) => ({ ...p, dateOfBirth: p.dateOfBirth ? iso(p.dateOfBirth) : null })),
     today: iso(new Date()),
     knownBank: await bankResolver(db, ctx.orgId),
+    pfas: await db.pensionFundAdministrator.findMany({ where: { organizationId: ctx.orgId }, select: { name: true, active: true } }),
   };
 }
 

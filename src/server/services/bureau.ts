@@ -12,6 +12,7 @@ import { twoFactorState, type TwoFactorState } from "@/lib/two-factor-policy";
 import { d, iso } from "@/lib/dates";
 import { num } from "@/lib/money";
 import { ensureDefaultChart } from "./accounting";
+import { ensureDefaultPfas } from "./pfas";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { startingRuleIds } from "./rule-library";
@@ -148,6 +149,7 @@ export async function onboardClient(ctx: Ctx, raw: z.input<typeof onboardClientS
       const client = await tx.organization.create({ data: { name: v.name, code: v.code, bureauOrganizationId: bureau.id, currency: bureau.currency } });
       const rules = await copyStatutoryRules(tx, bureau.id, client.id, await startingRuleIds(tx, bureau.id));
       await ensureDefaultChart(tx, client.id);
+      await ensureDefaultPfas(tx, client.id); // the starting list of pension fund administrators
       // every company has a subscription from the day it exists (assumed: the Payroll Core plan, key payroll_essentials; the bureau can change it)
       await ensureSubscription(tx, ctx, client.id, { planKey: "payroll_essentials", reason: "Onboarded by the bureau" });
       const engagement = await tx.clientEngagement.create({
