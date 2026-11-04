@@ -18,7 +18,7 @@ export default async function ReconciliationPage() {
   return (
     <>
       <PageHeader
-        title="Bank reconciliation"
+        title="Salary payment reconciliation"
         description="Match the bank statement to payment transactions on account number + amount. Unmatched lines and outstanding transactions are reported."
       />
       {can(ctx.role, "payment.manage") && batches.length > 0 && (

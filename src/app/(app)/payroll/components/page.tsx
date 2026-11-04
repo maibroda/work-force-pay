@@ -15,6 +15,9 @@ export default async function ComponentsPage() {
         title="Salary components"
         description="Every component across all salary structures. Edit components on the structure (drafts) or clone an active structure."
       />
+      <p className="no-print mb-3 text-sm text-muted-foreground">
+        This is a view of the <Link href="/payroll/structures" className="font-medium text-primary underline">salary structures</Link>: open a structure to change its components.
+      </p>
       <Section title="Components" flush>
         <Table>
           <THead>

@@ -5,10 +5,12 @@ import { requirePage } from "@/lib/auth/session";
 import { twoFactorStateFor } from "@/lib/auth/two-factor-gate";
 import { twoFactorReminder } from "@/lib/two-factor-policy";
 import { can } from "@/lib/auth/permissions";
-import { NAV, SELF_NAV } from "@/lib/nav";
+import { AREAS, EMPLOYEE_SECTIONS, NAV, SELF_NAV, areaEntry, visibleSections, type JumpPage } from "@/lib/nav";
 import { pageAllowed } from "@/lib/entitlements/guard";
 import { db } from "@/lib/db";
 import { Sidebar } from "@/components/sidebar";
+import { AreaTabs } from "@/components/area-tabs";
+import { GoTo } from "@/components/go-to";
 import { logoutAction } from "@/app/actions/auth";
 import { returnToBureauAction } from "@/app/actions/bureau";
 
@@ -21,6 +23,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const home = ctx.homeOrgId ? await db.organization.findUnique({ where: { id: ctx.homeOrgId }, select: { name: true } }) : null;
   const showBureau = Boolean(org?.isBureau || ctx.homeOrgId);
   const reminder = twoFactorReminder(gate.state, gate.enforceFrom, new Date(new Date().toISOString().slice(0, 10)));
+  // What this person may see: their role, the company's modules, and whether they are in a bureau. An area (Payroll and so on) is ONE sidebar entry leading to the first of its pages
+  // they may open; its pages are tabs inside it. Nothing here grants access: every page checks permission and module itself.
+  const vis = { can: (p: Parameters<typeof can>[1]) => can(ctx.role, p), allowed: (href: string) => pageAllowed(ctx.entitlements, href), bureau: showBureau };
+  const areas = AREAS.map((area) => ({ area, sections: visibleSections(area, vis) })).filter((x) => x.sections.length);
   const groups = [
     ...(["SUPERVISOR", "EMPLOYEE"].includes(ctx.role) ? SELF_NAV : []),
     ...NAV,
@@ -28,11 +34,28 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   ]
     .map((g) => ({
       title: g.title,
-      items: g.items
-        .filter((i) => can(ctx.role, i.perm) && (!i.bureauOnly || showBureau) && (!i.salesOnly || salesOn) && (!i.clientOnly || ctx.role === "CLIENT_APPROVER" || ctx.role === "CLIENT_HR") && pageAllowed(ctx.entitlements, i.href))
-        .map(({ href, label, section }) => ({ href, label, section })),
+      items: g.items.flatMap((i) => {
+        if (i.area) {
+          const found = areas.find((x) => x.area.key === i.area);
+          const entry = found && areaEntry(found.area, vis);
+          return entry && found ? [{ href: entry.href, label: entry.label, section: i.section, owns: found.sections.flatMap((s) => [s.href, ...(s.also ?? [])]) }] : [];
+        }
+        const ok = can(ctx.role, i.perm) && (!i.bureauOnly || showBureau) && (!i.salesOnly || salesOn) && (!i.clientOnly || ctx.role === "CLIENT_APPROVER" || ctx.role === "CLIENT_HR") && pageAllowed(ctx.entitlements, i.href);
+        return ok ? [{ href: i.href, label: i.label, section: i.section, owns: undefined as string[] | undefined }] : [];
+      }),
     }))
     .filter((g) => g.items.length);
+  // The pages the Go to box can jump to: every page the menu or a tab row shows this person.
+  const seen = new Set<string>();
+  const jump: JumpPage[] = [];
+  const addJump = (href: string, label: string, where: string) => {
+    if (seen.has(href)) return;
+    seen.add(href);
+    jump.push({ href, label, where });
+  };
+  for (const { area, sections } of areas) for (const s of sections) addJump(s.href, s.label, `${area.title} › ${s.group}`);
+  for (const s of EMPLOYEE_SECTIONS) if (can(ctx.role, s.perm) && pageAllowed(ctx.entitlements, s.href)) addJump(s.href, s.label, "Employees");
+  for (const g of groups) for (const i of g.items) if (!i.owns) addJump(i.href, i.label, g.title);
   return (
     <div className="min-h-screen">
       <Suspense>
@@ -40,6 +63,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </Suspense>
       <div className="lg:pl-60">
         <header className="no-print flex items-center justify-end gap-3 border-b bg-card px-4 py-2 text-sm">
+          <GoTo pages={jump} />
           <span className="hidden text-muted-foreground sm:inline">{org?.name}</span>
           <span className="font-medium">{ctx.name}</span>
           <span className="rounded bg-secondary px-2 py-0.5 text-[11px] font-medium">
@@ -72,7 +96,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </Link>
           </div>
         )}
-        <main className="mx-auto max-w-[1400px] p-4 sm:p-6">{children}</main>
+        <main className="mx-auto max-w-[1400px] p-4 sm:p-6">
+          <AreaTabs areas={areas.map(({ area, sections }) => ({ key: area.key, title: area.title, sections: sections.map(({ href, label, group, also }) => ({ href, label, group, also })) }))} />
+          {children}
+        </main>
       </div>
     </div>
   );
