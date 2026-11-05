@@ -14,7 +14,7 @@ import Link from "next/link";
 import { options } from "@/server/options";
 import { FormPanel } from "@/components/page";
 import { SmartForm } from "@/components/smart-form";
-import { createRoleStructureAction } from "@/app/actions/payroll";
+import { assignStructureToClientAction, createRoleStructureAction } from "@/app/actions/payroll";
 import { StructureBuilder } from "@/components/structure-builder";
 import {
   activateStructureAction,
@@ -82,6 +82,19 @@ export default async function StructurePage({ params }: { params: Promise<{ id: 
           )
         }
       />
+      {manage && !s.clientId && !s.parentId && !s.isDefault && o.clients.length > 0 && (
+        <FormPanel title="Give this structure to a client">
+          <SmartForm
+            columns={2}
+            submitLabel="Give to the client"
+            action={assignStructureToClientAction}
+            fields={[
+              { name: "structureId", label: "", type: "hidden", defaultValue: s.id },
+              { name: "clientId", label: "Client", type: "select", required: true, options: o.clients, help: "A client's structure can be used only on that client's contracts, and can then have role structures. Refused if it is already used on another client's contracts or for personal pay rates." },
+            ]}
+          />
+        </FormPanel>
+      )}
       {s.clientId && !s.parentId && (
         <Section title="Role structures" description="One for each job role (guard, supervisor, driver, cleaner). Each starts as a complete copy of this structure and can then be edited. Only one can be active for a role." flush>
           <Table>

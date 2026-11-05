@@ -33,8 +33,11 @@ export async function checkProposal(tx: Tx, orgId: string, v: ProposalInput) {
   if (reason.length < 3) throw new BusinessError("Give a reason (at least a few words), for example “Office staff on a personal gross”.");
   if (!isIsoDate(v.effectiveFrom)) throw new BusinessError("Effective from must be a valid date (YYYY-MM-DD).");
   const structureCode = (v.structureCode ?? "").trim() || null;
-  if (structureCode && !(await tx.salaryStructure.findFirst({ where: { organizationId: orgId, code: structureCode, status: "ACTIVE" }, select: { id: true } })))
-    throw new BusinessError(`Salary structure ${structureCode} was not found, or is not active.`);
+  if (structureCode) {
+    const found = await tx.salaryStructure.findFirst({ where: { organizationId: orgId, code: structureCode, status: "ACTIVE" }, select: { id: true, clientId: true } });
+    if (!found) throw new BusinessError(`Salary structure ${structureCode} was not found, or is not active.`);
+    if (found.clientId) throw new BusinessError(`Salary structure ${structureCode} belongs to a client and can be used only on that client's contracts, so it cannot be used for a personal pay rate. Choose a company-wide structure.`);
+  }
   return { monthlyGross, reason, structureCode, effectiveFrom: v.effectiveFrom };
 }
 

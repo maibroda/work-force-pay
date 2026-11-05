@@ -36,3 +36,7 @@ ABC Bank's structure: Basic 60%, Housing 40%. You add role structures: **Guard**
 - On the rate card form the structure is chosen from a list that now shows whose it is ("ABC Bank › …"); a wrong choice is refused by the server with a clear message rather than hidden from the list.
 - **Not built:** moving an existing company-wide structure to a client, and the office-staff structure percentages (waiting for your adviser).
 - I checked the screens in a browser against a scratch database (see the pull request); not every role.
+
+## Addendum (2026-11-05): giving an existing structure to a client
+
+On a company-wide structure's page, "Give this structure to a client" sets its owner and changes nothing else (the components stay). The rule it must keep is that a client's structure is used only on that client's contracts, so the server **refuses**, naming the client, if the structure is already used on another client's contract rate or as another client's contract default, and refuses if employees' **personal pay rates** or pending proposals use it (those are not tied to a client). The default structure can never be given to a client; a structure that already belongs to a client, or a role structure, is not moved; it is logged by ids. **Related fix:** a client's structure is also no longer accepted for a personal pay rate (a proposed gross, the import's Salary Structure column) or offered in the employee form. Tests: `tests/integration/assign-structure.test.ts`.

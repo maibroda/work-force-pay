@@ -29,7 +29,7 @@ async function reference(ctx: Ctx) {
     knownBank: await bankResolver(db, ctx.orgId),
     pfas: await db.pensionFundAdministrator.findMany({ where: { organizationId: ctx.orgId }, select: { name: true, active: true } }),
 
-    structureCodes: (await db.salaryStructure.findMany({ where: { organizationId: ctx.orgId, status: "ACTIVE" }, select: { code: true } })).map((s) => s.code),
+    structureCodes: (await db.salaryStructure.findMany({ where: { organizationId: ctx.orgId, status: "ACTIVE", clientId: null }, select: { code: true } })).map((s) => s.code),
   };
 }
 

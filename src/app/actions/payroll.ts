@@ -33,6 +33,16 @@ export async function createClientStructureAction(v: Record<string, unknown>) {
     ["/payroll/structures"],
   );
 }
+export async function assignStructureToClientAction(v: Record<string, unknown>) {
+  return act(
+    "structure.manage",
+    async (ctx) => {
+      const s = await st.assignStructureToClient(ctx, String(v.structureId ?? ""), String(v.clientId ?? ""));
+      return { message: `${s.name} now belongs to the client: it can be used only on that client's contracts.` };
+    },
+    ["/payroll/structures"],
+  );
+}
 export async function createRoleStructureAction(v: Record<string, unknown>) {
   return act(
     "structure.manage",
