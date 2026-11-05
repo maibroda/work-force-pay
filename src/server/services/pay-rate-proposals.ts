@@ -3,7 +3,7 @@ import { can, ForbiddenError } from "@/lib/auth/permissions";
 import { isIsoDate, MONTHLY_GROSS_MESSAGE, parseMonthlyGross } from "@/lib/pay-rate";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
-import { applyPayRate } from "./employees";
+import { applyPayRate } from "./pay-rates";
 
 /**
  * A personal monthly gross is PROPOSED (by HR, or by the payroll people) and APPROVED by a payroll manager, a second person, before it becomes a pay rate (the founder's decision,

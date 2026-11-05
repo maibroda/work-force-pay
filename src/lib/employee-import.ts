@@ -7,6 +7,7 @@
  */
 import { normaliseState } from "./nigeria-states";
 import { pfaKey } from "./pfas";
+import { parseTypedAmount } from "./pay-rate";
 
 export const MAX_IMPORT_ROWS = 1000;
 
@@ -30,7 +31,9 @@ export type ImportKey =
   | "taxId"
   | "pensionPin"
   | "pfa"
-  | "annualRent";
+  | "annualRent"
+  | "monthlyGross"
+  | "salaryStructure";
 
 export const IMPORT_COLUMNS: { key: ImportKey; header: string; required: boolean; aliases: string[]; example: string; help: string }[] = [
   { key: "firstName", header: "First Name", required: true, aliases: ["firstname", "forename", "givenname"], example: "Chinedu", help: "Required" },
@@ -53,6 +56,8 @@ export const IMPORT_COLUMNS: { key: ImportKey; header: string; required: boolean
   { key: "pensionPin", header: "Pension PIN", required: false, aliases: ["pensionpin", "pin", "rsapin"], example: "PEN100200300400", help: "" },
   { key: "pfa", header: "PFA", required: false, aliases: ["pfa", "pensionfundadministrator"], example: "Stanbic IBTC Pension", help: "" },
   { key: "annualRent", header: "Annual Rent", required: false, aliases: ["annualrent", "rent"], example: "", help: "Naira, for rent relief" },
+  { key: "monthlyGross", header: "Monthly Gross", required: false, aliases: ["monthlygross", "grosssalary", "monthlygrosssalary", "monthlygrosspay"], example: "", help: "Only for staff paid a personal monthly gross, not from a client contract rate. The MONTHLY amount in naira (not annual). It is a proposal: a payroll manager approves it before it counts" },
+  { key: "salaryStructure", header: "Salary Structure", required: false, aliases: ["salarystructure", "structure", "structurecode"], example: "", help: "The salary structure code the gross is split by; leave blank for the company's default. Used only with a Monthly Gross" },
 ];
 
 /** The other names a required column goes by, as a person would write them (the stored aliases are normalised: lower case, no spaces), for the message that says what is missing. */
@@ -273,6 +278,8 @@ export type ImportRowResult = {
     pensionPin?: string;
     pfa?: string;
     annualRent?: number;
+    monthlyGross?: string;
+    salaryStructure?: string;
   };
 };
 
@@ -291,7 +298,7 @@ export type ImportCheck = {
 /** Checks a whole file. `today` is YYYY-MM-DD. */
 export function checkImport(
   csv: string,
-  ref: { categories: Lookup[]; departments: Lookup[]; existing: ExistingPerson[]; today: string; /** Whether a bank name can be turned into a bank code for the payment file. */ knownBank?: (name: string) => boolean; /** The company's list of pension fund administrators. Empty or left out: any PFA typed is kept. */ pfas?: { name: string; active: boolean }[] },
+  ref: { categories: Lookup[]; departments: Lookup[]; existing: ExistingPerson[]; today: string; /** Whether a bank name can be turned into a bank code for the payment file. */ knownBank?: (name: string) => boolean; /** The company's list of pension fund administrators. Empty or left out: any PFA typed is kept. */ pfas?: { name: string; active: boolean }[]; /** The codes of the company's active salary structures, to check a Salary Structure column against. Left out: not checked. */ structureCodes?: string[] },
 ): ImportCheck {
   const empty = (fatal: string): ImportCheck => ({ fatal, headers: null, rows: [], summary: { total: 0, ok: 0, warnings: 0, errors: 0 } });
   const table = parseCsv(csv);
@@ -416,6 +423,18 @@ export function checkImport(
     if (!get("pensionPin") || !pfa) warnings.push("Pension PIN or PFA is missing.");
     if (!get("taxId")) warnings.push("Tax ID is missing.");
 
+    // a personal monthly gross becomes a PROPOSAL (a payroll manager approves it). One that cannot be used does not stop the person being captured: they are saved without a pay rate.
+    let payRate: { gross: string; structure?: string } | null = null;
+    if (get("monthlyGross")) {
+      const gross = parseTypedAmount(get("monthlyGross"));
+      if (gross === null) warnings.push(`Monthly gross "${get("monthlyGross")}" is not a monthly amount in naira (at most two decimals; an annual figure is not accepted), so it was left blank and no pay rate was proposed. Set it on the employee's record.`);
+      else if (get("salaryStructure")) {
+        const code = ref.structureCodes ? ref.structureCodes.find((c) => norm(c) === norm(get("salaryStructure"))) : get("salaryStructure");
+        if (!code) warnings.push(`Salary structure "${get("salaryStructure")}" is not one of this company's active salary structures, so no pay rate was proposed. Fix the code in the file, or set the pay rate on the employee's record.`);
+        else payRate = { gross, structure: code };
+      } else payRate = { gross };
+    }
+
     const phone = get("phone") ? normalizePhone(get("phone")) : "";
     if (get("phone") && !/^0\d{10}$/.test(phone)) warnings.push(`Phone "${get("phone")}" is not an 11-digit Nigerian number.`);
 
@@ -471,6 +490,7 @@ export function checkImport(
         ...(get("pensionPin") ? { pensionPin: get("pensionPin") } : {}),
         ...(pfa ? { pfa } : {}),
         ...(annualRent !== undefined ? { annualRent } : {}),
+        ...(payRate ? { monthlyGross: payRate.gross, ...(payRate.structure ? { salaryStructure: payRate.structure } : {}) } : {}),
       };
     }
     return result;
