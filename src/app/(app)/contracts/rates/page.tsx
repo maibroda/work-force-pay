@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { listContracts } from "@/server/services/clients";
@@ -67,6 +68,9 @@ export default async function RatesPage() {
             action={addContractRateAction}
             submitLabel="Save agreed rate"
           />
+      <p className="no-print mb-3 text-sm text-muted-foreground">
+        Each rate uses a <Link href="/payroll/structures" className="font-medium text-primary underline">salary structure</Link>: the structure says how the gross is split into components.
+      </p>
         </FormPanel>
       )}
       <Section title="Agreed rates" flush>

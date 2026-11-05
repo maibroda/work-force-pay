@@ -20,6 +20,22 @@ export default async function RunsPage({
         title={sp.status ? `Payroll runs — ${sp.status.replace("_", " ").toLowerCase()}` : "Payroll runs"}
         description="Regular runs can be recalculated any number of times while the period is open. Supplementary runs handle post-lock corrections."
       />
+      <nav aria-label="Filter runs by step" className="no-print mb-3 flex flex-wrap gap-2 text-sm">
+        {[
+          { status: undefined, label: "All runs" },
+          { status: "PENDING_APPROVAL", label: "Awaiting approval" },
+          { status: "APPROVED", label: "Approved, ready to lock" },
+        ].map((f) => (
+          <Link
+            key={f.label}
+            href={f.status ? `/payroll/runs?status=${f.status}` : "/payroll/runs"}
+            aria-current={(sp.status ?? undefined) === f.status ? "true" : undefined}
+            className={(sp.status ?? undefined) === f.status ? "rounded-full bg-primary px-3 py-1 font-medium text-primary-foreground" : "rounded-full border px-3 py-1 text-muted-foreground hover:text-foreground"}
+          >
+            {f.label}
+          </Link>
+        ))}
+      </nav>
       <Section title={`${runs.length} run(s)`} flush>
         <Table>
           <THead>
