@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { can, type Permission, type Role } from "@/lib/auth/permissions";
 import { pageRouteFor } from "@/lib/entitlements/guard";
-import { AREAS, NAV, PAYROLL_AREA, areaEntry, groupSections, searchPages, sectionFor, visibleSections } from "@/lib/nav";
+import { AREAS, NAV, PAYROLL_AREA, REPORTS_AREA, areaEntry, groupSections, searchPages, sectionFor, visibleSections } from "@/lib/nav";
 
 /**
  * The founder's review (2026-11-04): about 170 menu entries over 239 pages is hard to work in; merge the pages that overlap, make the menu easy to find your way around
@@ -70,7 +70,8 @@ const SPLIT_OUT = { settlements: "/payroll/settlements" }; // End-of-Service Set
 const REDIRECTS = ["/payroll/control", "/payroll/approval", "/payroll/lock"]; // three entries that all led to the payroll runs page
 
 const hrefs = PAYROLL_AREA.sections.map((s) => s.href);
-const reachable = new Set([...hrefs, ...PAYROLL_AREA.sections.flatMap((s) => s.also ?? [])]);
+// the reports moved out of Payroll into the Reports area (the founder's decision of 2026-11-05: every report in one place), so a page is reachable if it is a Payroll tab or a Reports tab
+const reachable = new Set([...hrefs, ...PAYROLL_AREA.sections.flatMap((s) => s.also ?? []), ...REPORTS_AREA.sections.map((s) => s.href)]);
 
 describe("the Payroll area is one sidebar entry with its pages inside", () => {
   it("replaces the 38 Payroll sidebar entries by one, named Payroll, that leads into the area", () => {
@@ -100,7 +101,7 @@ describe("the Payroll area is one sidebar entry with its pages inside", () => {
 
   it("shows nobody a page they could not open before, and hides no page from anybody who could open it before (same permission per page)", () => {
     const was = new Map([...OLD_PAYROLL, ...BROUGHT_IN]);
-    for (const s of PAYROLL_AREA.sections) {
+    for (const s of [...PAYROLL_AREA.sections, ...REPORTS_AREA.sections.filter((r) => was.has(r.href))]) {
       expect(s.perm, s.href).toBe(was.get(s.href));
       for (const r of all) expect(can(r, s.perm)).toBe(can(r, was.get(s.href)!));
     }
@@ -142,8 +143,9 @@ describe("what a person sees of the area", () => {
 
   it("makes the sidebar entry lead to the first page they can open, so someone who may only read reports still gets in, and no entry at all for someone with nothing", () => {
     expect(areaEntry(PAYROLL_AREA, v("PAYROLL_ADMIN"))).toEqual({ href: "/payroll/runs", label: "Payroll" });
-    const reportsOnly = areaEntry(PAYROLL_AREA, { can: (p) => p === "reports.view", allowed: () => true, bureau: false });
-    expect(reportsOnly?.href.startsWith("/reports/")).toBe(true);
+    // someone who may only read reports has no Payroll entry: the reports are under Reports now
+    expect(areaEntry(PAYROLL_AREA, { can: (p) => p === "reports.view", allowed: () => true, bureau: false })).toBeNull();
+    expect(areaEntry(REPORTS_AREA, { can: (p) => p === "reports.view", allowed: () => true, bureau: false })).toEqual({ href: "/reports", label: "Reports" });
     expect(areaEntry(PAYROLL_AREA, v("EMPLOYEE"))).toBeNull();
   });
 
@@ -163,7 +165,8 @@ describe("which tab a page is under", () => {
     expect(at("/payroll/structures/new")).toBe("/payroll/structures");
     expect(at("/payroll/components")).toBe("/payroll/structures");
     expect(at("/payments/batches/")).toBe("/payments/batches");
-    expect(at("/reports/payslips")).toBe("/reports/payslips");
+    expect(at("/reports/payslips")).toBeNull(); // payslips are a report now: under Reports
+    expect(sectionFor(REPORTS_AREA, "/reports/payslips")?.href).toBe("/reports/payslips");
     expect(at("/employees")).toBeNull();
     expect(at("/payroll")).toBeNull();
   });
