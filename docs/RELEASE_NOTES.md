@@ -9,8 +9,6 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 - **The amount is the monthly gross** in naira, at most two decimals, held as exact text. No migration and no change to the payroll calculation; this only creates proposals through the code added in the pay-rate approval pull request.
 - Tests: `tests/unit/employee-import-gross.test.ts`, `tests/integration/pay-rate-entry.test.ts`, written first.
 
-## Not yet merged (branch `pay-rate-approval`, one migration: 20261122090000_pay_rate_proposals)
-
 ## Merged in #143 on 2026-11-05 (branch `navigation-reports`, no migration)
 
 - **Every report is in one place: a Reports menu entry with search (the founder, 2026-11-05).** Reports were listed in the Payroll, Workforce, Operations, Finance and Settings groups as well as on the Reports page. They are now one sidebar entry, "Reports". It opens the Reports page, which has a search box that narrows the list as you type; inside it, each report is a tab, grouped HR, Workforce, Payroll, Operations, Finance and Audit. The Reports page's own list is the single source.
