@@ -55,7 +55,7 @@ export async function options(ctx: Ctx) {
     activeStructures: structures
       .filter((s) => s.status === "ACTIVE")
       .map((s) => opt(s.id, `${s.client ? `${s.client.name} › ` : ""}${s.name}${s.category ? ` (${s.category.name})` : ""}${s.isDefault ? " (default)" : ""}`)),
-    structureCodes: structures.filter((s) => s.status === "ACTIVE").map((s) => opt(s.code, s.name)),
+    structureCodes: structures.filter((s) => s.status === "ACTIVE" && !s.clientId).map((s) => opt(s.code, s.name)), // a client's structure is not offered for a personal pay rate
     periods: periods.map((p) => opt(p.id, `${p.name} (${p.status.toLowerCase()})`)),
     openPeriods: periods
       .filter((p) => ["OPEN", "PROCESSING", "PENDING_VALIDATION", "PENDING_APPROVAL"].includes(p.status))

@@ -2,6 +2,13 @@
 
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
+## Not yet merged (branch `assign-structure-to-client`, no migration)
+
+- **An existing salary structure can be given to a client (the founder, 2026-11-05).** On a company-wide structure's page, "Give this structure to a client". The demo data, for example, has structures named for a client that sat as company-wide ones. Nothing but the owner changes; the components stay.
+- **It keeps the rule that a client's structure is used only on that client's contracts**, so it is **refused** (naming the client) if the structure is already used on another client's contract rate or as another client's contract default, or if employees' **personal pay rates** (or pending proposals) use it, because those are not tied to a client. The default structure can never be given to a client, and a structure that already belongs to a client, or a role structure, is not moved. Logged by ids.
+- **A fix to what #151 left open:** a client's structure could still be chosen for an employee's personal pay rate. It is now **refused** for a proposed personal gross (with the reason), **not accepted in the bulk import** (the row is imported without a pay rate, with a warning), and **not offered** in the employee form's list.
+- **No migration; no change to the payroll calculation.** Tests: `tests/integration/assign-structure.test.ts` (8), written first and seen failing.
+
 ## Not yet merged (branch `client-structures-build`, one migration: 20261123090000_client_salary_structures)
 
 - **A salary structure for each client, with sub-structures for each job role (the founder, 2026-11-05).** On the Salary structures page the list is now grouped: **Company-wide** first, then each client, with a client's structure followed by its **role structures** (guard, supervisor, driver, cleaner: the existing employee categories), indented. "Create a salary structure for a client" makes, for example, "ABC Bank salary structure" as a copy of a structure you pick (the company's default if none), owned by that client. On a client's structure, "Add a role structure" makes a **complete copy for one job role**, which can then be edited; a change to the client's structure later does **not** change a role structure.

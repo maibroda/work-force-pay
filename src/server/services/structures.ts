@@ -340,6 +340,32 @@ export async function createRoleStructure(ctx: Ctx, raw: { parentId: string; cat
   });
 }
 
+/**
+ * Gives an EXISTING company-wide structure to a client. A client's structure can be used only on that client's contracts, so it is refused if the structure is already used on ANOTHER
+ * client's contract rate or as another client's contract default, or by employees' personal pay rates or proposals (those are not tied to a client). The default structure can never be
+ * given an owner, and a structure that already belongs to a client (or is a role structure) is not moved. Nothing but the owner changes.
+ */
+export async function assignStructureToClient(ctx: Ctx, id: string, clientId: string) {
+  assertCan(ctx, "structure.manage");
+  return db.$transaction(async (tx) => {
+    const s = await tx.salaryStructure.findFirst({ where: { id, organizationId: ctx.orgId }, include: { client: { select: { name: true } } } });
+    if (!s) throw new BusinessError("Salary structure not found.");
+    if (s.isDefault) throw new BusinessError("The default structure can never be given to a client.");
+    if (s.clientId || s.parentId) throw new BusinessError(`This structure already belongs to ${s.client?.name ?? "a client"}.`);
+    const client = await tx.client.findFirst({ where: { id: clientId, organizationId: ctx.orgId } });
+    if (!client) throw new BusinessError("Client not found.");
+    const onRates = await tx.contractRate.findMany({ where: { organizationId: ctx.orgId, salaryStructureId: id, contract: { clientId: { not: clientId } } }, select: { contract: { select: { client: { select: { name: true } } } } } });
+    const asDefault = await tx.contract.findMany({ where: { organizationId: ctx.orgId, defaultStructureId: id, clientId: { not: clientId } }, select: { client: { select: { name: true } } } });
+    const others = [...new Set([...onRates.map((r) => r.contract.client.name), ...asDefault.map((c) => c.client.name)])];
+    if (others.length) throw new BusinessError(`This structure is used on ${others.join(" and ")} contracts, so it cannot be given to ${client.name}: a client's structure can be used only on that client's contracts.`);
+    const pay = (await tx.employeePayRate.count({ where: { organizationId: ctx.orgId, structureCode: s.code } })) + (await tx.payRateProposal.count({ where: { organizationId: ctx.orgId, structureCode: s.code } }));
+    if (pay > 0) throw new BusinessError(`${pay} personal pay rate${pay === 1 ? " uses" : "s use"} this structure, and those are not tied to a client, so it cannot be given to ${client.name}.`);
+    const done = await tx.salaryStructure.update({ where: { id }, data: { clientId: client.id } });
+    await logAudit(ctx, { action: "SALARY_STRUCTURE_ASSIGN_CLIENT", entity: "SalaryStructure", entityId: id, oldValue: { clientId: null }, newValue: { clientId: client.id } }, tx);
+    return done;
+  });
+}
+
 export async function listStructures(ctx: Ctx) {
   return db.salaryStructure.findMany({
     where: { organizationId: ctx.orgId },
