@@ -10,6 +10,11 @@ import { KV, PageHeader, Section } from "@/components/page";
 import { ActionButton } from "@/components/action-button";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR, TFoot } from "@/components/ui/table";
+import Link from "next/link";
+import { options } from "@/server/options";
+import { FormPanel } from "@/components/page";
+import { SmartForm } from "@/components/smart-form";
+import { createRoleStructureAction } from "@/app/actions/payroll";
 import { StructureBuilder } from "@/components/structure-builder";
 import {
   activateStructureAction,
@@ -27,6 +32,7 @@ export default async function StructurePage({ params }: { params: Promise<{ id: 
   const errors = validateStructure(def);
   const sample = computeComponents(def, 84000, 1);
   const manage = can(ctx.role, "structure.manage");
+  const o = await options(ctx);
   return (
     <>
       <PageHeader
@@ -38,6 +44,13 @@ export default async function StructurePage({ params }: { params: Promise<{ id: 
             {s.isDefault && <Badge tone="blue">Default</Badge>}
             {s.isPartial && <Badge tone="amber">Partial</Badge>}
             <code className="text-xs">{s.code}</code>
+            {s.client && <span className="text-xs">Owned by {s.client.name}</span>}
+            {s.parent && (
+              <span className="text-xs">
+                Role structure under <Link className="text-primary underline" href={`/payroll/structures/${s.parent.id}`}>{s.parent.name}</Link>
+                {s.category ? ` for ${s.category.name}` : ""}
+              </span>
+            )}
           </span>
         }
         actions={
@@ -69,6 +82,52 @@ export default async function StructurePage({ params }: { params: Promise<{ id: 
           )
         }
       />
+      {s.clientId && !s.parentId && (
+        <Section title="Role structures" description="One for each job role (guard, supervisor, driver, cleaner). Each starts as a complete copy of this structure and can then be edited. Only one can be active for a role." flush>
+          <Table>
+            <THead>
+              <TR>
+                <TH>Role</TH>
+                <TH>Code</TH>
+                <TH>Name</TH>
+                <TH>Status</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {s.roles.map((r) => (
+                <TR key={r.id}>
+                  <TD>{r.category?.name ?? "—"}</TD>
+                  <TD className="font-mono text-xs">{r.code}</TD>
+                  <TD>
+                    <Link className="font-medium text-primary hover:underline" href={`/payroll/structures/${r.id}`}>
+                      {r.name}
+                    </Link>
+                  </TD>
+                  <TD>
+                    <StatusBadge status={r.status} />
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+          {!s.roles.length && <p className="px-4 py-3 text-sm text-muted-foreground">No role structures yet.</p>}
+        </Section>
+      )}
+      {manage && s.clientId && !s.parentId && (
+        <FormPanel title="Add a role structure">
+          <SmartForm
+            columns={3}
+            submitLabel="Create role structure"
+            action={createRoleStructureAction}
+            fields={[
+              { name: "parentId", label: "", type: "hidden", defaultValue: s.id },
+              { name: "categoryId", label: "Job role (category)", type: "select", required: true, options: o.categories },
+              { name: "code", label: "Code", required: true, placeholder: `${s.code}-GUARD` },
+              { name: "name", label: "Name", placeholder: "Leave blank for “<client> — <role>”" },
+            ]}
+          />
+        </FormPanel>
+      )}
       {errors.length > 0 && (
         <p className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
           {errors.join(" ")}

@@ -1870,6 +1870,7 @@ model EmployeeCategory {
   description          String?
   employees            Employee[]
   contractRates        ContractRate[]
+  salaryStructures     SalaryStructure[]
   deployments          Deployment[]
   workRegister         WorkRegister[]
   requisitions         JobRequisition[]
@@ -2670,6 +2671,7 @@ model Client {
   taxCertificates   TaxCertificate[]
 
   @@unique([organizationId, code])
+  salaryStructures SalaryStructure[]
 }
 
 model Contract {
@@ -2793,11 +2795,24 @@ model SalaryStructure {
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
+  /// The client this structure belongs to (empty: company-wide, usable on any client's contracts, as every structure was before).
+  clientId   String?
+  client     Client?            @relation(fields: [clientId], references: [id])
+  /// The client structure this one sits under, as a role structure (empty: a top-level structure). Two levels only.
+  parentId   String?
+  parent     SalaryStructure?   @relation("StructureRoles", fields: [parentId], references: [id])
+  roles      SalaryStructure[]  @relation("StructureRoles")
+  /// The employee category (job role) a role structure is for.
+  categoryId String?
+  category   EmployeeCategory?  @relation(fields: [categoryId], references: [id])
+
   components    SalaryComponent[]
   contractRates ContractRate[]
   contracts     Contract[]
 
   @@unique([organizationId, code])
+  @@index([organizationId, clientId])
+  @@index([parentId, categoryId])
 }
 
 model SalaryComponent {

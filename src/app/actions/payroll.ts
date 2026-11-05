@@ -23,6 +23,26 @@ export async function createStructureAction(v: st.StructureInput) {
     ["/payroll/structures"],
   );
 }
+export async function createClientStructureAction(v: Record<string, unknown>) {
+  return act(
+    "structure.manage",
+    async (ctx) => {
+      const s = await st.createClientStructure(ctx, { clientId: String(v.clientId ?? ""), code: String(v.code ?? ""), name: typeof v.name === "string" ? v.name : undefined, copyFromId: typeof v.copyFromId === "string" && v.copyFromId ? v.copyFromId : undefined });
+      return { message: `Salary structure ${s.name} created for the client (draft: add role structures, then activate).`, redirectTo: `/payroll/structures/${s.id}` };
+    },
+    ["/payroll/structures"],
+  );
+}
+export async function createRoleStructureAction(v: Record<string, unknown>) {
+  return act(
+    "structure.manage",
+    async (ctx) => {
+      const s = await st.createRoleStructure(ctx, { parentId: String(v.parentId ?? ""), categoryId: String(v.categoryId ?? ""), code: String(v.code ?? ""), name: typeof v.name === "string" ? v.name : undefined });
+      return { message: `Role structure ${s.name} created as a draft copy of its parent: edit it, then activate it.`, redirectTo: `/payroll/structures/${s.id}` };
+    },
+    ["/payroll/structures"],
+  );
+}
 export async function updateStructureAction(id: string, v: st.StructureInput) {
   return act(
     "structure.manage",

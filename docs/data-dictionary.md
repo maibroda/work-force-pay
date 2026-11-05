@@ -1125,6 +1125,7 @@ A per-cost-center, per-period budget for budget-vs-actual variance reporting.
 | description | String |  |  |
 | employees | → Employee[] |  |  |
 | contractRates | → ContractRate[] |  |  |
+| salaryStructures | → SalaryStructure[] |  |  |
 | deployments | → Deployment[] |  |  |
 | workRegister | → WorkRegister[] |  |  |
 | requisitions | → JobRequisition[] |  |  |
@@ -1793,6 +1794,7 @@ What an exiting employee is owed (or owes) beyond their final month's pay. Compu
 | receiptRefunds | → ClientRefund[] |  |  |
 | notes | → ClientNote[] |  |  |
 | taxCertificates | → TaxCertificate[] |  |  |
+| salaryStructures | → SalaryStructure[] |  |  |
 
 ### Contract
 
@@ -1912,6 +1914,13 @@ CLIENT → CONTRACT → EMPLOYEE CATEGORY → SALARY STRUCTURE → AGREED RATE (
 | effectiveTo | DateTime |  |  |
 | createdAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |
+| clientId | String |  | The client this structure belongs to (empty: company-wide, usable on any client's contracts, as every structure was before). |
+| client | → Client |  |  |
+| parentId | String |  | The client structure this one sits under, as a role structure (empty: a top-level structure). Two levels only. |
+| parent | → SalaryStructure |  |  |
+| roles | → SalaryStructure[] |  |  |
+| categoryId | String |  | The employee category (job role) a role structure is for. |
+| category | → EmployeeCategory |  |  |
 | components | → SalaryComponent[] |  |  |
 | contractRates | → ContractRate[] |  |  |
 | contracts | → Contract[] |  |  |

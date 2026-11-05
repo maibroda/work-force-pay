@@ -138,7 +138,7 @@ export const contractSchema = z.object({
 export async function createContractRecord(ctx: Ctx, tx: Tx, v: z.output<typeof contractSchema>, opts: RecordOptions = {}) {
   const client = await tx.client.findFirst({ where: { id: v.clientId, organizationId: ctx.orgId } });
   if (!client) throw new BusinessError("Client not found.");
-  if (v.defaultStructureId) await assertStructure(ctx, v.defaultStructureId, tx);
+  if (v.defaultStructureId) await assertStructure(ctx, v.defaultStructureId, tx, v.clientId);
   const contractNumber = v.contractNumber?.toUpperCase() ?? (await nextNumber(tx, ctx.orgId, "CONTRACT"));
   const c = await tx.contract.create({
     data: {
@@ -167,10 +167,12 @@ export async function createContract(ctx: Ctx, raw: z.input<typeof contractSchem
   return db.$transaction((tx) => createContractRecord(ctx, tx, v));
 }
 
-async function assertStructure(ctx: Ctx, id: string, tx: Tx | typeof db = db) {
-  const s = await tx.salaryStructure.findFirst({ where: { id, organizationId: ctx.orgId } });
+/** The structure must be active, and a client's structure can be used only on that client's contracts (company-wide structures on any). */
+async function assertStructure(ctx: Ctx, id: string, tx: Tx | typeof db = db, forClientId?: string) {
+  const s = await tx.salaryStructure.findFirst({ where: { id, organizationId: ctx.orgId }, include: { client: { select: { name: true } }, category: { select: { name: true } } } });
   if (!s) throw new BusinessError("Salary structure not found.");
   if (s.status !== "ACTIVE") throw new BusinessError("Only ACTIVE salary structures can be assigned.");
+  if (forClientId && s.clientId && s.clientId !== forClientId) throw new BusinessError(`This salary structure belongs to ${s.client?.name ?? "another client"}: it can only be used on that client's contracts.`);
   return s;
 }
 
@@ -218,7 +220,8 @@ export async function setContractBusinessLine(
 export const contractRateSchema = z.object({
   contractId: z.string().min(1),
   categoryId: z.string().min(1),
-  salaryStructureId: z.string().min(1),
+  /** Left blank: the client's active role structure for the category. */
+  salaryStructureId: z.string().trim().optional().transform((v) => v || undefined),
   agreedRate: z.coerce.number().positive("Agreed rate must be greater than zero"),
   operativeSharePct: z.coerce.number().min(1).max(100).optional(),
   effectiveFrom: z.string().min(10),
@@ -230,7 +233,16 @@ export async function addContractRateRecord(ctx: Ctx, tx: Tx, v: z.output<typeof
   if (!contract) throw new BusinessError("Contract not found.");
   const cat = await tx.employeeCategory.findFirst({ where: { id: v.categoryId, organizationId: ctx.orgId } });
   if (!cat) throw new BusinessError("Category not found.");
-  await assertStructure(ctx, v.salaryStructureId, tx);
+  // the structure: the one chosen, or (left blank) the client's active role structure for this category
+  let structureId = v.salaryStructureId;
+  if (!structureId) {
+    const client = await tx.client.findFirst({ where: { id: contract.clientId, organizationId: ctx.orgId }, select: { name: true } });
+    const role = await tx.salaryStructure.findFirst({ where: { organizationId: ctx.orgId, clientId: contract.clientId, parentId: { not: null }, categoryId: v.categoryId, status: "ACTIVE" } });
+    if (!role) throw new BusinessError(`No salary structure was chosen, and ${client?.name ?? "the client"} has no active structure for ${cat.name}. Choose one, or create a role structure under the client's structure.`);
+    structureId = role.id;
+  }
+  const chosen = await assertStructure(ctx, structureId, tx, contract.clientId);
+  if (chosen.categoryId && chosen.categoryId !== v.categoryId) throw new BusinessError(`This role structure is for the ${chosen.category?.name ?? "another"} category, not ${cat.name}.`);
   const from = d(v.effectiveFrom);
   const open = await tx.contractRate.findMany({
     where: {
@@ -253,7 +265,7 @@ export async function addContractRateRecord(ctx: Ctx, tx: Tx, v: z.output<typeof
       organizationId: ctx.orgId,
       contractId: v.contractId,
       categoryId: v.categoryId,
-      salaryStructureId: v.salaryStructureId,
+      salaryStructureId: structureId,
       agreedRate: v.agreedRate,
       operativeSharePct: v.operativeSharePct ?? null,
       effectiveFrom: from,

@@ -4,7 +4,7 @@ import { d } from "@/lib/dates";
 import { num } from "@/lib/money";
 import { validateStructure, type StructureDef } from "@/lib/payroll/structure";
 import { validateFormula } from "@/lib/payroll/formula";
-import { assertCan, BusinessError, db } from "./_base";
+import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
 
 export const componentSchema = z.object({
@@ -39,6 +39,12 @@ export const structureSchema = z.object({
   effectiveTo: z.string().optional(),
   components: z.array(componentSchema).min(1, "Add at least one salary component"),
   activate: z.coerce.boolean().default(false),
+  /** The client that owns the structure (blank: company-wide). */
+  clientId: z.string().trim().optional().transform((v) => v || undefined),
+  /** The client structure this one sits under, as a role structure. */
+  parentId: z.string().trim().optional().transform((v) => v || undefined),
+  /** The employee category (job role) a role structure is for. */
+  categoryId: z.string().trim().optional().transform((v) => v || undefined),
 });
 export type StructureInput = z.input<typeof structureSchema>;
 
@@ -50,6 +56,41 @@ function checkFormulas(components: z.output<typeof componentSchema>[]) {
       if (err) throw new BusinessError(`${c.code}: ${err}`);
     }
   }
+}
+
+/**
+ * Where a structure sits (docs/plans/client-salary-structures.md): company-wide, owned by one client, or a role structure under a client's structure for a job category. Two levels only; a
+ * role structure belongs to its parent's client; a category belongs only to a role structure. Everything is looked up in the caller's company, so another company's rows are "not found".
+ */
+async function resolvePlacement(tx: Tx, orgId: string, v: { clientId?: string; parentId?: string; categoryId?: string }) {
+  if (v.parentId) {
+    const parent = await tx.salaryStructure.findFirst({ where: { id: v.parentId, organizationId: orgId } });
+    if (!parent) throw new BusinessError("The parent salary structure was not found.");
+    if (!parent.clientId) throw new BusinessError("The parent must be a structure owned by a client (a company-wide structure has no role structures).");
+    if (parent.parentId) throw new BusinessError("Role structures go two levels only: a client's structure, then its role structures.");
+    if (!v.categoryId) throw new BusinessError("Choose the job category this role structure is for.");
+    const category = await tx.employeeCategory.findFirst({ where: { id: v.categoryId, organizationId: orgId } });
+    if (!category) throw new BusinessError("Job category not found.");
+    if (v.clientId && v.clientId !== parent.clientId) throw new BusinessError("A role structure belongs to the same client as its parent.");
+    return { clientId: parent.clientId, parentId: parent.id, categoryId: category.id };
+  }
+  if (v.categoryId) throw new BusinessError("A job category can only be given to a role structure under a client's structure.");
+  if (v.clientId) {
+    const client = await tx.client.findFirst({ where: { id: v.clientId, organizationId: orgId }, select: { id: true } });
+    if (!client) throw new BusinessError("Client not found.");
+    return { clientId: client.id, parentId: null, categoryId: null };
+  }
+  return { clientId: null, parentId: null, categoryId: null };
+}
+
+/** At most one ACTIVE role structure per client structure and category, so the rate card can pick it without guessing (switch the old one off first). */
+async function assertOneActiveRole(tx: Tx, orgId: string, parentId: string | null, categoryId: string | null, exceptId?: string) {
+  if (!parentId || !categoryId) return;
+  const other = await tx.salaryStructure.findFirst({
+    where: { organizationId: orgId, parentId, categoryId, status: "ACTIVE", ...(exceptId ? { id: { not: exceptId } } : {}) },
+    include: { category: { select: { name: true } } },
+  });
+  if (other) throw new BusinessError(`There is already an active role structure (${other.code}) for ${other.category?.name ?? "this category"} under this client's structure: switch it off first.`);
 }
 
 /** Creates a NEW salary structure. The default structure is never modified by this. */
@@ -65,9 +106,14 @@ export async function createStructure(ctx: Ctx, raw: StructureInput) {
   const exists = await db.salaryStructure.findFirst({ where: { organizationId: ctx.orgId, code: v.code } });
   if (exists) throw new BusinessError(`A salary structure with code ${v.code} already exists.`);
   return db.$transaction(async (tx) => {
+    const place = await resolvePlacement(tx, ctx.orgId, v);
+    if (v.activate) await assertOneActiveRole(tx, ctx.orgId, place.parentId, place.categoryId);
     const s = await tx.salaryStructure.create({
       data: {
         organizationId: ctx.orgId,
+        clientId: place.clientId,
+        parentId: place.parentId,
+        categoryId: place.categoryId,
         code: v.code,
         name: v.name,
         description: v.description,
@@ -178,6 +224,7 @@ export async function activateStructure(ctx: Ctx, id: string) {
     })),
   });
   if (errors.length) throw new BusinessError(errors.join(" "));
+  await assertOneActiveRole(db, ctx.orgId, s.parentId, s.categoryId, s.id);
   const updated = await db.salaryStructure.update({ where: { id }, data: { status: "ACTIVE" } });
   await logAudit(ctx, {
     action: "SALARY_STRUCTURE_ACTIVATE",
@@ -231,6 +278,65 @@ export async function cloneStructure(ctx: Ctx, id: string, newCode: string, newN
       active: c.active,
     })),
     activate: false,
+    clientId: s.clientId ?? undefined,
+    parentId: s.parentId ?? undefined,
+    categoryId: s.categoryId ?? undefined,
+  });
+}
+
+const copyOf = (components: Array<{ code: string; name: string; calcType: "PERCENTAGE" | "FIXED_AMOUNT" | "FORMULA"; percentage: unknown; fixedAmount: unknown; formula: string | null; taxable: boolean; pensionable: boolean; employerCost: boolean; active: boolean }>) =>
+  components.map((c) => ({
+    code: c.code,
+    name: c.name,
+    calcType: c.calcType,
+    percentage: c.percentage === null ? null : num(c.percentage as never),
+    fixedAmount: c.fixedAmount === null ? null : num(c.fixedAmount as never),
+    formula: c.formula,
+    taxable: c.taxable,
+    pensionable: c.pensionable,
+    employerCost: c.employerCost,
+    active: c.active,
+  }));
+
+/** A salary structure for a CLIENT (for example "ABC Bank salary structure"): a copy of an existing structure (the company's default if none is named), owned by the client, starting as a draft. */
+export async function createClientStructure(ctx: Ctx, raw: { clientId: string; code: string; name?: string; copyFromId?: string; effectiveFrom?: string }) {
+  assertCan(ctx, "structure.manage");
+  const client = await db.client.findFirst({ where: { id: raw.clientId, organizationId: ctx.orgId } });
+  if (!client) throw new BusinessError("Client not found.");
+  const from = raw.copyFromId
+    ? await db.salaryStructure.findFirst({ where: { id: raw.copyFromId, organizationId: ctx.orgId }, include: { components: { orderBy: { sortOrder: "asc" } } } })
+    : await db.salaryStructure.findFirst({ where: { organizationId: ctx.orgId, isDefault: true }, include: { components: { orderBy: { sortOrder: "asc" } } } });
+  if (!from) throw new BusinessError(raw.copyFromId ? "The structure to copy was not found." : "There is no default structure to start from: choose a structure to copy.");
+  return createStructure(ctx, {
+    code: raw.code,
+    name: raw.name?.trim() || `${client.name} salary structure`,
+    description: `For ${client.name}, copied from ${from.name}`,
+    calculationMethod: from.calculationMethod,
+    isPartial: from.isPartial,
+    effectiveFrom: raw.effectiveFrom || new Date().toISOString().slice(0, 10),
+    components: copyOf(from.components),
+    activate: false,
+    clientId: client.id,
+  });
+}
+
+/** A ROLE structure under a client's structure, for one job category (guard, supervisor, driver, cleaner): a complete copy of the parent, which can then be edited. It starts as a draft. */
+export async function createRoleStructure(ctx: Ctx, raw: { parentId: string; categoryId: string; code: string; name?: string; effectiveFrom?: string }) {
+  assertCan(ctx, "structure.manage");
+  const parent = await db.salaryStructure.findFirst({ where: { id: raw.parentId, organizationId: ctx.orgId }, include: { components: { orderBy: { sortOrder: "asc" } }, client: true } });
+  if (!parent) throw new BusinessError("The parent salary structure was not found.");
+  const category = await db.employeeCategory.findFirst({ where: { id: raw.categoryId, organizationId: ctx.orgId } });
+  return createStructure(ctx, {
+    code: raw.code,
+    name: raw.name?.trim() || `${parent.client?.name ?? parent.name} — ${category?.name ?? "role"}`,
+    description: `Role structure for ${category?.name ?? "a job category"}, copied from ${parent.name}`,
+    calculationMethod: parent.calculationMethod,
+    isPartial: parent.isPartial,
+    effectiveFrom: raw.effectiveFrom || new Date().toISOString().slice(0, 10),
+    components: copyOf(parent.components),
+    activate: false,
+    parentId: parent.id,
+    categoryId: raw.categoryId,
   });
 }
 
@@ -239,6 +345,8 @@ export async function listStructures(ctx: Ctx) {
     where: { organizationId: ctx.orgId },
     include: {
       components: { orderBy: { sortOrder: "asc" } },
+      client: { select: { id: true, name: true } },
+      category: { select: { id: true, name: true } },
       _count: { select: { contractRates: true, contracts: true } },
     },
     orderBy: [{ isDefault: "desc" }, { name: "asc" }],
@@ -251,6 +359,10 @@ export async function getStructure(ctx: Ctx, id: string) {
     include: {
       components: { orderBy: { sortOrder: "asc" } },
       contractRates: { include: { contract: { include: { client: true } }, category: true } },
+      client: { select: { id: true, name: true } },
+      category: { select: { id: true, name: true } },
+      parent: { select: { id: true, name: true } },
+      roles: { include: { category: { select: { name: true } } }, orderBy: { code: "asc" } },
     },
   });
 }

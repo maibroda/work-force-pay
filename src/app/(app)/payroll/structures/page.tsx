@@ -9,10 +9,16 @@ import { PageHeader, Section } from "@/components/page";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
+import { arrangeStructures } from "@/lib/structure-groups";
+import { options } from "@/server/options";
+import { FormPanel } from "@/components/page";
+import { SmartForm } from "@/components/smart-form";
+import { createClientStructureAction } from "@/app/actions/payroll";
 
 export default async function StructuresPage() {
   const ctx = await requirePage("structure.view");
-  const rows = await listStructures(ctx);
+  const [rows, o] = await Promise.all([listStructures(ctx), options(ctx)]);
+  const groups = arrangeStructures(rows);
   return (
     <>
       <PageHeader
@@ -43,10 +49,17 @@ export default async function StructuresPage() {
             </TR>
           </THead>
           <TBody>
-            {rows.map((s) => (
+            {groups.flatMap((g) => [
+              <TR key={`h-${g.heading}`}>
+                <TD colSpan={7} className="bg-muted/50 font-semibold">
+                  {g.heading}
+                </TD>
+              </TR>,
+              ...g.rows.map(({ structure: s, depth }) => (
               <TR key={s.id}>
                 <TD className="font-mono text-xs">{s.code}</TD>
-                <TD>
+                <TD className={depth === 1 ? "pl-8" : undefined}>
+                  {depth === 1 && <span className="mr-1 text-muted-foreground">↳</span>}
                   <Link
                     className="font-medium text-primary hover:underline"
                     href={`/payroll/structures/${s.id}`}
@@ -54,7 +67,8 @@ export default async function StructuresPage() {
                     {s.name}
                   </Link>{" "}
                   {s.isDefault && <Badge tone="blue">Default</Badge>}{" "}
-                  {s.isPartial && <Badge tone="amber">Partial</Badge>}
+                  {s.isPartial && <Badge tone="amber">Partial</Badge>}{" "}
+                  {s.category && <span className="text-xs text-muted-foreground">for {s.category.name}</span>}
                 </TD>
                 <TD className="max-w-md whitespace-normal text-xs text-muted-foreground">
                   {s.components
@@ -76,10 +90,26 @@ export default async function StructuresPage() {
                   <StatusBadge status={s.status} />
                 </TD>
               </TR>
-            ))}
+              )),
+            ])}
           </TBody>
         </Table>
       </Section>
+      {can(ctx.role, "structure.manage") && o.clients.length > 0 && (
+        <FormPanel title="Create a salary structure for a client">
+          <SmartForm
+            columns={2}
+            submitLabel="Create client structure"
+            action={createClientStructureAction}
+            fields={[
+              { name: "clientId", label: "Client", type: "select", required: true, options: o.clients },
+              { name: "code", label: "Code", required: true, placeholder: "ABC-BANK" },
+              { name: "name", label: "Name", placeholder: "Leave blank for “<client> salary structure”" },
+              { name: "copyFromId", label: "Start from", type: "select", options: rows.map((r) => ({ value: r.id, label: r.name })), help: "The structure whose components it starts as a copy of. Blank: the company's default." },
+            ]}
+          />
+        </FormPanel>
+      )}
     </>
   );
 }

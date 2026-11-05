@@ -22,7 +22,7 @@ export async function options(ctx: Ctx) {
         include: { client: true },
         orderBy: [{ client: { name: "asc" } }, { name: "asc" }],
       }),
-      db.salaryStructure.findMany({ where: { organizationId: ctx.orgId }, orderBy: { name: "asc" } }),
+      db.salaryStructure.findMany({ where: { organizationId: ctx.orgId }, include: { client: { select: { name: true } }, category: { select: { name: true } } }, orderBy: { name: "asc" } }),
       db.payrollPeriod.findMany({
         where: { organizationId: ctx.orgId },
         orderBy: [{ year: "desc" }, { month: "desc" }],
@@ -54,7 +54,7 @@ export async function options(ctx: Ctx) {
     beats: beats.map((b) => opt(b.id, `${b.client.name} — ${b.name}`)),
     activeStructures: structures
       .filter((s) => s.status === "ACTIVE")
-      .map((s) => opt(s.id, `${s.name}${s.isDefault ? " (default)" : ""}`)),
+      .map((s) => opt(s.id, `${s.client ? `${s.client.name} › ` : ""}${s.name}${s.category ? ` (${s.category.name})` : ""}${s.isDefault ? " (default)" : ""}`)),
     structureCodes: structures.filter((s) => s.status === "ACTIVE").map((s) => opt(s.code, s.name)),
     periods: periods.map((p) => opt(p.id, `${p.name} (${p.status.toLowerCase()})`)),
     openPeriods: periods
