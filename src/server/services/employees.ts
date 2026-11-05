@@ -10,6 +10,9 @@ import { nextNumber } from "./numbering";
 import { seedOnboardingTasks } from "./hr";
 import { resolvePfa } from "./pfas";
 
+import { applyPayRate } from "./pay-rates";
+import { recordProposal } from "./pay-rate-proposals";
+
 const opt = z
   .string()
   .trim()
@@ -62,6 +65,13 @@ export const employeeSchema = z.object({
   pensionPin: opt,
   pfa: opt,
   annualRent: z.coerce.number().min(0).optional(),
+  /** Optional: a personal MONTHLY gross for a person not paid from a client contract rate. Never stored on the employee: it becomes a PROPOSAL that a payroll manager approves (pay-rate-proposals.ts). Used only when adding an employee or importing. */
+  monthlyGross: z
+    .union([z.string(), z.number()])
+    .optional()
+    .transform((v) => (v === undefined || String(v).trim() === "" ? undefined : v)),
+  /** The salary structure (its code) the gross is to be split by; blank means the company's default. */
+  salaryStructure: opt,
 });
 export type EmployeeInput = z.input<typeof employeeSchema>;
 
@@ -142,6 +152,15 @@ export async function createEmployeeInTx(ctx: Ctx, tx: Tx, input: z.output<typeo
   );
   await logAudit(ctx, { action: "EMPLOYEE_CREATE", entity: "Employee", entityId: emp.id, newValue: emp }, tx);
   await seedOnboardingTasks(ctx, emp.id, tx);
+  if (v.monthlyGross !== undefined) {
+    // a PROPOSAL, not a pay rate: it counts only when a payroll manager approves it. It starts on the employment date. Refused here means the employee is not created either.
+    await recordProposal(
+      ctx,
+      tx,
+      { employeeId: emp.id, monthlyGross: v.monthlyGross, structureCode: v.salaryStructure, reason: extra.importBatchId ? "Set in the bulk import" : "Set when the employee was added", effectiveFrom: String(v.employmentDate).slice(0, 10) },
+      extra.importBatchId ? "IMPORT" : "NEW_EMPLOYEE",
+    );
+  }
   return emp;
 }
 
@@ -480,48 +499,6 @@ export async function createPayRate(ctx: Ctx, raw: z.input<typeof payRateSchema>
   const emp = await db.employee.findFirst({ where: { id: v.employeeId, organizationId: ctx.orgId } });
   if (!emp) throw new BusinessError("Employee not found.");
   return db.$transaction((tx) => applyPayRate(ctx, tx, v));
-}
-
-/**
- * Makes the pay rate: closes the previous open one the day before, writes the new one and audits it. Used by createPayRate and when a proposed gross is approved
- * (src/server/services/pay-rate-proposals.ts), which passes the approver's own name as `approvedBy`. The caller has already checked who may do this.
- */
-export async function applyPayRate(ctx: Ctx, tx: Tx, v: { employeeId: string; monthlyGross: number | string; structureCode?: string | null; reason: string; approvedBy: string; effectiveFrom: string }) {
-  const from = d(v.effectiveFrom);
-  const open = await tx.employeePayRate.findMany({
-    where: { employeeId: v.employeeId, organizationId: ctx.orgId, effectiveTo: null },
-  });
-  for (const r of open) {
-    if (r.effectiveFrom >= from)
-      throw new BusinessError("A pay rate already starts on or after this date.");
-    await tx.employeePayRate.update({
-      where: { id: r.id },
-      data: { effectiveTo: new Date(from.getTime() - 86400000) },
-    });
-  }
-  const rate = await tx.employeePayRate.create({
-    data: {
-      organizationId: ctx.orgId,
-      employeeId: v.employeeId,
-      monthlyGross: v.monthlyGross,
-      structureCode: v.structureCode || null,
-      reason: v.reason,
-      approvedBy: v.approvedBy,
-      effectiveFrom: from,
-    },
-  });
-  await logAudit(
-    ctx,
-    {
-      action: "EMPLOYEE_PAY_RATE_CHANGE",
-      entity: "Employee",
-      entityId: v.employeeId,
-      newValue: rate,
-      reason: v.reason,
-    },
-    tx,
-  );
-  return rate;
 }
 
 // ──────────────────────── Categories / departments ────────────────────────

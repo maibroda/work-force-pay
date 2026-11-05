@@ -2,7 +2,14 @@
 
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
-## Not yet merged (branch `navigation-reports`, no migration)
+## Not yet merged (branch `pay-rate-entry`, no migration)
+
+- **The monthly gross can now be entered when adding an employee and in the bulk import (the founder's decision of 2026-11-05).** The New employee form has an optional "Monthly gross" and "Salary structure". The import template has two optional columns, **Monthly Gross** and **Salary Structure**. In both cases it is a **proposal**, not a pay rate: it starts on the employment date and counts only when a payroll manager approves it (Employees > Pay rate approvals).
+- **Incomplete records still get captured.** In the import, a gross that cannot be read (an annual figure such as "3000000 per annum", more than two decimals, a word, zero) or a salary structure the company does not have does not stop the person being imported: they are saved **without** a pay rate and the row carries a warning saying what to fix. (A structure that does not exist means no proposal at all, because the gross would be split by the wrong structure.) Excel's display is understood: ₦250,000, NGN 250,000.00, thousands commas. On the New employee form, a refused gross or structure saves nothing at all, so there is no half-added employee.
+- **The amount is the monthly gross** in naira, at most two decimals, held as exact text. No migration and no change to the payroll calculation; this only creates proposals through the code added in the pay-rate approval pull request.
+- Tests: `tests/unit/employee-import-gross.test.ts`, `tests/integration/pay-rate-entry.test.ts`, written first.
+
+## Merged in #143 on 2026-11-05 (branch `navigation-reports`, no migration)
 
 - **Every report is in one place: a Reports menu entry with search (the founder, 2026-11-05).** Reports were listed in the Payroll, Workforce, Operations, Finance and Settings groups as well as on the Reports page. They are now one sidebar entry, "Reports". It opens the Reports page, which has a search box that narrows the list as you type; inside it, each report is a tab, grouped HR, Workforce, Payroll, Operations, Finance and Audit. The Reports page's own list is the single source.
 - **Payroll no longer lists reports** (payslips, payroll register, bank payment schedule, PAYE, pension, NHF and the other schedules, overtime, arrears and deductions reports): they are under Reports > Payroll. Payroll keeps its working pages, with PAYE and Pension in a "Tax & pension" group. The personnel reports (documents, training, location history), the operations reports, the client/beat report and the audit report moved the same way.

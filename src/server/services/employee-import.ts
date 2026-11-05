@@ -28,6 +28,8 @@ async function reference(ctx: Ctx) {
     today: iso(new Date()),
     knownBank: await bankResolver(db, ctx.orgId),
     pfas: await db.pensionFundAdministrator.findMany({ where: { organizationId: ctx.orgId }, select: { name: true, active: true } }),
+
+    structureCodes: (await db.salaryStructure.findMany({ where: { organizationId: ctx.orgId, status: "ACTIVE" }, select: { code: true } })).map((s) => s.code),
   };
 }
 
