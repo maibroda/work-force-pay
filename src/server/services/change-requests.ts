@@ -24,6 +24,7 @@ import {
 import { addDays } from "@/lib/dates";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
+import { resolvePfa } from "./pfas";
 import { todayUtc } from "./hr-policy";
 
 const GONE = ["EXITED", "TERMINATED", "RESIGNED"];
@@ -72,6 +73,7 @@ export async function requestChangeCore(ctx: Ctx, employeeId: string, kind: Chan
   if (!reason || reason.trim().length < 5) throw new BusinessError("Say why the details are changing (at least a few words).");
   const fields = KIND_FIELDS[kind];
   const parsed = SCHEMAS[kind].parse(Object.fromEntries(fields.map((f) => [f, raw[f]]))) as Record<string, unknown>;
+  if (kind === "PENSION") parsed.pfa = await resolvePfa(db, ctx.orgId, parsed.pfa as string | undefined, emp.pfa); // held to the company's list of PFAs
   const proposed = Object.fromEntries(fields.map((f) => [f, normalizeValue(parsed[f])]));
   const previous = snapshot(emp as never, kind);
   if (sameValues(proposed, previous, fields)) throw new BusinessError("That's what is already on file — nothing to change.");
@@ -129,6 +131,8 @@ export async function approveChange(ctx: Ctx, id: string, note?: string) {
   if (clash) throw new BusinessError(`That ${FIELD_LABELS[kind === "BANK" ? "accountNumber" : kind === "TAX" ? "taxId" : "pensionPin"].toLowerCase()} is already on ${clash.employeeNumber} ${clash.firstName} ${clash.lastName} — it can't be on two people.`);
   const data = Object.fromEntries(fields.map((f) => [f, proposed[f] ?? null]));
   return db.$transaction(async (tx) => {
+    // the list of PFAs may have changed since the request was made (a PFA switched off, or taken off the list)
+    if (kind === "PENSION") data.pfa = await resolvePfa(tx, ctx.orgId, data.pfa as string | null, r.employee.pfa);
     await tx.employee.update({ where: { id: r.employeeId }, data });
     const u = await tx.employeeChangeRequest.update({
       where: { id },

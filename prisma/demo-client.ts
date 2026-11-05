@@ -24,7 +24,7 @@ export type DemoStaff = { founder: Ctx; officer: Ctx; reviewer: Ctx; hr: Ctx };
 const FIRST = ["Adebayo", "Ngozi", "Emeka", "Funke", "Ibrahim", "Chiamaka", "Tunde", "Aisha", "Obinna", "Yetunde", "Musa", "Blessing", "Segun", "Halima", "Chidi", "Folake", "Usman", "Amaka", "Kunle", "Zainab", "Ifeanyi", "Bukola", "Sani", "Ngo", "Damilola", "Kelechi", "Hauwa", "Tosin", "Uche", "Maryam"];
 const LAST = ["Adeyemi", "Okonkwo", "Eze", "Balogun", "Abubakar", "Nwosu", "Ogunleye", "Lawal", "Okafor", "Bakare", "Danjuma", "Igwe", "Adeleke", "Yusuf", "Nnamdi", "Coker", "Garba", "Obi", "Salami", "Mohammed", "Chukwu", "Fashola", "Bello", "Etim", "Ajayi", "Onyema", "Idris", "Ola", "Nweke", "Sule"];
 const BANKS = ["GTBank", "Access Bank", "Zenith Bank", "UBA", "First Bank", "Sterling Bank"];
-const PFAS = ["Stanbic IBTC Pension", "ARM Pension", "Premium Pension"];
+const PFAS = ["Stanbic IBTC Pension Managers", "Access ARM Pensions", "Premium Pension Ltd"];
 const SITES = [{ code: "LAG", name: "Lagos HQ" }, { code: "ABJ", name: "Abuja Office" }, { code: "PHC", name: "Port Harcourt Depot" }];
 export const DEMO_MONTH = { year: 2026, month: 10 };
 
