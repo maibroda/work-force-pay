@@ -2,6 +2,13 @@
 
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
+## Not yet merged (branch `fix-payroll-note-correction`, no migration)
+
+- **A correction. An earlier finding of mine (in #134) was wrong, and so was the note I added to blueprints.** I wrote that payroll cannot pay an employee who is not deployed to a client site, and that the plans "Payroll Core" and "HR + Payroll" cannot run payroll for an office-based firm. **That is not true: the pay run already pays an employee who has a pay rate (a monthly gross set on their record) and no work-register days, for every day they are employed (under "Head Office"), splitting the gross into components by a salary structure.** I had missed that rule. **The blueprint note now says how payroll runs without Contracts and deployment** (each employee needs a pay rate; the company's default structure should be checked for office staff), instead of saying it cannot run. The E6 plan carries the correction and a revised list of what is really missing (the gross cannot be entered in the bulk import or when adding an employee; the default structure is the security workforce's; unpaid leave has no distinction) with questions for the founder. **No payroll rule is changed.**
+- Test: the blueprint note test rewritten first and seen failing (it also pins that the note is not a refusal).
+
+## Not yet merged (branch `employee-incomplete-records`, no migration)
+
 ## Not yet merged (branch `navigation-payroll`, no migration)
 
 - **Payroll is now one menu entry (the founder's review of 2026-11-04: so many menu entries make the app hard to work in).** The Payroll group had 38 entries; it is one, "Payroll", and its pages are tabs inside it, grouped by the job: Run payroll, Pay inputs, Pay setup, Pay out, Tax, pension & schedules, Payroll reports. Every page keeps its address, its permission and its module check, so nobody gains or loses access to anything.
