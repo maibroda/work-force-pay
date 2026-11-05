@@ -12,6 +12,8 @@ export interface NavItem {
   clientOnly?: boolean;
   /** Shown only while the organization has switched the sales module on. */
   salesOnly?: boolean;
+  /** This entry stands for a whole area (see AREAS): shown if the person may open any page of it, and leading to the first they may open. */
+  area?: string;
 }
 export interface NavGroup {
   title: string;
@@ -80,19 +82,8 @@ export const NAV: NavGroup[] = [
   {
     title: "Workforce / Personnel",
     items: [
+      // everything about employees sits inside this one entry, as a row of tabs across the top of its pages (EMPLOYEE_SECTIONS below)
       { href: "/employees", label: "Employees", perm: "employee.view" },
-      { href: "/employees/import", label: "Import Employees", perm: "employee.manage" },
-      { href: "/employees/categories", label: "Employee Categories", perm: "employee.view" },
-      { href: "/employees/departments", label: "Departments", perm: "employee.view" },
-      { href: "/employees/bank", label: "Bank Information", perm: "employee.sensitive" },
-      { href: "/employees/pension", label: "Pension Information", perm: "employee.sensitive" },
-      { href: "/employees/tax", label: "Tax Information", perm: "employee.sensitive" },
-      { href: "/employees/change-requests", label: "Detail Change Requests", perm: "employee.sensitive" },
-      { href: "/employees/next-of-kin", label: "Next of Kin & Emergency", perm: "employee.sensitive" },
-      { href: "/employees/guarantors", label: "Guarantors", perm: "employee.sensitive" },
-      { href: "/employees/dependants", label: "Dependants & Beneficiaries", perm: "employee.sensitive" },
-      { href: "/operations/deployments", label: "Employee Assignments", perm: "operations.view" },
-      { href: "/employees/org-chart", label: "Org Chart", perm: "employee.view" },
       {
         href: "/reports/location-history",
         label: "Employee Location History",
@@ -126,68 +117,8 @@ export const NAV: NavGroup[] = [
   },
   {
     title: "Payroll",
-    items: [
-      { href: "/payroll/structures", label: "Salary Structures", perm: "structure.view" },
-      { href: "/payroll/components", label: "Salary Components", perm: "structure.view" },
-      { href: "/payroll/periods", label: "Payroll Periods", perm: "payroll.view" },
-      { href: "/payroll/calendar", label: "Payroll Calendar", perm: "payroll.view" },
-      { href: "/payroll/client-inputs", label: "Client Inputs", perm: "payroll.view", bureauOnly: true },
-      { href: "/payroll/runs", label: "Payroll Runs", perm: "payroll.view" },
-      { href: "/payroll/quick-payslip", label: "Quick Payslip", perm: "payroll.view" },
-      { href: "/payroll/earnings", label: "Earnings", perm: "payroll.view" },
-      { href: "/payroll/deductions", label: "Deductions", perm: "payroll.view" },
-      { href: "/payroll/loans", label: "Staff Loans & Advances", perm: "payroll.view" },
-      { href: "/payroll/overtime", label: "Overtime", perm: "payroll.view" },
-      { href: "/payroll/arrears", label: "Arrears", perm: "payroll.view" },
-      { href: "/payroll/paye", label: "PAYE", perm: "payroll.view" },
-      { href: "/payroll/pension", label: "Pension", perm: "payroll.view" },
-      { href: "/payroll/control", label: "Payroll Validation", perm: "payroll.view" },
-      { href: "/payroll/approval", label: "Payroll Approval", perm: "payroll.view" },
-      { href: "/payroll/lock", label: "Payroll Lock", perm: "payroll.view" },
-      { href: "/payroll/supplementary", label: "Supplementary Payroll", perm: "payroll.view" },
-      { href: "/payroll/settlements", label: "End-of-Service Settlements", perm: "payroll.view" },
-      {
-        href: "/payments/batches",
-        label: "Payment Batches",
-        perm: "payroll.view",
-        section: "Payments",
-      },
-      { href: "/payments/transactions", label: "Payment Transactions", perm: "payroll.view" },
-      { href: "/payments/bank-codes", label: "Bank List & Codes", perm: "payment.manage" },
-      { href: "/payments/paying-banks", label: "Paying Banks", perm: "payment.manage" },
-      { href: "/payments/reconciliation", label: "Bank Reconciliation", perm: "payroll.view" },
-      { href: "/payments/remittance", label: "Statutory Remittance", perm: "payroll.view" },
-      {
-        href: "/reports/payroll-register",
-        label: "Payroll Register",
-        perm: "reports.view",
-        section: "Payroll reports",
-      },
-      { href: "/reports/payslips", label: "Payslips", perm: "reports.view" },
-      { href: "/reports/employer-contributions", label: "Employer Contributions", perm: "reports.view" },
-      { href: "/reports/overtime", label: "Overtime Report", perm: "reports.view" },
-      { href: "/reports/arrears", label: "Arrears Report", perm: "reports.view" },
-      { href: "/reports/deductions", label: "Deductions Report", perm: "reports.view" },
-      { href: "/reports/pension", label: "Pension Schedule", perm: "reports.view" },
-      { href: "/reports/paye", label: "PAYE Schedule", perm: "reports.view" },
-      { href: "/reports/bank", label: "Bank Payment Schedule", perm: "reports.view" },
-      { href: "/reports/itf", label: "ITF Schedule", perm: "reports.view" },
-      { href: "/reports/nsitf", label: "NSITF Schedule", perm: "reports.view" },
-      { href: "/reports/nhf-medical", label: "NHF / Medical Schedule", perm: "reports.view" },
-      { href: "/reports/insurance", label: "Insurance Schedule", perm: "reports.view" },
-      { href: "/reports/uniform-kits", label: "Uniform & Kits Schedule", perm: "reports.view" },
-      {
-        href: "/reports/recruitment-training",
-        label: "Recruitment, Training & Vetting Schedule",
-        perm: "reports.view",
-      },
-      { href: "/reports/leave-reliever", label: "Annual Leave Reliever Schedule", perm: "reports.view" },
-      {
-        href: "/reports/outsourcing-leave-allowance",
-        label: "Outsourcing Leave Allowance Schedule",
-        perm: "reports.view",
-      },
-    ],
+    // One entry for the whole area: its pages are tabs inside it (PAYROLL_AREA below). The entry leads to the first page the person may open.
+    items: [{ href: "/payroll/runs", label: "Payroll", perm: "payroll.view", area: "payroll" }],
   },
   {
     title: "Operations",
@@ -230,7 +161,6 @@ export const NAV: NavGroup[] = [
       { href: "/beats/bids", label: "Bids", perm: "client.view" },
       { href: "/beats", label: "Beats / Locations", perm: "client.view" },
       { href: "/beats/strength", label: "Approved Strength", perm: "client.view" },
-      { href: "/contracts/rates", label: "Client Salary Structures", perm: "client.view" },
       {
         href: "/finance/invoices",
         label: "Billing & Receivables",
@@ -262,7 +192,7 @@ export const NAV: NavGroup[] = [
         perm: "gl.view",
         section: "Banking",
       },
-      { href: "/finance/bank-reconciliation", label: "Bank Reconciliation", perm: "gl.view" },
+      { href: "/finance/bank-reconciliation", label: "Operating Account Reconciliation", perm: "gl.view" },
       { href: "/accounting/journals", label: "Journal Entries", perm: "gl.view", section: "Accounting" },
       { href: "/accounting/manual-journals", label: "Manual Journals", perm: "gl.view" },
       { href: "/accounting/recurring-journals", label: "Recurring Journals", perm: "gl.view" },
@@ -319,10 +249,6 @@ export const NAV: NavGroup[] = [
       { href: "/settings/subscription", label: "Subscription", perm: "subscription.view" },
       { href: "/settings/entitlements", label: "Module switch", perm: "subscription.manage" },
       { href: "/settings/price-book", label: "Software price book", perm: "pricebook.manage" },
-      { href: "/settings/statutory", label: "Statutory Rules", perm: "payroll.view" },
-      { href: "/settings/payroll-rules", label: "Payroll Rules", perm: "payroll.view" },
-      { href: "/settings/employer-costs", label: "Employer Cost Rules", perm: "payroll.view" },
-      { href: "/settings/recurring-deductions", label: "Recurring Deductions", perm: "payroll.view" },
       { href: "/settings/cost-centers", label: "Cost Centers", perm: "payroll.view" },
       { href: "/settings/hr-policy", label: "HR & Lifecycle Policy", perm: "hr.configure" },
       { href: "/settings/checklists", label: "Onboarding & Exit Checklists", perm: "hr.configure" },
@@ -354,6 +280,154 @@ export const SELF_NAV: NavGroup[] = [
     ],
   },
 ];
+
+// ───────────────────────────── Areas: one sidebar entry, its pages as tabs ─────────────────────────────
+
+/**
+ * An area is a part of the app that used to be dozens of sidebar entries (the founder's review of 2026-11-04: so many entries make the app hard to work in). It is ONE entry in the
+ * sidebar; its pages are shown as two rows of tabs across the top of each of them: the jobs (groups) and, under the active job, its pages. Every page keeps its address and its own
+ * permission and module check; this only decides where it is listed. See docs/plans/navigation-consolidation.md.
+ */
+export interface AreaSection {
+  href: string;
+  label: string;
+  perm: Permission;
+  /** The job it belongs to (the first row of tabs). */
+  group: string;
+  bureauOnly?: boolean;
+  /** Other pages folded into this one: they show this tab as the one you are on (for example every salary component sits under Salary structures). */
+  also?: string[];
+}
+export interface Area {
+  key: string;
+  title: string;
+  sections: AreaSection[];
+}
+
+/**
+ * Payroll: 38 sidebar entries became one, grouped by the job. Three entries (Validation, Approval, Lock) were all redirects to the payroll runs page and are gone from the menu (their
+ * addresses still work); Settlements stays with HR Lifecycle; Salary components is a view of the salary structures; the contract rates sit beside the salary structures they use; and the
+ * payroll-related settings sit here instead of among the other settings.
+ */
+export const PAYROLL_AREA: Area = {
+  key: "payroll",
+  title: "Payroll",
+  sections: [
+    { group: "Run payroll", href: "/payroll/runs", label: "Payroll runs", perm: "payroll.view" },
+    { group: "Run payroll", href: "/payroll/periods", label: "Payroll periods", perm: "payroll.view" },
+    { group: "Run payroll", href: "/payroll/calendar", label: "Payroll calendar", perm: "payroll.view" },
+    { group: "Run payroll", href: "/payroll/client-inputs", label: "Client inputs", perm: "payroll.view", bureauOnly: true },
+    { group: "Run payroll", href: "/payroll/supplementary", label: "Supplementary payroll", perm: "payroll.view" },
+    { group: "Run payroll", href: "/payroll/quick-payslip", label: "Quick payslip", perm: "payroll.view" },
+    { group: "Run payroll", href: "/reports/payslips", label: "Payslips", perm: "reports.view" },
+    { group: "Run payroll", href: "/reports/payroll-register", label: "Payroll register", perm: "reports.view" },
+    { group: "Pay inputs", href: "/payroll/earnings", label: "Earnings", perm: "payroll.view" },
+    { group: "Pay inputs", href: "/payroll/deductions", label: "Deductions", perm: "payroll.view" },
+    { group: "Pay inputs", href: "/payroll/loans", label: "Staff loans & advances", perm: "payroll.view" },
+    { group: "Pay inputs", href: "/payroll/overtime", label: "Overtime", perm: "payroll.view" },
+    { group: "Pay inputs", href: "/payroll/arrears", label: "Arrears", perm: "payroll.view" },
+    { group: "Pay setup", href: "/payroll/structures", label: "Salary structures", perm: "structure.view", also: ["/payroll/components"] },
+    { group: "Pay setup", href: "/contracts/rates", label: "Contract rates", perm: "client.view" },
+    { group: "Pay setup", href: "/settings/statutory", label: "Statutory rules", perm: "payroll.view" },
+    { group: "Pay setup", href: "/settings/payroll-rules", label: "Payroll rules", perm: "payroll.view" },
+    { group: "Pay setup", href: "/settings/employer-costs", label: "Employer cost rules", perm: "payroll.view" },
+    { group: "Pay setup", href: "/settings/recurring-deductions", label: "Recurring deductions", perm: "payroll.view" },
+    { group: "Pay out", href: "/payments/batches", label: "Payment batches", perm: "payroll.view" },
+    { group: "Pay out", href: "/payments/transactions", label: "Payment transactions", perm: "payroll.view" },
+    { group: "Pay out", href: "/reports/bank", label: "Bank payment schedule", perm: "reports.view" },
+    { group: "Pay out", href: "/payments/reconciliation", label: "Salary payment reconciliation", perm: "payroll.view" },
+    { group: "Pay out", href: "/payments/paying-banks", label: "Paying banks", perm: "payment.manage" },
+    { group: "Pay out", href: "/payments/bank-codes", label: "Bank list & codes", perm: "payment.manage" },
+    { group: "Pay out", href: "/payments/remittance", label: "Statutory remittance", perm: "payroll.view" },
+    { group: "Tax, pension & schedules", href: "/payroll/paye", label: "PAYE", perm: "payroll.view" },
+    { group: "Tax, pension & schedules", href: "/reports/paye", label: "PAYE schedule", perm: "reports.view" },
+    { group: "Tax, pension & schedules", href: "/payroll/pension", label: "Pension", perm: "payroll.view" },
+    { group: "Tax, pension & schedules", href: "/reports/pension", label: "Pension schedule", perm: "reports.view" },
+    { group: "Tax, pension & schedules", href: "/reports/employer-contributions", label: "Employer contributions", perm: "reports.view" },
+    { group: "Tax, pension & schedules", href: "/reports/itf", label: "ITF schedule", perm: "reports.view" },
+    { group: "Tax, pension & schedules", href: "/reports/nsitf", label: "NSITF schedule", perm: "reports.view" },
+    { group: "Tax, pension & schedules", href: "/reports/nhf-medical", label: "NHF / medical schedule", perm: "reports.view" },
+    { group: "Tax, pension & schedules", href: "/reports/insurance", label: "Insurance schedule", perm: "reports.view" },
+    { group: "Tax, pension & schedules", href: "/reports/uniform-kits", label: "Uniform & kits schedule", perm: "reports.view" },
+    { group: "Tax, pension & schedules", href: "/reports/recruitment-training", label: "Recruitment, training & vetting schedule", perm: "reports.view" },
+    { group: "Tax, pension & schedules", href: "/reports/leave-reliever", label: "Annual leave reliever schedule", perm: "reports.view" },
+    { group: "Tax, pension & schedules", href: "/reports/outsourcing-leave-allowance", label: "Outsourcing leave allowance schedule", perm: "reports.view" },
+    { group: "Payroll reports", href: "/reports/overtime", label: "Overtime report", perm: "reports.view" },
+    { group: "Payroll reports", href: "/reports/arrears", label: "Arrears report", perm: "reports.view" },
+    { group: "Payroll reports", href: "/reports/deductions", label: "Deductions report", perm: "reports.view" },
+  ],
+};
+
+export const AREAS: Area[] = [PAYROLL_AREA];
+
+/** What the person may see: their permissions, the company's modules, and whether they are in a bureau. */
+export interface Visibility {
+  can: (perm: Permission) => boolean;
+  allowed: (href: string) => boolean;
+  bureau: boolean;
+}
+
+/** The pages of an area this person may open, in the area's order. */
+export function visibleSections(area: Area, v: Visibility): AreaSection[] {
+  return area.sections.filter((s) => v.can(s.perm) && v.allowed(s.href) && (!s.bureauOnly || v.bureau));
+}
+
+/** The sidebar entry for an area: its name, leading to the first page the person may open; null (no entry) if they may open none. */
+export function areaEntry(area: Area, v: Visibility): { href: string; label: string } | null {
+  const first = visibleSections(area, v)[0];
+  return first ? { href: first.href, label: area.title } : null;
+}
+
+/** The visible pages grouped by job, in the order each job first appears. */
+export function groupSections<T extends { group: string }>(sections: T[]): Array<{ group: string; sections: T[] }> {
+  const out: Array<{ group: string; sections: T[] }> = [];
+  for (const s of sections) {
+    const g = out.find((x) => x.group === s.group);
+    if (g) g.sections.push(s);
+    else out.push({ group: s.group, sections: [s] });
+  }
+  return out;
+}
+
+/** Which tab a page is under: its own address, a page inside it, or a page folded into it; the longest match wins; null if it is no page of the area. */
+export function sectionFor<S extends { href: string; also?: string[] }>(area: { sections: S[] }, pathname: string): S | null {
+  const p = trimSlash(pathname);
+  let best: { s: S; len: number } | null = null;
+  for (const s of area.sections)
+    for (const h of [s.href, ...(s.also ?? [])]) {
+      const base = trimSlash(h);
+      if ((p === base || p.startsWith(base + "/")) && (!best || base.length > best.len)) best = { s, len: base.length };
+    }
+  return best?.s ?? null;
+}
+
+/** A page someone can jump to, and where it sits (for the Go to search). */
+export interface JumpPage {
+  href: string;
+  label: string;
+  where: string;
+}
+
+/** The Go to search: pages whose label (or place) contains what was typed, best first: a label that starts with it, then one with a word that starts with it, then the rest (a match on where a page sits only if no title matches); a shorter label (a closer match) before a longer one. At most eight. */
+export function searchPages<T extends JumpPage>(pages: T[], query: string, limit = 8): T[] {
+  const q = query.trim().toLowerCase().replace(/\s+/g, " ");
+  if (!q) return [];
+  const score = (p: T) => {
+    const label = p.label.toLowerCase();
+    if (label.startsWith(q)) return 0;
+    if (label.split(/[^a-z0-9]+/).some((w) => w.startsWith(q))) return 1;
+    if (label.includes(q)) return 2;
+    if (p.where.toLowerCase().includes(q)) return 3;
+    return null;
+  };
+  const scored = pages.map((p, i) => ({ p, i, s: score(p) })).filter((x): x is { p: T; i: number; s: number } => x.s !== null);
+  // where a page sits counts only when no page title matches, so a group's name does not drag in unrelated pages
+  const hits = scored.some((x) => x.s < 3) ? scored.filter((x) => x.s < 3) : scored;
+  return hits
+    .sort((a, b) => a.s - b.s || a.p.label.length - b.p.label.length || a.i - b.i)
+    .slice(0, limit)
+    .map((x) => x.p);
+}
 
 /** Every downloadable/report-registry report, grouped for the Reports hub page. */
 export const REPORT_LINKS: Array<{ href: string; label: string; group: string }> = [
@@ -403,3 +477,43 @@ export const REPORT_LINKS: Array<{ href: string; label: string; group: string }>
   { href: "/finance/invoices", label: "Billing & Receivables", group: "Finance / Accounting" },
   { href: "/reports/audit", label: "Audit Report", group: "Settings / Support" },
 ];
+
+export interface EmployeeSection {
+  href: string;
+  label: string;
+  perm: Permission;
+}
+
+/**
+ * What sits inside "Employees" (the founder, 2026-11-04: one menu entry, with Import Employees and the rest as its sections). Shown as a row of tabs across the top of the Employees
+ * pages, each only to people whose role may open it, and only while its module is on for the company. The employee's own record has its own tabs and shows all of that person's
+ * information, so the row is not shown there.
+ */
+export const EMPLOYEE_SECTIONS: EmployeeSection[] = [
+  { href: "/employees", label: "All employees", perm: "employee.view" },
+  { href: "/employees/import", label: "Import employees", perm: "employee.manage" },
+  { href: "/employees/categories", label: "Employee categories", perm: "employee.view" },
+  { href: "/employees/departments", label: "Departments", perm: "employee.view" },
+  { href: "/employees/bank", label: "Bank information", perm: "employee.sensitive" },
+  { href: "/employees/pension", label: "Pension information", perm: "employee.sensitive" },
+  { href: "/employees/tax", label: "Tax information", perm: "employee.sensitive" },
+  { href: "/employees/change-requests", label: "Detail change requests", perm: "employee.sensitive" },
+  { href: "/employees/next-of-kin", label: "Next of kin & emergency", perm: "employee.sensitive" },
+  { href: "/employees/guarantors", label: "Guarantors", perm: "employee.sensitive" },
+  { href: "/employees/dependants", label: "Dependants & beneficiaries", perm: "employee.sensitive" },
+  { href: "/operations/deployments", label: "Assignments", perm: "operations.view" },
+  { href: "/employees/org-chart", label: "Org chart", perm: "employee.view" },
+];
+
+const trimSlash = (p: string) => p.replace(/\/+$/, "") || "/";
+const SECTION_PAGES = new Set(EMPLOYEE_SECTIONS.map((s) => s.href).filter((h) => h.startsWith("/employees")));
+
+/** Whether the row of Employees tabs is shown on this page: on the section pages, not on an employee's own record or anywhere else. */
+export function showEmployeesSections(pathname: string): boolean {
+  return SECTION_PAGES.has(trimSlash(pathname));
+}
+
+/** Whether a tab is the page being shown. */
+export function employeesSectionActive(href: string, pathname: string): boolean {
+  return trimSlash(href) === trimSlash(pathname);
+}

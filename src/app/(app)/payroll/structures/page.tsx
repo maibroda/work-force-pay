@@ -26,6 +26,9 @@ export default async function StructuresPage() {
           )
         }
       />
+      <p className="no-print mb-3 text-sm text-muted-foreground">
+        Related: <Link href="/payroll/components" className="font-medium text-primary underline">every salary component across the structures</Link>, and <Link href="/contracts/rates" className="font-medium text-primary underline">the contract rates that use these structures</Link>.
+      </p>
       <Section title={`${rows.length} structure(s)`} flush>
         <Table>
           <THead>
