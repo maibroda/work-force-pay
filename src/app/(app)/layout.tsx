@@ -25,7 +25,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const reminder = twoFactorReminder(gate.state, gate.enforceFrom, new Date(new Date().toISOString().slice(0, 10)));
   // What this person may see: their role, the company's modules, and whether they are in a bureau. An area (Payroll and so on) is ONE sidebar entry leading to the first of its pages
   // they may open; its pages are tabs inside it. Nothing here grants access: every page checks permission and module itself.
-  const vis = { can: (p: Parameters<typeof can>[1]) => can(ctx.role, p), allowed: (href: string) => pageAllowed(ctx.entitlements, href), bureau: showBureau };
+  const vis = { can: (p: Parameters<typeof can>[1]) => can(ctx.role, p), allowed: (href: string) => pageAllowed(ctx.entitlements, href), bureau: showBureau, sales: salesOn, client: ctx.role === "CLIENT_APPROVER" || ctx.role === "CLIENT_HR" };
   const areas = AREAS.map((area) => ({ area, sections: visibleSections(area, vis) })).filter((x) => x.sections.length);
   const groups = [
     ...(["SUPERVISOR", "EMPLOYEE"].includes(ctx.role) ? SELF_NAV : []),
