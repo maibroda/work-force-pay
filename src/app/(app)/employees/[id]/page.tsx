@@ -20,7 +20,10 @@ import { StatusBadge, Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/input";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { employeeFields } from "@/components/forms/fields";
-import { createOverrideAction, createPayRateAction, updateEmployeeAction } from "@/app/actions/workforce";
+import { createOverrideAction, updateEmployeeAction } from "@/app/actions/workforce";
+import { proposePayRateAction } from "@/app/actions/pay-rate-proposals";
+import { listPayRateProposals } from "@/server/services/pay-rate-proposals";
+import { PayRateProposalsTable } from "@/components/pay-rate-proposals-table";
 import { createMovementAction, deployAction } from "@/app/actions/operations";
 import {
   addDocumentAction,
@@ -67,6 +70,9 @@ export default async function EmployeePage({
   const e = await getEmployee(ctx, id);
   if (!e) notFound();
   const tab = sp.tab ?? "overview";
+  // proposed personal monthly grosses for this employee (shown on the Salary tab to people who may propose or approve them)
+  const mayPropose = can(ctx.role, "override.manage") || can(ctx.role, "employee.manage");
+  const proposals = tab === "salary" && mayPropose ? await listPayRateProposals(ctx, { employeeId: id }) : [];
   const o = await options(ctx);
   const sensitive = can(ctx.role, "employee.sensitive");
   // the overview and the details tab show bank, tax and pension identifiers; the contacts tab shows guarantors and next of kin
@@ -532,6 +538,11 @@ export default async function EmployeePage({
             </Table>
             {!e.payRates.length && <Empty>No personal pay rate — paid from contract agreed rates.</Empty>}
           </Section>
+          {mayPropose && (
+            <Section title="Proposed pay rates" description="A proposed personal monthly gross becomes a pay rate only when a payroll manager (not the person who proposed it) approves it." flush>
+              <PayRateProposalsTable ctx={ctx} rows={proposals} showEmployee={false} />
+            </Section>
+          )}
           {can(ctx.role, "override.manage") && (
             <div className="grid gap-5 lg:grid-cols-2">
               <FormPanel title="Add Employee Salary Override">
@@ -558,7 +569,7 @@ export default async function EmployeePage({
                   submitLabel="Save override"
                 />
               </FormPanel>
-              <FormPanel title="Add effective-dated pay rate">
+              <FormPanel title="Propose a personal monthly gross">
                 <SmartForm
                   fields={[
                     { name: "employeeId", label: "", type: "hidden", defaultValue: e.id },
@@ -568,6 +579,7 @@ export default async function EmployeePage({
                       type: "number",
                       required: true,
                       min: 1,
+                      help: "The monthly gross before deductions (not an annual package). A payroll manager must approve it before it counts.",
                     },
                     {
                       name: "structureCode",
@@ -576,11 +588,10 @@ export default async function EmployeePage({
                       options: o.structureCodes,
                     },
                     { name: "effectiveFrom", label: "Effective from", type: "date", required: true },
-                    { name: "approvedBy", label: "Approved by", required: true },
                     { name: "reason", label: "Reason", required: true, span: 2 },
                   ]}
-                  action={createPayRateAction}
-                  submitLabel="Add pay rate"
+                  action={proposePayRateAction}
+                  submitLabel="Propose pay rate"
                 />
               </FormPanel>
             </div>

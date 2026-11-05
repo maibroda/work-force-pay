@@ -44,16 +44,6 @@ export async function createOverrideAction(v: V) {
     ["/employees"],
   );
 }
-export async function createPayRateAction(v: V) {
-  return act(
-    "override.manage",
-    async (ctx) => {
-      await emp.createPayRate(ctx, v as never);
-      return { message: "Effective-dated pay rate added." };
-    },
-    ["/employees"],
-  );
-}
 export async function createCategoryAction(v: V) {
   return act(
     "employee.manage",

@@ -83,6 +83,7 @@ export const PAGE_MODULES: Record<string, EntryModule> = {
   "/employees/new": "core",
   "/employees/next-of-kin": "hr",
   "/employees/org-chart": "hr",
+  "/employees/pay-rates": "core",
   "/employees/pension": "core",
   "/employees/pfas": "core",
   "/employees/tax": "core",
@@ -290,6 +291,8 @@ export const ACTION_MODULES: Record<string, EntryModule> = {
   "launch-readiness.ts": "core",
   "leave.ts": "hr",
   "letters.ts": "hr",
+  "pay-rate-proposals.ts": "core",
+
   "pfas.ts": "core",
   "loans.ts": "payroll",
   "matching.ts": "payables_procurement",

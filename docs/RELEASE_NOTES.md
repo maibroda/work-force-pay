@@ -10,9 +10,18 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 - **Screen change only:** no payroll, statutory, permission or entitlement change, and no migration.
 - Tests: `tests/unit/navigation-reports.test.ts` (no report lost or listed twice, the permission per report, who sees which), written first. I **changed two existing tests** because the design changed on purpose: the one that pinned a personnel report in the Employees sidebar group, and the Payroll ones that listed payslips and the bank schedule as Payroll tabs.
 
+## Merged in #142 on 2026-11-05 (branch `pay-rate-approval`, one migration: 20261122090000_pay_rate_proposals)
+
+- **A personal monthly gross is now proposed by HR and approved by a payroll manager (the founder's decision of 2026-11-05, for staff paid a gross entered by hand instead of from a client contract rate).** On the employee's Salary tab the form now says "Propose a personal monthly gross". A proposal is **not** a pay rate: nothing changes in any payroll until a payroll manager (the new permission `payrate.approve`: the payroll role, the company administrator, the platform administrator) approves it. **Nobody approves their own proposal or their own pay**, and the approver's own name is recorded (the old form let anyone type any "approved by" name). A new page, **Employees > Pay rate approvals**, lists what is waiting.
+- **The amount is the monthly gross** in naira with at most two decimals, held as exact text (no floats). A personal gross still takes precedence over a contract rate (now pinned by a test).
+- **No direct route any more:** the server action that added a pay rate straight away is removed.
+- **Migration (reversible):** a new table and status; existing pay rates are not touched. `down.sql` drops the table (the pay rates that approvals made are kept).
+- **Not yet built (the next pull request):** entering the gross when adding an employee and in the bulk import (these will create proposals). **Still open for the founder:** the percentages for an office salary structure (question 3), paid days (5) and unpaid leave (6).
+- Explain-back note: `docs/plans/pay-rate-approval-explain-back.md`. Tests: `tests/integration/pay-rate-approval.test.ts`, `tests/unit/pay-rate-amount.test.ts`, `tests/unit/rates-pay-rate-precedence.test.ts`, written first.
+
 ## Merged in #141 on 2026-11-04 (branch `navigation-payroll`, no migration)
 
-## Not yet merged (branch `pfa-register`, one migration: 20261121090000_pfa_register)
+## Merged in #140 on 2026-11-05 (branch `pfa-register`, one migration: 20261121090000_pfa_register)
 
 - **Where to add or remove a pension fund administrator (the founder's review of 2026-11-04, point 3).** A new page, **Employees → Pension fund administrators**, is each company's own list of PFAs. **The company administrator and the HR manager** can add one, correct its name, record its **PenCom number** (optional), switch it off or on, or remove it (only if nobody has it). Payroll and HR staff can read it. Before this the nine PFAs were a list in the program and nobody could change it.
 - **An employee's PFA is now chosen from that list** (when adding or editing an employee, hiring from recruitment, and in a pension change request, which is checked again when someone else approves it). It is stored as the list spells it, so one PFA can no longer appear as two lines on the pension schedule. A PFA that has been switched off stays with the people who already have it; renaming one carries the new name to the company's employees who have it (payrolls already calculated keep the name they were calculated with).
