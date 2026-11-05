@@ -2,6 +2,13 @@
 
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
+## Not yet merged (branch `navigation-hr`, no migration)
+
+- **"HR Lifecycle" (16 entries) and "Leave Management" (3) are now one menu entry, HR, with its pages as tabs grouped by job (the founder's review: so many menu entries make the app hard to work in).** Overview; Recruitment (job requisitions, candidates and pipeline); Onboarding; Employment (employment contracts, employee relations, appraisals, training compliance, letters); **Leave (leave management, balances and the leave policy together)**; Exit (exits and clearance, end-of-service settlements, attrition report); Privacy & records (policies and acknowledgements, data access requests, data breaches, records retention); and **HR setup**, which brings in the five HR settings that sat among the other settings (HR and lifecycle policy, onboarding and exit checklists, letter templates, training requirements, appraisal criteria).
+- **One place for each page:** End-of-Service Settlements was listed under both HR Lifecycle and Payroll (the same page): it is under HR only.
+- **Screen change only:** every page keeps its address, its permission and its module check, so nobody gains or loses access to anything. A supervisor who may only handle leave still gets an HR entry, leading to Leave; an employee has none. No migration; no payroll, statutory or permission change.
+- Tests: `tests/unit/navigation-hr.test.ts` (no page lost, the same permission per page for every role, nothing twice, grouping, who sees which), written first. **I changed one existing test** (the one that pinned Settlements inside the HR Lifecycle group) because the design changed on purpose.
+
 ## Not yet merged (branch `pay-rate-entry`, no migration)
 
 - **The monthly gross can now be entered when adding an employee and in the bulk import (the founder's decision of 2026-11-05).** The New employee form has an optional "Monthly gross" and "Salary structure". The import template has two optional columns, **Monthly Gross** and **Salary Structure**. In both cases it is a **proposal**, not a pay rate: it starts on the employment date and counts only when a payroll manager approves it (Employees > Pay rate approvals).

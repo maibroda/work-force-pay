@@ -1,0 +1,107 @@
+import { describe, expect, it } from "vitest";
+import { can, type Permission, type Role } from "@/lib/auth/permissions";
+import { pageRouteFor } from "@/lib/entitlements/guard";
+import { AREAS, HR_AREA, NAV, PAYROLL_AREA, areaEntry, groupSections, sectionFor, visibleSections } from "@/lib/nav";
+
+/**
+ * The founder's review (2026-11-04/05): so many menu entries make the app hard to work in; merge what overlaps (docs/plans/navigation-consolidation.md). Step 4: "HR Lifecycle" (16
+ * entries) and "Leave Management" (3) become ONE entry, HR, with its pages as tabs grouped by job (recruitment, onboarding, employment, leave, exit, privacy and records), plus the HR
+ * settings that were among the other settings. These tests pin that no page is lost, that nobody gains or loses access to a page, and that nothing is listed twice.
+ */
+const roles: Role[] = ["SUPER_ADMIN", "COMPANY_ADMIN", "HR_ADMIN", "PAYROLL_ADMIN", "FINANCE", "AUDITOR", "OPERATIONS", "SUPERVISOR", "EMPLOYEE", "BUSINESS_DEV", "CLIENT_APPROVER", "CLIENT_HR"];
+
+/** The "HR Lifecycle" and "Leave Management" sidebar groups, and the HR settings, exactly as they were (href and the permission that showed it). */
+const OLD: Array<[string, Permission]> = [
+  ["/hr", "hr.view"],
+  ["/hr/requisitions", "hr.view"],
+  ["/hr/candidates", "hr.view"],
+  ["/hr/onboarding", "hr.view"],
+  ["/hr/contracts", "hr.view"],
+  ["/hr/relations", "hr.view"],
+  ["/hr/exits", "hr.view"],
+  ["/hr/attrition", "hr.view"],
+  ["/hr/training", "hr.view"],
+  ["/hr/policies", "hr.view"],
+  ["/hr/data-requests", "hr.view"],
+  ["/hr/breaches", "hr.view"],
+  ["/hr/retention", "hr.view"],
+  ["/hr/appraisals", "appraisal.view"],
+  ["/hr/letters", "hr.view"],
+  ["/payroll/settlements", "payroll.view"],
+  ["/leave", "leave.view"],
+  ["/leave/balances", "leave.view"],
+  ["/settings/leave", "leave.manage"],
+  // the HR settings, which sat among the other settings
+  ["/settings/hr-policy", "hr.configure"],
+  ["/settings/checklists", "hr.configure"],
+  ["/settings/letter-templates", "hr.configure"],
+  ["/settings/training-requirements", "hr.configure"],
+  ["/settings/appraisal-criteria", "appraisal.manage"],
+];
+const hrefs = HR_AREA.sections.map((s) => s.href);
+
+describe("HR Lifecycle and Leave Management become one entry, HR", () => {
+  it("has no HR Lifecycle or Leave Management group any more: one entry, HR, standing for an area", () => {
+    expect(NAV.find((g) => g.title === "HR Lifecycle")).toBeUndefined();
+    expect(NAV.find((g) => g.title === "Leave Management")).toBeUndefined();
+    const g = NAV.find((x) => x.title === "HR")!;
+    expect(g.items).toHaveLength(1);
+    expect(g.items[0]).toMatchObject({ label: "HR", area: "hr" });
+    expect(AREAS).toContain(HR_AREA);
+  });
+
+  it("loses no page: every page of the old groups and every HR setting is a tab, exactly once", () => {
+    for (const [h] of OLD) expect(hrefs.filter((x) => x === h), h).toHaveLength(1);
+  });
+
+  it("opens each page to exactly the roles that could see it before: same permission per page", () => {
+    const was = new Map(OLD);
+    for (const s of HR_AREA.sections) {
+      expect(s.perm, s.href).toBe(was.get(s.href));
+      for (const r of roles) expect(can(r, s.perm)).toBe(can(r, was.get(s.href)!));
+    }
+  });
+
+  it("lists none of those pages as a sidebar entry of its own, and none appears in another area (Settlements is in HR only, not in Payroll)", () => {
+    const items = NAV.flatMap((g) => g.items).filter((i) => !i.area);
+    for (const [h] of OLD) expect(items.map((i) => i.href), h).not.toContain(h);
+    const all = AREAS.flatMap((a) => a.sections.map((s) => s.href));
+    expect(new Set(all).size).toBe(all.length);
+    expect(PAYROLL_AREA.sections.map((s) => s.href)).not.toContain("/payroll/settlements");
+  });
+
+  it("has only real pages, each in a named group, and groups them by the job", () => {
+    for (const s of HR_AREA.sections) expect(pageRouteFor(s.href), s.href).not.toBeNull();
+    expect(groupSections(HR_AREA.sections).map((g) => g.group)).toEqual(["Overview", "Recruitment", "Onboarding", "Employment", "Leave", "Exit", "Privacy & records", "HR setup"]);
+  });
+
+  it("puts leave in the same place as the rest of HR, with its policy beside the balances", () => {
+    const leave = HR_AREA.sections.filter((s) => s.group === "Leave").map((s) => s.href);
+    expect(leave).toEqual(["/leave", "/leave/balances", "/settings/leave"]);
+    const exit = HR_AREA.sections.filter((s) => s.group === "Exit").map((s) => s.href);
+    expect(exit).toContain("/payroll/settlements");
+  });
+});
+
+describe("what a person sees", () => {
+  const v = (role: Role) => ({ can: (p: Permission) => can(role, p), allowed: () => true, bureau: false });
+
+  it("shows each role exactly the pages it may open, so a supervisor who may only handle leave still gets in, and an employee has no HR entry", () => {
+    for (const r of roles) {
+      const shown = new Set(visibleSections(HR_AREA, v(r)).map((s) => s.href));
+      for (const s of HR_AREA.sections) expect(shown.has(s.href), `${r} ${s.href}`).toBe(can(r, s.perm));
+    }
+    const onlyLeave = visibleSections(HR_AREA, { can: (p) => p === "leave.view", allowed: () => true, bureau: false }).map((s) => s.href);
+    expect(onlyLeave).toEqual(["/leave", "/leave/balances"]);
+    expect(areaEntry(HR_AREA, { can: (p) => p === "leave.view", allowed: () => true, bureau: false })).toEqual({ href: "/leave", label: "HR" });
+    expect(areaEntry(HR_AREA, v("EMPLOYEE"))).toBeNull();
+  });
+
+  it("finds the tab a page is under, including the pages inside it", () => {
+    expect(sectionFor(HR_AREA, "/hr/candidates/abc")?.href).toBe("/hr/candidates");
+    expect(sectionFor(HR_AREA, "/hr")?.href).toBe("/hr");
+    expect(sectionFor(HR_AREA, "/payroll/settlements")?.href).toBe("/payroll/settlements");
+    expect(sectionFor(HR_AREA, "/settings/hr-policy")?.group).toBe("HR setup");
+    expect(sectionFor(HR_AREA, "/leave/balances")?.href).toBe("/leave/balances");
+  });
+});
