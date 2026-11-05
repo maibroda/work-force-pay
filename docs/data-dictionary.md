@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-212 tables and 161 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+213 tables and 162 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -31,6 +31,7 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | salaryStructures | → SalaryStructure[] |  |  |
 | salaryOverrides | → EmployeeSalaryOverride[] |  |  |
 | payRates | → EmployeePayRate[] |  |  |
+| payRateProposals | → PayRateProposal[] |  |  |
 | deployments | → Deployment[] |  |  |
 | movements | → StaffMovement[] |  |  |
 | workRegister | → WorkRegister[] |  |  |
@@ -1204,6 +1205,7 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | workRegister | → WorkRegister[] |  |  |
 | salaryOverrides | → EmployeeSalaryOverride[] |  |  |
 | payRates | → EmployeePayRate[] |  |  |
+| payRateProposals | → PayRateProposal[] |  |  |
 | payrollRecords | → PayrollRecord[] |  |  |
 | overtime | → Overtime[] |  |  |
 | arrears | → Arrears[] |  |  |
@@ -1972,6 +1974,32 @@ Employee-specific monthly gross (e.g. office staff / supervisors not billed per 
 | effectiveFrom | DateTime | yes |  |
 | effectiveTo | DateTime |  |  |
 | createdAt | DateTime |  |  |
+
+### PayRateProposal
+
+A proposed personal monthly gross for an employee (HR or payroll proposes; the payroll manager approves, a second person). It is NOT a pay rate: the pay run reads only EmployeePayRate, and approval is what creates one. Many arrive from the bulk import and from adding an employee, and are decided in one queue.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| employeeId | String | yes |  |
+| employee | → Employee |  |  |
+| monthlyGross | Decimal | yes |  |
+| structureCode | String |  |  |
+| effectiveFrom | DateTime | yes |  |
+| reason | String | yes |  |
+| source | String |  | Where it came from: MANUAL (the employee's record), NEW_EMPLOYEE (set when the employee was added) or IMPORT (the bulk import). |
+| status | PayRateProposalStatus |  |  |
+| proposedBy | String | yes |  |
+| proposedByUserId | String | yes |  |
+| createdAt | DateTime |  |  |
+| decidedBy | String |  |  |
+| decidedByUserId | String |  |  |
+| decidedAt | DateTime |  |  |
+| decisionNote | String |  |  |
+| appliedRateId | String |  | The EmployeePayRate that approval made. |
 
 ### Deployment
 
@@ -5647,6 +5675,10 @@ The two sign-offs a statutory rate change needs before it reaches any client: on
 ### EngagementStatus
 
 `ONBOARDING`, `ACTIVE`, `PAUSED`, `ENDED`
+
+### PayRateProposalStatus
+
+`PENDING`, `APPROVED`, `REJECTED`, `CANCELLED`
 
 ### InvoiceDeductionType
 

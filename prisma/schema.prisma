@@ -558,6 +558,7 @@ model Organization {
   salaryStructures          SalaryStructure[]
   salaryOverrides           EmployeeSalaryOverride[]
   payRates                  EmployeePayRate[]
+  payRateProposals          PayRateProposal[]
   deployments               Deployment[]
   movements                 StaffMovement[]
   workRegister              WorkRegister[]
@@ -1956,6 +1957,7 @@ model Employee {
   workRegister            WorkRegister[]
   salaryOverrides         EmployeeSalaryOverride[]
   payRates                EmployeePayRate[]
+  payRateProposals        PayRateProposal[]
   payrollRecords          PayrollRecord[]
   overtime                Overtime[]
   arrears                 Arrears[]
@@ -2852,6 +2854,42 @@ model EmployeePayRate {
   effectiveTo    DateTime?    @db.Date
   createdAt      DateTime     @default(now())
 
+  @@index([organizationId, employeeId])
+}
+
+enum PayRateProposalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+/// A proposed personal monthly gross for an employee (HR or payroll proposes; the payroll manager approves, a second person). It is NOT a pay rate: the pay run reads only EmployeePayRate, and
+/// approval is what creates one. Many arrive from the bulk import and from adding an employee, and are decided in one queue.
+model PayRateProposal {
+  id                String                @id @default(cuid())
+  organizationId    String
+  organization      Organization          @relation(fields: [organizationId], references: [id])
+  employeeId        String
+  employee          Employee              @relation(fields: [employeeId], references: [id])
+  monthlyGross      Decimal               @db.Decimal(14, 2)
+  structureCode     String?
+  effectiveFrom     DateTime              @db.Date
+  reason            String
+  /// Where it came from: MANUAL (the employee's record), NEW_EMPLOYEE (set when the employee was added) or IMPORT (the bulk import).
+  source            String                @default("MANUAL")
+  status            PayRateProposalStatus @default(PENDING)
+  proposedBy        String
+  proposedByUserId  String
+  createdAt         DateTime              @default(now())
+  decidedBy         String?
+  decidedByUserId   String?
+  decidedAt         DateTime?
+  decisionNote      String?
+  /// The EmployeePayRate that approval made.
+  appliedRateId     String?
+
+  @@index([organizationId, status])
   @@index([organizationId, employeeId])
 }
 

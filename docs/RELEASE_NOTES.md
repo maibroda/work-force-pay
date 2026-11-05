@@ -2,6 +2,15 @@
 
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
+## Not yet merged (branch `pay-rate-approval`, one migration: 20261122090000_pay_rate_proposals)
+
+- **A personal monthly gross is now proposed by HR and approved by a payroll manager (the founder's decision of 2026-11-05, for staff paid a gross entered by hand instead of from a client contract rate).** On the employee's Salary tab the form now says "Propose a personal monthly gross". A proposal is **not** a pay rate: nothing changes in any payroll until a payroll manager (the new permission `payrate.approve`: the payroll role, the company administrator, the platform administrator) approves it. **Nobody approves their own proposal or their own pay**, and the approver's own name is recorded (the old form let anyone type any "approved by" name). A new page, **Employees > Pay rate approvals**, lists what is waiting.
+- **The amount is the monthly gross** in naira with at most two decimals, held as exact text (no floats). A personal gross still takes precedence over a contract rate (now pinned by a test).
+- **No direct route any more:** the server action that added a pay rate straight away is removed.
+- **Migration (reversible):** a new table and status; existing pay rates are not touched. `down.sql` drops the table (the pay rates that approvals made are kept).
+- **Not yet built (the next pull request):** entering the gross when adding an employee and in the bulk import (these will create proposals). **Still open for the founder:** the percentages for an office salary structure (question 3), paid days (5) and unpaid leave (6).
+- Explain-back note: `docs/plans/pay-rate-approval-explain-back.md`. Tests: `tests/integration/pay-rate-approval.test.ts`, `tests/unit/pay-rate-amount.test.ts`, `tests/unit/rates-pay-rate-precedence.test.ts`, written first.
+
 ## Not yet merged (branch `navigation-payroll`, no migration)
 
 - **Payroll is now one menu entry (the founder's review of 2026-11-04: so many menu entries make the app hard to work in).** The Payroll group had 38 entries; it is one, "Payroll", and its pages are tabs inside it, grouped by the job: Run payroll, Pay inputs, Pay setup, Pay out, Tax, pension & schedules, Payroll reports. Every page keeps its address, its permission and its module check, so nobody gains or loses access to anything.

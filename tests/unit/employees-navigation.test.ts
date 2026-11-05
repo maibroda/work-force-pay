@@ -43,7 +43,8 @@ describe("the sidebar", () => {
 describe("the tab strip inside Employees", () => {
   it("starts with all employees and has every page that moved out of the sidebar, Import Employees included, under the names the founder gave them", () => {
     expect(EMPLOYEE_SECTIONS[0]).toMatchObject({ href: "/employees", label: "All employees" });
-    expect(EMPLOYEE_SECTIONS.map((s) => s.href).sort()).toEqual([...MOVED, "/employees"].sort());
+    // the pages that moved out of the sidebar, plus the Pay rate approvals queue added on 2026-11-05 (a personal gross is proposed by HR and approved by a payroll manager)
+    expect(EMPLOYEE_SECTIONS.map((s) => s.href).sort()).toEqual([...MOVED, "/employees", "/employees/pay-rates"].sort());
     const label = (href: string) => EMPLOYEE_SECTIONS.find((s) => s.href === href)!.label;
     expect(label("/employees/import")).toBe("Import employees");
     expect(label("/employees/bank")).toBe("Bank information");
