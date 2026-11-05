@@ -2,7 +2,14 @@
 
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
-## Not yet merged (branch `navigation-sales`, no migration)
+## Not yet merged (branch `navigation-settings`, no migration)
+
+- **The last three menu groups become one entry each, with their pages as tabs (the founder's review: so many menu entries make the app hard to work in).** **Settings** (what is left after the payroll, HR and bureau settings moved into their own areas): Company (organization, numbering rules, cost centers), People & access (users, roles), Plan & modules (subscription, module switch, software price book), Audit & security (audit integrity, who looked at sensitive details). **Analytics** (8 entries): Payroll & workforce cost, Profitability, Analysis. **My Workspace** (10 entries, the self-service pages): Today (a supervisor's work register), My details, My HR (leave, appraisals, grievances, policies) and My security.
+- **With this, the whole menu is area-based:** the sidebar is about a dozen entries (Dashboard, Sales, Bureau, Employees, HR, Payroll, Operations, Clients & contracts, Finance, Accounting, Analytics, Reports, Settings, My Workspace; Bureau and Your payroll only for the people they are for), with the Go to search on top, instead of about 170.
+- **Screen change only:** every page keeps its address, permission and module check, so nobody gains or loses access; no migration; no payroll, statutory or permission change.
+- Tests: `tests/unit/navigation-settings.test.ts` (no page lost, the same permission per page for every role, nothing twice, who sees which, the right first page for a supervisor and an employee), written first and seen failing.
+
+## Merged in #149 on 2026-11-05 (branch `navigation-sales`, no migration)
 
 - **The two Sales menu groups are now ONE entry, Sales (the founder's decision of 2026-11-05).** The sales module's group (18 entries) and the bureau's own sales pipeline (8) are one entry with its pages as tabs: **Leads & deals** (leads, accounts, deals board, deals, handovers), **Contacts & cases**, **Activity** (my tasks, notifications, reports), **Data tools** (import and export, merge records), **Sales setup**, and **Bureau pipeline** (the bureau's pipeline, leads, outreach, proposals, blueprints and quotes, pricing, referral partners, health checks). Because "Leads" and "Pipeline" were on both, the bureau's are named **Bureau leads** and **Bureau pipeline**.
 - **Only the menu is merged.** The sales module and the bureau's pipeline remain two systems with their own pages, data and permissions (they never share a file or a permission). Every page shows to exactly who saw it before: by permission, by whether the company has switched the sales module on, and by being in a bureau.

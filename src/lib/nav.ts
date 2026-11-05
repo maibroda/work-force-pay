@@ -77,20 +77,8 @@ export const NAV: NavGroup[] = [
   },
   {
     title: "Analytics",
-    items: [
-      { href: "/analytics/payroll", label: "Payroll Analytics", perm: "analytics.view" },
-      { href: "/analytics/workforce-cost", label: "Workforce Cost", perm: "analytics.view" },
-      { href: "/analytics/client-cost", label: "Client Cost", perm: "analytics.view" },
-      { href: "/analytics/profitability", label: "Client Profitability", perm: "analytics.view" },
-      {
-        href: "/analytics/contract-profitability",
-        label: "Contract Profitability",
-        perm: "analytics.view",
-      },
-      { href: "/analytics/cost-centers", label: "Cost Center P&L", perm: "analytics.view" },
-      { href: "/analytics/variance", label: "Variance Analysis", perm: "analytics.view" },
-      { href: "/analytics/locations", label: "Location Analytics", perm: "analytics.view" },
-    ],
+    // One entry: its pages are tabs inside it (ANALYTICS_AREA below)
+    items: [{ href: "/analytics/payroll", label: "Analytics", perm: "analytics.view", area: "analytics" }],
   },
   {
     title: "Reports",
@@ -98,37 +86,17 @@ export const NAV: NavGroup[] = [
     items: [{ href: "/reports", label: "Reports", perm: "reports.view", area: "reports" }],
   },
   {
-    title: "Settings / Support",
-    items: [
-      { href: "/settings/organization", label: "Organization", perm: "dashboard.view" },
-      { href: "/settings/users", label: "Users", perm: "users.manage" },
-      { href: "/settings/roles", label: "Roles", perm: "dashboard.view" },
-      { href: "/settings/subscription", label: "Subscription", perm: "subscription.view" },
-      { href: "/settings/entitlements", label: "Module switch", perm: "subscription.manage" },
-      { href: "/settings/price-book", label: "Software price book", perm: "pricebook.manage" },
-      { href: "/settings/cost-centers", label: "Cost Centers", perm: "payroll.view" },
-      { href: "/settings/numbering", label: "Numbering Rules", perm: "employee.view" },
-      { href: "/settings/audit-integrity", label: "Audit Integrity", perm: "audit.view" },
-      { href: "/settings/sensitive-access", label: "Who Looked at Sensitive Details", perm: "audit.view" },
-    ],
+    title: "Settings",
+    // One entry: company, people and access, plan and modules, audit and security as tabs (SETTINGS_AREA below)
+    items: [{ href: "/settings/organization", label: "Settings", perm: "dashboard.view", area: "settings" }],
   },
 ];
 
 export const SELF_NAV: NavGroup[] = [
   {
     title: "My Workspace",
-    items: [
-      { href: "/supervisor", label: "Today's Work Register", perm: "attendance.record" },
-      { href: "/me", label: "My Dashboard", perm: "self.view" },
-      { href: "/me/leave", label: "My Leave", perm: "leave.apply" },
-      { href: "/me/contacts", label: "My Contacts", perm: "self.view" },
-      { href: "/me/details", label: "My Bank & Tax Details", perm: "self.view" },
-      { href: "/me/policies", label: "My Policies", perm: "self.view" },
-      { href: "/me/my-data", label: "My Data", perm: "self.view" },
-      { href: "/me/appraisals", label: "My Appraisals", perm: "self.view" },
-      { href: "/me/grievances", label: "My Grievances", perm: "relations.raise" },
-      { href: "/settings/security", label: "My Security", perm: "self.security" },
-    ],
+    // One entry for the self-service pages (MY_AREA below): a supervisor's work register, the employee's own details, leave, appraisals, grievances and security
+    items: [{ href: "/me", label: "My Workspace", perm: "self.view", area: "me" }],
   },
 ];
 
@@ -517,7 +485,61 @@ export const PORTAL_AREA: Area = {
   ],
 };
 
-export const AREAS: Area[] = [PAYROLL_AREA, OPERATIONS_AREA, HR_AREA, CLIENTS_AREA, FINANCE_AREA, ACCOUNTING_AREA, REPORTS_AREA, SALES_AREA, BUREAU_AREA, PORTAL_AREA];
+/**
+ * Settings, Analytics and My workspace are one entry each, with their pages as tabs (the founder's review: so many menu entries make the app hard to work in). Settings is what is left of the
+ * old Settings group after the payroll, HR and bureau settings moved into their own areas, and the audit report into Reports. "My security" is under My workspace, as it was. Each page
+ * keeps its address and the permission that showed it before.
+ */
+export const SETTINGS_AREA: Area = {
+  key: "settings",
+  title: "Settings",
+  sections: [
+    { group: "Company", href: "/settings/organization", label: "Organization", perm: "dashboard.view" },
+    { group: "Company", href: "/settings/numbering", label: "Numbering rules", perm: "employee.view" },
+    { group: "Company", href: "/settings/cost-centers", label: "Cost centers", perm: "payroll.view" },
+    { group: "People & access", href: "/settings/users", label: "Users", perm: "users.manage" },
+    { group: "People & access", href: "/settings/roles", label: "Roles", perm: "dashboard.view" },
+    { group: "Plan & modules", href: "/settings/subscription", label: "Subscription", perm: "subscription.view" },
+    { group: "Plan & modules", href: "/settings/entitlements", label: "Module switch", perm: "subscription.manage" },
+    { group: "Plan & modules", href: "/settings/price-book", label: "Software price book", perm: "pricebook.manage" },
+    { group: "Audit & security", href: "/settings/audit-integrity", label: "Audit integrity", perm: "audit.view" },
+    { group: "Audit & security", href: "/settings/sensitive-access", label: "Who looked at sensitive details", perm: "audit.view" },
+  ],
+};
+
+export const ANALYTICS_AREA: Area = {
+  key: "analytics",
+  title: "Analytics",
+  sections: [
+    { group: "Payroll & workforce cost", href: "/analytics/payroll", label: "Payroll analytics", perm: "analytics.view" },
+    { group: "Payroll & workforce cost", href: "/analytics/workforce-cost", label: "Workforce cost", perm: "analytics.view" },
+    { group: "Payroll & workforce cost", href: "/analytics/client-cost", label: "Client cost", perm: "analytics.view" },
+    { group: "Profitability", href: "/analytics/profitability", label: "Client profitability", perm: "analytics.view" },
+    { group: "Profitability", href: "/analytics/contract-profitability", label: "Contract profitability", perm: "analytics.view" },
+    { group: "Profitability", href: "/analytics/cost-centers", label: "Cost center P&L", perm: "analytics.view" },
+    { group: "Analysis", href: "/analytics/variance", label: "Variance analysis", perm: "analytics.view" },
+    { group: "Analysis", href: "/analytics/locations", label: "Location analytics", perm: "analytics.view" },
+  ],
+};
+
+export const MY_AREA: Area = {
+  key: "me",
+  title: "My Workspace",
+  sections: [
+    { group: "Today", href: "/supervisor", label: "Today's work register", perm: "attendance.record" },
+    { group: "My details", href: "/me", label: "My dashboard", perm: "self.view" },
+    { group: "My details", href: "/me/contacts", label: "My contacts", perm: "self.view" },
+    { group: "My details", href: "/me/details", label: "My bank & tax details", perm: "self.view" },
+    { group: "My details", href: "/me/my-data", label: "My data", perm: "self.view" },
+    { group: "My HR", href: "/me/leave", label: "My leave", perm: "leave.apply" },
+    { group: "My HR", href: "/me/appraisals", label: "My appraisals", perm: "self.view" },
+    { group: "My HR", href: "/me/grievances", label: "My grievances", perm: "relations.raise" },
+    { group: "My HR", href: "/me/policies", label: "My policies", perm: "self.view" },
+    { group: "My security", href: "/settings/security", label: "My security", perm: "self.security" },
+  ],
+};
+
+export const AREAS: Area[] = [PAYROLL_AREA, OPERATIONS_AREA, HR_AREA, CLIENTS_AREA, FINANCE_AREA, ACCOUNTING_AREA, REPORTS_AREA, SALES_AREA, BUREAU_AREA, PORTAL_AREA, SETTINGS_AREA, ANALYTICS_AREA, MY_AREA];
 
 export interface EmployeeSection {
   href: string;
