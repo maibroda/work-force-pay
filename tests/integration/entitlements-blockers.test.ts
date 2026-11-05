@@ -23,18 +23,28 @@ function fake(answers: Record<string, number> = {}) {
       return answers[model] ?? 0;
     },
   });
-  const models = ["payrollRun", "paymentBatch", "journalDocument", "accountingPeriod", "purchaseOrder", "purchaseInvoice", "clientInvoice", "crmOpportunity", "crmAutomationRun", "leaveRequest", "onboardingTask", "exitTask"];
+  const models = ["payrollRun", "paymentBatch", "journalDocument", "accountingPeriod", "purchaseOrder", "purchaseInvoice", "clientInvoice", "crmOpportunity", "crmAutomationRun", "leaveRequest", "onboardingTask", "exitTask", "exitSettlement", "exitRecord", "disciplinaryRecord", "appraisalCycle", "appraisal", "jobRequisition"];
   const client = Object.fromEntries(models.map((m) => [m, delegate(m)]));
   return { client: client as never, calls };
 }
 const where = (calls: ReturnType<typeof fake>["calls"], model: string) => calls.filter((c) => c.model === model).map((c) => c.where);
 
 describe("what is looked for, per module (the lists proposed in the plan)", () => {
-  it("Payroll: a pay run not yet locked or paid, and a payment batch still pending, both for this company only", async () => {
+  it("Payroll: a pay run not yet locked or paid, a payment batch still pending, and a final settlement awaiting approval or release, all for this company only", async () => {
     const f = fake();
     await changeBlockers("org1", ["payroll"], f.client);
     expect(where(f.calls, "payrollRun")).toEqual([{ organizationId: "org1", status: { in: ["DRAFT", "CALCULATED", "PENDING_APPROVAL", "APPROVED"] } }]);
     expect(where(f.calls, "paymentBatch")).toEqual([{ organizationId: "org1", status: "PENDING" }]);
+    // a final settlement is the leaver's last pay: hard while it waits for approval or release, soft while it is only being prepared
+    expect(where(f.calls, "exitSettlement")).toEqual([{ organizationId: "org1", status: { in: ["PENDING_APPROVAL", "APPROVED"] } }, { organizationId: "org1", status: "DRAFT" }]);
+  });
+
+  it("a final settlement awaiting approval or release refuses removing Payroll; one being prepared only needs an acknowledgement", async () => {
+    const waiting = await changeBlockers("org1", ["payroll"], fake({ exitSettlement: 2 }).client);
+    expect(waiting.hard.map((b) => b.message)).toEqual(["Payroll: 2 final settlements are awaiting approval or release. Approve and release, or cancel, them first."]);
+    expect(waiting.soft.map((b) => b.message)).toEqual(["Payroll: 2 final settlements are still being prepared. They stay readable but cannot be completed once the module ends."]);
+    const one = await changeBlockers("org1", ["payroll"], fake({ exitSettlement: 1 }).client);
+    expect(one.hard[0].message).toBe("Payroll: 1 final settlement is awaiting approval or release. Approve and release, or cancel, it first.");
   });
 
   it("Accounting: a manual journal waiting for approval or posting, and a period still being closed", async () => {
@@ -59,7 +69,7 @@ describe("what is looked for, per module (the lists proposed in the plan)", () =
     expect(r.soft.map((b) => b.count)).toEqual([2]);
   });
 
-  it("CRM and HR have no hard blockers, only soft ones: open deals and queued automation; pending leave and open onboarding and exit tasks", async () => {
+  it("CRM has no hard blockers, only soft ones: open deals and queued automation; HR is below", async () => {
     const crm = fake({ crmOpportunity: 3, crmAutomationRun: 1 });
     const c = await changeBlockers("org1", ["crm"], crm.client);
     expect(c.hard).toEqual([]);
@@ -69,11 +79,27 @@ describe("what is looked for, per module (the lists proposed in the plan)", () =
     ]);
     expect(where(crm.calls, "crmOpportunity")).toEqual([{ organizationId: "org1", status: "ACTIVE" }]);
     expect(where(crm.calls, "crmAutomationRun")).toEqual([{ organizationId: "org1", status: "PENDING" }]);
-    const hr = fake({ leaveRequest: 1, onboardingTask: 2, exitTask: 4 });
+  });
+
+  it("HR (the whole cycle): an exit awaiting approval is hard; pending leave, open onboarding and exit tasks, disciplinary decisions, appraisals not yet approved, open appraisal cycles and open job requisitions are soft", async () => {
+    const hr = fake({ leaveRequest: 1, onboardingTask: 2, exitTask: 4, exitRecord: 3, disciplinaryRecord: 5, appraisalCycle: 1, appraisal: 6, jobRequisition: 7 });
     const h = await changeBlockers("org1", ["hr"], hr.client);
-    expect(h.hard).toEqual([]);
-    expect(h.soft.map((b) => b.count)).toEqual([1, 2, 4]);
-    for (const m of ["leaveRequest", "onboardingTask", "exitTask"]) expect(where(hr.calls, m), m).toEqual([{ organizationId: "org1", status: "PENDING" }]);
+    expect(h.hard.map((b) => [b.module, b.count])).toEqual([["hr", 3]]);
+    expect(h.hard[0].message).toBe("HR management: 3 exits are awaiting approval. Approve or reject them first.");
+    expect(h.soft.map((b) => b.count)).toEqual([1, 2, 4, 5, 1, 6, 7]);
+    for (const m of ["leaveRequest", "onboardingTask", "exitTask", "exitRecord", "disciplinaryRecord"]) expect(where(hr.calls, m), m).toEqual([{ organizationId: "org1", status: "PENDING" }]);
+    expect(where(hr.calls, "appraisalCycle")).toEqual([{ organizationId: "org1", status: "OPEN" }]);
+    expect(where(hr.calls, "appraisal")).toEqual([{ organizationId: "org1", status: { in: ["DRAFT", "SUBMITTED"] } }]);
+    expect(where(hr.calls, "jobRequisition")).toEqual([{ organizationId: "org1", status: { in: ["PENDING_APPROVAL", "APPROVED", "ON_HOLD"] } }]);
+    expect(h.soft.map((b) => b.message)).toEqual([
+      "HR management: 1 leave request is still pending. It stays readable but cannot be decided once the module ends.",
+      "HR management: 2 onboarding tasks are still open. They stay readable but cannot be completed once the module ends.",
+      "HR management: 4 exit tasks are still open. They stay readable but cannot be completed once the module ends.",
+      "HR management: 5 disciplinary records are awaiting a decision. They stay readable but cannot be decided once the module ends.",
+      "HR management: 1 appraisal cycle is still open. It stays readable but cannot be completed once the module ends.",
+      "HR management: 6 appraisals are not yet approved. They stay readable but cannot be completed once the module ends.",
+      "HR management: 7 job requisitions are still open. They stay readable but cannot be decided once the module ends.",
+    ]);
   });
 
   it("looks at nothing for a module with no work to strand, and only at the modules being removed", async () => {
@@ -83,7 +109,7 @@ describe("what is looked for, per module (the lists proposed in the plan)", () =
     expect(r).toEqual({ hard: [], soft: [] });
     const only = fake({ payrollRun: 1 });
     await changeBlockers("org1", ["payroll"], only.client);
-    expect(only.calls.every((c) => ["payrollRun", "paymentBatch"].includes(c.model))).toBe(true);
+    expect(only.calls.every((c) => ["payrollRun", "paymentBatch", "exitSettlement"].includes(c.model))).toBe(true);
   });
 });
 
