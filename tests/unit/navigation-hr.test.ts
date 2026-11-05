@@ -72,14 +72,20 @@ describe("HR Lifecycle and Leave Management become one entry, HR", () => {
 
   it("has only real pages, each in a named group, and groups them by the job", () => {
     for (const s of HR_AREA.sections) expect(pageRouteFor(s.href), s.href).not.toBeNull();
-    expect(groupSections(HR_AREA.sections).map((g) => g.group)).toEqual(["Overview", "Recruitment", "Onboarding", "Employment", "Leave", "Exit", "Privacy & records", "HR setup"]);
+    // the groups follow the HR functions in the review the founder asked me to consider (2026-11-05): recruitment, employee administration, performance management, employee relations,
+    // learning and development; only for pages that exist (the rest is in docs/plans/hr-module-gap-analysis.md)
+    expect(groupSections(HR_AREA.sections).map((g) => g.group)).toEqual(["Overview", "Recruitment", "Employee administration", "Performance management", "Employee relations", "Learning & development", "Leave", "Privacy & records", "HR setup"]);
   });
 
   it("puts leave in the same place as the rest of HR, with its policy beside the balances", () => {
     const leave = HR_AREA.sections.filter((s) => s.group === "Leave").map((s) => s.href);
     expect(leave).toEqual(["/leave", "/leave/balances", "/settings/leave"]);
-    const exit = HR_AREA.sections.filter((s) => s.group === "Exit").map((s) => s.href);
-    expect(exit).toContain("/payroll/settlements");
+    // exit management is part of employee administration, with probation and confirmation on the employment contract
+    const admin = HR_AREA.sections.filter((s) => s.group === "Employee administration").map((s) => s.href);
+    for (const h of ["/hr/onboarding", "/hr/contracts", "/hr/exits", "/payroll/settlements", "/hr/attrition", "/hr/letters"]) expect(admin, h).toContain(h);
+    expect(HR_AREA.sections.filter((s) => s.group === "Performance management").map((s) => s.href)).toEqual(["/hr/appraisals", "/settings/appraisal-criteria"]);
+    expect(HR_AREA.sections.filter((s) => s.group === "Learning & development").map((s) => s.href)).toEqual(["/hr/training", "/settings/training-requirements"]);
+    expect(HR_AREA.sections.filter((s) => s.group === "Employee relations").map((s) => s.href)).toEqual(["/hr/relations"]);
   });
 });
 
@@ -102,6 +108,7 @@ describe("what a person sees", () => {
     expect(sectionFor(HR_AREA, "/hr")?.href).toBe("/hr");
     expect(sectionFor(HR_AREA, "/payroll/settlements")?.href).toBe("/payroll/settlements");
     expect(sectionFor(HR_AREA, "/settings/hr-policy")?.group).toBe("HR setup");
+    expect(sectionFor(HR_AREA, "/settings/appraisal-criteria")?.group).toBe("Performance management");
     expect(sectionFor(HR_AREA, "/leave/balances")?.href).toBe("/leave/balances");
   });
 });
