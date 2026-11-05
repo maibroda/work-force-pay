@@ -139,68 +139,19 @@ export const NAV: NavGroup[] = [
     ],
   },
   {
-    title: "Finance / Accounting",
-    items: [
-      { href: "/clients", label: "Clients", perm: "client.view" },
-      { href: "/contracts", label: "Contracts", perm: "client.view" },
-      { href: "/beats/bids", label: "Bids", perm: "client.view" },
-      { href: "/beats", label: "Beats / Locations", perm: "client.view" },
-      { href: "/beats/strength", label: "Approved Strength", perm: "client.view" },
-      {
-        href: "/finance/invoices",
-        label: "Billing & Receivables",
-        perm: "client.view",
-        section: "Billing",
-      },
-      { href: "/finance/billing-rules", label: "Billing Rules", perm: "gl.view", section: "Billing" },
-      { href: "/finance/proforma", label: "Proforma Invoices", perm: "client.view", section: "Billing" },
-      { href: "/finance/receipts", label: "Client Receipts", perm: "gl.view", section: "Billing" },
-      { href: "/finance/notes", label: "Credit & Debit Notes", perm: "gl.view", section: "Billing" },
-      { href: "/finance/statements", label: "Receivables Ageing", perm: "gl.view", section: "Billing" },
-      {
-        href: "/finance/vendors",
-        label: "Vendors",
-        perm: "gl.view",
-        section: "Payables",
-      },
-      { href: "/finance/payables", label: "Billing & Payables", perm: "gl.view" },
-      { href: "/finance/purchase-orders", label: "Purchase Orders", perm: "gl.view" },
-      {
-        href: "/finance/fixed-assets",
-        label: "Fixed Asset Register",
-        perm: "gl.view",
-        section: "Fixed Assets",
-      },
-      {
-        href: "/finance/bank-accounts",
-        label: "Bank Accounts",
-        perm: "gl.view",
-        section: "Banking",
-      },
-      { href: "/finance/bank-reconciliation", label: "Operating Account Reconciliation", perm: "gl.view" },
-      { href: "/accounting/journals", label: "Journal Entries", perm: "gl.view", section: "Accounting" },
-      { href: "/accounting/manual-journals", label: "Manual Journals", perm: "gl.view" },
-      { href: "/accounting/recurring-journals", label: "Recurring Journals", perm: "gl.view" },
-      { href: "/accounting/reversals", label: "Journal Reversals", perm: "gl.view" },
-      { href: "/accounting/tax-codes", label: "Tax Codes & Rates", perm: "gl.view" },
-      { href: "/accounting/tax-reports", label: "Tax Reports", perm: "gl.view" },
-      { href: "/accounting/wht-certificates", label: "WHT Certificates", perm: "gl.view" },
-      { href: "/accounting/periods", label: "Accounting Periods", perm: "gl.view" },
-      { href: "/accounting/reconciliations", label: "Reconciliation Centre", perm: "gl.view" },
-      { href: "/accounting/ar-report", label: "Monthly Receivables Report", perm: "gl.view" },
-      { href: "/accounting/mapping", label: "Payroll GL Mapping", perm: "gl.view" },
-      { href: "/accounting/accounts", label: "Chart of Accounts", perm: "gl.view" },
-      { href: "/accounting/dimensions", label: "Accounting Dimensions", perm: "gl.view" },
-      { href: "/accounting/ledger-by-dimension", label: "Ledger by Dimension", perm: "gl.view" },
-      {
-        href: "/accounting/trial-balance",
-        label: "Trial Balance",
-        perm: "gl.view",
-        section: "Financial Statements",
-      },
-      { href: "/accounting/income-statement", label: "Income Statement", perm: "gl.view" },
-      { href: "/accounting/balance-sheet", label: "Balance Sheet", perm: "gl.view" },
-    ],
+    title: "Clients & contracts",
+    // One entry: its pages are tabs inside it (CLIENTS_AREA below)
+    items: [{ href: "/clients", label: "Clients & contracts", perm: "client.view", area: "clients" }],
+  },
+  {
+    title: "Finance",
+    // One entry: billing, payables, banking and fixed assets as tabs (FINANCE_AREA below)
+    items: [{ href: "/finance/invoices", label: "Finance", perm: "gl.view", area: "finance" }],
+  },
+  {
+    title: "Accounting",
+    // One entry: journals, ledger, tax and statements as tabs (ACCOUNTING_AREA below)
+    items: [{ href: "/accounting/journals", label: "Accounting", perm: "gl.view", area: "accounting" }],
   },
   {
     title: "Analytics",
@@ -440,7 +391,6 @@ export const REPORT_LINKS: Array<{ href: string; label: string; group: string }>
   { href: "/reports/staff-movement", label: "Staff Movement Report", group: "Operations" },
   { href: "/reports/beat-reconciliation", label: "Beat Reconciliation", group: "Operations" },
   { href: "/reports/client-beat", label: "Client / Beat Report", group: "Finance / Accounting" },
-  { href: "/finance/invoices", label: "Billing & Receivables", group: "Finance / Accounting" },
   { href: "/reports/audit", label: "Audit Report", group: "Settings / Support" },
 ];
 
@@ -462,7 +412,67 @@ export const REPORTS_AREA: Area = {
   })),
 };
 
-export const AREAS: Area[] = [PAYROLL_AREA, REPORTS_AREA];
+/**
+ * The 34-entry "Finance / Accounting" group was really three jobs, so it is three sidebar entries, each with its pages as tabs (the founder's review: merge what overlaps, make it easy
+ * to navigate). Each page keeps its address and the permission that showed it before. The four journal pages sit together under Journals; "Billing & Receivables" and "Billing &
+ * Payables", which read as the same thing, are Client invoices and Supplier bills; the two bank reconciliations stay separate and are named apart.
+ */
+export const CLIENTS_AREA: Area = {
+  key: "clients",
+  title: "Clients & contracts",
+  sections: [
+    { group: "Clients", href: "/clients", label: "Clients", perm: "client.view" },
+    { group: "Contracts", href: "/contracts", label: "Contracts", perm: "client.view" },
+    { group: "Contracts", href: "/beats/bids", label: "Bids", perm: "client.view" },
+    { group: "Sites", href: "/beats", label: "Beats / locations", perm: "client.view" },
+    { group: "Sites", href: "/beats/strength", label: "Approved strength", perm: "client.view" },
+  ],
+};
+
+export const FINANCE_AREA: Area = {
+  key: "finance",
+  title: "Finance",
+  sections: [
+    { group: "Billing", href: "/finance/invoices", label: "Client invoices", perm: "client.view" },
+    { group: "Billing", href: "/finance/proforma", label: "Proforma invoices", perm: "client.view" },
+    { group: "Billing", href: "/finance/receipts", label: "Client receipts", perm: "gl.view" },
+    { group: "Billing", href: "/finance/notes", label: "Credit & debit notes", perm: "gl.view" },
+    { group: "Billing", href: "/finance/statements", label: "Receivables ageing", perm: "gl.view" },
+    { group: "Billing", href: "/accounting/ar-report", label: "Monthly receivables report", perm: "gl.view" },
+    { group: "Billing", href: "/finance/billing-rules", label: "Billing rules", perm: "gl.view" },
+    { group: "Payables", href: "/finance/vendors", label: "Vendors", perm: "gl.view" },
+    { group: "Payables", href: "/finance/payables", label: "Supplier bills", perm: "gl.view" },
+    { group: "Payables", href: "/finance/purchase-orders", label: "Purchase orders", perm: "gl.view" },
+    { group: "Banking", href: "/finance/bank-accounts", label: "Bank accounts", perm: "gl.view" },
+    { group: "Banking", href: "/finance/bank-reconciliation", label: "Operating account reconciliation", perm: "gl.view" },
+    { group: "Fixed assets", href: "/finance/fixed-assets", label: "Fixed asset register", perm: "gl.view" },
+  ],
+};
+
+export const ACCOUNTING_AREA: Area = {
+  key: "accounting",
+  title: "Accounting",
+  sections: [
+    { group: "Journals", href: "/accounting/journals", label: "Journal entries", perm: "gl.view" },
+    { group: "Journals", href: "/accounting/manual-journals", label: "Manual journals", perm: "gl.view" },
+    { group: "Journals", href: "/accounting/recurring-journals", label: "Recurring journals", perm: "gl.view" },
+    { group: "Journals", href: "/accounting/reversals", label: "Journal reversals", perm: "gl.view" },
+    { group: "Ledger", href: "/accounting/accounts", label: "Chart of accounts", perm: "gl.view" },
+    { group: "Ledger", href: "/accounting/dimensions", label: "Accounting dimensions", perm: "gl.view" },
+    { group: "Ledger", href: "/accounting/ledger-by-dimension", label: "Ledger by dimension", perm: "gl.view" },
+    { group: "Ledger", href: "/accounting/mapping", label: "Payroll GL mapping", perm: "gl.view" },
+    { group: "Ledger", href: "/accounting/periods", label: "Accounting periods", perm: "gl.view" },
+    { group: "Ledger", href: "/accounting/reconciliations", label: "Reconciliation centre", perm: "gl.view" },
+    { group: "Tax", href: "/accounting/tax-codes", label: "Tax codes & rates", perm: "gl.view" },
+    { group: "Tax", href: "/accounting/tax-reports", label: "Tax reports", perm: "gl.view" },
+    { group: "Tax", href: "/accounting/wht-certificates", label: "WHT certificates", perm: "gl.view" },
+    { group: "Statements", href: "/accounting/trial-balance", label: "Trial balance", perm: "gl.view" },
+    { group: "Statements", href: "/accounting/income-statement", label: "Income statement", perm: "gl.view" },
+    { group: "Statements", href: "/accounting/balance-sheet", label: "Balance sheet", perm: "gl.view" },
+  ],
+};
+
+export const AREAS: Area[] = [PAYROLL_AREA, CLIENTS_AREA, FINANCE_AREA, ACCOUNTING_AREA, REPORTS_AREA];
 
 export interface EmployeeSection {
   href: string;

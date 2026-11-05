@@ -2,6 +2,13 @@
 
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
+## Not yet merged (branch `navigation-finance`, no migration)
+
+- **The 34-entry "Finance / Accounting" menu group is now three entries, each with its pages as tabs (the founder's review: so many menu entries make the app hard to work in).** **Clients & contracts** (Clients; Contracts and Bids; Beats / locations and Approved strength). **Finance** (Billing: client invoices, proforma, receipts, credit and debit notes, receivables ageing, the monthly receivables report, billing rules; Payables: vendors, supplier bills, purchase orders; Banking: bank accounts and the operating-account reconciliation; Fixed assets). **Accounting** (Journals: journal entries, manual, recurring and reversals together; Ledger: chart of accounts, dimensions, ledger by dimension, payroll GL mapping, accounting periods, reconciliation centre; Tax: tax codes, tax reports, WHT certificates; Statements: trial balance, income statement, balance sheet).
+- **Overlaps cleared:** the four journal pages sit together as one place; "Billing & Receivables" and "Billing & Payables", which read as the same thing, are now **Client invoices** and **Supplier bills**; the two bank reconciliations stay separate (the founder's decision) and are named apart ("Operating account reconciliation" here, "Salary payment reconciliation" under Payroll); the client invoices page was also listed on the Reports page although it is not a report, so it is listed once, under Finance.
+- **Screen change only:** every page keeps its address, its permission and its module check, so nobody gains or loses access to anything; no migration; no payroll, statutory or permission change.
+- Tests: `tests/unit/navigation-finance.test.ts` (no page lost, the same permission per page for every role, nothing twice, tab grouping, who sees which), written first.
+
 ## Not yet merged (branch `navigation-reports`, no migration)
 
 - **Every report is in one place: a Reports menu entry with search (the founder, 2026-11-05).** Reports were listed in the Payroll, Workforce, Operations, Finance and Settings groups as well as on the Reports page. They are now one sidebar entry, "Reports". It opens the Reports page, which has a search box that narrows the list as you type; inside it, each report is a tab, grouped HR, Workforce, Payroll, Operations, Finance and Audit. The Reports page's own list is the single source.
