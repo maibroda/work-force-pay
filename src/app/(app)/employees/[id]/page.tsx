@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { getEmployee } from "@/server/services/employees";
+import { listContacts, listGuarantors } from "@/server/services/personal-records";
 import { recordSensitiveAccess } from "@/server/services/sensitive-access";
 import { employeeLocationHistory } from "@/server/services/operations";
 import { employeeTimeline } from "@/server/services/hr-overview";
@@ -70,7 +71,10 @@ export default async function EmployeePage({
   const sensitive = can(ctx.role, "employee.sensitive");
   // the overview and the details tab show bank, tax and pension identifiers; the contacts tab shows guarantors and next of kin
   if (sensitive && (tab === "overview" || tab === "details")) await recordSensitiveAccess(ctx, { kind: "IDENTIFIERS", employeeId: e.id });
-  if (sensitive && tab === "contacts") await recordSensitiveAccess(ctx, { kind: "PERSONAL_RECORDS", employeeId: e.id });
+  if (sensitive && (tab === "contacts" || tab === "overview")) await recordSensitiveAccess(ctx, { kind: "PERSONAL_RECORDS", employeeId: e.id });
+  const [contacts, guarantors] = sensitive && tab === "overview" ? await Promise.all([listContacts(ctx, e.id), listGuarantors(ctx, { employeeId: e.id })]) : [[], []];
+  const kin = contacts.filter((c) => c.kind === "NEXT_OF_KIN" || c.kind === "EMERGENCY_CONTACT");
+  const dependants = contacts.filter((c) => c.kind === "DEPENDANT");
   const hrView = can(ctx.role, "hr.view");
   const hrManage = can(ctx.role, "hr.manage");
   const hrApprove = can(ctx.role, "hr.approve");
@@ -100,7 +104,7 @@ export default async function EmployeePage({
           { key: "assignments", label: "Assignments & movements" },
           { key: "locations", label: "Work locations" },
           { key: "salary", label: "Salary & overrides" },
-          ...(sensitive ? [{ key: "contacts", label: "Contacts & guarantors" }, { key: "details", label: "Bank, tax & pension" }] : []),
+          ...(sensitive ? [{ key: "contacts", label: "Next of kin, guarantors & dependants" }, { key: "details", label: "Detail change requests" }] : []),
           ...(hrView
             ? [
                 { key: "documents", label: "Documents & training" },
@@ -119,7 +123,7 @@ export default async function EmployeePage({
 
       {tab === "overview" && (
         <>
-          <Section title="Employee master">
+          <Section title="Personal details">
             <KV
               cols={4}
               items={[
@@ -130,32 +134,181 @@ export default async function EmployeePage({
                 ["Email", e.email],
                 ["Address", e.address],
                 ["State of residence (PAYE)", e.stateOfResidence ?? "— not recorded"],
-                ["Employment date", fmtDate(e.employmentDate)],
-                ["Exit date", fmtDate(e.exitDate)],
-                ["Department", e.department?.name],
-                [
-                  "Reports to",
-                  e.reportingManager
-                    ? `${e.reportingManager.employeeNumber} — ${fullName(e.reportingManager)}`
-                    : "—",
-                ],
-                [
-                  "Direct reports",
-                  e.directReports.length
-                    ? `${e.directReports.length} (${e.directReports.map((r) => r.employeeNumber).join(", ")})`
-                    : "—",
-                ],
-                ["Bank", sensitive ? e.bankName : "••••"],
-                ["Account number", sensitive ? e.accountNumber : "••••"],
-                ["Account name", sensitive ? e.accountName : "••••"],
-                ["Tax ID", sensitive ? e.taxId : "••••"],
-                ["Pension PIN", sensitive ? e.pensionPin : "••••"],
-                ["PFA", sensitive ? e.pfa : "••••"],
-                ["NHF (voluntary)", e.nhfContributes ? `Contributes since ${fmtDate(e.nhfOptedInOn)}` : "Not contributing"],
-                ["Annual rent (relief)", sensitive && e.annualRent ? naira(e.annualRent) : "—"],
               ]}
             />
           </Section>
+          <Section title="Employment">
+            <KV
+              cols={4}
+              items={[
+                ["Employment date", fmtDate(e.employmentDate)],
+                ["Exit date", fmtDate(e.exitDate)],
+                ["Category", e.category.name],
+                ["Department", e.department?.name],
+                ["Reports to", e.reportingManager ? `${e.reportingManager.employeeNumber} — ${fullName(e.reportingManager)}` : "—"],
+                ["Direct reports", e.directReports.length ? `${e.directReports.length} (${e.directReports.map((r) => r.employeeNumber).join(", ")})` : "—"],
+                ["NHF (voluntary)", e.nhfContributes ? `Contributes since ${fmtDate(e.nhfOptedInOn)}` : "Not contributing"],
+              ]}
+            />
+          </Section>
+          <Section title="Current assignment" description="Operational only. History and movements are under Assignments & movements.">
+            <p className="text-sm">
+              <b>
+                {e.currentClient?.name ?? "Unassigned"}
+                {e.currentBeat ? ` — ${e.currentBeat.name}` : ""}
+              </b>{" "}
+              <Link className="text-xs underline" href={`/employees/${e.id}?tab=assignments`}>
+                Assignments &amp; movements
+              </Link>
+            </p>
+          </Section>
+          {sensitive && (
+            <Section title="Bank information">
+              <KV
+                cols={3}
+                items={[
+                  ["Bank", e.bankName],
+                  ["Account number", e.accountNumber],
+                  ["Account name", e.accountName],
+                ]}
+              />
+            </Section>
+          )}
+          {sensitive && (
+            <Section title="Pension information">
+              <KV
+                cols={3}
+                items={[
+                  ["Pension PIN", e.pensionPin],
+                  ["PFA", e.pfa],
+                ]}
+              />
+            </Section>
+          )}
+          {sensitive && (
+            <Section title="Tax information">
+              <KV
+                cols={3}
+                items={[
+                  ["Tax ID", e.taxId],
+                  ["Annual rent (relief)", e.annualRent ? naira(e.annualRent) : "—"],
+                ]}
+              />
+            </Section>
+          )}
+          {sensitive && (
+            <Section
+              title="Next of kin & emergency contacts"
+              description="Who to call when something happens to this employee."
+              actions={
+                <Link className="text-xs underline" href={`/employees/${e.id}?tab=contacts`}>
+                  Add or edit
+                </Link>
+              }
+              flush={kin.length > 0}
+            >
+              {kin.length === 0 ? (
+                <Empty>None recorded.</Empty>
+              ) : (
+                <Table>
+                  <THead>
+                    <TR>
+                      <TH>Name</TH>
+                      <TH>Kind</TH>
+                      <TH>Relationship</TH>
+                      <TH>Phone</TH>
+                    </TR>
+                  </THead>
+                  <TBody>
+                    {kin.map((c) => (
+                      <TR key={c.id}>
+                        <TD>
+                          {c.fullName} {c.isPrimary && <Badge tone="blue">Main</Badge>}
+                        </TD>
+                        <TD>{c.kind === "NEXT_OF_KIN" ? "Next of kin" : "Emergency contact"}</TD>
+                        <TD>{c.relationship}</TD>
+                        <TD>{c.phone ?? "—"}</TD>
+                      </TR>
+                    ))}
+                  </TBody>
+                </Table>
+              )}
+            </Section>
+          )}
+          {sensitive && (
+            <Section
+              title="Guarantors"
+              actions={
+                <Link className="text-xs underline" href={`/employees/${e.id}?tab=contacts`}>
+                  Add or edit
+                </Link>
+              }
+              flush={guarantors.length > 0}
+            >
+              {guarantors.length === 0 ? (
+                <Empty>None recorded.</Empty>
+              ) : (
+                <Table>
+                  <THead>
+                    <TR>
+                      <TH>Name</TH>
+                      <TH>Relationship</TH>
+                      <TH>Phone</TH>
+                      <TH>Status</TH>
+                    </TR>
+                  </THead>
+                  <TBody>
+                    {guarantors.map((g) => (
+                      <TR key={g.id}>
+                        <TD>{g.fullName}</TD>
+                        <TD>{g.relationship}</TD>
+                        <TD>{g.phone}</TD>
+                        <TD>
+                          <StatusBadge status={g.status} />
+                        </TD>
+                      </TR>
+                    ))}
+                  </TBody>
+                </Table>
+              )}
+            </Section>
+          )}
+          {sensitive && (
+            <Section
+              title="Dependants & beneficiaries"
+              actions={
+                <Link className="text-xs underline" href={`/employees/${e.id}?tab=contacts`}>
+                  Add or edit
+                </Link>
+              }
+              flush={dependants.length > 0}
+            >
+              {dependants.length === 0 ? (
+                <Empty>None recorded.</Empty>
+              ) : (
+                <Table>
+                  <THead>
+                    <TR>
+                      <TH>Name</TH>
+                      <TH>Relationship</TH>
+                      <TH>Date of birth</TH>
+                      <TH>Beneficiary</TH>
+                    </TR>
+                  </THead>
+                  <TBody>
+                    {dependants.map((c) => (
+                      <TR key={c.id}>
+                        <TD>{c.fullName}</TD>
+                        <TD>{c.relationship}</TD>
+                        <TD>{fmtDate(c.dateOfBirth)}</TD>
+                        <TD>{c.isBeneficiary ? `Yes${c.benefitSharePct ? `, ${c.benefitSharePct}%` : ""}` : "No"}</TD>
+                      </TR>
+                    ))}
+                  </TBody>
+                </Table>
+              )}
+            </Section>
+          )}
           {can(ctx.role, "employee.manage") && (
             <FormPanel title="Edit employee">
               <SmartForm

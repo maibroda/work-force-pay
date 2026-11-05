@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { ChevronDown, Menu, Shield, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Item = { href: string; label: string; section?: string };
+type Item = { href: string; label: string; section?: string; /** For an area's entry: every page of the area, so the entry stays highlighted on all of them. */ owns?: string[] };
 type Group = { title: string; items: Item[] };
 
 /** The group whose items contain the given path (used to auto-expand it). */
@@ -13,6 +13,7 @@ function groupFor(groups: Group[], path: string): string | null {
   for (const g of groups) {
     for (const i of g.items) {
       const base = i.href.split("?")[0];
+      if (i.owns?.some((o) => path === o || path.startsWith(o + "/"))) return g.title;
       if (i.href === path || (base !== "/" && path.startsWith(base + "/")) || path === base) return g.title;
     }
   }
@@ -23,8 +24,10 @@ function NavList({ groups, onNavigate }: { groups: Group[]; onNavigate?: () => v
   const path = usePathname();
   const sp = useSearchParams();
   const full = path + (sp.toString() ? `?${sp.toString()}` : "");
-  const isActive = (href: string) =>
-    href.includes("?")
+  const isActive = (href: string, owns?: string[]): boolean =>
+    owns
+      ? owns.some((o) => path === o || path.startsWith(o + "/"))
+      : href.includes("?")
       ? full === href
       : href === "/"
         ? path === "/"
@@ -54,10 +57,10 @@ function NavList({ groups, onNavigate }: { groups: Group[]; onNavigate?: () => v
       return next;
     });
 
-  const itemClass = (href: string) =>
+  const itemClass = (href: string, owns?: string[]) =>
     cn(
       "block rounded-md px-3 py-1.5 text-[13px] text-slate-300 hover:bg-white/10 hover:text-white",
-      isActive(href) && "bg-white/15 font-medium text-white",
+      isActive(href, owns) && "bg-white/15 font-medium text-white",
     );
 
   return (
@@ -72,7 +75,7 @@ function NavList({ groups, onNavigate }: { groups: Group[]; onNavigate?: () => v
               key={g.title}
               href={i.href}
               onClick={onNavigate}
-              className={cn(itemClass(i.href), "font-semibold")}
+              className={cn(itemClass(i.href, i.owns), "font-semibold")}
             >
               {g.title}
             </Link>

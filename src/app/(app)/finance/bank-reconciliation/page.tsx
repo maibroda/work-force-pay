@@ -34,7 +34,7 @@ export default async function BankReconciliationPage({
   if (!acctId) {
     return (
       <>
-        <PageHeader title="Bank reconciliation" description="Reconcile the organization's operating account against imported bank statements." />
+        <PageHeader title="Operating account reconciliation" description="Reconcile the organization's operating account against imported bank statements." />
         <Empty>
           No bank accounts yet.{" "}
           <Link href="/finance/bank-accounts" className="text-primary underline">
