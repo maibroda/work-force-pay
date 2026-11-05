@@ -10,7 +10,14 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 - **Screen change only:** every page keeps its address, permission and module check; no migration; no payroll, statutory or permission change.
 - Tests: `tests/unit/navigation-sales.test.ts` (no page lost; each page visible to exactly the same roles as before for every combination of role, bureau, sales switch and client role; nothing twice; the two systems kept apart), written first and seen failing.
 
-## Not yet merged (branch `navigation-hr`, no migration)
+## Merged in #148 on 2026-11-05 (branch `navigation-operations`, no migration)
+
+- **The 12-entry Operations menu group is now one entry, Operations, with its pages as tabs (the founder's review: so many menu entries make the app hard to work in).** Overview (activation dashboard); Deployment (deployments, staff movement); Attendance (work register, attendance, rosters, absence); Uniform & kit (stock and kit, kit packs, kit held by staff).
+- **Overlap cleared:** "Replacements" and "Transfers" were two menu entries for the same page as "Staff movement" (it filters by type). They are now filters on the Staff movement page ("All movements / Replacements / Transfers / Reliefs"), and their old addresses still work.
+- **Screen change only:** every page keeps its address, its permission and its module check, so nobody gains or loses access to anything. No migration; no payroll, statutory or permission change.
+- Tests: `tests/unit/navigation-operations.test.ts` (no page lost, the same permission per page for every role, nothing twice, the movement filters, who sees which), written first and seen failing.
+
+## Merged in #147 on 2026-11-05 (branch `navigation-hr`, no migration)
 
 - **"HR Lifecycle" (16 entries) and "Leave Management" (3) are now one menu entry, HR, with its pages as tabs grouped by HR function (the founder's review: so many menu entries make the app hard to work in; grouping follows the HR review the founder asked me to consider).** Overview; **Recruitment** (job requisitions, candidates and pipeline); **Employee administration** (onboarding tracker, employment contracts and probation, letters, exits and clearance, end-of-service settlements, attrition report); **Performance management** (appraisals and the appraisal criteria); **Employee relations** (the cases page); **Learning & development** (training compliance and training requirements); **Leave** (leave management, balances and the leave policy together); **Privacy & records** (policies and acknowledgements, data access requests, data breaches, records retention); and **HR setup** (HR and lifecycle policy, onboarding and exit checklists, letter templates). The groups cover only pages that exist today; what the review adds beyond them (job descriptions and KPIs, performance improvement plans, a separate disciplinary area, welfare, compensation reviews, career and succession) is in `docs/plans/hr-module-gap-analysis.md`.
 - **One place for each page:** End-of-Service Settlements was listed under both HR Lifecycle and Payroll (the same page): it is under HR only.

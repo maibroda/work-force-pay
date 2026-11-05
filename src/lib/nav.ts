@@ -57,20 +57,8 @@ export const NAV: NavGroup[] = [
   },
   {
     title: "Operations",
-    items: [
-      { href: "/operations/activation", label: "Activation Dashboard", perm: "operations.view" },
-      { href: "/operations/deployments", label: "Deployment", perm: "operations.view" },
-      { href: "/operations/movements", label: "Staff Movement", perm: "operations.view" },
-      { href: "/operations/work-register", label: "Work Register", perm: "operations.view" },
-      { href: "/operations/attendance", label: "Attendance", perm: "attendance.record" },
-      { href: "/operations/rosters", label: "Rosters", perm: "operations.view" },
-      { href: "/operations/absence", label: "Absence", perm: "operations.view" },
-      { href: "/operations/movements?type=REPLACEMENT", label: "Replacements", perm: "operations.view" },
-      { href: "/operations/movements?type=PERMANENT_TRANSFER", label: "Transfers", perm: "operations.view" },
-      { href: "/inventory", label: "Stock & Kit", perm: "inventory.view", section: "Uniform & kit" },
-      { href: "/inventory/packs", label: "Kit Packs", perm: "inventory.view" },
-      { href: "/inventory/outstanding", label: "Kit Held by Staff", perm: "inventory.view" },
-    ],
+    // One entry: deployment, attendance and uniform & kit as tabs (OPERATIONS_AREA below)
+    items: [{ href: "/operations/activation", label: "Operations", perm: "operations.view", area: "operations" }],
   },
   {
     title: "Clients & contracts",
@@ -446,6 +434,27 @@ export const HR_AREA: Area = {
 };
 
 /**
+ * The 12-entry Operations group is one entry. "Replacements" and "Transfers" were two entries for the same page as "Staff movement" (it filters by type): they are filters on that page now,
+ * and their old addresses still work. Each page keeps its address and the permission that showed it before.
+ */
+export const OPERATIONS_AREA: Area = {
+  key: "operations",
+  title: "Operations",
+  sections: [
+    { group: "Overview", href: "/operations/activation", label: "Activation dashboard", perm: "operations.view" },
+    { group: "Deployment", href: "/operations/deployments", label: "Deployments", perm: "operations.view" },
+    { group: "Deployment", href: "/operations/movements", label: "Staff movement", perm: "operations.view" },
+    { group: "Attendance", href: "/operations/work-register", label: "Work register", perm: "operations.view" },
+    { group: "Attendance", href: "/operations/attendance", label: "Attendance", perm: "attendance.record" },
+    { group: "Attendance", href: "/operations/rosters", label: "Rosters", perm: "operations.view" },
+    { group: "Attendance", href: "/operations/absence", label: "Absence", perm: "operations.view" },
+    { group: "Uniform & kit", href: "/inventory", label: "Stock & kit", perm: "inventory.view" },
+    { group: "Uniform & kit", href: "/inventory/packs", label: "Kit packs", perm: "inventory.view" },
+    { group: "Uniform & kit", href: "/inventory/outstanding", label: "Kit held by staff", perm: "inventory.view" },
+  ],
+};
+
+/**
  * Sales: the sales module's pages (18) and the bureau's own sales pipeline (8) are ONE menu entry (the founder, 2026-11-05), told apart by group and by name ("Bureau leads", "Bureau pipeline").
  * Only the MENU is merged: they remain two systems with their own pages, data and permissions, and every page shows to exactly who saw it before (permission, the sales switch, or
  * being in a bureau). Bureau (7 entries) and the client portal's Your payroll (4) are one entry each.
@@ -508,7 +517,7 @@ export const PORTAL_AREA: Area = {
   ],
 };
 
-export const AREAS: Area[] = [PAYROLL_AREA, HR_AREA, CLIENTS_AREA, FINANCE_AREA, ACCOUNTING_AREA, REPORTS_AREA, SALES_AREA, BUREAU_AREA, PORTAL_AREA];
+export const AREAS: Area[] = [PAYROLL_AREA, OPERATIONS_AREA, HR_AREA, CLIENTS_AREA, FINANCE_AREA, ACCOUNTING_AREA, REPORTS_AREA, SALES_AREA, BUREAU_AREA, PORTAL_AREA];
 
 export interface EmployeeSection {
   href: string;

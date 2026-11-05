@@ -46,6 +46,23 @@ export default async function MovementsPage({
         title={sp.type ? (TITLES[sp.type] ?? "Staff movement") : "Staff movement"}
         description="An employee can work at several beats in one payroll period. Approved movements create the deployments; temporary moves and reliefs return the employee to the original beat after the end date."
       />
+      <nav aria-label="Filter staff movements by type" className="no-print mb-3 flex flex-wrap gap-2 text-sm">
+        {[
+          { type: undefined, label: "All movements", href: "/operations/movements" },
+          { type: "REPLACEMENT", label: "Replacements", href: "/operations/movements?type=REPLACEMENT" },
+          { type: "PERMANENT_TRANSFER", label: "Transfers", href: "/operations/movements?type=PERMANENT_TRANSFER" },
+          { type: "RELIEF", label: "Reliefs", href: "/operations/movements?type=RELIEF" },
+        ].map((f) => (
+          <Link
+            key={f.label}
+            href={f.href}
+            aria-current={(sp.type ?? undefined) === f.type ? "true" : undefined}
+            className={(sp.type ?? undefined) === f.type ? "rounded-full bg-primary px-3 py-1 font-medium text-primary-foreground" : "rounded-full border px-3 py-1 text-muted-foreground hover:text-foreground"}
+          >
+            {f.label}
+          </Link>
+        ))}
+      </nav>
       {can(ctx.role, "operations.manage") && (
         <FormPanel title="Record staff movement">
           <SmartForm
