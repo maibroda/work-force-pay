@@ -88,25 +88,9 @@ export const NAV: NavGroup[] = [
     ],
   },
   {
-    title: "HR Lifecycle",
-    items: [
-      { href: "/hr", label: "HR Overview", perm: "hr.view" },
-      { href: "/hr/requisitions", label: "Job Requisitions", perm: "hr.view", section: "Recruitment" },
-      { href: "/hr/candidates", label: "Candidates & Pipeline", perm: "hr.view" },
-      { href: "/hr/onboarding", label: "Onboarding Tracker", perm: "hr.view", section: "Onboarding" },
-      { href: "/hr/contracts", label: "Employment Contracts", perm: "hr.view", section: "Contracts" },
-      { href: "/hr/relations", label: "Employee Relations", perm: "hr.view", section: "Employee relations" },
-      { href: "/hr/exits", label: "Exits & Clearance", perm: "hr.view", section: "Exit" },
-      { href: "/hr/attrition", label: "Attrition Report", perm: "hr.view" },
-      { href: "/hr/training", label: "Training Compliance", perm: "hr.view", section: "Training" },
-      { href: "/hr/policies", label: "Policies & Acknowledgements", perm: "hr.view", section: "Policies" },
-      { href: "/hr/data-requests", label: "Data Access Requests", perm: "hr.view", section: "Privacy" },
-      { href: "/hr/breaches", label: "Data Breaches", perm: "hr.view" },
-      { href: "/hr/retention", label: "Records Retention", perm: "hr.view" },
-      { href: "/hr/appraisals", label: "Appraisals", perm: "appraisal.view", section: "Performance" },
-      { href: "/hr/letters", label: "Letters", perm: "hr.view", section: "Letters" },
-      { href: "/payroll/settlements", label: "End-of-Service Settlements", perm: "payroll.view" },
-    ],
+    title: "HR",
+    // One entry: recruitment, onboarding, employment, leave, exit, privacy and the HR setup as tabs (HR_AREA below)
+    items: [{ href: "/hr", label: "HR", perm: "hr.view", area: "hr" }],
   },
   {
     title: "Payroll",
@@ -128,14 +112,6 @@ export const NAV: NavGroup[] = [
       { href: "/inventory", label: "Stock & Kit", perm: "inventory.view", section: "Uniform & kit" },
       { href: "/inventory/packs", label: "Kit Packs", perm: "inventory.view" },
       { href: "/inventory/outstanding", label: "Kit Held by Staff", perm: "inventory.view" },
-    ],
-  },
-  {
-    title: "Leave Management",
-    items: [
-      { href: "/leave", label: "Leave Management", perm: "leave.view" },
-      { href: "/leave/balances", label: "Leave Balances", perm: "leave.view" },
-      { href: "/settings/leave", label: "Leave Policy", perm: "leave.manage" },
     ],
   },
   {
@@ -185,11 +161,6 @@ export const NAV: NavGroup[] = [
       { href: "/settings/entitlements", label: "Module switch", perm: "subscription.manage" },
       { href: "/settings/price-book", label: "Software price book", perm: "pricebook.manage" },
       { href: "/settings/cost-centers", label: "Cost Centers", perm: "payroll.view" },
-      { href: "/settings/hr-policy", label: "HR & Lifecycle Policy", perm: "hr.configure" },
-      { href: "/settings/checklists", label: "Onboarding & Exit Checklists", perm: "hr.configure" },
-      { href: "/settings/letter-templates", label: "Letter Templates", perm: "hr.configure" },
-      { href: "/settings/training-requirements", label: "Training Requirements", perm: "hr.configure" },
-      { href: "/settings/appraisal-criteria", label: "Appraisal Criteria", perm: "appraisal.manage" },
       { href: "/settings/numbering", label: "Numbering Rules", perm: "employee.view" },
       { href: "/settings/audit-integrity", label: "Audit Integrity", perm: "audit.view" },
       { href: "/settings/sensitive-access", label: "Who Looked at Sensitive Details", perm: "audit.view" },
@@ -472,7 +443,43 @@ export const ACCOUNTING_AREA: Area = {
   ],
 };
 
-export const AREAS: Area[] = [PAYROLL_AREA, CLIENTS_AREA, FINANCE_AREA, ACCOUNTING_AREA, REPORTS_AREA];
+/**
+ * HR Lifecycle (16 entries) and Leave Management (3) are one entry, HR, with its pages as tabs grouped by job, plus the HR settings that sat among the other settings (the founder's review:
+ * merge what overlaps, make it easy to navigate). End-of-Service Settlements was listed in HR Lifecycle and in Payroll (the same page): it is here only. Each page keeps its address and the
+ * permission that showed it before.
+ */
+export const HR_AREA: Area = {
+  key: "hr",
+  title: "HR",
+  sections: [
+    { group: "Overview", href: "/hr", label: "HR overview", perm: "hr.view" },
+    { group: "Recruitment", href: "/hr/requisitions", label: "Job requisitions", perm: "hr.view" },
+    { group: "Recruitment", href: "/hr/candidates", label: "Candidates & pipeline", perm: "hr.view" },
+    { group: "Employee administration", href: "/hr/onboarding", label: "Onboarding tracker", perm: "hr.view" },
+    { group: "Employee administration", href: "/hr/contracts", label: "Employment contracts & probation", perm: "hr.view" },
+    { group: "Employee administration", href: "/hr/letters", label: "Letters", perm: "hr.view" },
+    { group: "Employee administration", href: "/hr/exits", label: "Exits & clearance", perm: "hr.view" },
+    { group: "Employee administration", href: "/payroll/settlements", label: "End-of-service settlements", perm: "payroll.view" },
+    { group: "Employee administration", href: "/hr/attrition", label: "Attrition report", perm: "hr.view" },
+    { group: "Performance management", href: "/hr/appraisals", label: "Appraisals", perm: "appraisal.view" },
+    { group: "Performance management", href: "/settings/appraisal-criteria", label: "Appraisal criteria", perm: "appraisal.manage" },
+    { group: "Employee relations", href: "/hr/relations", label: "Employee relations cases", perm: "hr.view" },
+    { group: "Learning & development", href: "/hr/training", label: "Training compliance", perm: "hr.view" },
+    { group: "Learning & development", href: "/settings/training-requirements", label: "Training requirements", perm: "hr.configure" },
+    { group: "Leave", href: "/leave", label: "Leave management", perm: "leave.view" },
+    { group: "Leave", href: "/leave/balances", label: "Leave balances", perm: "leave.view" },
+    { group: "Leave", href: "/settings/leave", label: "Leave policy", perm: "leave.manage" },
+    { group: "Privacy & records", href: "/hr/policies", label: "Policies & acknowledgements", perm: "hr.view" },
+    { group: "Privacy & records", href: "/hr/data-requests", label: "Data access requests", perm: "hr.view" },
+    { group: "Privacy & records", href: "/hr/breaches", label: "Data breaches", perm: "hr.view" },
+    { group: "Privacy & records", href: "/hr/retention", label: "Records retention", perm: "hr.view" },
+    { group: "HR setup", href: "/settings/hr-policy", label: "HR & lifecycle policy", perm: "hr.configure" },
+    { group: "HR setup", href: "/settings/checklists", label: "Onboarding & exit checklists", perm: "hr.configure" },
+    { group: "HR setup", href: "/settings/letter-templates", label: "Letter templates", perm: "hr.configure" },
+  ],
+};
+
+export const AREAS: Area[] = [PAYROLL_AREA, HR_AREA, CLIENTS_AREA, FINANCE_AREA, ACCOUNTING_AREA, REPORTS_AREA];
 
 export interface EmployeeSection {
   href: string;
