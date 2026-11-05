@@ -7,9 +7,7 @@ import { ReportsList } from "@/components/reports-list";
 
 export default async function ReportsHub() {
   const ctx = await requirePage("reports.view");
-  const items = REPORT_LINKS.filter((i) =>
-    can(ctx.role, i.href === "/finance/invoices" ? "client.view" : reportPermission(i.href.replace("/reports/", ""))),
-  );
+  const items = REPORT_LINKS.filter((i) => can(ctx.role, reportPermission(i.href.replace("/reports/", ""))));
   return (
     <>
       <PageHeader
