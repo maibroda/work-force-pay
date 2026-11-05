@@ -8,6 +8,7 @@ import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
 import { nextNumber } from "./numbering";
 import { seedOnboardingTasks } from "./hr";
+import { resolvePfa } from "./pfas";
 
 const opt = z
   .string()
@@ -123,7 +124,8 @@ export async function createEmployee(ctx: Ctx, raw: EmployeeInput) {
 }
 
 /** The transactional core of createEmployee — also used when a recruitment candidate is hired. */
-export async function createEmployeeInTx(ctx: Ctx, tx: Tx, v: z.output<typeof employeeSchema>, extra: { importBatchId?: string } = {}) {
+export async function createEmployeeInTx(ctx: Ctx, tx: Tx, input: z.output<typeof employeeSchema>, extra: { importBatchId?: string } = {}) {
+  const v = { ...input, pfa: (await resolvePfa(tx, ctx.orgId, input.pfa)) ?? undefined }; // the PFA is held to the company's list once it has one
   const employeeNumber = await nextNumber(tx, ctx.orgId, "EMPLOYEE");
   const emp = await tx.employee.create({
     data: { organizationId: ctx.orgId, employeeNumber, ...toData(v), nhfOptedInOn: v.nhfContributes ? d(new Date().toISOString().slice(0, 10)) : null, importBatchId: extra.importBatchId ?? null },
@@ -155,6 +157,7 @@ export async function updateEmployee(ctx: Ctx, id: string, raw: EmployeeInput, r
   return db.$transaction(async (tx) => {
     const old = await tx.employee.findFirst({ where: { id, organizationId: ctx.orgId } });
     if (!old) throw new BusinessError("Employee not found.");
+    v.pfa = (await resolvePfa(tx, ctx.orgId, v.pfa, old.pfa)) ?? undefined; // held to the company's list; the one they already have is always accepted
     const data = { ...toData(v), nhfOptedInOn: v.nhfContributes ? (old.nhfContributes && old.nhfOptedInOn ? old.nhfOptedInOn : d(new Date().toISOString().slice(0, 10))) : null };
     const emp = await tx.employee.update({ where: { id }, data });
     await logAudit(

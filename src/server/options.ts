@@ -1,12 +1,13 @@
 import type { Ctx } from "@/lib/auth/context";
 import { db } from "@/lib/db";
 import { fullName, titleCase } from "@/lib/utils";
+import { activePfaNames } from "@/server/services/pfas";
 
 export const opt = (value: string, label: string) => ({ value, label });
 export const enumOptions = (values: readonly string[]) => values.map((v) => opt(v, titleCase(v)));
 
 export async function options(ctx: Ctx) {
-  const [categories, departments, clients, contracts, beats, structures, periods, employees, costCenters] =
+  const [categories, departments, clients, contracts, beats, structures, periods, employees, costCenters, pfaNames] =
     await Promise.all([
       db.employeeCategory.findMany({ where: { organizationId: ctx.orgId }, orderBy: { name: "asc" } }),
       db.department.findMany({ where: { organizationId: ctx.orgId }, orderBy: { name: "asc" } }),
@@ -42,8 +43,10 @@ export async function options(ctx: Ctx) {
         where: { organizationId: ctx.orgId, active: true },
         orderBy: { name: "asc" },
       }),
+      activePfaNames(ctx.orgId),
     ]);
   return {
+    pfas: pfaNames.map((n) => opt(n, n)),
     categories: categories.map((c) => opt(c.id, c.name)),
     departments: departments.map((c) => opt(c.id, c.name)),
     clients: clients.map((c) => opt(c.id, c.name)),

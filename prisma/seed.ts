@@ -17,6 +17,7 @@ import { NTA_2025_BANDS } from "../src/lib/payroll/paye";
 import { DEFAULT_EARNINGS } from "../src/lib/payroll/structure";
 import { db } from "../src/lib/db";
 import { createStructure } from "../src/server/services/structures";
+import { ensureDefaultPfas } from "../src/server/services/pfas";
 import { createMovement } from "../src/server/services/operations";
 import {
   approveArrears,
@@ -290,6 +291,7 @@ async function main() {
       email: "info@demosecurity.ng",
     },
   });
+  await ensureDefaultPfas(db, org.id);
   const roles = [
     ["SUPER_ADMIN", "superadmin@workforcepay.test", "Platform Super Admin"],
     ["COMPANY_ADMIN", "admin@demosecurity.test", "Adaeze Company Admin"],
@@ -1265,6 +1267,7 @@ async function main() {
   const org2 = await db.organization.create({
     data: { name: "Northern Guards Ltd", code: "NGL", address: "Kano" },
   });
+  await ensureDefaultPfas(db, org2.id);
   await db.user.create({
     data: {
       organizationId: org2.id,
@@ -1298,6 +1301,7 @@ async function main() {
   const bureau = await db.organization.create({
     data: { name: "ThreeRoots Payroll Services", code: "THREEROOTS", address: "Lagos", isBureau: true },
   });
+  await ensureDefaultPfas(db, bureau.id);
   const bureauUsers: Array<{ id: string; role: Role; name: string; email: string }> = [];
   for (const [email, name, role] of [
     ["founder@threeroots.test", "Tunji Founder", "COMPANY_ADMIN"],

@@ -23,20 +23,20 @@ export const BANKS = [
   "Moniepoint MFB",
   "OPay",
 ];
-export const PFAS = [
-  "Stanbic IBTC Pension Managers",
-  "Access ARM Pensions",
-  "Leadway Pensure PFA",
-  "Premium Pension Ltd",
-  "Crusader Sterling Pensions",
-  "Fidelity Pension Managers",
-  "Trustfund Pensions",
-  "NLPC Pension Fund Administrators",
-  "Tangerine APT Pensions",
-];
+
+/**
+ * The PFA is chosen from the company's own list (Employees → Pension fund administrators). While a company has no list it is typed, as it always could be. A PFA the employee already has
+ * that is no longer on the active list (switched off, or typed before the list existed) stays selectable so editing the record does not lose it.
+ */
+export function pfaField(pfas: Opts, current?: string): Field {
+  const base = { name: "pfa", label: "Pension Fund Administrator", defaultValue: current };
+  if (pfas.length === 0) return base;
+  const has = !current || pfas.some((p) => p.value.toLowerCase() === current.toLowerCase());
+  return { ...base, type: "select", options: has ? pfas : [{ value: current as string, label: `${current} (not on the active list)` }, ...pfas], help: "From the company's list: Employees → Pension fund administrators." };
+}
 
 export function employeeFields(
-  o: { categories: Opts; departments: Opts; employees?: Opts },
+  o: { categories: Opts; departments: Opts; employees?: Opts; pfas?: Opts },
   e?: Record<string, unknown>,
 ): Field[] {
   const selfId = e?.id ? String(e.id) : undefined;
@@ -148,12 +148,6 @@ export function employeeFields(
       help: "Voluntary: only if the employee has chosen it. 2.5% of basic pay is taken and remitted by the end of the month.",
       span: 3,
     },
-    {
-      name: "pfa",
-      label: "Pension Fund Administrator",
-      type: "select",
-      options: PFAS.map((b) => ({ value: b, label: b })),
-      defaultValue: v("pfa"),
-    },
+    pfaField(o.pfas ?? [], v("pfa")),
   ];
 }
