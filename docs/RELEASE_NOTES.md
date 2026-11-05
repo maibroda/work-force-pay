@@ -2,6 +2,13 @@
 
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
+## Not yet merged (branch `navigation-operations`, no migration)
+
+- **The 12-entry Operations menu group is now one entry, Operations, with its pages as tabs (the founder's review: so many menu entries make the app hard to work in).** Overview (activation dashboard); Deployment (deployments, staff movement); Attendance (work register, attendance, rosters, absence); Uniform & kit (stock and kit, kit packs, kit held by staff).
+- **Overlap cleared:** "Replacements" and "Transfers" were two menu entries for the same page as "Staff movement" (it filters by type). They are now filters on the Staff movement page ("All movements / Replacements / Transfers / Reliefs"), and their old addresses still work.
+- **Screen change only:** every page keeps its address, its permission and its module check, so nobody gains or loses access to anything. No migration; no payroll, statutory or permission change.
+- Tests: `tests/unit/navigation-operations.test.ts` (no page lost, the same permission per page for every role, nothing twice, the movement filters, who sees which), written first and seen failing.
+
 ## Not yet merged (branch `navigation-finance`, no migration)
 
 - **The 34-entry "Finance / Accounting" menu group is now three entries, each with its pages as tabs (the founder's review: so many menu entries make the app hard to work in).** **Clients & contracts** (Clients; Contracts and Bids; Beats / locations and Approved strength). **Finance** (Billing: client invoices, proforma, receipts, credit and debit notes, receivables ageing, the monthly receivables report, billing rules; Payables: vendors, supplier bills, purchase orders; Banking: bank accounts and the operating-account reconciliation; Fixed assets). **Accounting** (Journals: journal entries, manual, recurring and reversals together; Ledger: chart of accounts, dimensions, ledger by dimension, payroll GL mapping, accounting periods, reconciliation centre; Tax: tax codes, tax reports, WHT certificates; Statements: trial balance, income statement, balance sheet).
