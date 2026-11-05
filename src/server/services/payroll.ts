@@ -2,6 +2,11 @@ import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import type { Ctx } from "@/lib/auth/context";
 import { daysInMonth, eachDay, iso, monthEnd, monthStart, periodName } from "@/lib/dates";
+import { employeeProration, monthProration, type BasisRow } from "@/lib/paid-days";
+import { workingDatesBetween } from "@/lib/leave";
+import { loadApprovedBases } from "./pay-basis";
+import { holidayContext } from "./holidays";
+import { getLeavePolicy } from "./leave";
 import { num } from "@/lib/money";
 import { roundPlaces } from "@/lib/money-exact";
 import { missingStateSeverity, normaliseState } from "@/lib/nigeria-states";
@@ -107,6 +112,13 @@ async function assemble(
     employerCostRuleFor(db, ctx.orgId, period.endDate),
   ]);
   const basisDays = rules.prorationBasis === "FIXED_30" ? 30 : daysInMonth(period.year, period.month);
+  // the paid-days basis agreed per contract, the company's holidays, and unpaid leave (docs/plans/paid-days-basis.md): a contract with no approved setting keeps the company's rule above
+  const [payBases, holidayCtx, leavePolicy, unpaidLeave] = await Promise.all([
+    loadApprovedBases(db, ctx.orgId, period.startDate, period.endDate),
+    holidayContext(db, ctx.orgId, period.year),
+    getLeavePolicy(ctx.orgId),
+    db.leaveRequest.findMany({ where: { organizationId: ctx.orgId, unpaid: true, status: "APPROVED", startDate: { lte: period.endDate }, endDate: { gte: period.startDate } }, select: { employeeId: true, startDate: true, endDate: true } }),
+  ]);
   const book = await loadRateBook(
     db,
     ctx.orgId,
@@ -197,6 +209,11 @@ async function assemble(
     rules,
     employerCosts,
     basisDays,
+    payBases,
+    holidays: holidayCtx.holidays,
+    holidaysConfirmed: holidayCtx.confirmed,
+    leaveWorkingDaysPerWeek: leavePolicy.workingDaysPerWeek,
+    unpaidLeave,
     book,
     employees,
     work,
@@ -226,6 +243,13 @@ function workDaysFor(a: Assembled, employeeId: string): WorkDay[] {
       status: w.attendanceStatus as AttendanceStatus,
       overtimeHours: num(w.overtimeHours),
     }));
+}
+
+/** The ISO dates of an employee's APPROVED unpaid leave: its working days (by the company's leave working week) are not paid days. */
+function unpaidDatesFor(a: Assembled, employeeId: string): Set<string> {
+  const out = new Set<string>();
+  for (const r of a.unpaidLeave) if (r.employeeId === employeeId) for (const dt of workingDatesBetween(r.startDate, r.endDate, a.leaveWorkingDaysPerWeek)) out.add(iso(dt));
+  return out;
 }
 
 type EngineDeductionInput = NonNullable<Parameters<typeof calculateEmployeePayroll>[0]["deductions"]>[number];
@@ -297,6 +321,7 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
   const issues: Issue[] = [];
   type Row = { emp: Assembled["employees"][number]; res: EngineResult };
   const rows: Row[] = [];
+  let holidaysUnconfirmed = false;
 
   for (const emp of a.employees) {
     let days = workDaysFor(a, emp.id);
@@ -321,6 +346,24 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
         }));
       }
     }
+    // unpaid leave (approved): its working days are not paid days, whether the person is on the work register or on a personal pay rate
+    const unpaid = unpaidDatesFor(a, emp.id);
+    if (unpaid.size) days = days.filter((x) => !unpaid.has(iso(x.date)));
+    // the paid-days basis agreed for the contract(s) the person worked on (the basis in force at the start of the pay month applies to the whole month); none: the company's rule, as before
+    const contractIds = days.map((x) => x.contractId).filter((x): x is string => Boolean(x));
+    const basis = employeeProration(a.payBases as BasisRow[], contractIds, period.startDate);
+    const setting = basis.kind === "ok" ? basis.setting : null;
+    if (basis.kind === "mixed")
+      issues.push({
+        employeeId: emp.id,
+        category: "ATTENDANCE",
+        severity: "WARNING",
+        code: "BASIS_MIXED",
+        requiresExplanation: true,
+        message: `${emp.employeeNumber} ${fullName(emp)} worked on contracts with different paid-days bases in ${period.name}, so was paid on the company's rule. Check the pay and explain it.`,
+      });
+    if (setting?.excludePublicHolidays && !a.holidaysConfirmed) holidaysUnconfirmed = true;
+    const proration = monthProration(period.year, period.month, setting, { companyBasisDays: a.basisDays, leaveWorkingDaysPerWeek: a.leaveWorkingDaysPerWeek, holidays: a.holidays });
     const ot = a.overtime.filter((o) => o.employeeId === emp.id);
     const arr = a.arrears.filter((x) => x.employeeId === emp.id);
     const oth = a.others.filter((x) => x.employeeId === emp.id);
@@ -344,7 +387,8 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
       reason: x.reason,
     }));
     const buildInput = (deductions: EngineDeductionInput[]) => ({
-      basisDays: a.basisDays,
+      basisDays: proration.basisDays,
+      nonProratedDates: proration.nonProratedDates,
       days,
       resolveRate: (day: WorkDay) => a.book.resolve(emp.id, day),
       businessLineFor: (contractId: string | null) => a.book.businessLineOf(contractId),
@@ -384,6 +428,14 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
     rows.push({ emp, res });
   }
 
+  if (holidaysUnconfirmed)
+    issues.push({
+      employeeId: null,
+      category: "ATTENDANCE",
+      severity: "CRITICAL",
+      code: "HOLIDAYS_UNCONFIRMED",
+      message: `A contract that excludes public holidays is being paid for ${period.name}, but the company's public holidays for ${period.year} have not been confirmed. Confirm them (Payroll > Pay setup > Public holidays) and recalculate.`,
+    });
   issues.push(...(await validate(ctx, period, a, rows)));
 
   const totals = summarize(rows.map((r) => r.res));

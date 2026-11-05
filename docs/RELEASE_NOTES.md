@@ -2,6 +2,15 @@
 
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
+## Not yet merged (branch `paid-days-build`, one migration: 20261124090000_paid_days_basis_and_unpaid_leave)
+
+- **The paid-days basis agreed with each client, set on the contract (the founder, 2026-11-05).** A month's pay can now be divided by the **days in the month** (calendar) or by the **working days** in it (for example 22, Monday to Friday by default, or the contract's own 5, 6 or 7-day week), optionally **without the confirmed public holidays**. **On the working-days basis a weekend or holiday day adds no basic pay** (work on it is paid as overtime through the existing route), so pay on that basis can never exceed one full gross. **A contract with no setting keeps the company's payroll rule exactly as before.** Screen: **Clients & contracts > Paid days**.
+- **A change is proposed and approved by a second person** (the payroll manager; the same maker and checker rule as personal pay rates), takes effect from the **first day of a month** (the basis at the start of a pay month applies to the whole month), is effective-dated and keeps its history. **A pending proposal never changes pay.**
+- **Public holidays:** the company enters its holidays each year and a payroll manager **confirms the year** (**Payroll > Pay setup > Public holidays**); no date is in the code. A contract that excludes holidays cannot be paid cleanly for a month in an unconfirmed year: the pay run raises a **critical finding** until the year is confirmed. A person who worked on contracts with different bases in a month is **flagged for review** and paid on the company's rule.
+- **Unpaid leave:** switch it on in the leave policy ("Allow unpaid leave", off by default). An employee (or HR) can ask for unpaid leave; it needs no annual entitlement and **does not use up annual leave**. Once approved, **its working days are not paid days** (pay is reduced as for an absence; pension, PAYE and NHF follow the reduced pay), for staff on the work register and for staff on a personal pay rate.
+- **Migration (reversible):** three tables (the basis, the holidays, the yearly confirmation), an enum, and two additive columns on leave. Round-tripped (down, up) on a copy of the test database. **No existing contract's pay changes.** Explain-back note with a worked example: `docs/plans/paid-days-explain-back.md`.
+- Tests: `tests/unit/paid-days.test.ts` (12), `tests/unit/engine-paid-days.test.ts` (9), `tests/integration/paid-days.test.ts` (11), written first. Not yet built: the payslip does not yet list unpaid days.
+
 ## Not yet merged (branch `assign-structure-to-client`, no migration)
 
 - **An existing salary structure can be given to a client (the founder, 2026-11-05).** On a company-wide structure's page, "Give this structure to a client". The demo data, for example, has structures named for a client that sat as company-wide ones. Nothing but the owner changes; the components stay.

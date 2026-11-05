@@ -52,7 +52,15 @@ export default async function LeavePolicyPage() {
                 { value: "6", label: "6 days (Mon–Sat)" },
                 { value: "7", label: "7 days (every day)" },
               ],
-              help: "Which days count against the leave balance.",
+              help: "Which days count against the leave balance. It is also the working week for a contract on the working-days basis that sets none of its own.",
+            },
+            {
+              name: "unpaidLeaveEnabled",
+              label: "Allow unpaid leave",
+              type: "checkbox",
+              defaultValue: p.unpaidLeaveEnabled,
+              help: "When on, an employee can ask for unpaid leave. Once approved, its working days are not paid days (pay is reduced as for an absence; pension, PAYE and NHF follow the reduced pay), and it does not use up annual leave.",
+              span: 3,
             },
           ]}
         />

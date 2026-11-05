@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-214 tables and 162 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+217 tables and 163 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -32,6 +32,9 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | salaryOverrides | → EmployeeSalaryOverride[] |  |  |
 | payRates | → EmployeePayRate[] |  |  |
 | payRateProposals | → PayRateProposal[] |  |  |
+| contractPayBases | → ContractPayBasis[] |  |  |
+| publicHolidays | → PublicHoliday[] |  |  |
+| holidayCalendarYears | → HolidayCalendarYear[] |  |  |
 | deployments | → Deployment[] |  |  |
 | movements | → StaffMovement[] |  |  |
 | workRegister | → WorkRegister[] |  |  |
@@ -1834,6 +1837,7 @@ What an exiting employee is owed (or owes) beyond their final month's pay. Compu
 | serviceTypeId | String |  | Which service this contract is billed as; its billing rule applies unless the contract has an approved override. |
 | serviceType | → ServiceType |  |  |
 | billingRules | → BillingRule[] |  |  |
+| payBases | → ContractPayBasis[] |  |  |
 
 ### ContractRate
 
@@ -3088,6 +3092,7 @@ One policy per organization. Defaults: 10 working days a year, due after 12 mont
 | annualDays | Int |  |  |
 | eligibilityMonths | Int |  |  |
 | workingDaysPerWeek | Int |  |  |
+| unpaidLeaveEnabled | Boolean |  | Whether an employee may ask for UNPAID leave (off until the company switches it on). Unpaid leave days are not paid days and do not use up annual leave. |
 | updatedAt | DateTime |  |  |
 
 ### LeaveRequest
@@ -3104,6 +3109,7 @@ One policy per organization. Defaults: 10 working days a year, due after 12 mont
 | startDate | DateTime | yes |  |
 | endDate | DateTime | yes |  |
 | workingDays | Int | yes |  |
+| unpaid | Boolean |  | Unpaid leave: its working days are not paid days (the pay run leaves them out) and it does not use up the annual-leave entitlement. |
 | reason | String |  |  |
 | status | LeaveStatus |  |  |
 | requestedBy | String | yes |  |
@@ -5350,6 +5356,60 @@ A pension fund administrator on a company's own list (Settings → Pension fund 
 | createdAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |
 
+### ContractPayBasis
+
+How a contract's pay is divided over the month, as agreed with the client (docs/plans/paid-days-basis.md). Effective-dated from the first day of a pay month; PROPOSED by someone who manages clients and APPROVED by a second person (the payroll manager) before it counts. A contract with no approved row keeps the company's payroll rule, so nothing existing changes.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| contractId | String | yes |  |
+| contract | → Contract |  |  |
+| basis | PaidDaysBasis | yes |  |
+| excludePublicHolidays | Boolean |  | Working-days basis only: the confirmed public holidays are not working days (work on them is overtime). |
+| workingDaysPerWeek | Int |  | Working-days basis only: 5 = Monday to Friday, 6 = Monday to Saturday, 7 = every day. Empty: the company's "working days per week" in the leave policy. |
+| effectiveFrom | DateTime | yes |  |
+| effectiveTo | DateTime |  |  |
+| reason | String | yes |  |
+| status | PayRateProposalStatus |  |  |
+| proposedBy | String | yes |  |
+| proposedByUserId | String | yes |  |
+| createdAt | DateTime |  |  |
+| decidedBy | String |  |  |
+| decidedByUserId | String |  |  |
+| decidedAt | DateTime |  |  |
+| decisionNote | String |  |  |
+
+### PublicHoliday
+
+A public holiday the company has entered (some are announced each year, so the dates are the company's data, never in the code).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| date | DateTime | yes |  |
+| name | String | yes |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+
+### HolidayCalendarYear
+
+The company's confirmation that its list of public holidays for a year is complete and right. A contract that excludes public holidays cannot be paid cleanly for a month in an unconfirmed year.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| year | Int | yes |  |
+| confirmedBy | String | yes |  |
+| confirmedByUserId | String | yes |  |
+| confirmedAt | DateTime |  |  |
+
 ## Fixed sets of values
 
 ### Role
@@ -6021,4 +6081,8 @@ Whether an outbound message is a service message (about an active contract) or m
 ### EntitlementMode
 
 `OFF`, `REPORT`, `ENFORCE`
+
+### PaidDaysBasis
+
+`CALENDAR_DAYS`, `WORKING_DAYS`
 

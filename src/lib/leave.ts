@@ -51,7 +51,7 @@ export function leaveEligibility(
   }
 }
 
-const isWorkingDay = (date: Date, workingDaysPerWeek: number) => {
+export const isWorkingDay = (date: Date, workingDaysPerWeek: number) => {
   const dow = date.getUTCDay(); // 0 = Sunday … 6 = Saturday
   if (workingDaysPerWeek >= 7) return true;
   if (workingDaysPerWeek === 6) return dow !== 0;
