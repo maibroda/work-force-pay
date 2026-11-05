@@ -88,11 +88,12 @@ describe("what the rules add, and the reasons given in words", () => {
     expect(configureClient(ask(["hr"])).notes).toEqual([]);
   });
 
-  it("says plainly that payroll cannot yet run for a company with no Contracts and deployment, because it pays only for days recorded against a client contract and site", () => {
-    const NOTE = "Payroll currently pays employees only for days recorded against a client contract and site. Without Contracts & deployment there is nothing to pay from yet, so this cannot run payroll for a company that does not place workers at client sites.";
+  it("says how payroll runs for a company with no Contracts and deployment: each employee is paid from a pay rate (a monthly gross) set on their record, split into components by a salary structure (a correction: an earlier note wrongly said payroll could not run at all)", () => {
+    const NOTE = "Without Contracts & deployment there is no client contract to take pay from, so each employee needs a pay rate (a monthly gross) set on their record. Payroll then pays them for every day they are employed and splits the gross into components by a salary structure (the company's default unless another is chosen). Check that the default structure suits office staff.";
     expect(configureClient(ask(["payroll"])).notes).toEqual([NOTE]);
-    expect(configureClient(ask(["payroll", "hr", "self_service"])).notes).toContain(NOTE); // HR + Payroll for an office-based firm: the same gap
-    expect(configureClient(ask(["payroll", "contracts_deployment"])).notes).toEqual([]); // with deployment it can
+    expect(configureClient(ask(["payroll", "hr", "self_service"])).notes).toContain(NOTE); // HR + Payroll for an office-based firm
+    expect(configureClient(ask(["payroll"])).notes.join(" ")).not.toMatch(/cannot run|nothing to pay from yet/i); // it can run: it is not a refusal
+    expect(configureClient(ask(["payroll", "contracts_deployment"])).notes).toEqual([]); // with deployment, pay comes from the contract rate
     expect(configureClient(ask(["crm"], { crmUsers: 2 })).notes).toEqual([]); // not about payroll
     expect(configureClient(ask(["inventory", "analytics"])).notes).toEqual([]);
   });
