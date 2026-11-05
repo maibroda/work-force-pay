@@ -233,7 +233,7 @@ describe("5. Payslips, register, bank file and remittance schedule export correc
     expect(paye.map((p) => p.payee).sort()).toEqual(["FCT Internal Revenue Service (PAYE)", "Lagos Internal Revenue Service (PAYE)", "Rivers Internal Revenue Service (PAYE)"]);
     expect(paye.reduce((a, p) => a + Math.round(Number(p.totalAmount) * 100), 0)).toBe(Math.round(Number(run.totalPaye) * 100));
     const pension = rem.filter((r) => r.type === "PENSION");
-    expect(pension.map((p) => p.payee).sort()).toEqual(["ARM Pension", "Premium Pension", "Stanbic IBTC Pension"]);
+    expect(pension.map((p) => p.payee).sort()).toEqual(["Access ARM Pensions", "Premium Pension Ltd", "Stanbic IBTC Pension Managers"]);
     expect(pension.reduce((a, p) => a + Number(p.employeeAmount), 0)).toBeCloseTo(Number(run.totalEmployeePension), 2);
     expect(pension.reduce((a, p) => a + Number(p.employerAmount), 0)).toBeCloseTo(Number(run.totalEmployerPension), 2);
     expect(pension.reduce((a, p) => a + p.headcount, 0)).toBe(30);

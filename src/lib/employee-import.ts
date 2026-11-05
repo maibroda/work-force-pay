@@ -6,6 +6,7 @@
  * complain about later (no bank details, no pension PIN) but does not stop the row. Dates are day-first (31/12/1990) or ISO (1990-12-31).
  */
 import { normaliseState } from "./nigeria-states";
+import { pfaKey } from "./pfas";
 
 export const MAX_IMPORT_ROWS = 1000;
 
@@ -290,7 +291,7 @@ export type ImportCheck = {
 /** Checks a whole file. `today` is YYYY-MM-DD. */
 export function checkImport(
   csv: string,
-  ref: { categories: Lookup[]; departments: Lookup[]; existing: ExistingPerson[]; today: string; /** Whether a bank name can be turned into a bank code for the payment file. */ knownBank?: (name: string) => boolean },
+  ref: { categories: Lookup[]; departments: Lookup[]; existing: ExistingPerson[]; today: string; /** Whether a bank name can be turned into a bank code for the payment file. */ knownBank?: (name: string) => boolean; /** The company's list of pension fund administrators. Empty or left out: any PFA typed is kept. */ pfas?: { name: string; active: boolean }[] },
 ): ImportCheck {
   const empty = (fatal: string): ImportCheck => ({ fatal, headers: null, rows: [], summary: { total: 0, ok: 0, warnings: 0, errors: 0 } });
   const table = parseCsv(csv);
@@ -400,7 +401,19 @@ export function checkImport(
       if (account && !get("accountName")) warnings.push("Account number without an account name.");
     }
     if (get("bankName") && ref.knownBank && !ref.knownBank(get("bankName"))) warnings.push(`Bank "${get("bankName")}" is not in the bank list, so this person can't go in the bank payment file until the list or the name is put right.`);
-    if (!get("pensionPin") || !get("pfa")) warnings.push("Pension PIN or PFA is missing.");
+    // the PFA is held to the company's list once it has one; a name that does not match does not stop the row: the person is saved without a PFA, to be completed later
+    let pfa = get("pfa");
+    if (pfa && ref.pfas && ref.pfas.length) {
+      const hit = ref.pfas.find((p) => pfaKey(p.name) === pfaKey(pfa));
+      if (!hit) {
+        warnings.push(`PFA "${pfa}" is not on your list of pension fund administrators, so it was left blank. Add it under Employees → Pension fund administrators, then set it on this person's record.`);
+        pfa = "";
+      } else if (!hit.active) {
+        warnings.push(`PFA "${hit.name}" is switched off on your list of pension fund administrators, so it was left blank. Switch it on under Employees → Pension fund administrators, or choose another, then set it on this person's record.`);
+        pfa = "";
+      } else pfa = hit.name;
+    }
+    if (!get("pensionPin") || !pfa) warnings.push("Pension PIN or PFA is missing.");
     if (!get("taxId")) warnings.push("Tax ID is missing.");
 
     const phone = get("phone") ? normalizePhone(get("phone")) : "";
@@ -456,7 +469,7 @@ export function checkImport(
         ...(get("accountName") ? { accountName: get("accountName") } : {}),
         ...(get("taxId") ? { taxId: get("taxId") } : {}),
         ...(get("pensionPin") ? { pensionPin: get("pensionPin") } : {}),
-        ...(get("pfa") ? { pfa: get("pfa") } : {}),
+        ...(pfa ? { pfa } : {}),
         ...(annualRent !== undefined ? { annualRent } : {}),
       };
     }

@@ -497,6 +497,8 @@ export const EMPLOYEE_SECTIONS: EmployeeSection[] = [
   { href: "/employees/bank", label: "Bank information", perm: "employee.sensitive" },
   { href: "/employees/pension", label: "Pension information", perm: "employee.sensitive" },
   { href: "/employees/pay-rates", label: "Pay rate approvals", perm: "override.manage" },
+
+  { href: "/employees/pfas", label: "Pension fund administrators", perm: "employee.view" },
   { href: "/employees/tax", label: "Tax information", perm: "employee.sensitive" },
   { href: "/employees/change-requests", label: "Detail change requests", perm: "employee.sensitive" },
   { href: "/employees/next-of-kin", label: "Next of kin & emergency", perm: "employee.sensitive" },

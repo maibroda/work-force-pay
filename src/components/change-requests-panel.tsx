@@ -3,6 +3,8 @@ import { can } from "@/lib/auth/permissions";
 import { FIELD_LABELS, KIND_FIELDS, KIND_LABELS, type ChangeKindName } from "@/lib/change-control";
 import { fmtDate } from "@/lib/dates";
 import { currentDetails, employeeChanges } from "@/server/services/change-requests";
+import { activePfaNames } from "@/server/services/pfas";
+import { pfaField } from "@/components/forms/fields";
 import { approveChangeAction, cancelChangeAction, rejectChangeAction, requestChangeAction } from "@/app/actions/change-requests";
 import { ActionButton } from "@/components/action-button";
 import { Empty, FormPanel, KV, Section } from "@/components/page";
@@ -13,7 +15,7 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 const KINDS: ChangeKindName[] = ["BANK", "TAX", "PENSION"];
 const show = (v: unknown) => (v === null || v === undefined || v === "" ? "—" : String(v));
 
-function formFields(kind: ChangeKindName, current: Record<string, unknown>): Field[] {
+function formFields(kind: ChangeKindName, current: Record<string, unknown>, pfas: string[]): Field[] {
   const v = (k: string) => (current[k] == null ? undefined : (current[k] as string | number));
   const byKind: Record<ChangeKindName, Field[]> = {
     BANK: [
@@ -27,7 +29,7 @@ function formFields(kind: ChangeKindName, current: Record<string, unknown>): Fie
     ],
     PENSION: [
       { name: "pensionPin", label: "Pension PIN", defaultValue: v("pensionPin") },
-      { name: "pfa", label: "PFA", defaultValue: v("pfa") },
+      { ...pfaField(pfas.map((n) => ({ value: n, label: n })), v("pfa") as string | undefined), label: "PFA" },
     ],
   };
   return [...byKind[kind], { name: "reason", label: "Why is this changing?", required: true, span: 2, placeholder: "e.g. employee moved to a new bank" }];
@@ -55,7 +57,7 @@ function Diff({ kind, previous, proposed }: { kind: ChangeKindName; previous: Re
  * My Bank & Tax Details (self-service).
  */
 export async function ChangeRequestsPanel({ ctx, employeeId, selfService = false }: { ctx: Ctx; employeeId: string; selfService?: boolean }) {
-  const [cur, requests] = await Promise.all([currentDetails(ctx, employeeId), employeeChanges(ctx, employeeId)]);
+  const [cur, requests, pfaNames] = await Promise.all([currentDetails(ctx, employeeId), employeeChanges(ctx, employeeId), activePfaNames(ctx.orgId)]);
   const canRequest = selfService || can(ctx.role, "employee.manage");
   const canDecide = !selfService && can(ctx.role, "employee.approve") && ctx.employeeId !== employeeId;
   const pending = requests.filter((r) => r.status === "PENDING");
@@ -135,7 +137,7 @@ export async function ChangeRequestsPanel({ ctx, employeeId, selfService = false
             {pendingKinds.has(k) ? (
               <p className="text-sm text-muted-foreground">There is already a pending request for this — approve, reject or cancel it first.</p>
             ) : (
-              <SmartForm columns={2} submitLabel="Request change" resetOnSuccess={false} action={requestChangeAction.bind(null, employeeId, k)} fields={formFields(k, cur[k])} />
+              <SmartForm columns={2} submitLabel="Request change" resetOnSuccess={false} action={requestChangeAction.bind(null, employeeId, k)} fields={formFields(k, cur[k], pfaNames)} />
             )}
           </FormPanel>
         ))}

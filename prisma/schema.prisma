@@ -594,6 +594,7 @@ model Organization {
   clientInvoiceDeductions   ClientInvoiceDeduction[]
   employeeDocuments         EmployeeDocument[]
   employeeTrainings         EmployeeTraining[]
+  pensionFundAdministrators PensionFundAdministrator[]
   disciplinaryRecords       DisciplinaryRecord[]
   onboardingTasks           OnboardingTask[]
   exitRecords               ExitRecord[]
@@ -7119,4 +7120,20 @@ model SoftwarePriceLine {
   amount    Decimal           @db.Decimal(16, 2)
 
   @@unique([bookId, moduleKey])
+}
+
+/// A pension fund administrator on a company's own list (Settings → Pension fund administrators). The company administrator and the HR manager keep it; an employee's `pfa` (still the name, as typed on payroll records and schedules) is chosen from it.
+/// Switching one off stops it being chosen for anyone new; the people who already have it keep it. The PenCom number is the regulator's licence number for the PFA, recorded for the company's reference.
+model PensionFundAdministrator {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  penComNumber   String?
+  active         Boolean      @default(true)
+  createdBy      String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, name])
 }

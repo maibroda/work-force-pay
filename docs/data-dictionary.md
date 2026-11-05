@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-213 tables and 162 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+214 tables and 162 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -67,6 +67,7 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | clientInvoiceDeductions | → ClientInvoiceDeduction[] |  |  |
 | employeeDocuments | → EmployeeDocument[] |  |  |
 | employeeTrainings | → EmployeeTraining[] |  |  |
+| pensionFundAdministrators | → PensionFundAdministrator[] |  |  |
 | disciplinaryRecords | → DisciplinaryRecord[] |  |  |
 | onboardingTasks | → OnboardingTask[] |  |  |
 | exitRecords | → ExitRecord[] |  |  |
@@ -5323,6 +5324,22 @@ One price in a version: per employee, per CRM user or flat, per month, by the wa
 | moduleKey | String | yes |  |
 | basis | String | yes | active_employee, crm_user or flat. |
 | amount | Decimal | yes |  |
+
+### PensionFundAdministrator
+
+A pension fund administrator on a company's own list (Settings → Pension fund administrators). The company administrator and the HR manager keep it; an employee's `pfa` (still the name, as typed on payroll records and schedules) is chosen from it. Switching one off stops it being chosen for anyone new; the people who already have it keep it. The PenCom number is the regulator's licence number for the PFA, recorded for the company's reference.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| name | String | yes |  |
+| penComNumber | String |  |  |
+| active | Boolean |  |  |
+| createdBy | String |  |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
 
 ## Fixed sets of values
 
