@@ -83,6 +83,11 @@ export interface EmployerCostRuleInput {
 
 export interface EngineInput {
   basisDays: number;
+  /**
+   * ISO dates that add NO basic pay even if the person worked them: the weekends (and, if the contract excludes them, the public holidays) on the working-days basis (docs/plans/paid-days-basis.md).
+   * Work on such a day is paid only as overtime. Left out or empty: every paid day counts, as pay has always been worked.
+   */
+  nonProratedDates?: string[];
   days: WorkDay[];
   resolveRate: (day: WorkDay) => RateInfo | null;
   /** Business line of a contract (null = no contract → back-office pay, no add-on costs). */
@@ -333,6 +338,7 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
   // ── 1. Build segments from actual work records (beat × rate) ──
   const segMap = new Map<string, Segment>();
   const unratedDays: WorkDay[] = [];
+  const setAside = new Set(input.nonProratedDates ?? []);
   for (const day of days) {
     const rate = input.resolveRate(day);
     if (!rate) {
@@ -374,7 +380,7 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
     }
     seg.recordedDays += 1;
     seg.to = iso(day.date);
-    if (PAID_STATUSES.includes(day.status)) seg.paidDays += 1;
+    if (PAID_STATUSES.includes(day.status) && !setAside.has(iso(day.date))) seg.paidDays += 1; // a day set aside (not a working day on this contract) adds no basic pay
   }
   const segments = [...segMap.values()];
   const totalPaid = segments.reduce((a, s) => a + s.paidDays, 0);

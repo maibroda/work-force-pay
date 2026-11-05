@@ -66,7 +66,7 @@ describe("the 34-entry Finance / Accounting group becomes three sidebar entries"
   });
 
   it("opens each page to exactly the roles that could see it before: same permission per page", () => {
-    const was = new Map(OLD);
+    const was = new Map<string, Permission>([...OLD, ["/contracts/pay-basis", "client.view"]]); // Paid days was added on 2026-11-05 (the paid-days basis agreed per contract)
     for (const s of sections) {
       expect(s.perm, s.href).toBe(was.get(s.href));
       for (const r of roles) expect(can(r, s.perm)).toBe(can(r, was.get(s.href)!));

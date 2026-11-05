@@ -101,7 +101,7 @@ describe("the Payroll area is one sidebar entry with its pages inside", () => {
   });
 
   it("shows nobody a page they could not open before, and hides no page from anybody who could open it before (same permission per page)", () => {
-    const was = new Map([...OLD_PAYROLL, ...BROUGHT_IN]);
+    const was = new Map<string, Permission>([...OLD_PAYROLL, ...BROUGHT_IN, ["/payroll/holidays", "payroll.view"]]); // Public holidays was added on 2026-11-05 (the company's holidays, for the paid-days basis)
     for (const s of [...PAYROLL_AREA.sections, ...REPORTS_AREA.sections.filter((r) => was.has(r.href))]) {
       expect(s.perm, s.href).toBe(was.get(s.href));
       for (const r of all) expect(can(r, s.perm)).toBe(can(r, was.get(s.href)!));

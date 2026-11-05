@@ -559,6 +559,9 @@ model Organization {
   salaryOverrides           EmployeeSalaryOverride[]
   payRates                  EmployeePayRate[]
   payRateProposals          PayRateProposal[]
+  contractPayBases          ContractPayBasis[]
+  publicHolidays            PublicHoliday[]
+  holidayCalendarYears      HolidayCalendarYear[]
   deployments               Deployment[]
   movements                 StaffMovement[]
   workRegister              WorkRegister[]
@@ -2669,9 +2672,9 @@ model Client {
   receiptRefunds    ClientRefund[]
   notes             ClientNote[]
   taxCertificates   TaxCertificate[]
+  salaryStructures  SalaryStructure[]
 
   @@unique([organizationId, code])
-  salaryStructures SalaryStructure[]
 }
 
 model Contract {
@@ -2711,6 +2714,7 @@ model Contract {
   serviceTypeId String?
   serviceType   ServiceType?        @relation(fields: [serviceTypeId], references: [id], onDelete: Restrict)
   billingRules  BillingRule[]
+  payBases      ContractPayBasis[]
 
   @@unique([organizationId, contractNumber])
 }
@@ -2797,14 +2801,14 @@ model SalaryStructure {
 
   /// The client this structure belongs to (empty: company-wide, usable on any client's contracts, as every structure was before).
   clientId   String?
-  client     Client?            @relation(fields: [clientId], references: [id])
+  client     Client?           @relation(fields: [clientId], references: [id])
   /// The client structure this one sits under, as a role structure (empty: a top-level structure). Two levels only.
   parentId   String?
-  parent     SalaryStructure?   @relation("StructureRoles", fields: [parentId], references: [id])
-  roles      SalaryStructure[]  @relation("StructureRoles")
+  parent     SalaryStructure?  @relation("StructureRoles", fields: [parentId], references: [id])
+  roles      SalaryStructure[] @relation("StructureRoles")
   /// The employee category (job role) a role structure is for.
   categoryId String?
-  category   EmployeeCategory?  @relation(fields: [categoryId], references: [id])
+  category   EmployeeCategory? @relation(fields: [categoryId], references: [id])
 
   components    SalaryComponent[]
   contractRates ContractRate[]
@@ -2883,27 +2887,27 @@ enum PayRateProposalStatus {
 /// A proposed personal monthly gross for an employee (HR or payroll proposes; the payroll manager approves, a second person). It is NOT a pay rate: the pay run reads only EmployeePayRate, and
 /// approval is what creates one. Many arrive from the bulk import and from adding an employee, and are decided in one queue.
 model PayRateProposal {
-  id                String                @id @default(cuid())
-  organizationId    String
-  organization      Organization          @relation(fields: [organizationId], references: [id])
-  employeeId        String
-  employee          Employee              @relation(fields: [employeeId], references: [id])
-  monthlyGross      Decimal               @db.Decimal(14, 2)
-  structureCode     String?
-  effectiveFrom     DateTime              @db.Date
-  reason            String
+  id               String                @id @default(cuid())
+  organizationId   String
+  organization     Organization          @relation(fields: [organizationId], references: [id])
+  employeeId       String
+  employee         Employee              @relation(fields: [employeeId], references: [id])
+  monthlyGross     Decimal               @db.Decimal(14, 2)
+  structureCode    String?
+  effectiveFrom    DateTime              @db.Date
+  reason           String
   /// Where it came from: MANUAL (the employee's record), NEW_EMPLOYEE (set when the employee was added) or IMPORT (the bulk import).
-  source            String                @default("MANUAL")
-  status            PayRateProposalStatus @default(PENDING)
-  proposedBy        String
-  proposedByUserId  String
-  createdAt         DateTime              @default(now())
-  decidedBy         String?
-  decidedByUserId   String?
-  decidedAt         DateTime?
-  decisionNote      String?
+  source           String                @default("MANUAL")
+  status           PayRateProposalStatus @default(PENDING)
+  proposedBy       String
+  proposedByUserId String
+  createdAt        DateTime              @default(now())
+  decidedBy        String?
+  decidedByUserId  String?
+  decidedAt        DateTime?
+  decisionNote     String?
   /// The EmployeePayRate that approval made.
-  appliedRateId     String?
+  appliedRateId    String?
 
   @@index([organizationId, status])
   @@index([organizationId, employeeId])
@@ -4118,6 +4122,8 @@ model LeavePolicy {
   annualDays         Int          @default(10)
   eligibilityMonths  Int          @default(12) // months of service before the first entitlement is due
   workingDaysPerWeek Int          @default(5) // 5 = Mon–Fri, 6 = Mon–Sat, 7 = every day
+  /// Whether an employee may ask for UNPAID leave (off until the company switches it on). Unpaid leave days are not paid days and do not use up annual leave.
+  unpaidLeaveEnabled Boolean      @default(false)
   updatedAt          DateTime     @updatedAt
 }
 
@@ -4132,6 +4138,8 @@ model LeaveRequest {
   startDate      DateTime     @db.Date
   endDate        DateTime     @db.Date
   workingDays    Int
+  /// Unpaid leave: its working days are not paid days (the pay run leaves them out) and it does not use up the annual-leave entitlement.
+  unpaid         Boolean      @default(false)
   reason         String?
   status         LeaveStatus  @default(PENDING)
   requestedBy    String
@@ -7151,4 +7159,63 @@ model PensionFundAdministrator {
   updatedAt      DateTime     @updatedAt
 
   @@unique([organizationId, name])
+}
+
+enum PaidDaysBasis {
+  CALENDAR_DAYS
+  WORKING_DAYS
+}
+
+/// How a contract's pay is divided over the month, as agreed with the client (docs/plans/paid-days-basis.md). Effective-dated from the first day of a pay month; PROPOSED by someone who manages clients and
+/// APPROVED by a second person (the payroll manager) before it counts. A contract with no approved row keeps the company's payroll rule, so nothing existing changes.
+model ContractPayBasis {
+  id                    String                @id @default(cuid())
+  organizationId        String
+  organization          Organization          @relation(fields: [organizationId], references: [id])
+  contractId            String
+  contract              Contract              @relation(fields: [contractId], references: [id])
+  basis                 PaidDaysBasis
+  /// Working-days basis only: the confirmed public holidays are not working days (work on them is overtime).
+  excludePublicHolidays Boolean               @default(false)
+  /// Working-days basis only: 5 = Monday to Friday, 6 = Monday to Saturday, 7 = every day. Empty: the company's "working days per week" in the leave policy.
+  workingDaysPerWeek    Int?
+  effectiveFrom         DateTime              @db.Date
+  effectiveTo           DateTime?             @db.Date
+  reason                String
+  status                PayRateProposalStatus @default(PENDING)
+  proposedBy            String
+  proposedByUserId      String
+  createdAt             DateTime              @default(now())
+  decidedBy             String?
+  decidedByUserId       String?
+  decidedAt             DateTime?
+  decisionNote          String?
+
+  @@index([organizationId, contractId, status])
+}
+
+/// A public holiday the company has entered (some are announced each year, so the dates are the company's data, never in the code).
+model PublicHoliday {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  date           DateTime     @db.Date
+  name           String
+  createdBy      String
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, date])
+}
+
+/// The company's confirmation that its list of public holidays for a year is complete and right. A contract that excludes public holidays cannot be paid cleanly for a month in an unconfirmed year.
+model HolidayCalendarYear {
+  id                String       @id @default(cuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  year              Int
+  confirmedBy       String
+  confirmedByUserId String
+  confirmedAt       DateTime     @default(now())
+
+  @@unique([organizationId, year])
 }

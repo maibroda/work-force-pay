@@ -91,7 +91,8 @@ export default async function LeavePage({
               { name: "employeeId", label: "Employee", type: "select", required: true, options: o.employees },
               { name: "startDate", label: "First day", type: "date", required: true, defaultValue: today },
               { name: "endDate", label: "Last day", type: "date", required: true },
-              { name: "reason", label: "Reason", span: 3 },
+              { name: "reason", label: "Reason", span: 2 },
+              ...(policy.unpaidLeaveEnabled ? [{ name: "unpaid", label: "Unpaid leave", type: "checkbox" as const, help: "Not paid for those days; does not use up annual leave." }] : []),
             ]}
           />
         </FormPanel>
@@ -121,7 +122,7 @@ export default async function LeavePage({
                   <TD className="whitespace-nowrap">
                     {fmtDate(r.startDate)} – {fmtDate(r.endDate)}
                   </TD>
-                  <TD className="text-right">{r.workingDays}</TD>
+                  <TD className="text-right">{r.workingDays}{r.unpaid ? " (unpaid)" : ""}</TD>
                   <TD className="max-w-xs truncate text-xs">{r.reason ?? "—"}</TD>
                   <TD className="text-xs">{r.requestedBy}</TD>
                   <TD className="space-x-1 whitespace-nowrap">
@@ -183,7 +184,7 @@ export default async function LeavePage({
                   <TD className="whitespace-nowrap">
                     {fmtDate(r.startDate)} – {fmtDate(r.endDate)}
                   </TD>
-                  <TD className="text-right">{r.workingDays}</TD>
+                  <TD className="text-right">{r.workingDays}{r.unpaid ? " (unpaid)" : ""}</TD>
                   <TD>
                     <StatusBadge status={r.status} />
                   </TD>

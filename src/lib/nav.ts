@@ -155,6 +155,7 @@ export const PAYROLL_AREA: Area = {
     { group: "Pay setup", href: "/settings/payroll-rules", label: "Payroll rules", perm: "payroll.view" },
     { group: "Pay setup", href: "/settings/employer-costs", label: "Employer cost rules", perm: "payroll.view" },
     { group: "Pay setup", href: "/settings/recurring-deductions", label: "Recurring deductions", perm: "payroll.view" },
+    { group: "Pay setup", href: "/payroll/holidays", label: "Public holidays", perm: "payroll.view" },
     { group: "Pay out", href: "/payments/batches", label: "Payment batches", perm: "payroll.view" },
     { group: "Pay out", href: "/payments/transactions", label: "Payment transactions", perm: "payroll.view" },
     { group: "Pay out", href: "/payments/reconciliation", label: "Salary payment reconciliation", perm: "payroll.view" },
@@ -316,6 +317,7 @@ export const CLIENTS_AREA: Area = {
   sections: [
     { group: "Clients", href: "/clients", label: "Clients", perm: "client.view" },
     { group: "Contracts", href: "/contracts", label: "Contracts", perm: "client.view" },
+    { group: "Contracts", href: "/contracts/pay-basis", label: "Paid days", perm: "client.view" },
     { group: "Contracts", href: "/beats/bids", label: "Bids", perm: "client.view" },
     { group: "Sites", href: "/beats", label: "Beats / locations", perm: "client.view" },
     { group: "Sites", href: "/beats/strength", label: "Approved strength", perm: "client.view" },

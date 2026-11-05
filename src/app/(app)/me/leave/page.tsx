@@ -66,7 +66,7 @@ export default async function MyLeavePage() {
         )}
       </Card>
 
-      {b.due && b.remaining > 0 && (
+      {((b.due && b.remaining > 0) || policy.unpaidLeaveEnabled) && (
         <Card className="p-4">
           <p className="mb-3 text-sm font-semibold">Apply for leave</p>
           <SmartForm
@@ -89,6 +89,7 @@ export default async function MyLeavePage() {
                 help: `Working days only are counted (${policy.workingDaysPerWeek}-day week). Your supervisor approves the request.`,
               },
               { name: "reason", label: "Reason (optional)", type: "textarea" },
+              ...(policy.unpaidLeaveEnabled ? [{ name: "unpaid", label: "This is unpaid leave", type: "checkbox" as const, help: "Unpaid leave is not paid for those days and does not use up your annual leave. Leave it unticked for annual leave." }] : []),
             ]}
           />
         </Card>
@@ -116,6 +117,7 @@ export default async function MyLeavePage() {
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {r.workingDays} working day(s)
+                    {r.unpaid ? " · unpaid" : ""}
                     {r.reason ? ` · ${r.reason}` : ""}
                   </p>
                   {r.decidedBy && (

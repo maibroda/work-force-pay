@@ -28,6 +28,8 @@ export const policySchema = z.object({
     .number()
     .int()
     .refine((n) => [5, 6, 7].includes(n), "Must be 5, 6 or 7"),
+  /** Whether an employee may ask for UNPAID leave. Left out: unchanged. */
+  unpaidLeaveEnabled: z.preprocess((v) => (v === undefined ? undefined : v === true || v === "true" || v === "on"), z.boolean().optional()),
 });
 
 export async function updateLeavePolicy(ctx: Ctx, raw: z.input<typeof policySchema>) {
@@ -86,7 +88,7 @@ function computeBalance(
 async function balanceFor(tx: Tx, orgId: string, emp: { id: string; employmentDate: Date }, today: Date) {
   const policy = await getLeavePolicy(orgId, tx);
   const requests = await tx.leaveRequest.findMany({
-    where: { organizationId: orgId, employeeId: emp.id, status: { in: ["PENDING", "APPROVED"] } },
+    where: { organizationId: orgId, employeeId: emp.id, status: { in: ["PENDING", "APPROVED"] }, unpaid: false }, // unpaid leave does not use up the annual entitlement
     select: { cycleStart: true, status: true, workingDays: true },
   });
   return { policy, balance: computeBalance(emp, policy, requests, today) };
@@ -151,7 +153,7 @@ export async function leaveBalances(ctx: Ctx) {
       orderBy: { employeeNumber: "asc" },
     }),
     db.leaveRequest.findMany({
-      where: { organizationId: ctx.orgId, status: { in: ["PENDING", "APPROVED"] } },
+      where: { organizationId: ctx.orgId, status: { in: ["PENDING", "APPROVED"] }, unpaid: false },
       select: { employeeId: true, cycleStart: true, status: true, workingDays: true },
     }),
   ]);
@@ -183,6 +185,8 @@ export const applySchema = z.object({
   startDate: z.string().min(10, "Start date is required"),
   endDate: z.string().min(10, "End date is required"),
   reason: z.string().max(500).optional(),
+  /** Unpaid leave: needs the company policy to allow it, needs no annual entitlement, and its working days are not paid days. */
+  unpaid: z.preprocess((v) => v === true || v === "true" || v === "on", z.boolean()).default(false),
 });
 
 /**
@@ -208,6 +212,20 @@ export async function applyForLeave(ctx: Ctx, raw: z.input<typeof applySchema>) 
   if (start < today) throw new BusinessError("Leave cannot start in the past.");
 
   return db.$transaction(async (tx) => {
+    if (v.unpaid) {
+      // UNPAID leave: allowed only if the company has switched it on; it needs no annual entitlement and is not charged to it (its working days are simply not paid days in the pay run)
+      const policy = await getLeavePolicy(ctx.orgId, tx);
+      if (!policy.unpaidLeaveEnabled) throw new BusinessError("Unpaid leave is not switched on for this company: HR can switch it on in the leave policy.");
+      const days = workingDatesBetween(start, end, policy.workingDaysPerWeek).length;
+      if (!days) throw new BusinessError("The selected dates contain no working days.");
+      const clash = await tx.leaveRequest.findFirst({ where: { organizationId: ctx.orgId, employeeId: emp.id, status: { in: ["PENDING", "APPROVED"] }, startDate: { lte: end }, endDate: { gte: start } } });
+      if (clash) throw new BusinessError(`These dates overlap an existing ${clash.status.toLowerCase()} leave request (${fmtDate(clash.startDate)} – ${fmtDate(clash.endDate)}).`);
+      const unpaidReq = await tx.leaveRequest.create({
+        data: { organizationId: ctx.orgId, employeeId: emp.id, cycleStart: start, cycleEnd: end, startDate: start, endDate: end, workingDays: days, unpaid: true, reason: v.reason?.trim() || null, requestedBy: ctx.name },
+      });
+      await logAudit(ctx, { action: "LEAVE_REQUEST", entity: "LeaveRequest", entityId: unpaidReq.id, newValue: { employee: emp.employeeNumber, from: iso(start), to: iso(end), workingDays: days, unpaid: true } }, tx);
+      return unpaidReq;
+    }
     const { policy, balance } = await balanceFor(tx, ctx.orgId, emp, today);
     if (!balance.cycle)
       throw new BusinessError(
@@ -301,6 +319,7 @@ export async function decideLeave(ctx: Ctx, id: string, decision: "APPROVED" | "
       const beats = new Map<string, { id: string; clientId: string; contractId: string } | null>();
       for (const date of workingDatesBetween(req.startDate, req.endDate, policy.workingDaysPerWeek)) {
         await assertPeriodEditable(tx, ctx.orgId, date);
+        if (req.unpaid) continue; // unpaid leave writes no work-register days: the pay run leaves its working days out of the paid days
         const dep = await deploymentOn(tx, ctx.orgId, req.employeeId, date);
         const beatId = dep?.beatId ?? req.employee.currentBeatId;
         if (!beatId) {
@@ -390,6 +409,10 @@ export async function cancelLeave(ctx: Ctx, id: string) {
     throw new BusinessError("Leave that has already started cannot be cancelled — ask HR to adjust it.");
 
   return db.$transaction(async (tx) => {
+    if (req.status === "APPROVED" && req.unpaid) {
+      const policy = await getLeavePolicy(ctx.orgId, tx);
+      for (const date of workingDatesBetween(req.startDate, req.endDate, policy.workingDaysPerWeek)) await assertPeriodEditable(tx, ctx.orgId, date);
+    }
     if (req.status === "APPROVED") {
       const rows = await tx.workRegister.findMany({
         where: {
