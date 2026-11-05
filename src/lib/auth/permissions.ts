@@ -66,6 +66,7 @@ export const PERMISSIONS = [
   "appraisal.review", // rate the staff you're assigned to review
   "appraisal.approve", // sign off a submitted appraisal (never its reviewer)
   "employee.approve", // approve a change to an employee's bank, tax or pension details (never the requester)
+  "payrate.approve", // approve a proposed personal monthly gross for an employee, so it becomes a pay rate (never the person who proposed it, never for yourself)
   "period.close", // soft-close an accounting period, and still post into a soft-closed one
   "period.approve", // close a soft-closed period (never the person who soft-closed it) and lock a closed one
   "period.reopen", // reopen a soft-closed or closed period, with a reason
@@ -194,6 +195,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "self.security",
   ],
   PAYROLL_ADMIN: [
+    "payrate.approve",
     "healthcheck.view",
     "healthcheck.manage",
     "dashboard.view",

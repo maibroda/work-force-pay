@@ -43,8 +43,8 @@ describe("the sidebar", () => {
 describe("the tab strip inside Employees", () => {
   it("starts with all employees and has every page that moved out of the sidebar, Import Employees included, under the names the founder gave them", () => {
     expect(EMPLOYEE_SECTIONS[0]).toMatchObject({ href: "/employees", label: "All employees" });
-    // the pages that moved out of the sidebar, plus the PFA list added later (2026-11-04: where the administrator or HR manager adds or removes a pension fund administrator)
-    expect(EMPLOYEE_SECTIONS.map((s) => s.href).sort()).toEqual([...MOVED, "/employees", "/employees/pfas"].sort());
+    // the pages that moved out of the sidebar, plus two added later: the PFA list (where the administrator or HR manager adds or removes a pension fund administrator) and the Pay rate approvals queue (a personal gross is proposed by HR and approved by a payroll manager)
+    expect(EMPLOYEE_SECTIONS.map((s) => s.href).sort()).toEqual([...MOVED, "/employees", "/employees/pay-rates", "/employees/pfas"].sort());
     const label = (href: string) => EMPLOYEE_SECTIONS.find((s) => s.href === href)!.label;
     expect(label("/employees/import")).toBe("Import employees");
     expect(label("/employees/bank")).toBe("Bank information");
