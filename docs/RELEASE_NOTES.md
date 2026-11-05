@@ -2,6 +2,13 @@
 
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
+## Not yet merged (branch `pay-rate-entry`, stacked on `pay-rate-approval`, no migration)
+
+- **The monthly gross can now be entered when adding an employee and in the bulk import (the founder's decision of 2026-11-05).** The New employee form has an optional "Monthly gross" and "Salary structure". The import template has two optional columns, **Monthly Gross** and **Salary Structure**. In both cases it is a **proposal**, not a pay rate: it starts on the employment date and counts only when a payroll manager approves it (Employees > Pay rate approvals).
+- **Incomplete records still get captured.** In the import, a gross that cannot be read (an annual figure such as "3000000 per annum", more than two decimals, a word, zero) or a salary structure the company does not have does not stop the person being imported: they are saved **without** a pay rate and the row carries a warning saying what to fix. (A structure that does not exist means no proposal at all, because the gross would be split by the wrong structure.) Excel's display is understood: ₦250,000, NGN 250,000.00, thousands commas. On the New employee form, a refused gross or structure saves nothing at all, so there is no half-added employee.
+- **The amount is the monthly gross** in naira, at most two decimals, held as exact text. No migration and no change to the payroll calculation; this only creates proposals through the code added in the pay-rate approval pull request.
+- Tests: `tests/unit/employee-import-gross.test.ts`, `tests/integration/pay-rate-entry.test.ts`, written first.
+
 ## Not yet merged (branch `pay-rate-approval`, one migration: 20261122090000_pay_rate_proposals)
 
 - **A personal monthly gross is now proposed by HR and approved by a payroll manager (the founder's decision of 2026-11-05, for staff paid a gross entered by hand instead of from a client contract rate).** On the employee's Salary tab the form now says "Propose a personal monthly gross". A proposal is **not** a pay rate: nothing changes in any payroll until a payroll manager (the new permission `payrate.approve`: the payroll role, the company administrator, the platform administrator) approves it. **Nobody approves their own proposal or their own pay**, and the approver's own name is recorded (the old form let anyone type any "approved by" name). A new page, **Employees > Pay rate approvals**, lists what is waiting.

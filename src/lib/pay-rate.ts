@@ -21,3 +21,17 @@ export function isIsoDate(text: unknown): text is string {
   const t = new Date(`${text}T00:00:00Z`);
   return !Number.isNaN(t.getTime()) && t.toISOString().slice(0, 10) === text;
 }
+
+/**
+ * What was typed in a spreadsheet cell as a monthly gross: Excel shows ₦250,000 or NGN 250,000.00, so a naira sign, NGN or N, spaces and thousands commas are removed, then the strict rule
+ * above applies. A comma that is not a thousands separator (a decimal comma, "1,5") is refused rather than guessed at, and so is an annual figure ("3000000 per annum").
+ */
+export function parseTypedAmount(value: unknown): string | null {
+  if (typeof value !== "string") return parseMonthlyGross(value);
+  let t = value.trim().replace(/^(₦|ngn|n)\s*/i, "").replace(/\s+/g, "");
+  if (t.includes(",")) {
+    if (!/^\d{1,3}(,\d{3})+(\.\d{1,2})?$/.test(t)) return null;
+    t = t.replace(/,/g, "");
+  }
+  return parseMonthlyGross(t);
+}
