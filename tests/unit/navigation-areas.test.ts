@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { can, type Permission, type Role } from "@/lib/auth/permissions";
 import { pageRouteFor } from "@/lib/entitlements/guard";
-import { AREAS, NAV, PAYROLL_AREA, REPORTS_AREA, areaEntry, groupSections, searchPages, sectionFor, visibleSections } from "@/lib/nav";
+import { AREAS, HR_AREA, NAV, PAYROLL_AREA, REPORTS_AREA, areaEntry, groupSections, searchPages, sectionFor, visibleSections } from "@/lib/nav";
 
 /**
  * The founder's review (2026-11-04): about 170 menu entries over 239 pages is hard to work in; merge the pages that overlap, make the menu easy to find your way around
@@ -92,7 +92,8 @@ describe("the Payroll area is one sidebar entry with its pages inside", () => {
 
   it("keeps Settlements in one place (HR Lifecycle) and the three step-pages (Validation, Approval, Lock) as redirects to the runs page, not as three entries", () => {
     expect(hrefs).not.toContain("/payroll/settlements");
-    expect(NAV.find((g) => g.title === "HR Lifecycle")!.items.map((i) => i.href)).toContain("/payroll/settlements");
+    // the HR Lifecycle group became the HR area on 2026-11-05: Settlements is a tab there
+    expect(HR_AREA.sections.map((i) => i.href)).toContain("/payroll/settlements");
     for (const r of REDIRECTS) {
       expect(hrefs).not.toContain(r);
       expect(fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", r, "page.tsx"), "utf8"), r).toMatch(/redirect\(/);
