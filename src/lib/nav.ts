@@ -25,60 +25,18 @@ export const NAV: NavGroup[] = [
   { title: "Dashboard", items: [{ href: "/", label: "Dashboard", perm: "dashboard.view" }] },
   {
     title: "Sales",
-    items: [
-      { href: "/sales/leads", label: "Leads", perm: "sales.view", salesOnly: true },
-      { href: "/sales/accounts", label: "Accounts", perm: "sales.view", salesOnly: true },
-      { href: "/sales/board", label: "Deals Board", perm: "sales.view", salesOnly: true },
-      { href: "/sales/opportunities", label: "Deals", perm: "sales.view", salesOnly: true },
-      { href: "/sales/tasks", label: "My Tasks", perm: "sales.view", salesOnly: true },
-      { href: "/sales/notifications", label: "Notifications", perm: "sales.view", salesOnly: true },
-      { href: "/sales/cases", label: "Cases", perm: "sales.view", salesOnly: true },
-      { href: "/sales/health", label: "Account Health", perm: "sales.view", salesOnly: true },
-      { href: "/sales/reports", label: "Reports", perm: "sales.view", salesOnly: true },
-      { href: "/sales/handovers", label: "Handovers", perm: "sales.view", salesOnly: true },
-      { href: "/sales/contacts", label: "Contacts", perm: "sales.view", salesOnly: true },
-      { href: "/sales/import", label: "Import and Export", perm: "sales.manage", salesOnly: true },
-      { href: "/sales/merge", label: "Merge Records", perm: "sales.view.all", salesOnly: true },
-      { href: "/sales/automation", label: "Automation", perm: "sales.configure" },
-      { href: "/sales/cases/settings", label: "Case Settings", perm: "sales.configure" },
-      { href: "/sales/teams", label: "Teams", perm: "sales.configure", salesOnly: true },
-      { href: "/sales/privacy", label: "Privacy", perm: "sales.privacy.manage" },
-      { href: "/sales/settings", label: "Sales Settings", perm: "sales.configure" },
-    ],
+    // One entry: the sales module and the bureau's own pipeline, as tabs (SALES_AREA below). The two stay two systems with their own pages and permissions
+    items: [{ href: "/sales/leads", label: "Sales", perm: "sales.view", area: "sales" }],
   },
   {
     title: "Your payroll",
-    items: [
-      { href: "/portal", label: "Your Payroll", perm: "portal.view", clientOnly: true },
-      { href: "/portal/inputs", label: "Monthly Inputs", perm: "portal.view", clientOnly: true },
-      { href: "/portal/queries", label: "Your Queries", perm: "portal.query", clientOnly: true },
-      { href: "/portal/employees", label: "Your Employees", perm: "portal.changes", clientOnly: true },
-    ],
-  },
-  {
-    title: "Sales",
-    items: [
-      { href: "/crm", label: "Sales Pipeline", perm: "crm.view", bureauOnly: true },
-      { href: "/crm/leads", label: "Leads", perm: "crm.view", bureauOnly: true },
-      { href: "/crm/outreach", label: "Outreach", perm: "crm.view", bureauOnly: true },
-      { href: "/crm/proposals", label: "Proposals", perm: "crm.view", bureauOnly: true },
-      { href: "/crm/blueprints", label: "Blueprints and quotes", perm: "blueprint.manage", bureauOnly: true },
-      { href: "/crm/pricing", label: "Pricing", perm: "crm.view", bureauOnly: true },
-      { href: "/health-checks", label: "Health Checks", perm: "healthcheck.view", bureauOnly: true },
-      { href: "/crm/partners", label: "Referral Partners", perm: "crm.view", bureauOnly: true },
-    ],
+    // One entry for the client portal's pages (PORTAL_AREA below)
+    items: [{ href: "/portal", label: "Your payroll", perm: "portal.view", area: "portal" }],
   },
   {
     title: "Bureau",
-    items: [
-      { href: "/bureau", label: "Clients", perm: "bureau.view", bureauOnly: true },
-      { href: "/bureau/deadlines", label: "Due This Week", perm: "bureau.view", bureauOnly: true },
-      { href: "/bureau/queries", label: "Open Queries", perm: "bureau.view", bureauOnly: true },
-      { href: "/service-desk", label: "Service Desk", perm: "query.respond", bureauOnly: true },
-      { href: "/settings/client-portal", label: "Client Portal Access", perm: "users.manage", bureauOnly: true },
-      { href: "/bureau/rules", label: "Statutory Rule Library", perm: "bureau.view", bureauOnly: true },
-      { href: "/bureau/readiness", label: "Launch Checklist", perm: "bureau.view", bureauOnly: true },
-    ],
+    // One entry: the bureau's clients, service desk and set-up as tabs (BUREAU_AREA below)
+    items: [{ href: "/bureau", label: "Bureau", perm: "bureau.view", area: "bureau" }],
   },
   {
     title: "Workforce / Personnel",
@@ -188,6 +146,10 @@ export interface AreaSection {
   /** The job it belongs to (the first row of tabs). */
   group: string;
   bureauOnly?: boolean;
+  /** Shown only while the organization has switched the sales module on (as the menu entry was). */
+  salesOnly?: boolean;
+  /** Shown only to a client's own people, the portal roles (as the menu entry was). */
+  clientOnly?: boolean;
   /** Other pages folded into this one: they show this tab as the one you are on (for example every salary component sits under Salary structures). */
   also?: string[];
 }
@@ -241,11 +203,15 @@ export interface Visibility {
   can: (perm: Permission) => boolean;
   allowed: (href: string) => boolean;
   bureau: boolean;
+  /** The sales module is switched on for the company. Left out: off. */
+  sales?: boolean;
+  /** The person is one of a client's own people (the portal roles). Left out: no. */
+  client?: boolean;
 }
 
 /** The pages of an area this person may open, in the area's order. */
 export function visibleSections(area: Area, v: Visibility): AreaSection[] {
-  return area.sections.filter((s) => v.can(s.perm) && v.allowed(s.href) && (!s.bureauOnly || v.bureau));
+  return area.sections.filter((s) => v.can(s.perm) && v.allowed(s.href) && (!s.bureauOnly || v.bureau) && (!s.salesOnly || Boolean(v.sales)) && (!s.clientOnly || Boolean(v.client)));
 }
 
 /** The sidebar entry for an area: its name, leading to the first page the person may open; null (no entry) if they may open none. */
@@ -488,7 +454,70 @@ export const OPERATIONS_AREA: Area = {
   ],
 };
 
-export const AREAS: Area[] = [PAYROLL_AREA, OPERATIONS_AREA, HR_AREA, CLIENTS_AREA, FINANCE_AREA, ACCOUNTING_AREA, REPORTS_AREA];
+/**
+ * Sales: the sales module's pages (18) and the bureau's own sales pipeline (8) are ONE menu entry (the founder, 2026-11-05), told apart by group and by name ("Bureau leads", "Bureau pipeline").
+ * Only the MENU is merged: they remain two systems with their own pages, data and permissions, and every page shows to exactly who saw it before (permission, the sales switch, or
+ * being in a bureau). Bureau (7 entries) and the client portal's Your payroll (4) are one entry each.
+ */
+export const SALES_AREA: Area = {
+  key: "sales",
+  title: "Sales",
+  sections: [
+    { group: "Leads & deals", href: "/sales/leads", label: "Leads", perm: "sales.view", salesOnly: true },
+    { group: "Leads & deals", href: "/sales/accounts", label: "Accounts", perm: "sales.view", salesOnly: true },
+    { group: "Leads & deals", href: "/sales/board", label: "Deals board", perm: "sales.view", salesOnly: true },
+    { group: "Leads & deals", href: "/sales/opportunities", label: "Deals", perm: "sales.view", salesOnly: true },
+    { group: "Leads & deals", href: "/sales/handovers", label: "Handovers", perm: "sales.view", salesOnly: true },
+    { group: "Contacts & cases", href: "/sales/contacts", label: "Contacts", perm: "sales.view", salesOnly: true },
+    { group: "Contacts & cases", href: "/sales/cases", label: "Cases", perm: "sales.view", salesOnly: true },
+    { group: "Contacts & cases", href: "/sales/health", label: "Account health", perm: "sales.view", salesOnly: true },
+    { group: "Activity", href: "/sales/tasks", label: "My tasks", perm: "sales.view", salesOnly: true },
+    { group: "Activity", href: "/sales/notifications", label: "Notifications", perm: "sales.view", salesOnly: true },
+    { group: "Activity", href: "/sales/reports", label: "Reports", perm: "sales.view", salesOnly: true },
+    { group: "Data tools", href: "/sales/import", label: "Import and export", perm: "sales.manage", salesOnly: true },
+    { group: "Data tools", href: "/sales/merge", label: "Merge records", perm: "sales.view.all", salesOnly: true },
+    { group: "Sales setup", href: "/sales/teams", label: "Teams", perm: "sales.configure", salesOnly: true },
+    { group: "Sales setup", href: "/sales/automation", label: "Automation", perm: "sales.configure" },
+    { group: "Sales setup", href: "/sales/cases/settings", label: "Case settings", perm: "sales.configure" },
+    { group: "Sales setup", href: "/sales/privacy", label: "Privacy", perm: "sales.privacy.manage" },
+    { group: "Sales setup", href: "/sales/settings", label: "Sales settings", perm: "sales.configure" },
+    { group: "Bureau pipeline", href: "/crm", label: "Bureau pipeline", perm: "crm.view", bureauOnly: true },
+    { group: "Bureau pipeline", href: "/crm/leads", label: "Bureau leads", perm: "crm.view", bureauOnly: true },
+    { group: "Bureau pipeline", href: "/crm/outreach", label: "Outreach", perm: "crm.view", bureauOnly: true },
+    { group: "Bureau pipeline", href: "/crm/proposals", label: "Proposals", perm: "crm.view", bureauOnly: true },
+    { group: "Bureau pipeline", href: "/crm/blueprints", label: "Blueprints and quotes", perm: "blueprint.manage", bureauOnly: true },
+    { group: "Bureau pipeline", href: "/crm/pricing", label: "Pricing", perm: "crm.view", bureauOnly: true },
+    { group: "Bureau pipeline", href: "/crm/partners", label: "Referral partners", perm: "crm.view", bureauOnly: true },
+    { group: "Bureau pipeline", href: "/health-checks", label: "Health checks", perm: "healthcheck.view", bureauOnly: true },
+  ],
+};
+
+export const BUREAU_AREA: Area = {
+  key: "bureau",
+  title: "Bureau",
+  sections: [
+    { group: "Clients", href: "/bureau", label: "Clients", perm: "bureau.view", bureauOnly: true },
+    { group: "Clients", href: "/bureau/deadlines", label: "Due this week", perm: "bureau.view", bureauOnly: true },
+    { group: "Service", href: "/bureau/queries", label: "Open queries", perm: "bureau.view", bureauOnly: true },
+    { group: "Service", href: "/service-desk", label: "Service desk", perm: "query.respond", bureauOnly: true },
+    { group: "Bureau setup", href: "/settings/client-portal", label: "Client portal access", perm: "users.manage", bureauOnly: true },
+    { group: "Bureau setup", href: "/bureau/rules", label: "Statutory rule library", perm: "bureau.view", bureauOnly: true },
+    { group: "Bureau setup", href: "/bureau/readiness", label: "Launch checklist", perm: "bureau.view", bureauOnly: true },
+  ],
+};
+
+export const PORTAL_AREA: Area = {
+  key: "portal",
+  title: "Your payroll",
+  sections: [
+    { group: "Payroll", href: "/portal", label: "Your payroll", perm: "portal.view", clientOnly: true },
+    { group: "Payroll", href: "/portal/inputs", label: "Monthly inputs", perm: "portal.view", clientOnly: true },
+    { group: "Queries", href: "/portal/queries", label: "Your queries", perm: "portal.query", clientOnly: true },
+    { group: "Employees", href: "/portal/employees", label: "Your employees", perm: "portal.changes", clientOnly: true },
+  ],
+};
+
+export const AREAS: Area[] = [PAYROLL_AREA, OPERATIONS_AREA, HR_AREA, CLIENTS_AREA, FINANCE_AREA, ACCOUNTING_AREA, REPORTS_AREA, SALES_AREA, BUREAU_AREA, PORTAL_AREA];
 
 export interface EmployeeSection {
   href: string;

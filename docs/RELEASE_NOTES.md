@@ -2,7 +2,15 @@
 
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
-## Not yet merged (branch `navigation-operations`, no migration)
+## Not yet merged (branch `navigation-sales`, no migration)
+
+- **The two Sales menu groups are now ONE entry, Sales (the founder's decision of 2026-11-05).** The sales module's group (18 entries) and the bureau's own sales pipeline (8) are one entry with its pages as tabs: **Leads & deals** (leads, accounts, deals board, deals, handovers), **Contacts & cases**, **Activity** (my tasks, notifications, reports), **Data tools** (import and export, merge records), **Sales setup**, and **Bureau pipeline** (the bureau's pipeline, leads, outreach, proposals, blueprints and quotes, pricing, referral partners, health checks). Because "Leads" and "Pipeline" were on both, the bureau's are named **Bureau leads** and **Bureau pipeline**.
+- **Only the menu is merged.** The sales module and the bureau's pipeline remain two systems with their own pages, data and permissions (they never share a file or a permission). Every page shows to exactly who saw it before: by permission, by whether the company has switched the sales module on, and by being in a bureau.
+- **Bureau** (7 entries) and the client portal's **Your payroll** (4) are one entry each, with their pages as tabs; the portal entry is still only for a client's own people.
+- **Screen change only:** every page keeps its address, permission and module check; no migration; no payroll, statutory or permission change.
+- Tests: `tests/unit/navigation-sales.test.ts` (no page lost; each page visible to exactly the same roles as before for every combination of role, bureau, sales switch and client role; nothing twice; the two systems kept apart), written first and seen failing.
+
+## Merged in #148 on 2026-11-05 (branch `navigation-operations`, no migration)
 
 - **The 12-entry Operations menu group is now one entry, Operations, with its pages as tabs (the founder's review: so many menu entries make the app hard to work in).** Overview (activation dashboard); Deployment (deployments, staff movement); Attendance (work register, attendance, rosters, absence); Uniform & kit (stock and kit, kit packs, kit held by staff).
 - **Overlap cleared:** "Replacements" and "Transfers" were two menu entries for the same page as "Staff movement" (it filters by type). They are now filters on the Staff movement page ("All movements / Replacements / Transfers / Reliefs"), and their old addresses still work.
