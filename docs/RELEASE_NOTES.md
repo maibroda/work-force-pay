@@ -2,6 +2,14 @@
 
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
+## Not yet merged (branch `navigation-reports`, stacked on `navigation-payroll`, no migration)
+
+- **Every report is in one place: a Reports menu entry with search (the founder, 2026-11-05).** Reports were listed in the Payroll, Workforce, Operations, Finance and Settings groups as well as on the Reports page. They are now one sidebar entry, "Reports". It opens the Reports page, which has a search box that narrows the list as you type; inside it, each report is a tab, grouped HR, Workforce, Payroll, Operations, Finance and Audit. The Reports page's own list is the single source.
+- **Payroll no longer lists reports** (payslips, payroll register, bank payment schedule, PAYE, pension, NHF and the other schedules, overtime, arrears and deductions reports): they are under Reports > Payroll. Payroll keeps its working pages, with PAYE and Pension in a "Tax & pension" group. The personnel reports (documents, training, location history), the operations reports, the client/beat report and the audit report moved the same way.
+- **Nobody gains or loses access:** each report opens to exactly the permission its page already enforced (for example the audit report needs the audit permission, guarantors and bank-change history need the sensitive-records permission), and the tabs show a role only the reports it may open. "Billing & Receivables" is not a report page and stays in Finance.
+- **Screen change only:** no payroll, statutory, permission or entitlement change, and no migration.
+- Tests: `tests/unit/navigation-reports.test.ts` (no report lost or listed twice, the permission per report, who sees which), written first. I **changed two existing tests** because the design changed on purpose: the one that pinned a personnel report in the Employees sidebar group, and the Payroll ones that listed payslips and the bank schedule as Payroll tabs.
+
 ## Not yet merged (branch `navigation-payroll`, no migration)
 
 - **Payroll is now one menu entry (the founder's review of 2026-11-04: so many menu entries make the app hard to work in).** The Payroll group had 38 entries; it is one, "Payroll", and its pages are tabs inside it, grouped by the job: Run payroll, Pay inputs, Pay setup, Pay out, Tax, pension & schedules, Payroll reports. Every page keeps its address, its permission and its module check, so nobody gains or loses access to anything.
