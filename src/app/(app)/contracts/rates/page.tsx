@@ -45,8 +45,8 @@ export default async function RatesPage() {
                 name: "salaryStructureId",
                 label: "Salary structure",
                 type: "select",
-                required: true,
                 options: o.activeStructures,
+                help: "A client's structure can be used only on that client's contracts. Leave blank to use the client's role structure for the category.",
               },
               {
                 name: "agreedRate",
