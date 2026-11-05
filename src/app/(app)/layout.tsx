@@ -38,7 +38,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         if (i.area) {
           const found = areas.find((x) => x.area.key === i.area);
           const entry = found && areaEntry(found.area, vis);
-          return entry && found ? [{ href: entry.href, label: entry.label, section: i.section, owns: found.sections.flatMap((s) => [s.href, ...(s.also ?? [])]) }] : [];
+          return entry && found ? [{ href: entry.href, label: entry.label, section: i.section, owns: [...(found.area.home ? [found.area.home] : []), ...found.sections.flatMap((s) => [s.href, ...(s.also ?? [])])] }] : [];
         }
         const ok = can(ctx.role, i.perm) && (!i.bureauOnly || showBureau) && (!i.salesOnly || salesOn) && (!i.clientOnly || ctx.role === "CLIENT_APPROVER" || ctx.role === "CLIENT_HR") && pageAllowed(ctx.entitlements, i.href);
         return ok ? [{ href: i.href, label: i.label, section: i.section, owns: undefined as string[] | undefined }] : [];

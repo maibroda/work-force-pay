@@ -1,4 +1,5 @@
 import type { Permission } from "./auth/permissions";
+import { reportPermission } from "./report-access";
 
 export interface NavItem {
   href: string;
@@ -84,14 +85,6 @@ export const NAV: NavGroup[] = [
     items: [
       // everything about employees sits inside this one entry, as a row of tabs across the top of its pages (EMPLOYEE_SECTIONS below)
       { href: "/employees", label: "Employees", perm: "employee.view" },
-      {
-        href: "/reports/location-history",
-        label: "Employee Location History",
-        perm: "reports.view",
-        section: "Personnel reports",
-      },
-      { href: "/reports/employee-documents", label: "Employee Documents", perm: "reports.view" },
-      { href: "/reports/employee-training", label: "Training & Certifications", perm: "reports.view" },
     ],
   },
   {
@@ -135,14 +128,6 @@ export const NAV: NavGroup[] = [
       { href: "/inventory", label: "Stock & Kit", perm: "inventory.view", section: "Uniform & kit" },
       { href: "/inventory/packs", label: "Kit Packs", perm: "inventory.view" },
       { href: "/inventory/outstanding", label: "Kit Held by Staff", perm: "inventory.view" },
-      {
-        href: "/reports/work-register",
-        label: "Work Register Report",
-        perm: "reports.view",
-        section: "Operations reports",
-      },
-      { href: "/reports/staff-movement", label: "Staff Movement Report", perm: "reports.view" },
-      { href: "/reports/beat-reconciliation", label: "Beat Reconciliation", perm: "reports.view" },
     ],
   },
   {
@@ -215,12 +200,6 @@ export const NAV: NavGroup[] = [
       },
       { href: "/accounting/income-statement", label: "Income Statement", perm: "gl.view" },
       { href: "/accounting/balance-sheet", label: "Balance Sheet", perm: "gl.view" },
-      {
-        href: "/reports/client-beat",
-        label: "Client / Beat Report",
-        perm: "reports.view",
-        section: "Finance reports",
-      },
     ],
   },
   {
@@ -241,6 +220,11 @@ export const NAV: NavGroup[] = [
     ],
   },
   {
+    title: "Reports",
+    // One entry: the Reports page, with search; each report is a tab inside it (REPORTS_AREA below)
+    items: [{ href: "/reports", label: "Reports", perm: "reports.view", area: "reports" }],
+  },
+  {
     title: "Settings / Support",
     items: [
       { href: "/settings/organization", label: "Organization", perm: "dashboard.view" },
@@ -256,7 +240,6 @@ export const NAV: NavGroup[] = [
       { href: "/settings/training-requirements", label: "Training Requirements", perm: "hr.configure" },
       { href: "/settings/appraisal-criteria", label: "Appraisal Criteria", perm: "appraisal.manage" },
       { href: "/settings/numbering", label: "Numbering Rules", perm: "employee.view" },
-      { href: "/reports/audit", label: "Audit Logs", perm: "audit.view" },
       { href: "/settings/audit-integrity", label: "Audit Integrity", perm: "audit.view" },
       { href: "/settings/sensitive-access", label: "Who Looked at Sensitive Details", perm: "audit.view" },
     ],
@@ -301,6 +284,8 @@ export interface AreaSection {
 export interface Area {
   key: string;
   title: string;
+  /** The page the sidebar entry opens (a landing page with search). Without one it opens the first page the person may open. */
+  home?: string;
   sections: AreaSection[];
 }
 
@@ -319,8 +304,6 @@ export const PAYROLL_AREA: Area = {
     { group: "Run payroll", href: "/payroll/client-inputs", label: "Client inputs", perm: "payroll.view", bureauOnly: true },
     { group: "Run payroll", href: "/payroll/supplementary", label: "Supplementary payroll", perm: "payroll.view" },
     { group: "Run payroll", href: "/payroll/quick-payslip", label: "Quick payslip", perm: "payroll.view" },
-    { group: "Run payroll", href: "/reports/payslips", label: "Payslips", perm: "reports.view" },
-    { group: "Run payroll", href: "/reports/payroll-register", label: "Payroll register", perm: "reports.view" },
     { group: "Pay inputs", href: "/payroll/earnings", label: "Earnings", perm: "payroll.view" },
     { group: "Pay inputs", href: "/payroll/deductions", label: "Deductions", perm: "payroll.view" },
     { group: "Pay inputs", href: "/payroll/loans", label: "Staff loans & advances", perm: "payroll.view" },
@@ -334,31 +317,14 @@ export const PAYROLL_AREA: Area = {
     { group: "Pay setup", href: "/settings/recurring-deductions", label: "Recurring deductions", perm: "payroll.view" },
     { group: "Pay out", href: "/payments/batches", label: "Payment batches", perm: "payroll.view" },
     { group: "Pay out", href: "/payments/transactions", label: "Payment transactions", perm: "payroll.view" },
-    { group: "Pay out", href: "/reports/bank", label: "Bank payment schedule", perm: "reports.view" },
     { group: "Pay out", href: "/payments/reconciliation", label: "Salary payment reconciliation", perm: "payroll.view" },
     { group: "Pay out", href: "/payments/paying-banks", label: "Paying banks", perm: "payment.manage" },
     { group: "Pay out", href: "/payments/bank-codes", label: "Bank list & codes", perm: "payment.manage" },
     { group: "Pay out", href: "/payments/remittance", label: "Statutory remittance", perm: "payroll.view" },
-    { group: "Tax, pension & schedules", href: "/payroll/paye", label: "PAYE", perm: "payroll.view" },
-    { group: "Tax, pension & schedules", href: "/reports/paye", label: "PAYE schedule", perm: "reports.view" },
-    { group: "Tax, pension & schedules", href: "/payroll/pension", label: "Pension", perm: "payroll.view" },
-    { group: "Tax, pension & schedules", href: "/reports/pension", label: "Pension schedule", perm: "reports.view" },
-    { group: "Tax, pension & schedules", href: "/reports/employer-contributions", label: "Employer contributions", perm: "reports.view" },
-    { group: "Tax, pension & schedules", href: "/reports/itf", label: "ITF schedule", perm: "reports.view" },
-    { group: "Tax, pension & schedules", href: "/reports/nsitf", label: "NSITF schedule", perm: "reports.view" },
-    { group: "Tax, pension & schedules", href: "/reports/nhf-medical", label: "NHF / medical schedule", perm: "reports.view" },
-    { group: "Tax, pension & schedules", href: "/reports/insurance", label: "Insurance schedule", perm: "reports.view" },
-    { group: "Tax, pension & schedules", href: "/reports/uniform-kits", label: "Uniform & kits schedule", perm: "reports.view" },
-    { group: "Tax, pension & schedules", href: "/reports/recruitment-training", label: "Recruitment, training & vetting schedule", perm: "reports.view" },
-    { group: "Tax, pension & schedules", href: "/reports/leave-reliever", label: "Annual leave reliever schedule", perm: "reports.view" },
-    { group: "Tax, pension & schedules", href: "/reports/outsourcing-leave-allowance", label: "Outsourcing leave allowance schedule", perm: "reports.view" },
-    { group: "Payroll reports", href: "/reports/overtime", label: "Overtime report", perm: "reports.view" },
-    { group: "Payroll reports", href: "/reports/arrears", label: "Arrears report", perm: "reports.view" },
-    { group: "Payroll reports", href: "/reports/deductions", label: "Deductions report", perm: "reports.view" },
+    { group: "Tax & pension", href: "/payroll/paye", label: "PAYE", perm: "payroll.view" },
+    { group: "Tax & pension", href: "/payroll/pension", label: "Pension", perm: "payroll.view" },
   ],
 };
-
-export const AREAS: Area[] = [PAYROLL_AREA];
 
 /** What the person may see: their permissions, the company's modules, and whether they are in a bureau. */
 export interface Visibility {
@@ -375,7 +341,7 @@ export function visibleSections(area: Area, v: Visibility): AreaSection[] {
 /** The sidebar entry for an area: its name, leading to the first page the person may open; null (no entry) if they may open none. */
 export function areaEntry(area: Area, v: Visibility): { href: string; label: string } | null {
   const first = visibleSections(area, v)[0];
-  return first ? { href: first.href, label: area.title } : null;
+  return first ? { href: area.home ?? first.href, label: area.title } : null;
 }
 
 /** The visible pages grouped by job, in the order each job first appears. */
@@ -477,6 +443,26 @@ export const REPORT_LINKS: Array<{ href: string; label: string; group: string }>
   { href: "/finance/invoices", label: "Billing & Receivables", group: "Finance / Accounting" },
   { href: "/reports/audit", label: "Audit Report", group: "Settings / Support" },
 ];
+
+const REPORT_GROUPS: Record<string, string> = { "HR Lifecycle": "HR", "Workforce / Personnel": "Workforce", Payroll: "Payroll", Operations: "Operations", "Finance / Accounting": "Finance", "Settings / Support": "Audit" };
+
+/**
+ * Reports: every report in ONE place (the founder, 2026-11-05), instead of in the Payroll, Workforce, Operations, Finance and Settings groups as well as on the Reports page. The Reports
+ * page's own list (REPORT_LINKS) is the one source. Each report opens to exactly the permission its page enforces. The sidebar entry opens the Reports page, which has a search.
+ */
+export const REPORTS_AREA: Area = {
+  key: "reports",
+  title: "Reports",
+  home: "/reports",
+  sections: REPORT_LINKS.filter((r) => r.href.startsWith("/reports/")).map((r) => ({
+    href: r.href,
+    label: r.label,
+    perm: reportPermission(r.href.replace("/reports/", "")),
+    group: REPORT_GROUPS[r.group] ?? r.group,
+  })),
+};
+
+export const AREAS: Area[] = [PAYROLL_AREA, REPORTS_AREA];
 
 export interface EmployeeSection {
   href: string;

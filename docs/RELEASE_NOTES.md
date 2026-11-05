@@ -2,7 +2,15 @@
 
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
-## Not yet merged (branch `pay-rate-approval`, one migration: 20261122090000_pay_rate_proposals)
+## Not yet merged (branch `navigation-reports`, no migration)
+
+- **Every report is in one place: a Reports menu entry with search (the founder, 2026-11-05).** Reports were listed in the Payroll, Workforce, Operations, Finance and Settings groups as well as on the Reports page. They are now one sidebar entry, "Reports". It opens the Reports page, which has a search box that narrows the list as you type; inside it, each report is a tab, grouped HR, Workforce, Payroll, Operations, Finance and Audit. The Reports page's own list is the single source.
+- **Payroll no longer lists reports** (payslips, payroll register, bank payment schedule, PAYE, pension, NHF and the other schedules, overtime, arrears and deductions reports): they are under Reports > Payroll. Payroll keeps its working pages, with PAYE and Pension in a "Tax & pension" group. The personnel reports (documents, training, location history), the operations reports, the client/beat report and the audit report moved the same way.
+- **Nobody gains or loses access:** each report opens to exactly the permission its page already enforced (for example the audit report needs the audit permission, guarantors and bank-change history need the sensitive-records permission), and the tabs show a role only the reports it may open. "Billing & Receivables" is not a report page and stays in Finance.
+- **Screen change only:** no payroll, statutory, permission or entitlement change, and no migration.
+- Tests: `tests/unit/navigation-reports.test.ts` (no report lost or listed twice, the permission per report, who sees which), written first. I **changed two existing tests** because the design changed on purpose: the one that pinned a personnel report in the Employees sidebar group, and the Payroll ones that listed payslips and the bank schedule as Payroll tabs.
+
+## Merged in #142 on 2026-11-05 (branch `pay-rate-approval`, one migration: 20261122090000_pay_rate_proposals)
 
 - **A personal monthly gross is now proposed by HR and approved by a payroll manager (the founder's decision of 2026-11-05, for staff paid a gross entered by hand instead of from a client contract rate).** On the employee's Salary tab the form now says "Propose a personal monthly gross". A proposal is **not** a pay rate: nothing changes in any payroll until a payroll manager (the new permission `payrate.approve`: the payroll role, the company administrator, the platform administrator) approves it. **Nobody approves their own proposal or their own pay**, and the approver's own name is recorded (the old form let anyone type any "approved by" name). A new page, **Employees > Pay rate approvals**, lists what is waiting.
 - **The amount is the monthly gross** in naira with at most two decimals, held as exact text (no floats). A personal gross still takes precedence over a contract rate (now pinned by a test).
@@ -13,7 +21,7 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 ## Merged in #141 on 2026-11-04 (branch `navigation-payroll`, no migration)
 
-## Not yet merged (branch `pfa-register`, one migration: 20261121090000_pfa_register)
+## Merged in #140 on 2026-11-05 (branch `pfa-register`, one migration: 20261121090000_pfa_register)
 
 - **Where to add or remove a pension fund administrator (the founder's review of 2026-11-04, point 3).** A new page, **Employees → Pension fund administrators**, is each company's own list of PFAs. **The company administrator and the HR manager** can add one, correct its name, record its **PenCom number** (optional), switch it off or on, or remove it (only if nobody has it). Payroll and HR staff can read it. Before this the nine PFAs were a list in the program and nobody could change it.
 - **An employee's PFA is now chosen from that list** (when adding or editing an employee, hiring from recruitment, and in a pension change request, which is checked again when someone else approves it). It is stored as the list spells it, so one PFA can no longer appear as two lines on the pension schedule. A PFA that has been switched off stays with the people who already have it; renaming one carries the new name to the company's employees who have it (payrolls already calculated keep the name they were calculated with).

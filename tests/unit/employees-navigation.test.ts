@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { can, ROLE_PERMISSIONS, type Role } from "@/lib/auth/permissions";
-import { EMPLOYEE_SECTIONS, NAV, employeesSectionActive, showEmployeesSections } from "@/lib/nav";
+import { EMPLOYEE_SECTIONS, NAV, REPORTS_AREA, employeesSectionActive, showEmployeesSections } from "@/lib/nav";
 import { discoverPages, matchPage } from "../../scripts/routes";
 
 /**
@@ -35,8 +35,10 @@ describe("the sidebar", () => {
     for (const h of MOVED) expect(hrefs, h).not.toContain(h);
   });
 
-  it("still has the personnel reports and documents below Employees", () => {
-    expect(group.items.some((i) => i.href === "/reports/employee-documents")).toBe(true);
+  // the personnel reports (documents, training, location history) moved to the Reports area on 2026-11-05 (the founder: every report in one place)
+  it("no longer lists the personnel reports and documents below Employees: they are under Reports", () => {
+    expect(group.items.some((i) => i.href.startsWith("/reports/"))).toBe(false);
+    for (const h of ["/reports/employee-documents", "/reports/employee-training", "/reports/location-history"]) expect(REPORTS_AREA.sections.map((s) => s.href), h).toContain(h);
   });
 });
 
