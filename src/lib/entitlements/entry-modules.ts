@@ -134,6 +134,8 @@ export const PAGE_MODULES: Record<string, EntryModule> = {
   "/hr/onboarding": "hr",
   "/hr/policies": "hr",
   "/hr/policies/[id]": "hr",
+  "/hr/discipline": "hr",
+  "/hr/discipline/[id]": "hr",
   "/hr/relations": "hr",
   "/hr/relations/[id]": "hr",
   "/hr/requisitions": "hr",

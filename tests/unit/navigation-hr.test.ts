@@ -55,12 +55,18 @@ describe("HR Lifecycle and Leave Management become one entry, HR", () => {
   });
 
   it("opens each page to exactly the roles that could see it before: same permission per page", () => {
-    const was = new Map(OLD);
+    const was = new Map<string, Permission>(OLD);
     for (const s of HR_AREA.sections) {
       // Job descriptions & KPIs was added on 2026-11-06 (they feed the appraisal): it opens to exactly the roles that may open Appraisals
       if (s.href === "/hr/job-descriptions") {
         expect(s.perm).toBe("appraisal.view");
         for (const r of roles) expect(can(r, s.perm), r).toBe(can(r, was.get("/hr/appraisals")!));
+        continue;
+      }
+      // Disciplinary was split from Employee relations on 2026-11-05 (the founder's decision): the new page opens to the new disciplinary permission, which only ever narrows access
+      if (s.href === "/hr/discipline") {
+        expect(s.perm).toBe("discipline.view");
+        for (const r of roles) if (can(r, s.perm)) expect(can(r, "hr.view"), r).toBe(true);
         continue;
       }
       expect(s.perm, s.href).toBe(was.get(s.href));
@@ -80,7 +86,7 @@ describe("HR Lifecycle and Leave Management become one entry, HR", () => {
     for (const s of HR_AREA.sections) expect(pageRouteFor(s.href), s.href).not.toBeNull();
     // the groups follow the HR functions in the review the founder asked me to consider (2026-11-05): recruitment, employee administration, performance management, employee relations,
     // learning and development; only for pages that exist (the rest is in docs/plans/hr-module-gap-analysis.md)
-    expect(groupSections(HR_AREA.sections).map((g) => g.group)).toEqual(["Overview", "Recruitment", "Employee administration", "Performance management", "Employee relations", "Learning & development", "Leave", "Privacy & records", "HR setup"]);
+    expect(groupSections(HR_AREA.sections).map((g) => g.group)).toEqual(["Overview", "Recruitment", "Employee administration", "Performance management", "Employee relations", "Disciplinary", "Learning & development", "Leave", "Privacy & records", "HR setup"]);
   });
 
   it("puts leave in the same place as the rest of HR, with its policy beside the balances", () => {
@@ -92,6 +98,7 @@ describe("HR Lifecycle and Leave Management become one entry, HR", () => {
     expect(HR_AREA.sections.filter((s) => s.group === "Performance management").map((s) => s.href)).toEqual(["/hr/appraisals", "/hr/job-descriptions", "/settings/appraisal-criteria"]);
     expect(HR_AREA.sections.filter((s) => s.group === "Learning & development").map((s) => s.href)).toEqual(["/hr/training", "/settings/training-requirements"]);
     expect(HR_AREA.sections.filter((s) => s.group === "Employee relations").map((s) => s.href)).toEqual(["/hr/relations"]);
+    expect(HR_AREA.sections.filter((s) => s.group === "Disciplinary").map((s) => s.href)).toEqual(["/hr/discipline"]);
   });
 });
 

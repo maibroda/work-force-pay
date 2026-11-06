@@ -389,6 +389,7 @@ export const HR_AREA: Area = {
     { group: "Performance management", href: "/hr/job-descriptions", label: "Job descriptions & KPIs", perm: "appraisal.view" },
     { group: "Performance management", href: "/settings/appraisal-criteria", label: "Appraisal criteria", perm: "appraisal.manage" },
     { group: "Employee relations", href: "/hr/relations", label: "Employee relations cases", perm: "hr.view" },
+    { group: "Disciplinary", href: "/hr/discipline", label: "Disciplinary cases & sanctions", perm: "discipline.view" },
     { group: "Learning & development", href: "/hr/training", label: "Training compliance", perm: "hr.view" },
     { group: "Learning & development", href: "/settings/training-requirements", label: "Training requirements", perm: "hr.configure" },
     { group: "Leave", href: "/leave", label: "Leave management", perm: "leave.view" },

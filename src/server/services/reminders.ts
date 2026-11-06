@@ -9,6 +9,7 @@
  * /api/cron/hr-digest; HR can also send one on demand.
  */
 import type { Ctx } from "@/lib/auth/context";
+import { can } from "@/lib/auth/permissions";
 import { addDays, fmtDate, iso } from "@/lib/dates";
 import { sendEmail } from "@/lib/email";
 import { logger } from "@/lib/logger";
@@ -55,7 +56,9 @@ function section(key: string, title: string, items: DigestItem[]): DigestSection
 }
 
 /** Everything that needs doing, as of `today`. Sections with nothing in them are left out. */
-export async function buildHrDigest(orgId: string, today = todayUtc()) {
+export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { discipline?: boolean } = {}) {
+  // misconduct deadlines and pending sanctions are disciplinary: left out for a reader without disciplinary access (the emailed digest goes to HR administrators, who have it)
+  const withDiscipline = opts.discipline ?? true;
   const policy = await getHrPolicy(orgId);
   const contractHorizon = addDays(today, policy.contractAlertDays);
   const probationHorizon = addDays(today, policy.probationAlertDays);
@@ -104,7 +107,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
       ...reqs.map((r) => ({ text: `Job requisition ${r.requisitionNumber} — ${r.title} (raised by ${r.requestedBy})`, path: `/hr/requisitions/${r.id}` })),
       ...offers.map((o) => ({ text: `Job offer ${o.offerNumber} — ${o.candidate.firstName} ${o.candidate.lastName}, ${o.jobTitle}`, path: `/hr/candidates/${o.candidateId}` })),
       ...exits.map((x) => ({ text: `Exit — ${name(x.employee)} (${x.exitType.replace(/_/g, " ").toLowerCase()}, last day ${fmtDate(x.lastWorkingDate)})`, path: `/hr/exits/${x.id}` })),
-      ...discipline.map((x) => ({ text: `Disciplinary record — ${name(x.employee)} (${x.type.replace(/_/g, " ").toLowerCase()})`, path: `/employees/${x.employeeId}?tab=conduct` })),
+      ...discipline.filter((x) => withDiscipline || x.type === "COMMENDATION").map((x) => ({ text: `Disciplinary record — ${name(x.employee)} (${x.type.replace(/_/g, " ").toLowerCase()})`, path: `/employees/${x.employeeId}?tab=conduct` })),
       ...settlements.map((s) => ({ text: `End-of-service settlement ${s.settlementNumber} — ${name(s.employee)}, net ${naira(s.netSettlement)}`, path: `/payroll/settlements/${s.id}` })),
       ...changes.map((c) => ({ text: `${c.kind.toLowerCase()} details change — ${name(c.employee)} (requested by ${c.requestedBy})`, path: "/employees/change-requests" })),
       ...appraisals.awaiting.map((a) => ({ text: `Appraisal — ${name(a.employee)} (${a.cycle.name}), reviewed by ${a.reviewerName ?? "—"}`, path: `/hr/appraisals/${a.id}` })),
@@ -167,7 +170,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc()) {
     section(
       "relations",
       "Employee-relations deadlines",
-      cases.map((c) => ({
+      cases.filter((c) => withDiscipline || c.type !== "MISCONDUCT").map((c) => ({
         text: `${c.caseNumber} — ${c.confidential ? "Confidential case" : c.summary}: ${c.dueDate! < today ? "past its target" : "target"} ${fmtDate(c.dueDate)}`,
         path: `/hr/relations/${c.id}`,
       })),
@@ -401,7 +404,7 @@ export async function sendHrDigestNow(ctx: Ctx) {
 export async function previewHrDigest(ctx: Ctx) {
   assertCan(ctx, "hr.view");
   const policy = await getHrPolicy(ctx.orgId);
-  const digest = await buildHrDigest(ctx.orgId);
+  const digest = await buildHrDigest(ctx.orgId, undefined, { discipline: can(ctx.role, "discipline.view") });
   const admins = await db.user.count({ where: { organizationId: ctx.orgId, role: "HR_ADMIN", active: true } });
   return { digest, lastSentAt: policy.lastDigestAt, enabled: policy.reminderEmailsEnabled, recipientCount: admins + policy.reminderExtraEmails.length };
 }

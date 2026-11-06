@@ -11,7 +11,7 @@ import * as retention from "@/server/services/retention";
 const act = actFor("hr-lifecycle.ts");
 
 type V = Record<string, unknown>;
-const HR = ["/hr", "/employees", "/me"];
+const HR = ["/hr", "/hr/discipline", "/employees", "/me"];
 const SETTLE = ["/hr", "/employees", "/payroll/settlements"];
 const EXIT_TYPES = ["RESIGNATION", "TERMINATION", "END_OF_CONTRACT", "RETIREMENT", "ABSCONDMENT", "DECEASED"];
 
@@ -292,7 +292,7 @@ export async function raiseCaseAction(v: V) {
     const c = await rel.raiseCase(ctx, v as never);
     return {
       message: `${c.caseNumber} raised.`,
-      redirectTo: ctx.role === "EMPLOYEE" || ctx.role === "SUPERVISOR" ? "/me/grievances" : `/hr/relations/${c.id}`,
+      redirectTo: ctx.role === "EMPLOYEE" || ctx.role === "SUPERVISOR" ? "/me/grievances" : `/hr/${c.type === "MISCONDUCT" ? "discipline" : "relations"}/${c.id}`,
     };
   }, [...HR, "/me/grievances"]);
 }
