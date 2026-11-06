@@ -12,22 +12,23 @@ import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { raiseCaseAction } from "@/app/actions/hr-lifecycle";
 
-const TYPES = ["GRIEVANCE", "MISCONDUCT", "HARASSMENT", "WHISTLEBLOWING", "COUNSELLING", "MEDIATION", "OTHER"];
+// misconduct is disciplinary: it has its own page (Disciplinary)
+const TYPES = ["GRIEVANCE", "HARASSMENT", "WHISTLEBLOWING", "COUNSELLING", "MEDIATION", "OTHER"];
 const STATUSES = ["OPEN", "INVESTIGATING", "HEARING", "RESOLVED", "CLOSED"];
 
 export default async function RelationsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const ctx = await requirePage("hr.view");
   const sp = await searchParams;
   const [rows, stats, o] = await Promise.all([
-    listCases(ctx, { status: sp.status, type: sp.type, q: sp.q, overdue: sp.overdue === "1" }),
-    caseStats(ctx),
+    listCases(ctx, { status: sp.status, type: sp.type, q: sp.q, overdue: sp.overdue === "1", scope: "relations" }),
+    caseStats(ctx, "relations"),
     options(ctx),
   ]);
   return (
     <>
       <PageHeader
         title="Employee relations"
-        description="Grievances, misconduct investigations, harassment and whistleblowing concerns, counselling and mediation — each a case with an append-only file. Confidential cases show only their existence to read-only viewers."
+        description="Grievances, harassment and whistleblowing concerns, counselling and mediation — each a case with an append-only file. Confidential cases show only their existence to read-only viewers."
       />
       <StatGrid cols={3}>
         <Stat label="Open cases" value={stats.open} />
