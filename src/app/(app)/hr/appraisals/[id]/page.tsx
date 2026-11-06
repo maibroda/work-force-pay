@@ -7,6 +7,7 @@ import { KIND_LABELS, RATING_LABELS, RATINGS, RECOMMENDATIONS, RECOMMENDATION_LA
 import { can } from "@/lib/auth/permissions";
 import { fmtDate } from "@/lib/dates";
 import { num } from "@/lib/money";
+import { KPI_DIRECTION_LABELS, KPI_UNIT_LABELS, type KpiDirection, type KpiUnit } from "@/lib/performance";
 import { fullName } from "@/lib/utils";
 import { KV, PageHeader, Section, Stat, StatGrid } from "@/components/page";
 import { ActionButton } from "@/components/action-button";
@@ -57,6 +58,10 @@ export default async function AppraisalPage({ params }: { params: Promise<{ id: 
         defaultValue: r.rating ?? undefined,
       },
       { name: `comment_${r.criterionId}`, label: low || high ? `Comment (required for ${[low ? `${low} or below` : "", high ? `${high} or above` : ""].filter(Boolean).join(" and ")})` : "Comment", defaultValue: r.comment ?? undefined },
+    ]),
+    ...a.kpis.flatMap((k): Field[] => [
+      { name: `kpi_actual_${k.kpiId}`, label: `KPI — ${k.kpiName}: the actual result (target ${String(k.target)}, ${KPI_DIRECTION_LABELS[k.direction as KpiDirection].toLowerCase()}, weight ${k.weight})`, defaultValue: k.actual != null ? String(k.actual) : undefined },
+      { name: `kpi_comment_${k.kpiId}`, label: "Comment on this KPI (optional)", defaultValue: k.comment ?? undefined },
     ]),
     { name: "strengths", label: "Strengths", type: "textarea", span: 2, defaultValue: a.strengths ?? undefined },
     { name: "improvements", label: "Areas to improve", type: "textarea", span: 2, defaultValue: a.improvements ?? undefined },
@@ -138,6 +143,54 @@ export default async function AppraisalPage({ params }: { params: Promise<{ id: 
           </TBody>
         </Table>
       </Section>
+
+      {a.kpis.length > 0 && (
+        <Section
+          title={`KPIs (${a.cycle.kpiSharePct}% of the overall score)`}
+          description="Measured results against the targets set in the job description when this cycle was launched."
+          flush
+        >
+          <Table>
+            <THead>
+              <TR>
+                <TH>KPI</TH>
+                <TH>Target</TH>
+                <TH>Weight</TH>
+                {showReviewer && <TH>Actual</TH>}
+                {showReviewer && <TH>Achievement</TH>}
+                {showReviewer && <TH>Score</TH>}
+              </TR>
+            </THead>
+            <TBody>
+              {a.kpis.map((k) => (
+                <TR key={k.id}>
+                  <TD className="max-w-xs whitespace-normal">
+                    {k.kpiName}
+                    <div className="text-xs text-muted-foreground">
+                      {KPI_UNIT_LABELS[k.unit as KpiUnit]} · {KPI_DIRECTION_LABELS[k.direction as KpiDirection].toLowerCase()}
+                    </div>
+                  </TD>
+                  <TD>{String(k.target)}</TD>
+                  <TD>{k.weight}</TD>
+                  {showReviewer && (
+                    <TD className="max-w-xs whitespace-normal">
+                      {k.actual != null ? String(k.actual) : "—"}
+                      {k.comment && <div className="text-xs text-muted-foreground">{k.comment}</div>}
+                    </TD>
+                  )}
+                  {showReviewer && <TD>{k.achievementBp != null ? `${(k.achievementBp / 100).toFixed(2)}%` : "—"}</TD>}
+                  {showReviewer && <TD>{k.score ?? "—"}</TD>}
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+          {a.kpiScore != null && a.criteriaScore != null && (
+            <p className="px-4 py-3 text-xs text-muted-foreground">
+              Overall score = criteria {num(a.criteriaScore).toFixed(2)} × {100 - a.cycle.kpiSharePct}% + KPIs {(a.kpiScore / 100).toFixed(2)} × {a.cycle.kpiSharePct}%.
+            </p>
+          )}
+        </Section>
+      )}
 
       {a.employeeSelfComment && (
         <Section title="Employee's comment">
