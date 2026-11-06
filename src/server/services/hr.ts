@@ -191,6 +191,8 @@ export const disciplinarySchema = z.object({
 export async function raiseDisciplinary(ctx: Ctx, raw: z.input<typeof disciplinarySchema>) {
   assertCan(ctx, "hr.manage");
   const v = disciplinarySchema.parse(raw);
+  // a sanction is discipline and needs the disciplinary permission too; praise (a commendation) needs only HR access
+  if (v.type !== "COMMENDATION") assertCan(ctx, "discipline.manage");
   await assertEmployee(ctx, v.employeeId);
   if (v.caseId) {
     const c = await db.relationsCase.findFirst({ where: { id: v.caseId, organizationId: ctx.orgId } });
@@ -217,10 +219,22 @@ export async function raiseDisciplinary(ctx: Ctx, raw: z.input<typeof disciplina
   return rec;
 }
 
+/** Sanctions (not commendations) for the Disciplinary page: those still waiting for sign-off by default. */
+export async function listSanctions(ctx: Ctx, f: { status?: "PENDING" | "APPROVED" | "REJECTED" } = {}) {
+  assertCan(ctx, "discipline.view");
+  return db.disciplinaryRecord.findMany({
+    where: { organizationId: ctx.orgId, type: { not: "COMMENDATION" }, ...(f.status ? { status: f.status } : {}) },
+    include: { employee: true },
+    orderBy: { createdAt: "asc" },
+    take: 200,
+  });
+}
+
 export async function approveDisciplinary(ctx: Ctx, id: string, remarks?: string) {
   assertCan(ctx, "hr.approve");
   const rec = await db.disciplinaryRecord.findFirst({ where: { id, organizationId: ctx.orgId } });
   if (!rec) throw new BusinessError("Disciplinary record not found.");
+  if (rec.type !== "COMMENDATION") assertCan(ctx, "discipline.manage");
   if (rec.status !== "PENDING") throw new BusinessError("Already decided.");
   const updated = await db.disciplinaryRecord.update({
     where: { id },
@@ -239,6 +253,7 @@ export async function rejectDisciplinary(ctx: Ctx, id: string, remarks: string) 
   assertCan(ctx, "hr.approve");
   const rec = await db.disciplinaryRecord.findFirst({ where: { id, organizationId: ctx.orgId } });
   if (!rec) throw new BusinessError("Disciplinary record not found.");
+  if (rec.type !== "COMMENDATION") assertCan(ctx, "discipline.manage");
   if (rec.status !== "PENDING") throw new BusinessError("Already decided.");
   const updated = await db.disciplinaryRecord.update({
     where: { id },

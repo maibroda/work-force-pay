@@ -84,6 +84,7 @@ export default async function EmployeePage({
   const hrView = can(ctx.role, "hr.view");
   const hrManage = can(ctx.role, "hr.manage");
   const hrApprove = can(ctx.role, "hr.approve");
+  const discManage = can(ctx.role, "discipline.manage"); // sanctions need this too; a commendation needs only HR access
   const today = new Date();
   const year = Number(sp.year ?? today.getUTCFullYear());
   const month = Number(sp.month ?? today.getUTCMonth() + 1);
@@ -810,7 +811,7 @@ export default async function EmployeePage({
                     </TD>
                     <TD className="text-xs">{r.approvedBy ?? "—"}</TD>
                     <TD>
-                      {hrApprove && r.status === "PENDING" && (
+                      {hrApprove && (discManage || r.type === "COMMENDATION") && r.status === "PENDING" && (
                         <div className="flex gap-1">
                           <ActionButton action={approveDisciplinaryAction.bind(null, r.id)} variant="success">
                             Approve

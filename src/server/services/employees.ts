@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import type { Ctx } from "@/lib/auth/context";
+import { can } from "@/lib/auth/permissions";
 import { d } from "@/lib/dates";
 import { normaliseState } from "@/lib/nigeria-states";
 import { fullName } from "@/lib/utils";
@@ -291,7 +292,7 @@ export async function listEmployees(
 
 /** Tenancy-safe single fetch: returns null for another organization's employee. */
 export async function getEmployee(ctx: Ctx, id: string) {
-  return db.employee.findFirst({
+  const e = await db.employee.findFirst({
     where: { id, organizationId: ctx.orgId },
     include: {
       category: true,
@@ -321,6 +322,10 @@ export async function getEmployee(ctx: Ctx, id: string) {
       employmentContracts: { orderBy: { startDate: "desc" } },
     },
   });
+  if (!e) return null;
+  // sanctions are disciplinary: only someone with disciplinary access sees them on the employee's file (praise is shown to all who may see HR records)
+  if (can(ctx.role, "discipline.view")) return e;
+  return { ...e, disciplinaryRecords: e.disciplinaryRecords.filter((r) => r.type === "COMMENDATION") };
 }
 
 export async function getEmployeeByNumber(ctx: Ctx, employeeNumber: string) {

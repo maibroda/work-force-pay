@@ -15,11 +15,13 @@ import { recruitmentSummary } from "./recruitment";
 export async function hrOverview(ctx: Ctx) {
   assertCan(ctx, "hr.view");
   const today = todayUtc();
+  // misconduct is disciplinary, not employee relations: counted on its own and shown only to those who may see it
+  const discipline = can(ctx.role, "discipline.view") ? await caseStats(ctx, "discipline") : null;
   const [recruitment, contracts, cases, onboarding, exitsPending, exitsActive, settlements, expiringDocs] =
     await Promise.all([
       recruitmentSummary(ctx),
       contractAlerts(ctx),
-      caseStats(ctx),
+      caseStats(ctx, "relations"),
       db.onboardingTask.findMany({
         where: { organizationId: ctx.orgId, status: "PENDING", mandatory: true },
         select: { employeeId: true, dueDate: true },
@@ -45,6 +47,7 @@ export async function hrOverview(ctx: Ctx) {
       withoutContract: contracts.noContract.length,
     },
     relations: cases,
+    discipline,
     onboarding: {
       employeesIncomplete: new Set(onboarding.map((t) => t.employeeId)).size,
       overdueTasks: onboarding.filter((t) => t.dueDate && t.dueDate < today).length,
@@ -144,6 +147,8 @@ export async function employeeTimeline(ctx: Ctx, employeeId: string): Promise<Ti
   const ev: TimelineEvent[] = [];
   const label = (s: string) => s.replace(/_/g, " ").toLowerCase();
   const seeCases = can(ctx.role, "hr.manage");
+  // sanctions and misconduct cases are disciplinary: they show only to someone with disciplinary access (praise shows to all)
+  const seeDiscipline = can(ctx.role, "discipline.view");
 
   ev.push({
     date: emp.employmentDate,
@@ -180,7 +185,7 @@ export async function employeeTimeline(ctx: Ctx, employeeId: string): Promise<Ti
     });
   for (const r of rates)
     ev.push({ date: r.effectiveFrom, kind: "Pay", title: `Pay rate set to ${Number(r.monthlyGross).toLocaleString("en-NG")} / month`, detail: r.reason, tone: "slate" });
-  for (const x of discipline)
+  for (const x of discipline.filter((r) => r.type === "COMMENDATION" || seeDiscipline))
     ev.push({
       date: x.incidentDate,
       kind: x.type === "COMMENDATION" ? "Commendation" : "Disciplinary",
@@ -189,7 +194,7 @@ export async function employeeTimeline(ctx: Ctx, employeeId: string): Promise<Ti
       tone: x.type === "COMMENDATION" ? "green" : "amber",
     });
   if (seeCases)
-    for (const c of cases)
+    for (const c of cases.filter((k) => k.type !== "MISCONDUCT" || seeDiscipline))
       ev.push({
         date: c.openedAt,
         kind: "Relations",

@@ -56,13 +56,23 @@ export default async function HrOverviewPage() {
         </StatGrid>
       </Section>
 
-      <Section title="Employee relations" description="Grievances, investigations and sanctions.">
+      <Section title="Employee relations" description="Grievances, harassment, whistleblowing, counselling and mediation.">
         <StatGrid cols={3}>
           <L href="/hr/relations" label="Open cases" value={o.relations.open} />
           <L href="/hr/relations?overdue=1" label="Past their resolution target" value={o.relations.overdue} tone="red" />
           <Stat label="Average time to resolve (12 months)" value={o.relations.avgResolutionDays === null ? "—" : `${o.relations.avgResolutionDays} days`} />
         </StatGrid>
       </Section>
+
+      {o.discipline && (
+        <Section title="Disciplinary" description="Misconduct cases and the sanctions that follow.">
+          <StatGrid cols={3}>
+            <L href="/hr/discipline" label="Open cases" value={o.discipline.open} />
+            <L href="/hr/discipline?overdue=1" label="Past their resolution target" value={o.discipline.overdue} tone="red" />
+            <Stat label="Average time to resolve (12 months)" value={o.discipline.avgResolutionDays === null ? "—" : `${o.discipline.avgResolutionDays} days`} />
+          </StatGrid>
+        </Section>
+      )}
 
       <Section title="Exits & end-of-service" description="Offboarding, clearance and what the leaver is owed.">
         <StatGrid cols={5}>
