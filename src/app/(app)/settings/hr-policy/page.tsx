@@ -139,6 +139,22 @@ export default async function HrPolicyPage() {
         />
       </Section>
 
+      <Section title="Performance improvement plans" description="The limits a plan runs under (proposed starting values: a lawyer should confirm what is reasonable for your contracts). The default length can never be longer than the longest length.">
+        <SmartForm
+          columns={3}
+          submitLabel="Save"
+          resetOnSuccess={false}
+          action={updateHrPolicyAction.bind(null, "pip")}
+          fields={[
+            { name: "pipDefaultDays", label: "Default length of a plan (days)", type: "number", min: 1, max: 365, defaultValue: p.pipDefaultDays },
+            { name: "pipMaxDays", label: "Longest plan allowed (days)", type: "number", min: 1, max: 365, defaultValue: p.pipMaxDays },
+            { name: "pipReviewIntervalDays", label: "A review falls due every (days)", type: "number", min: 1, max: 90, defaultValue: p.pipReviewIntervalDays },
+            { name: "pipMaxExtensions", label: "Extensions allowed (0 = none)", type: "number", min: 0, max: 5, defaultValue: p.pipMaxExtensions },
+            { name: "pipMaxExtensionDays", label: "Longest extension (days)", type: "number", min: 1, max: 365, defaultValue: p.pipMaxExtensionDays },
+          ]}
+        />
+      </Section>
+
       <Section title="Staff loans & advances" description="Affordability limits checked when a loan or advance is requested. Set a limit to 0 for no limit.">
         <SmartForm
           columns={3}
