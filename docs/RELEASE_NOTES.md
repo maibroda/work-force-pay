@@ -2,7 +2,14 @@
 
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
-## Not yet merged (branch `performance-kpis`, one migration: 20261125090000_performance_kpis)
+## Not yet merged (branch `employee-back-arrow`, no migration)
+
+- **A back arrow on every employee profile (the founder, 2026-11-07).** A left arrow at the top left of the profile, before the heading, returns to where the profile was opened from. It is in the profile's shared layout, so it is on **every tab and never repeated**, and it is shown only to someone who may open the directory.
+- **The directory comes back as it was left:** the same search, filters and page, and the same scroll position, remembered in the browser for the tab. Opened from another page (a disciplinary case, say), it goes back to that page and says "Back"; with nothing remembered (a bookmark, a new tab) it falls back to the directory. Moving between the profile's tabs does not change where it goes. A remembered address is used only if it is inside the app.
+- The profile page's own "Employees /" breadcrumb was removed, because the arrow says the same thing.
+- Tests (written first): `tests/unit/profile-nav.test.ts` (16), including a guard that the list of non-profile pages inside Employees cannot drift from the folders. Checked in a browser against the seeded test database: arrow once on the Documents, Salary, Conduct and Lifecycle tabs, return to the filtered directory (41 rows) with scroll position restored, the fallback, and return to a case file. Not tested: the arrow on a phone-width screen beyond the layout check, and on browsers with storage blocked (it then falls back to the directory).
+
+## Merged in #157 (one migration: 20261125090000_performance_kpis)
 
 - **Job descriptions and KPIs now feed the appraisal (the founder, 2026-11-06; plan: `docs/plans/performance-management-phase1.md`).** Each employee category can have a **job description** (title, purpose, responsibilities) with **KPIs**: a unit, a direction (higher or lower is better), an exact **target** and a **weight**. Screen: **HR > Performance management > Job descriptions & KPIs**.
 - **A second person makes it active.** HR drafts; someone else (`hr.approve`, never the drafter) makes it active. An active version is never edited: a change is a new draft that starts as a copy, and making it active retires the old version. A review already under way keeps the KPIs it started with.

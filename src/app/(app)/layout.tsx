@@ -11,6 +11,7 @@ import { db } from "@/lib/db";
 import { Sidebar } from "@/components/sidebar";
 import { AreaTabs } from "@/components/area-tabs";
 import { GoTo } from "@/components/go-to";
+import { NavTracker } from "@/components/nav-tracker";
 import { logoutAction } from "@/app/actions/auth";
 import { returnToBureauAction } from "@/app/actions/bureau";
 
@@ -60,6 +61,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="min-h-screen">
       <Suspense>
         <Sidebar groups={groups} org={org?.name ?? ""} />
+      </Suspense>
+      <Suspense>
+        <NavTracker />
       </Suspense>
       <div className="lg:pl-60">
         <header className="no-print flex items-center justify-end gap-3 border-b bg-card px-4 py-2 text-sm">
