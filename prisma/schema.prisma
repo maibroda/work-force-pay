@@ -760,6 +760,10 @@ model Organization {
   appraisalCriteria         AppraisalCriterion[]
   appraisalCycles           AppraisalCycle[]
   appraisals                Appraisal[]
+  improvementPlans          PerformanceImprovementPlan[]
+  pipObjectives             PipObjective[]
+  pipReviews                PipReview[]
+  pipAssessments            PipReviewAssessment[]
   regions                   Region[]
   branches                  Branch[]
   profitCentres             ProfitCentre[]
@@ -2024,6 +2028,7 @@ model Employee {
   policyAcknowledgements  PolicyAcknowledgement[]
   dataAccessRequests      DataAccessRequest[]
   appraisals              Appraisal[]
+  improvementPlans        PerformanceImprovementPlan[]
   erasures                EmployeeErasure[]
   journalLines            JournalLine[]
 
@@ -2322,6 +2327,13 @@ model HrPolicy {
   probationAlertDays     Int @default(30)
   offerValidityDays      Int @default(14)
   relationsCaseSlaDays   Int @default(21)
+
+  // Performance improvement plans (proposed defaults; the company sets its own)
+  pipDefaultDays        Int @default(60)
+  pipMaxDays            Int @default(90)
+  pipMaxExtensions      Int @default(1)
+  pipMaxExtensionDays   Int @default(30)
+  pipReviewIntervalDays Int @default(14)
 
   // End-of-service: shared
   /// Monthly pay ÷ this = one day's pay (30 = calendar-month convention; 26 = working days).
@@ -4931,6 +4943,7 @@ model Appraisal {
 
   ratings AppraisalRating[]
   kpis    AppraisalKpi[]
+  improvementPlans PerformanceImprovementPlan[]
 
   @@unique([cycleId, employeeId])
   @@index([organizationId, status])
@@ -7480,4 +7493,138 @@ model HolidayCalendarYear {
   confirmedAt       DateTime     @default(now())
 
   @@unique([organizationId, year])
+}
+
+// ─────────────────────────── PERFORMANCE IMPROVEMENT PLANS ───────────────────────────
+
+enum PipStatus {
+  DRAFT
+  AWAITING_APPROVAL
+  ACTIVE
+  OUTCOME_PROPOSED
+  CLOSED
+  WITHDRAWN
+}
+
+enum PipOutcome {
+  SUCCESSFUL
+  EXTENDED
+  UNSUCCESSFUL
+}
+
+enum PipObjectiveResult {
+  OPEN
+  MET
+  PARTLY_MET
+  NOT_MET
+}
+
+/// A structured plan to bring an employee's performance up to the standard (capability, not conduct: it is not a sanction and changes no pay or status).
+/// Drafted by HR, started by a second person, reviewed at milestones, and closed with an outcome that a second person approves. At most one open plan per employee (checked in the service).
+model PerformanceImprovementPlan {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  employeeId     String
+  employee       Employee     @relation(fields: [employeeId], references: [id])
+  /// The appraisal this plan was started from, if any (a plan is never started automatically by an appraisal).
+  appraisalId    String?
+  appraisal      Appraisal?   @relation(fields: [appraisalId], references: [id])
+  status         PipStatus    @default(DRAFT)
+  concerns       String
+  startDate      DateTime     @db.Date
+  endDate        DateTime     @db.Date
+  originalEndDate DateTime    @db.Date
+  extensionsUsed Int          @default(0)
+  ownerUserId    String
+  ownerName      String
+  draftedByUserId String
+  draftedBy      String
+  submittedAt    DateTime?
+  activatedAt    DateTime?
+  activatedByUserId String?
+  activatedBy    String?
+  activationNote String?
+  returnNote     String?
+  nextReviewDue  DateTime?    @db.Date
+  proposedOutcome PipOutcome?
+  proposedEndDate DateTime?   @db.Date
+  proposedNote   String?
+  proposedByUserId String?
+  proposedBy     String?
+  proposedAt     DateTime?
+  outcome        PipOutcome?
+  outcomeNote    String?
+  outcomeApprovedByUserId String?
+  outcomeApprovedBy String?
+  closedAt       DateTime?
+  withdrawnAt    DateTime?
+  withdrawnBy    String?
+  withdrawReason String?
+  acknowledgedAt DateTime?
+  employeeAgreed Boolean?
+  employeeResponse String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  objectives PipObjective[]
+  reviews    PipReview[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, employeeId])
+  @@index([ownerUserId])
+}
+
+/// One thing the employee is to put right: the gap, the measurable target, the support the company gives, and when.
+model PipObjective {
+  id             String                     @id @default(cuid())
+  organizationId String
+  organization   Organization               @relation(fields: [organizationId], references: [id])
+  planId         String
+  plan           PerformanceImprovementPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  sortOrder      Int                        @default(0)
+  gap            String
+  target         String
+  support        String?
+  dueDate        DateTime                   @db.Date
+  createdAt      DateTime                   @default(now())
+
+  assessments PipReviewAssessment[]
+
+  @@index([planId])
+}
+
+/// A review at a milestone. Append-only: once recorded it is never edited (the employee may add one comment of their own).
+model PipReview {
+  id                String                     @id @default(cuid())
+  organizationId    String
+  organization      Organization               @relation(fields: [organizationId], references: [id])
+  planId            String
+  plan              PerformanceImprovementPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  reviewedOn        DateTime                   @db.Date
+  summary           String
+  recordedByUserId  String
+  recordedBy        String
+  employeeComment   String?
+  employeeCommentAt DateTime?
+  createdAt         DateTime                   @default(now())
+
+  assessments PipReviewAssessment[]
+
+  @@index([planId, reviewedOn])
+}
+
+model PipReviewAssessment {
+  id             String             @id @default(cuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  reviewId       String
+  review         PipReview          @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  objectiveId    String
+  objective      PipObjective       @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  result         PipObjectiveResult
+  note           String?
+
+  @@unique([reviewId, objectiveId])
+  @@index([objectiveId])
 }

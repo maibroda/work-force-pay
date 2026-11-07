@@ -42,6 +42,7 @@ const OLD_MY: Record<string, Permission> = {
   "/me/documents": "self.view",
   "/me/my-data": "self.view",
   "/me/appraisals": "self.view",
+  "/me/improvement-plan": "self.view",
   "/me/grievances": "relations.raise",
   "/settings/security": "self.security",
 };

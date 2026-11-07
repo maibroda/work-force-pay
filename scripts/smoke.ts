@@ -115,6 +115,7 @@ function resolvers(orgId: string): Record<string, () => Promise<string | undefin
     "/hr/breaches/[id]": () => first(db.dataBreach.findFirst({ where, select: { id: true } })),
     "/hr/appraisals/[id]": () => first(db.appraisal.findFirst({ where, select: { id: true } })),
     "/hr/appraisals/cycle/[id]": () => first(db.appraisalCycle.findFirst({ where, select: { id: true } })),
+    "/hr/improvement-plans/[id]": () => first(db.performanceImprovementPlan.findFirst({ where, select: { id: true } })),
     "/hr/candidates/[id]": () => first(db.candidate.findFirst({ where, select: { id: true } })),
     "/hr/contracts/[id]": () => first(db.employmentContract.findFirst({ where, select: { id: true } })),
     "/hr/exits/[id]": () => first(db.exitRecord.findFirst({ where, select: { id: true } })),

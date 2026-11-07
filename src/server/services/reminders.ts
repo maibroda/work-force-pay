@@ -31,6 +31,7 @@ import { retentionAttention } from "./employee-retention";
 import { describeHours } from "@/lib/breaches";
 import { STATE_LABELS } from "@/lib/training-compliance";
 import { appraisalAttention } from "./appraisals";
+import { planAttention } from "./pip";
 
 const OPEN_CASE = ["OPEN", "INVESTIGATING", "HEARING"];
 const SHOWN = 10;
@@ -56,14 +57,16 @@ function section(key: string, title: string, items: DigestItem[]): DigestSection
 }
 
 /** Everything that needs doing, as of `today`. Sections with nothing in them are left out. */
-export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { discipline?: boolean } = {}) {
+export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { discipline?: boolean; pip?: boolean } = {}) {
   // misconduct deadlines and pending sanctions are disciplinary: left out for a reader without disciplinary access (the emailed digest goes to HR administrators, who have it)
   const withDiscipline = opts.discipline ?? true;
+  // performance improvement plans are personal and sensitive (pip.view): left out for a reader without that access
+  const withPip = opts.pip ?? true;
   const policy = await getHrPolicy(orgId);
   const contractHorizon = addDays(today, policy.contractAlertDays);
   const probationHorizon = addDays(today, policy.probationAlertDays);
   const caseHorizon = addDays(today, 3);
-  const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records, training, appraisals, changes, policies, dataRequests, breaches, retention] =
+  const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records, training, appraisals, changes, policies, dataRequests, breaches, retention, plans] =
     await Promise.all([
       db.organization.findUniqueOrThrow({ where: { id: orgId }, select: { name: true } }),
       db.jobRequisition.findMany({ where: { organizationId: orgId, status: "PENDING_APPROVAL" }, orderBy: { createdAt: "asc" } }),
@@ -97,6 +100,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
       requestsNeedingAttention(orgId, today),
       breachesNeedingAttention(orgId, new Date()),
       retentionAttention(orgId, today),
+      withPip ? planAttention(orgId, today) : null,
     ]);
 
   const sections: DigestSection[] = [];
@@ -110,6 +114,8 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
       ...discipline.filter((x) => withDiscipline || x.type === "COMMENDATION").map((x) => ({ text: `Disciplinary record — ${name(x.employee)} (${x.type.replace(/_/g, " ").toLowerCase()})`, path: `/employees/${x.employeeId}?tab=conduct` })),
       ...settlements.map((s) => ({ text: `End-of-service settlement ${s.settlementNumber} — ${name(s.employee)}, net ${naira(s.netSettlement)}`, path: `/payroll/settlements/${s.id}` })),
       ...changes.map((c) => ({ text: `${c.kind.toLowerCase()} details change — ${name(c.employee)} (requested by ${c.requestedBy})`, path: "/employees/change-requests" })),
+      ...(plans?.awaitingApproval ?? []).map((p) => ({ text: `Improvement plan to start — ${name(p.employee)} (drafted by ${p.draftedBy})`, path: `/hr/improvement-plans/${p.id}` })),
+      ...(plans?.outcomeAwaiting ?? []).map((p) => ({ text: `Improvement plan outcome — ${name(p.employee)} (proposed by ${p.proposedBy ?? "—"})`, path: `/hr/improvement-plans/${p.id}` })),
       ...appraisals.awaiting.map((a) => ({ text: `Appraisal — ${name(a.employee)} (${a.cycle.name}), reviewed by ${a.reviewerName ?? "—"}`, path: `/hr/appraisals/${a.id}` })),
       ...loans.map((l) => ({ text: `${l.type === "SALARY_ADVANCE" ? "Salary advance" : "Staff loan"} ${l.loanNumber} — ${name(l.employee)}, ${naira(l.principal)}`, path: `/payroll/loans/${l.id}` })),
     ]),
@@ -185,6 +191,14 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
         path: `/hr/appraisals/${a.id}`,
       })),
     ),
+  );
+  add(
+    section("improvement-plans", "Improvement plans needing attention", [
+      ...(plans?.reviewOverdue ?? []).map((p) => ({ text: `${name(p.employee)} — review overdue since ${fmtDate(p.nextReviewDue)} (owner ${p.ownerName})`, path: `/hr/improvement-plans/${p.id}` })),
+      ...(plans?.reviewDue ?? []).map((p) => ({ text: `${name(p.employee)} — review due today (owner ${p.ownerName})`, path: `/hr/improvement-plans/${p.id}` })),
+      ...(plans?.pastEnd ?? []).map((p) => ({ text: `${name(p.employee)} — plan ended ${fmtDate(p.endDate)}: propose an outcome`, path: `/hr/improvement-plans/${p.id}` })),
+      ...(plans?.leavers ?? []).map((p) => ({ text: `${name(p.employee)} — has left, but the plan is still open: withdraw it`, path: `/hr/improvement-plans/${p.id}` })),
+    ]),
   );
   const pastGrace = records.rows.filter((r) => r.employee.employmentDate <= addDays(today, -RECORDS_GRACE_DAYS));
   add(
@@ -404,7 +418,7 @@ export async function sendHrDigestNow(ctx: Ctx) {
 export async function previewHrDigest(ctx: Ctx) {
   assertCan(ctx, "hr.view");
   const policy = await getHrPolicy(ctx.orgId);
-  const digest = await buildHrDigest(ctx.orgId, undefined, { discipline: can(ctx.role, "discipline.view") });
+  const digest = await buildHrDigest(ctx.orgId, undefined, { discipline: can(ctx.role, "discipline.view"), pip: can(ctx.role, "pip.view") });
   const admins = await db.user.count({ where: { organizationId: ctx.orgId, role: "HR_ADMIN", active: true } });
   return { digest, lastSentAt: policy.lastDigestAt, enabled: policy.reminderEmailsEnabled, recipientCount: admins + policy.reminderExtraEmails.length };
 }
