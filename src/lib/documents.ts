@@ -203,3 +203,31 @@ export const STANDARD_STEP_LINKS: { ONBOARDING: Record<string, string>; EXIT_CLE
     "Return of company property / equipment": "ASSET_RETURN",
   },
 };
+
+// ───────────────────── Required documents: does the employee have it? ─────────────────────
+
+export type RequirementState = "PRESENT" | "IN_REVIEW" | "NOT_SUBMITTED" | "REJECTED" | "EXPIRED" | "MISSING";
+
+export const REQUIREMENT_STATE_LABELS: Record<RequirementState, string> = {
+  PRESENT: "On file and approved",
+  IN_REVIEW: "Awaiting approval",
+  NOT_SUBMITTED: "Uploaded, not submitted",
+  REJECTED: "Rejected: replace it",
+  EXPIRED: "Expired: renew it",
+  MISSING: "Missing",
+};
+
+/**
+ * Whether an employee has a required document, from their documents of that type (the founder, 2026-11-07: **only an approved one counts**). A document
+ * still in the workflow shows as awaiting approval, never as on file; an approved one past its expiry is Expired; archived records and the older
+ * reference-only records (no status) are not documents on file.
+ */
+export function requirementState(docs: Array<{ status: DocumentStatus | null; expiryDate: Date | null }>, today: Date): RequirementState {
+  const live = docs.filter((d): d is { status: DocumentStatus; expiryDate: Date | null } => d.status !== null && d.status !== "ARCHIVED");
+  if (live.some((d) => effectiveStatus(d.status, d.expiryDate, today) === "APPROVED")) return "PRESENT";
+  if (live.some((d) => d.status === "SUBMITTED" || d.status === "UNDER_REVIEW")) return "IN_REVIEW";
+  if (live.some((d) => d.status === "PENDING")) return "NOT_SUBMITTED";
+  if (live.some((d) => d.status === "REJECTED")) return "REJECTED";
+  if (live.some((d) => d.status === "APPROVED")) return "EXPIRED"; // every approved one is past its expiry
+  return "MISSING";
+}

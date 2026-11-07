@@ -27,6 +27,7 @@ const OLD: Array<[string, Permission]> = [
   ["/hr/retention", "hr.view"],
   ["/hr/appraisals", "appraisal.view"],
   ["/hr/letters", "hr.view"],
+  ["/hr/documents", "document.view"],
   ["/payroll/settlements", "payroll.view"],
   ["/leave", "leave.view"],
   ["/leave/balances", "leave.view"],
