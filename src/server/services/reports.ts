@@ -2,6 +2,8 @@ import type { Ctx } from "@/lib/auth/context";
 import { iso } from "@/lib/dates";
 import { num, round2 } from "@/lib/money";
 import { normaliseState, STATE_NOT_RECORDED } from "@/lib/nigeria-states";
+import { can } from "@/lib/auth/permissions";
+import { LEGACY_TYPES } from "@/lib/documents";
 import { db } from "./_base";
 import { payrollRuleFor } from "./statutory";
 
@@ -469,17 +471,22 @@ export async function employerCostSchedule(ctx: Ctx, runId: string, field: Emplo
 
 // ─────────────────────────── HR compliance (documents / training) ───────────────────────────
 
+/** Not archived, and careful of the older records that have no status at all (a plain "not archived" test would drop them). */
+const NOT_ARCHIVED_DOCUMENT = { OR: [{ status: null }, { status: { not: "ARCHIVED" as const } }] };
+
 export async function documentsReport(ctx: Ctx) {
   const rows = await db.employeeDocument.findMany({
-    where: { organizationId: ctx.orgId },
-    include: { employee: true },
+    where: { organizationId: ctx.orgId, ...NOT_ARCHIVED_DOCUMENT },
+    include: { employee: true, type: true },
     orderBy: [{ expiryDate: "asc" }, { employee: { employeeNumber: "asc" } }],
   });
   const today = new Date();
-  return rows.map((r) => ({
+  // identification and medical documents are listed only for someone who may open them
+  const visible = rows.filter((r) => (r.type ? !r.type.sensitive : !LEGACY_TYPES[r.documentType]?.sensitive) || can(ctx.role, "document.sensitive"));
+  return visible.map((r) => ({
     employeeNumber: r.employee.employeeNumber,
     employeeName: `${r.employee.firstName} ${r.employee.lastName}`,
-    documentType: r.documentType.replace(/_/g, " "),
+    documentType: r.type?.name ?? r.documentType.replace(/_/g, " "),
     documentNumber: r.documentNumber ?? "",
     issueDate: r.issueDate ? iso(r.issueDate) : "",
     expiryDate: r.expiryDate ? iso(r.expiryDate) : "",

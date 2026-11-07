@@ -14,6 +14,7 @@ import { d, fmtDate, fmtShort, iso, monthEnd, monthStart, MONTHS } from "@/lib/d
 import { naira, num } from "@/lib/money";
 import { fullName } from "@/lib/utils";
 import { FilterBar, FilterField, FormPanel, KV, PageHeader, Section, Empty } from "@/components/page";
+import { EmployeeDocuments } from "@/components/employee-documents";
 import { Tabs } from "@/components/tabs";
 import { SmartForm } from "@/components/smart-form";
 import { StatusBadge, Badge } from "@/components/ui/badge";
@@ -602,8 +603,9 @@ export default async function EmployeePage({
 
       {tab === "documents" && hrView && (
         <>
+          <EmployeeDocuments ctx={ctx} employeeId={e.id} />
           <Section
-            title="Documents"
+            title="Reference-only records (before document management)"
             description="ID, licenses, contracts and certificates on file. Metadata only — the reference is a filename, physical file location or scan reference."
             flush
           >

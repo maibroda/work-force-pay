@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import type { Ctx } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
+import { LEGACY_TYPES } from "@/lib/documents";
 import { d } from "@/lib/dates";
 import { normaliseState } from "@/lib/nigeria-states";
 import { fullName } from "@/lib/utils";
@@ -323,9 +324,11 @@ export async function getEmployee(ctx: Ctx, id: string) {
     },
   });
   if (!e) return null;
+  // the electronic documents are in the document register; what is left here is the older reference-only records, and identification and medical kinds are for those who may see them
+  const documents = e.documents.filter((x) => !x.typeId && (can(ctx.role, "document.sensitive") || !LEGACY_TYPES[x.documentType]?.sensitive));
   // sanctions are disciplinary: only someone with disciplinary access sees them on the employee's file (praise is shown to all who may see HR records)
-  if (can(ctx.role, "discipline.view")) return e;
-  return { ...e, disciplinaryRecords: e.disciplinaryRecords.filter((r) => r.type === "COMMENDATION") };
+  if (can(ctx.role, "discipline.view")) return { ...e, documents };
+  return { ...e, documents, disciplinaryRecords: e.disciplinaryRecords.filter((r) => r.type === "COMMENDATION") };
 }
 
 export async function getEmployeeByNumber(ctx: Ctx, employeeNumber: string) {

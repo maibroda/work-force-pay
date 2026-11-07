@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-217 tables and 163 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+220 tables and 165 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -34,6 +34,9 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | payRateProposals | → PayRateProposal[] |  |  |
 | contractPayBases | → ContractPayBasis[] |  |  |
 | publicHolidays | → PublicHoliday[] |  |  |
+| employeeDocumentTypes | → EmployeeDocumentType[] |  |  |
+| documentVersions | → EmployeeDocumentVersion[] |  |  |
+| documentBlobs | → EmployeeDocumentBlob[] |  |  |
 | holidayCalendarYears | → HolidayCalendarYear[] |  |  |
 | deployments | → Deployment[] |  |  |
 | movements | → StaffMovement[] |  |  |
@@ -1263,6 +1266,74 @@ Employee documents (ID, licenses, contracts, certificates). Metadata-only — fi
 | notes | String |  |  |
 | uploadedBy | String | yes |  |
 | createdAt | DateTime |  |  |
+| typeId | String |  | Electronic documents (2026-11-07). A row with no type and no versions is a reference-only record from before document management. |
+| type | → EmployeeDocumentType |  |  |
+| status | DocumentStatus |  | Null for a reference-only record: no approval is invented for it. |
+| description | String |  |  |
+| archivedBy | String |  |  |
+| archivedAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+| versions | → EmployeeDocumentVersion[] |  |  |
+
+### EmployeeDocumentType
+
+A kind of document within a category. Data, not code: an administrator adds, renames or switches off types. Standard types are seeded for each company.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| category | DocumentCategory | yes |  |
+| code | String | yes |  |
+| name | String | yes |  |
+| requiresApproval | Boolean |  |  |
+| hasExpiry | Boolean |  |  |
+| sensitive | Boolean |  | Needs the document-sensitive permission to open (identification and medical by default). |
+| active | Boolean |  |  |
+| standard | Boolean |  |  |
+| sortOrder | Int |  |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+| documents | → EmployeeDocument[] |  |  |
+
+### EmployeeDocumentVersion
+
+One uploaded file of a document. A replacement is a new version: the earlier ones are kept and can be inspected. The bytes are in EmployeeDocumentBlob, so listing versions never loads them.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| documentId | String | yes |  |
+| document | → EmployeeDocument |  |  |
+| version | Int | yes |  |
+| fileName | String | yes |  |
+| mimeType | String | yes |  |
+| sizeBytes | Int | yes |  |
+| sha256 | String | yes | SHA-256 of the file as uploaded, checked again when it is read back. |
+| uploadedBy | String | yes |  |
+| uploadedByUserId | String |  |  |
+| uploadedAt | DateTime |  |  |
+| replacedBy | String |  | Set when a newer version replaces this one. |
+| replacedAt | DateTime |  |  |
+| blob | → EmployeeDocumentBlob |  |  |
+
+### EmployeeDocumentBlob
+
+The file itself, encrypted (AES-256-GCM) before it is saved. Without the key (DOCUMENT_ENCRYPTION_KEY) it cannot be read.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| versionId | String | yes | (key) |
+| version | → EmployeeDocumentVersion |  |  |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| data | Bytes | yes |  |
+| iv | Bytes | yes |  |
+| authTag | Bytes | yes |  |
+| keyId | String |  |  |
 
 ### EmployeeTraining
 
@@ -5427,6 +5498,18 @@ The company's confirmation that its list of public holidays for a year is comple
 ### DocumentType
 
 `NATIONAL_ID`, `PASSPORT`, `DRIVERS_LICENSE`, `GUARD_LICENSE`, `FIREARMS_LICENSE`, `MEDICAL_CERTIFICATE`, `POLICE_CLEARANCE`, `EMPLOYMENT_CONTRACT`, `ACADEMIC_CERTIFICATE`, `OTHER`
+
+### DocumentCategory
+
+The seven categories of employee document. The TYPES inside them are data (EmployeeDocumentType).
+
+`EMPLOYMENT`, `IDENTIFICATION`, `EDUCATION_PROFESSIONAL`, `COMPLIANCE`, `MEDICAL`, `STATUTORY`, `EXIT`
+
+### DocumentStatus
+
+Pending (no approval yet) to Submitted to Under review to Approved or Rejected; Expired is worked out from the expiry date; Archived is a deliberate step.
+
+`PENDING`, `SUBMITTED`, `UNDER_REVIEW`, `APPROVED`, `REJECTED`, `EXPIRED`, `ARCHIVED`
 
 ### TrainingStatus
 

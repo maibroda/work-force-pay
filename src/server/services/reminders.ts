@@ -88,7 +88,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
       db.relationsCase.findMany({ where: { organizationId: orgId, status: { in: OPEN_CASE as never }, dueDate: { lte: caseHorizon } }, include: { employee: true }, orderBy: { dueDate: "asc" } }),
       kitHeldByLeavers(orgId),
       loansOwedByLeavers(orgId),
-      db.employeeDocument.findMany({ where: { organizationId: orgId, expiryDate: { not: null, lte: addDays(today, 30) } }, include: { employee: true }, orderBy: { expiryDate: "asc" } }),
+      db.employeeDocument.findMany({ where: { organizationId: orgId, expiryDate: { not: null, lte: addDays(today, 30) }, OR: [{ status: null }, { status: { not: "ARCHIVED" } }] }, include: { employee: true, type: true }, orderBy: { expiryDate: "asc" } }),
       recordsOverviewFor(orgId),
       complianceFor(orgId, today),
       appraisalAttention(orgId, today),
@@ -281,7 +281,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
       "documents",
       "Documents expired or expiring within 30 days",
       docs.map((x) => ({
-        text: `${name(x.employee)} — ${x.documentType.replace(/_/g, " ").toLowerCase()} ${x.expiryDate! < today ? "expired" : "expires"} ${fmtDate(x.expiryDate)}`,
+        text: `${name(x.employee)} — ${(x.type?.name ?? x.documentType.replace(/_/g, " ")).toLowerCase()} ${x.expiryDate! < today ? "expired" : "expires"} ${fmtDate(x.expiryDate)}`,
         path: `/employees/${x.employeeId}?tab=documents`,
       })),
     ),

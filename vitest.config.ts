@@ -17,6 +17,8 @@ export default defineConfig({
     env: {
       // Integration tests run against a SEPARATE database that is reset and seeded.
       DATABASE_URL: process.env.TEST_DATABASE_URL ?? "",
+      // A fixed key for the tests only (32 bytes, base64): not a secret. Real keys are set in the host environment and never kept in the repository.
+      DOCUMENT_ENCRYPTION_KEY: "dGVzdC1kb2N1bWVudC1rZXktMDEyMzQ1Njc4OWFiY2Q=",
     },
   },
 });
