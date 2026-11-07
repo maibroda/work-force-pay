@@ -57,6 +57,7 @@ export default async function AppraisalsPage() {
               { name: "periodEnd", label: "Period to", type: "date", required: true },
               { name: "categoryId", label: "Only this category (optional)", type: "select", options: o.categories },
               { name: "employeeId", label: "Only this employee (optional)", type: "select", options: o.employees },
+              { name: "kpiSharePct", label: "KPI share of the overall score (%) — 0 = KPIs do not count", type: "number", defaultValue: 0 },
             ]}
           />
         </FormPanel>

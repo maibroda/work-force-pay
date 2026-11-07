@@ -93,7 +93,6 @@ export default async function EmployeePage({
     <>
       <PageHeader
         title={`${e.employeeNumber} — ${fullName(e)}`}
-        crumbs={[{ href: "/employees", label: "Employees" }]}
         description={
           <span className="flex flex-wrap items-center gap-2">
             <StatusBadge status={e.status} /> {e.category.name} · Current location (operational only):{" "}

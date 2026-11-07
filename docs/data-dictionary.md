@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-220 tables and 165 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+223 tables and 168 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -38,6 +38,9 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | documentVersions | → EmployeeDocumentVersion[] |  |  |
 | documentBlobs | → EmployeeDocumentBlob[] |  |  |
 | holidayCalendarYears | → HolidayCalendarYear[] |  |  |
+| jobDescriptions | → JobDescription[] |  |  |
+| kpis | → Kpi[] |  |  |
+| appraisalKpis | → AppraisalKpi[] |  |  |
 | deployments | → Deployment[] |  |  |
 | movements | → StaffMovement[] |  |  |
 | workRegister | → WorkRegister[] |  |  |
@@ -1136,6 +1139,7 @@ A per-cost-center, per-period budget for budget-vs-actual variance reporting.
 | workRegister | → WorkRegister[] |  |  |
 | requisitions | → JobRequisition[] |  |  |
 | checklistItems | → ChecklistTemplateItem[] |  |  |
+| jobDescriptions | → JobDescription[] |  |  |
 | kitPacks | → KitPack[] |  |  |
 | trainingRequirements | → TrainingRequirement[] |  |  |
 | companyPolicies | → CompanyPolicy[] |  |  |
@@ -1507,6 +1511,7 @@ One per organization — every number a buyer might want to change without a cod
 | appraisalSelfAssessment | Boolean |  | Employees rate themselves before their manager does. |
 | appraisalCommentAtOrBelow | Int |  | A written comment is required for a rating at or below this (0 = never)… |
 | appraisalCommentAtOrAbove | Int |  | …or at or above this (0 = never). |
+| kpiBands | Json |  | KPI achievement bands: [{ fromBp, score }], 10,000 basis points = 100%. Null = the defaults in src/lib/performance.ts. |
 | appraisalMinServiceDays | Int |  | Employees with less service than this (at the period end) aren't included in a cycle. |
 | probationRequiresAppraisal | Boolean |  | A probation can only be confirmed after a signed-off probation appraisal. |
 | probationMinScore | Decimal |  | …scoring at least this (1–5; 0 = any score). |
@@ -3593,6 +3598,7 @@ One thing employees are rated on, with its weight. Edited in Settings; a cycle s
 | dueDate | DateTime | yes | Reviews should be submitted by this date. |
 | status | AppraisalCycleStatus |  |  |
 | createdBy | String | yes |  |
+| kpiSharePct | Int |  | Whole percentage of the overall score that comes from KPI results (0 = KPIs do not count, as before). |
 | closedAt | DateTime |  |  |
 | createdAt | DateTime |  |  |
 | appraisals | → Appraisal[] |  |  |
@@ -3617,6 +3623,10 @@ One employee's review in a cycle: self-assessment, then the reviewer's ratings, 
 | employeeSelfComment | String |  |  |
 | overallScore | Decimal |  | Weighted average of the reviewer's ratings (1–5), fixed when the review is submitted. |
 | overallBand | String |  |  |
+| criteriaScore | Decimal |  | The weighted average of the reviewer's ratings and the KPI score (hundredths, 340 = 3.40), kept beside the blended overall score. |
+| kpiScore | Int |  |  |
+| jobDescriptionId | String |  | The job description in force when the cycle was launched, if the employee's category had one. |
+| jobDescription | → JobDescription |  |  |
 | strengths | String |  |  |
 | improvements | String |  |  |
 | goals | String |  |  |
@@ -3634,6 +3644,7 @@ One employee's review in a cycle: self-assessment, then the reviewer's ratings, 
 | createdAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |
 | ratings | → AppraisalRating[] |  |  |
+| kpis | → AppraisalKpi[] |  |  |
 
 ### AppraisalRating
 
@@ -3652,6 +3663,78 @@ One employee's review in a cycle: self-assessment, then the reviewer's ratings, 
 | selfComment | String |  |  |
 | rating | Int |  |  |
 | comment | String |  |  |
+
+### JobDescription
+
+What a role is for, one per employee category and version. HR drafts it; a second person makes it active (it drives how people are rated). An active version is never edited: a change is a new draft, and the old version is retired.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| categoryId | String | yes |  |
+| category | → EmployeeCategory |  |  |
+| version | Int | yes |  |
+| title | String | yes |  |
+| purpose | String |  |  |
+| responsibilities | String |  |  |
+| status | JobDescriptionStatus |  |  |
+| draftedBy | String | yes |  |
+| draftedByUserId | String |  |  |
+| activatedBy | String |  |  |
+| activatedByUserId | String |  |  |
+| activatedAt | DateTime |  |  |
+| retiredAt | DateTime |  |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+| kpis | → Kpi[] |  |  |
+| appraisals | → Appraisal[] |  |  |
+
+### Kpi
+
+One measurable target under a job description. Edited only while the job description is a draft.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| jobDescriptionId | String | yes |  |
+| jobDescription | → JobDescription |  |  |
+| name | String | yes |  |
+| description | String |  |  |
+| unit | KpiUnit | yes |  |
+| direction | KpiDirection | yes |  |
+| target | Decimal | yes | Exact decimal, above zero. |
+| weight | Int |  | Relative weight among the job description's KPIs (they need not add up to 100). |
+| sortOrder | Int |  |  |
+| createdAt | DateTime |  |  |
+| appraisalKpis | → AppraisalKpi[] |  |  |
+
+### AppraisalKpi
+
+One KPI on one appraisal: a snapshot taken when the cycle is launched (so later edits never change a review under way), then the reviewer's actual result, and the achievement and score worked out from it.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| appraisalId | String | yes |  |
+| appraisal | → Appraisal |  |  |
+| kpiId | String | yes |  |
+| kpi | → Kpi |  |  |
+| kpiName | String | yes |  |
+| unit | KpiUnit | yes |  |
+| direction | KpiDirection | yes |  |
+| target | Decimal | yes |  |
+| weight | Int | yes |  |
+| sortOrder | Int |  |  |
+| actual | Decimal |  |  |
+| comment | String |  |  |
+| achievementBp | Int |  | Basis points (10,000 = 100%) and the 1 to 5 score, fixed when the review is submitted. |
+| score | Int |  |  |
 
 ### EmployeeChangeRequest
 
@@ -5924,6 +6007,18 @@ How an instalment is settled: by a payroll deduction, by a deduction on the end-
 ### AppraisalRecommendation
 
 `NONE`, `CONFIRM_EMPLOYMENT`, `INCREMENT`, `PROMOTION`, `TRAINING`, `PERFORMANCE_PLAN`
+
+### KpiUnit
+
+`PERCENT`, `COUNT`, `NAIRA`, `RATING`
+
+### KpiDirection
+
+`HIGHER_IS_BETTER`, `LOWER_IS_BETTER`
+
+### JobDescriptionStatus
+
+`DRAFT`, `ACTIVE`, `RETIRED`
 
 ### ChangeKind
 
