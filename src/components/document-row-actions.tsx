@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ActionButton } from "@/components/action-button";
-import { approveDocumentAction, archiveDocumentAction, issueDocumentLinkAction, rejectDocumentAction, startReviewAction, submitDocumentAction } from "@/app/actions/documents";
+import { approveDocumentAction, archiveDocumentAction, rejectDocumentAction, startReviewAction, submitDocumentAction } from "@/app/actions/documents";
 import { DocumentUpload, type UploadType } from "@/components/document-upload";
-import { toast } from "./toaster";
+import { openDocumentFile as open } from "@/components/document-file-buttons";
 
 export interface VersionRow {
   id: string;
@@ -16,20 +16,6 @@ export interface VersionRow {
   uploadedAt: string;
   replacedBy: string | null;
   replacedAt: string | null;
-}
-
-/** Asks the server for a short-lived signed link, then opens it (a preview in a new tab) or downloads it. */
-async function open(versionId: string, mode: "view" | "download") {
-  // a window opened before the wait, so the browser does not treat it as a pop-up
-  const tab = mode === "view" ? window.open("", "_blank") : null;
-  const r = await issueDocumentLinkAction(versionId, mode);
-  const url = (r.data as { url?: string } | undefined)?.url;
-  if (!r.ok || !url) {
-    tab?.close();
-    return toast(false, r.error ?? "The link could not be made.");
-  }
-  if (tab) tab.location.href = url;
-  else window.location.assign(url);
 }
 
 /**

@@ -382,6 +382,7 @@ export const HR_AREA: Area = {
     { group: "Employee administration", href: "/hr/onboarding", label: "Onboarding tracker", perm: "hr.view" },
     { group: "Employee administration", href: "/hr/contracts", label: "Employment contracts & probation", perm: "hr.view" },
     { group: "Employee administration", href: "/hr/letters", label: "Letters", perm: "hr.view" },
+    { group: "Employee administration", href: "/hr/documents", label: "Employee documents", perm: "document.view" },
     { group: "Employee administration", href: "/hr/exits", label: "Exits & clearance", perm: "hr.view" },
     { group: "Employee administration", href: "/payroll/settlements", label: "End-of-service settlements", perm: "payroll.view" },
     { group: "Employee administration", href: "/hr/attrition", label: "Attrition report", perm: "hr.view" },
@@ -540,6 +541,7 @@ export const MY_AREA: Area = {
     { group: "My HR", href: "/me/appraisals", label: "My appraisals", perm: "self.view" },
     { group: "My HR", href: "/me/grievances", label: "My grievances", perm: "relations.raise" },
     { group: "My HR", href: "/me/policies", label: "My policies", perm: "self.view" },
+    { group: "My HR", href: "/me/documents", label: "My documents", perm: "self.view" },
     { group: "My security", href: "/settings/security", label: "My security", perm: "self.security" },
   ],
 };

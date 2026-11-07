@@ -113,7 +113,7 @@ export async function updateType(ctx: Ctx, id: string, raw: z.input<typeof typeE
 // ───────────────────────────── Access ─────────────────────────────
 
 /** Whether this caller may see a document of this kind: identification and medical need the sensitive permission. */
-function mayOpen(ctx: Ctx, doc: { type: { sensitive: boolean } | null; documentType: string }) {
+export function mayOpen(ctx: Ctx, doc: { type: { sensitive: boolean } | null; documentType: string }) {
   const sensitive = doc.type ? doc.type.sensitive : (LEGACY_TYPES[doc.documentType]?.sensitive ?? false);
   return !sensitive || can(ctx.role, "document.sensitive");
 }
@@ -285,7 +285,7 @@ export async function replaceDocument(ctx: Ctx, documentId: string, raw: z.input
 // ───────────────────────────── Reading ─────────────────────────────
 
 /** What the caller may do with a document next, from its status and who they are. Only a guide for the screen: every action checks again on the server. */
-function workflowActions(ctx: Ctx, doc: { status: DocumentStatus | null; submittedByUserId: string | null; reviewedByUserId: string | null; typeId: string | null; type: { requiresApproval: boolean } | null }, uploaderUserId: string | null) {
+export function workflowActions(ctx: Ctx, doc: { status: DocumentStatus | null; submittedByUserId: string | null; reviewedByUserId: string | null; typeId: string | null; type: { requiresApproval: boolean } | null }, uploaderUserId: string | null) {
   const own = ctx.userId === uploaderUserId || ctx.userId === doc.submittedByUserId;
   return {
     submit: can(ctx.role, "document.manage") && doc.status === "PENDING" && !!doc.type?.requiresApproval && !!doc.typeId,
@@ -531,20 +531,31 @@ export async function linkStandardSteps(ctx: Ctx) {
 
 const kindOfMime = (mime: string): FileKind => (mime === "application/pdf" ? "pdf" : mime === "image/png" ? "png" : mime === "image/jpeg" ? "jpeg" : mime === "application/msword" ? "doc" : "docx");
 
+/** An employee's own approved, unarchived document (an expired one is still approved): theirs to read, whatever its kind, medical included. */
+function isOwnApproved(ctx: Ctx, v: { document: { employeeId: string; status: DocumentStatus | null } }) {
+  return !!ctx.employeeId && v.document.employeeId === ctx.employeeId && v.document.status === "APPROVED";
+}
+
+/**
+ * A file version the caller may open: staff by the document permissions (and sensitive access for identification and medical files), or an employee reading
+ * their OWN approved document. Anything else is "not found" (or, for someone with no employee record and no document permission, a plain refusal).
+ */
 async function loadVersion(ctx: Ctx, versionId: string) {
   const v = await db.employeeDocumentVersion.findFirst({ where: { id: versionId, organizationId: ctx.orgId }, include: { document: { include: { type: true } } } });
-  if (!v || !mayOpen(ctx, v.document)) throw new BusinessError("Document not found.");
-  return v;
+  const staff = can(ctx.role, "document.view");
+  if (v && staff && mayOpen(ctx, v.document)) return { v, self: false };
+  if (v && isOwnApproved(ctx, v)) return { v, self: true };
+  if (!staff && !ctx.employeeId) assertCan(ctx, "document.view"); // not an employee and no document permission: refused outright
+  throw new BusinessError("Document not found.");
 }
 
 /** A signed link that works for five minutes, for this user only. The permission is checked now and again when the link is used. */
 export async function issueLink(ctx: Ctx, versionId: string, mode: "view" | "download", at: number = nowSeconds()) {
-  assertCan(ctx, "document.view");
-  const v = await loadVersion(ctx, versionId);
+  const { v, self } = await loadVersion(ctx, versionId);
   if (mode === "view" && !inlineViewable(kindOfMime(v.mimeType))) throw new BusinessError("This kind of file can only be downloaded, not previewed.");
   const exp = at + LINK_SECONDS;
   const token = signLink({ v: v.id, u: ctx.userId, o: ctx.orgId, m: mode, exp }, linkSecret(key()));
-  await logAudit(ctx, { action: "DOCUMENT_LINK_ISSUED", entity: "EmployeeDocument", entityId: v.documentId, newValue: { versionId: v.id, mode } });
+  await logAudit(ctx, { action: "DOCUMENT_LINK_ISSUED", entity: "EmployeeDocument", entityId: v.documentId, newValue: { versionId: v.id, mode, ...(self ? { self: true } : {}) } });
   return { token, url: `/api/documents/file?t=${token}`, expiresAt: exp };
 }
 
@@ -552,8 +563,7 @@ export async function issueLink(ctx: Ctx, versionId: string, mode: "view" | "dow
 export async function openFile(ctx: Ctx, token: string, at: number = nowSeconds()) {
   const claims = verifyLink(token, linkSecret(key()), at);
   if (!claims || claims.u !== ctx.userId || claims.o !== ctx.orgId) throw new BusinessError("This download link is not valid or has expired.");
-  assertCan(ctx, "document.view");
-  const v = await loadVersion(ctx, claims.v);
+  const { v, self } = await loadVersion(ctx, claims.v);
   const blob = await db.employeeDocumentBlob.findUnique({ where: { versionId: v.id } });
   if (!blob) throw new BusinessError("This file is no longer stored.");
   let bytes: Buffer;
@@ -563,7 +573,7 @@ export async function openFile(ctx: Ctx, token: string, at: number = nowSeconds(
     throw new BusinessError("This file could not be read: it may have been altered.");
   }
   if (crypto.createHash("sha256").update(bytes).digest("hex") !== v.sha256) throw new BusinessError("This file could not be read: it may have been altered.");
-  await logAudit(ctx, { action: claims.m === "view" ? "DOCUMENT_VIEW" : "DOCUMENT_DOWNLOAD", entity: "EmployeeDocument", entityId: v.documentId, newValue: { versionId: v.id, version: v.version } });
+  await logAudit(ctx, { action: claims.m === "view" ? "DOCUMENT_VIEW" : "DOCUMENT_DOWNLOAD", entity: "EmployeeDocument", entityId: v.documentId, newValue: { versionId: v.id, version: v.version, ...(self ? { self: true } : {}) } });
   return { bytes, fileName: v.fileName, mime: v.mimeType, disposition: claims.m === "view" ? ("inline" as const) : ("attachment" as const) };
 }
 

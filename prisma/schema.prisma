@@ -586,6 +586,7 @@ model Organization {
   employeeDocumentTypes     EmployeeDocumentType[]
   documentVersions          EmployeeDocumentVersion[]
   documentBlobs             EmployeeDocumentBlob[]
+  documentRequirements      EmployeeDocumentRequirement[]
   holidayCalendarYears      HolidayCalendarYear[]
   jobDescriptions           JobDescription[]
   kpis                      Kpi[]
@@ -1907,6 +1908,7 @@ model EmployeeCategory {
   requisitions         JobRequisition[]
   checklistItems       ChecklistTemplateItem[]
   jobDescriptions      JobDescription[]
+  documentRequirements EmployeeDocumentRequirement[]
   kitPacks             KitPack[]
   trainingRequirements TrainingRequirement[]
   companyPolicies      CompanyPolicy[]
@@ -2099,6 +2101,7 @@ model EmployeeDocumentType {
   templateItems ChecklistTemplateItem[]
   onboardingTasks OnboardingTask[]
   exitTasks     ExitTask[]
+  requirements  EmployeeDocumentRequirement[]
 
   @@unique([organizationId, code])
   @@index([organizationId, category])
@@ -2142,6 +2145,25 @@ model EmployeeDocumentBlob {
   keyId          String                  @default("v1")
 
   @@index([organizationId])
+}
+
+/// A document type the company requires, of everyone or of one employee category. Drives the missing-document tracking: an employee has it only when an approved,
+/// unexpired document of the type is on file. The company sets these; nothing is seeded.
+model EmployeeDocumentRequirement {
+  id             String               @id @default(cuid())
+  organizationId String
+  organization   Organization         @relation(fields: [organizationId], references: [id])
+  typeId         String
+  type           EmployeeDocumentType @relation(fields: [typeId], references: [id])
+  /// Null = every employee.
+  categoryId     String?
+  category       EmployeeCategory?    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  active         Boolean              @default(true)
+  createdBy      String
+  createdAt      DateTime             @default(now())
+
+  @@unique([organizationId, typeId, categoryId])
+  @@index([organizationId, active])
 }
 
 /// Training & certifications — critical for a security workforce (firearms license, first aid,

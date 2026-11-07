@@ -1,14 +1,16 @@
 "use server";
 import { actFor } from "./_run";
 import * as docs from "@/server/services/documents";
+import * as register from "@/server/services/document-register";
 const act = actFor("documents.ts");
 
 type V = Record<string, unknown>;
-const PAGES = ["/employees", "/hr", "/settings"];
+const PAGES = ["/employees", "/hr", "/settings", "/me"];
 
 /** A short-lived signed link to one version of a file; the browser then opens or downloads it. */
 export async function issueDocumentLinkAction(versionId: string, mode: "view" | "download") {
-  return act("document.view", async (ctx) => {
+  // login only: the service decides, by the document permissions or by the file being the caller's own approved document
+  return act(undefined, async (ctx) => {
     const link = await docs.issueLink(ctx, versionId, mode);
     return { message: "Link ready.", data: { url: link.url } };
   });
@@ -68,4 +70,18 @@ export async function updateDocumentTypeAction(id: string, v: V) {
     await docs.updateType(ctx, id, v as never);
     return { message: "Saved." };
   }, PAGES);
+}
+
+export async function addRequirementAction(v: V) {
+  return act("document.configure", async (ctx) => {
+    await register.addRequirement(ctx, v as never);
+    return { message: "Requirement added. Employees without that approved document now show as missing." };
+  }, [...PAGES, "/hr/documents"]);
+}
+
+export async function setRequirementActiveAction(id: string, active: boolean) {
+  return act("document.configure", async (ctx) => {
+    await register.setRequirementActive(ctx, id, active);
+    return { message: active ? "Requirement switched on." : "Requirement switched off." };
+  }, [...PAGES, "/hr/documents"]);
 }

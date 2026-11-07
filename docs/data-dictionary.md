@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-223 tables and 168 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+224 tables and 168 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -37,6 +37,7 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | employeeDocumentTypes | → EmployeeDocumentType[] |  |  |
 | documentVersions | → EmployeeDocumentVersion[] |  |  |
 | documentBlobs | → EmployeeDocumentBlob[] |  |  |
+| documentRequirements | → EmployeeDocumentRequirement[] |  |  |
 | holidayCalendarYears | → HolidayCalendarYear[] |  |  |
 | jobDescriptions | → JobDescription[] |  |  |
 | kpis | → Kpi[] |  |  |
@@ -1140,6 +1141,7 @@ A per-cost-center, per-period budget for budget-vs-actual variance reporting.
 | requisitions | → JobRequisition[] |  |  |
 | checklistItems | → ChecklistTemplateItem[] |  |  |
 | jobDescriptions | → JobDescription[] |  |  |
+| documentRequirements | → EmployeeDocumentRequirement[] |  |  |
 | kitPacks | → KitPack[] |  |  |
 | trainingRequirements | → TrainingRequirement[] |  |  |
 | companyPolicies | → CompanyPolicy[] |  |  |
@@ -1313,6 +1315,7 @@ A kind of document within a category. Data, not code: an administrator adds, ren
 | templateItems | → ChecklistTemplateItem[] |  |  |
 | onboardingTasks | → OnboardingTask[] |  |  |
 | exitTasks | → ExitTask[] |  |  |
+| requirements | → EmployeeDocumentRequirement[] |  |  |
 
 ### EmployeeDocumentVersion
 
@@ -1351,6 +1354,23 @@ The file itself, encrypted (AES-256-GCM) before it is saved. Without the key (DO
 | iv | Bytes | yes |  |
 | authTag | Bytes | yes |  |
 | keyId | String |  |  |
+
+### EmployeeDocumentRequirement
+
+A document type the company requires, of everyone or of one employee category. Drives the missing-document tracking: an employee has it only when an approved, unexpired document of the type is on file. The company sets these; nothing is seeded.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| typeId | String | yes |  |
+| type | → EmployeeDocumentType |  |  |
+| categoryId | String |  | Null = every employee. |
+| category | → EmployeeCategory |  |  |
+| active | Boolean |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
 
 ### EmployeeTraining
 
