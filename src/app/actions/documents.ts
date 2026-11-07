@@ -21,6 +21,41 @@ export async function archiveDocumentAction(id: string, reason?: string) {
   }, PAGES);
 }
 
+export async function submitDocumentAction(id: string) {
+  return act("document.manage", async (ctx) => {
+    await docs.submitDocument(ctx, id);
+    return { message: "Submitted for review." };
+  }, PAGES);
+}
+
+export async function startReviewAction(id: string) {
+  return act("document.approve", async (ctx) => {
+    await docs.startReview(ctx, id);
+    return { message: "You are now reviewing this document." };
+  }, PAGES);
+}
+
+export async function approveDocumentAction(id: string, note?: string) {
+  return act("document.approve", async (ctx) => {
+    await docs.approveDocument(ctx, id, note);
+    return { message: "Document approved." };
+  }, PAGES);
+}
+
+export async function rejectDocumentAction(id: string, reason?: string) {
+  return act("document.approve", async (ctx) => {
+    await docs.rejectDocument(ctx, id, reason ?? "");
+    return { message: "Document rejected. The reason is recorded." };
+  }, PAGES);
+}
+
+export async function linkStandardStepsAction() {
+  return act("document.configure", async (ctx) => {
+    const r = await docs.linkStandardSteps(ctx);
+    return { message: `${r.onboarding} onboarding and ${r.exit} exit steps linked to document types. Tasks made from now on follow their document.` };
+  }, [...PAGES, "/hr"]);
+}
+
 export async function addDocumentTypeAction(v: V) {
   return act("document.configure", async (ctx) => {
     await docs.addType(ctx, { ...v, requiresApproval: v.requiresApproval === true || v.requiresApproval === "on", hasExpiry: v.hasExpiry === true || v.hasExpiry === "on", sensitive: v.sensitive === undefined ? undefined : v.sensitive === true || v.sensitive === "on" } as never);

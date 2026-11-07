@@ -30,6 +30,7 @@ export const PERMISSIONS = [
   "document.manage", // upload, replace and archive an employee's documents; never delete
   "document.sensitive", // open identification and medical files, and see them in the register
   "document.configure", // add, rename and switch off the company's document types
+  "document.approve", // take a submitted document for review and approve or reject it (never the person who uploaded or submitted it); needs document.manage and document.view too
   "relations.raise", // raise your own grievance or confidential concern (self-service)
   "settlement.manage", // prepare end-of-service settlements (compute, add manual lines, submit)
   "settlement.approve", // approve and release settlements into payroll (never the preparer)
@@ -160,6 +161,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "document.manage",
     "document.sensitive",
     "document.configure",
+    "document.approve",
     "settlement.manage",
     "inventory.view",
     "inventory.manage",

@@ -15,6 +15,7 @@ import { naira, num } from "@/lib/money";
 import { fullName } from "@/lib/utils";
 import { FilterBar, FilterField, FormPanel, KV, PageHeader, Section, Empty } from "@/components/page";
 import { EmployeeDocuments } from "@/components/employee-documents";
+import { TaskDocumentCell } from "@/components/task-document-cell";
 import { Tabs } from "@/components/tabs";
 import { SmartForm } from "@/components/smart-form";
 import { StatusBadge, Badge } from "@/components/ui/badge";
@@ -896,12 +897,14 @@ export default async function EmployeePage({
                     <TD className="text-xs">{t.completedAt ? fmtDate(t.completedAt) : "—"}</TD>
                     <TD>
                       {hrManage && t.status === "PENDING" && (
-                        <ActionButton
-                          action={completeOnboardingTaskAction.bind(null, t.id)}
-                          variant="success"
-                        >
-                          Mark complete
-                        </ActionButton>
+                        <TaskDocumentCell ctx={ctx} kind="ONBOARDING" task={t} employeeId={e.id}>
+                          <ActionButton
+                            action={completeOnboardingTaskAction.bind(null, t.id)}
+                            variant="success"
+                          >
+                            Mark complete
+                          </ActionButton>
+                        </TaskDocumentCell>
                       )}
                     </TD>
                   </TR>
@@ -1018,12 +1021,14 @@ export default async function EmployeePage({
                           <TD className="text-xs">{t.completedBy ?? "—"}</TD>
                           <TD>
                             {hrManage && t.status === "PENDING" && (
-                              <ActionButton
-                                action={completeExitTaskAction.bind(null, t.id)}
-                                variant="success"
-                              >
-                                Mark complete
-                              </ActionButton>
+                              <TaskDocumentCell ctx={ctx} kind="EXIT" task={t} employeeId={e.id}>
+                                <ActionButton
+                                  action={completeExitTaskAction.bind(null, t.id)}
+                                  variant="success"
+                                >
+                                  Mark complete
+                                </ActionButton>
+                              </TaskDocumentCell>
                             )}
                           </TD>
                         </TR>

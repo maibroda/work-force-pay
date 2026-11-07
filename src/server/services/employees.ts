@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import type { Ctx } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { LEGACY_TYPES } from "@/lib/documents";
+import { TASK_DOCUMENT_INCLUDE } from "./documents";
 import { d } from "@/lib/dates";
 import { normaliseState } from "@/lib/nigeria-states";
 import { fullName } from "@/lib/utils";
@@ -315,9 +316,9 @@ export async function getEmployee(ctx: Ctx, id: string) {
       documents: { orderBy: { createdAt: "desc" } },
       trainings: { orderBy: { createdAt: "desc" } },
       disciplinaryRecords: { orderBy: { createdAt: "desc" } },
-      onboardingTasks: { orderBy: { sortOrder: "asc" } },
+      onboardingTasks: { orderBy: { sortOrder: "asc" }, include: TASK_DOCUMENT_INCLUDE },
       exitRecords: {
-        include: { tasks: { orderBy: { sortOrder: "asc" } }, settlement: true },
+        include: { tasks: { orderBy: { sortOrder: "asc" }, include: TASK_DOCUMENT_INCLUDE }, settlement: true },
         orderBy: { createdAt: "desc" },
       },
       employmentContracts: { orderBy: { startDate: "desc" } },

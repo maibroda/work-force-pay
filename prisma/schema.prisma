@@ -2057,8 +2057,20 @@ model EmployeeDocument {
   archivedBy     String?
   archivedAt     DateTime?
   updatedAt      DateTime     @default(now()) @updatedAt
+  /// The approval workflow: submitted by one person, taken and decided by another (never the uploader or the submitter).
+  submittedBy       String?
+  submittedByUserId String?
+  submittedAt       DateTime?
+  reviewedBy        String?
+  reviewedByUserId  String?
+  reviewStartedAt   DateTime?
+  reviewedAt        DateTime?
+  /// The reason for a rejection, or the approver's note.
+  reviewNote        String?
 
   versions EmployeeDocumentVersion[]
+  onboardingTasks OnboardingTask[]
+  exitTasks       ExitTask[]
 
   @@index([organizationId, employeeId])
   @@index([organizationId, expiryDate])
@@ -2084,6 +2096,9 @@ model EmployeeDocumentType {
   updatedAt        DateTime         @updatedAt
 
   documents EmployeeDocument[]
+  templateItems ChecklistTemplateItem[]
+  onboardingTasks OnboardingTask[]
+  exitTasks     ExitTask[]
 
   @@unique([organizationId, code])
   @@index([organizationId, category])
@@ -2194,6 +2209,11 @@ model OnboardingTask {
   responsibleRole String?
   mandatory       Boolean         @default(true)
   createdAt       DateTime        @default(now())
+  /// Copied from the template when the task is made; the document that completes it is attached when it is uploaded.
+  documentTypeId  String?
+  documentType    EmployeeDocumentType? @relation(fields: [documentTypeId], references: [id], onDelete: SetNull)
+  documentId      String?
+  document        EmployeeDocument?     @relation(fields: [documentId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, employeeId])
 }
@@ -2251,6 +2271,10 @@ model ExitTask {
   blocksSettlement Boolean         @default(true)
   /// "FINAL_SETTLEMENT" is auto-completed by the system when the settlement is approved.
   systemKey        String?
+  documentTypeId   String?
+  documentType     EmployeeDocumentType? @relation(fields: [documentTypeId], references: [id], onDelete: SetNull)
+  documentId       String?
+  document         EmployeeDocument?     @relation(fields: [documentId], references: [id], onDelete: SetNull)
   createdAt        DateTime        @default(now())
 
   @@index([organizationId, exitRecordId])
@@ -2414,6 +2438,9 @@ model ChecklistTemplateItem {
   /// Limit the step to one employee category (null = everyone).
   categoryId       String?
   category         EmployeeCategory? @relation(fields: [categoryId], references: [id])
+  /// When set, the step follows an electronic document of this type (it is completed by the approved document, not by hand).
+  documentTypeId   String?
+  documentType     EmployeeDocumentType? @relation(fields: [documentTypeId], references: [id], onDelete: SetNull)
   active           Boolean           @default(true)
   sortOrder        Int               @default(0)
   createdAt        DateTime          @default(now())

@@ -6,6 +6,7 @@ import { fmtDate } from "@/lib/dates";
 import { fullName } from "@/lib/utils";
 import { PageHeader, Section, Empty } from "@/components/page";
 import { ActionButton } from "@/components/action-button";
+import { TaskDocumentCell } from "@/components/task-document-cell";
 import { Badge } from "@/components/ui/badge";
 import { completeOnboardingTaskAction } from "@/app/actions/hr";
 import { waiveTaskAction } from "@/app/actions/hr-lifecycle";
@@ -52,10 +53,12 @@ export default async function OnboardingTrackerPage() {
                     </div>
                   </div>
                   {manage && (
-                    <div className="flex gap-1">
-                      <ActionButton action={completeOnboardingTaskAction.bind(null, t.id)} variant="success">
-                        Mark complete
-                      </ActionButton>
+                    <div className="flex flex-wrap gap-1">
+                      <TaskDocumentCell ctx={ctx} kind="ONBOARDING" task={t} employeeId={r.employee.id}>
+                        <ActionButton action={completeOnboardingTaskAction.bind(null, t.id)} variant="success">
+                          Mark complete
+                        </ActionButton>
+                      </TaskDocumentCell>
                       <ActionButton action={waiveTaskAction.bind(null, "onboarding", t.id)} reason reasonPlaceholder="Why doesn't it apply?" variant="outline">
                         Not applicable
                       </ActionButton>

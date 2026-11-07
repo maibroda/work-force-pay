@@ -10,6 +10,7 @@ import { outstandingKitValue } from "./inventory";
 import { employeeLoanBalances } from "./loans";
 import { todayUtc } from "./hr-policy";
 import { caseStats } from "./relations";
+import { TASK_DOCUMENT_INCLUDE } from "./documents";
 import { recruitmentSummary } from "./recruitment";
 
 export async function hrOverview(ctx: Ctx) {
@@ -68,7 +69,7 @@ export async function onboardingTracker(ctx: Ctx) {
   const today = todayUtc();
   const tasks = await db.onboardingTask.findMany({
     where: { organizationId: ctx.orgId, status: "PENDING" },
-    include: { employee: { include: { category: true } } },
+    include: { employee: { include: { category: true } }, ...TASK_DOCUMENT_INCLUDE },
     orderBy: [{ dueDate: "asc" }, { sortOrder: "asc" }],
   });
   const total = await db.onboardingTask.groupBy({
@@ -256,7 +257,7 @@ async function getExitRecord(ctx: Ctx, id: string) {
           assignedFixedAssets: { where: { status: "ACTIVE" }, orderBy: { assetNumber: "asc" } },
         },
       },
-      tasks: { orderBy: { sortOrder: "asc" } },
+      tasks: { orderBy: { sortOrder: "asc" }, include: TASK_DOCUMENT_INCLUDE },
       settlement: true,
     },
   });
