@@ -14,9 +14,11 @@ import type { Ctx } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { addDays, d, iso } from "@/lib/dates";
 import { bandFor, commentRequired, DEFAULT_CRITERIA, RECOMMENDATIONS, selfGap, STATUS_PHRASES, weightedScore } from "@/lib/appraisal";
+import { achievementBp, blendOverall, kpiScore as kpiScoreOf, parseKpiNumber, scoreFromBands } from "@/lib/performance";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { getHrPolicy } from "./hr-policy";
+import { getKpiBands } from "./performance";
 import { num } from "@/lib/money";
 
 const opt = z
@@ -88,6 +90,8 @@ export const cycleSchema = z.object({
   categoryIds: z.array(z.string()).optional(),
   /** Or to these specific employees (for probation / ad-hoc reviews). */
   employeeIds: z.array(z.string()).optional(),
+  /** Whole percentage of the overall score that comes from KPI results; 0 (the default) leaves appraisals scoring exactly as before. */
+  kpiSharePct: z.coerce.number().int("The KPI share must be a whole percentage").min(0, "The KPI share can't be below 0%").max(100, "The KPI share can't be above 100%").default(0),
 });
 
 /** The user who should review an employee: their reporting manager's login, if that person can review. */
@@ -125,8 +129,12 @@ export async function launchCycle(ctx: Ctx, raw: z.input<typeof cycleSchema>) {
   const cutoff = addDays(end, -policy.appraisalMinServiceDays);
   const skipped: Array<{ employee: string; reason: string }> = [];
   const eligible: typeof emps = [];
+  // each category's active job description (and its KPIs), noted on the appraisal; the KPIs are asked for only when they count
+  const jds = await db.jobDescription.findMany({ where: { organizationId: ctx.orgId, status: "ACTIVE" }, include: { kpis: { orderBy: { sortOrder: "asc" } } } });
+  const jdFor = new Map(jds.map((j) => [j.categoryId, j]));
   for (const e of emps) {
     if (e.employmentDate > cutoff && !v.employeeIds?.length) skipped.push({ employee: `${e.employeeNumber} ${e.firstName} ${e.lastName}`, reason: `under ${policy.appraisalMinServiceDays} days' service at the period end` });
+    else if (v.kpiSharePct > 0 && !jdFor.get(e.categoryId)?.kpis.length) skipped.push({ employee: `${e.employeeNumber} ${e.firstName} ${e.lastName}`, reason: "no KPIs are defined for their category, and KPIs count in this cycle" });
     else eligible.push(e);
   }
   if (!eligible.length) throw new BusinessError("No employee is eligible for this cycle — check the categories, the period and the minimum service in the HR policy.");
@@ -135,13 +143,14 @@ export async function launchCycle(ctx: Ctx, raw: z.input<typeof cycleSchema>) {
   for (const e of eligible) if (e.reportingManagerId && !reviewers.has(e.reportingManagerId)) reviewers.set(e.reportingManagerId, await reviewerFor(ctx.orgId, e.reportingManagerId));
 
   return db.$transaction(async (tx) => {
-    const cycle = await tx.appraisalCycle.create({ data: { organizationId: ctx.orgId, name: v.name, kind: v.kind, periodStart: start, periodEnd: end, dueDate: due, createdBy: ctx.name } });
+    const cycle = await tx.appraisalCycle.create({ data: { organizationId: ctx.orgId, name: v.name, kind: v.kind, periodStart: start, periodEnd: end, dueDate: due, createdBy: ctx.name, kpiSharePct: v.kpiSharePct } });
     let unassigned = 0;
     for (const e of eligible) {
       const r = e.reportingManagerId ? reviewers.get(e.reportingManagerId) : null;
       // nobody reviews themselves, even when their own login is their manager's
       const reviewer = r && r.id !== ctx.userId && !(await tx.user.findFirst({ where: { id: r.id, employeeId: e.id } })) ? r : null;
       if (!reviewer) unassigned += 1;
+      const jd = jdFor.get(e.categoryId);
       await tx.appraisal.create({
         data: {
           organizationId: ctx.orgId,
@@ -149,11 +158,15 @@ export async function launchCycle(ctx: Ctx, raw: z.input<typeof cycleSchema>) {
           employeeId: e.id,
           reviewerUserId: reviewer?.id ?? null,
           reviewerName: reviewer?.name ?? null,
+          jobDescriptionId: jd?.id ?? null,
+          ...(v.kpiSharePct > 0 && jd
+            ? { kpis: { create: jd.kpis.map((k) => ({ organizationId: ctx.orgId, kpiId: k.id, kpiName: k.name, unit: k.unit, direction: k.direction, target: k.target, weight: k.weight, sortOrder: k.sortOrder })) } }
+            : {}),
           ratings: { create: criteria.map((c) => ({ organizationId: ctx.orgId, criterionId: c.id, criterionName: c.name, weight: c.weight, sortOrder: c.sortOrder })) },
         },
       });
     }
-    await logAudit(ctx, { action: "APPRAISAL_CYCLE_LAUNCH", entity: "AppraisalCycle", entityId: cycle.id, newValue: { name: cycle.name, kind: cycle.kind, appraisals: eligible.length, skipped: skipped.length } }, tx);
+    await logAudit(ctx, { action: "APPRAISAL_CYCLE_LAUNCH", entity: "AppraisalCycle", entityId: cycle.id, newValue: { name: cycle.name, kind: cycle.kind, appraisals: eligible.length, skipped: skipped.length, kpiSharePct: v.kpiSharePct } }, tx);
     return { cycle, created: eligible.length, unassigned, skipped };
   });
 }
@@ -211,7 +224,7 @@ const isSelf = (ctx: Ctx, employeeId: string) => !!ctx.employeeId && ctx.employe
 async function load(ctx: Ctx, id: string) {
   const a = await db.appraisal.findFirst({
     where: { id, organizationId: ctx.orgId },
-    include: { cycle: true, ratings: { orderBy: { sortOrder: "asc" } }, employee: { include: { category: true } } },
+    include: { cycle: true, ratings: { orderBy: { sortOrder: "asc" } }, kpis: { orderBy: { sortOrder: "asc" } }, employee: { include: { category: true } } },
   });
   if (!a) throw new BusinessError("Appraisal not found.");
   return a;
@@ -248,8 +261,11 @@ export async function getAppraisal(ctx: Ctx, id: string) {
     ? {
         ...a,
         ratings: a.ratings.map((r) => ({ ...r, rating: null, comment: null })),
+        kpis: a.kpis.map((k) => ({ ...k, actual: null, comment: null, achievementBp: null, score: null })),
         overallScore: null,
         overallBand: null,
+        criteriaScore: null,
+        kpiScore: null,
         strengths: null,
         improvements: null,
         goals: null,
@@ -328,6 +344,8 @@ export const reviewSchema = z.object({
   goals: opt,
   reviewerComment: opt,
   recommendation: z.enum(RECOMMENDATIONS).default("NONE"),
+  /** The actual results for the KPIs on this appraisal (only when KPIs count in the cycle). */
+  kpis: z.array(z.object({ kpiId: z.string().min(1), actual: opt, comment: opt })).default([]),
 });
 
 function checkEntries(a: Loaded, entries: Array<{ criterionId: string; rating?: number; comment?: string }>) {
@@ -344,6 +362,18 @@ export async function saveReview(ctx: Ctx, id: string, raw: z.input<typeof revie
   if (a.status !== "DRAFT") throw new BusinessError("This appraisal has already been submitted.");
   const v = reviewSchema.parse(raw);
   checkEntries(a, v.ratings);
+  const known = new Set(a.kpis.map((k) => k.kpiId));
+  for (const k of v.kpis) {
+    if (!known.has(k.kpiId)) throw new BusinessError("One of the results isn't for a KPI on this appraisal.");
+    if (k.actual !== undefined) {
+      try {
+        parseKpiNumber(k.actual);
+      } catch (e) {
+        throw new BusinessError((e as Error).message);
+      }
+    }
+  }
+  if (new Set(v.kpis.map((k) => k.kpiId)).size !== v.kpis.length) throw new BusinessError("A KPI was entered twice.");
   const policy = await getHrPolicy(ctx.orgId);
   for (const e of v.ratings)
     if (e.rating && commentRequired(e.rating, policy) && !e.comment) {
@@ -351,6 +381,8 @@ export async function saveReview(ctx: Ctx, id: string, raw: z.input<typeof revie
       throw new BusinessError(`Explain the ${e.rating} for "${name}" — ratings that low or high need a comment.`);
     }
   await db.$transaction(async (tx) => {
+    for (const k of v.kpis)
+      await tx.appraisalKpi.update({ where: { appraisalId_kpiId: { appraisalId: id, kpiId: k.kpiId } }, data: { actual: k.actual ?? null, comment: k.comment ?? null } });
     for (const e of v.ratings)
       await tx.appraisalRating.update({ where: { appraisalId_criterionId: { appraisalId: id, criterionId: e.criterionId } }, data: { rating: e.rating ?? null, comment: e.comment ?? null } });
     await tx.appraisal.update({ where: { id }, data: { strengths: v.strengths ?? null, improvements: v.improvements ?? null, goals: v.goals ?? null, reviewerComment: v.reviewerComment ?? null, recommendation: v.recommendation } });
@@ -367,9 +399,30 @@ export async function submitReview(ctx: Ctx, id: string) {
   const policy = await getHrPolicy(ctx.orgId);
   const bare = a.ratings.find((r) => commentRequired(r.rating!, policy) && !r.comment);
   if (bare) throw new BusinessError(`Explain the ${bare.rating} for "${bare.criterionName}" — ratings that low or high need a comment.`);
-  const { score } = weightedScore(a.ratings);
-  const u = await db.appraisal.update({ where: { id }, data: { status: "SUBMITTED", submittedAt: new Date(), overallScore: score, overallBand: bandFor(score!), returnNote: null } });
-  await logAudit(ctx, { action: "APPRAISAL_SUBMIT", entity: "Appraisal", entityId: id, newValue: { employeeId: a.employeeId, score, cycle: a.cycle.name } });
+  const { score: criteriaScore } = weightedScore(a.ratings);
+  // KPIs count only when the cycle gave them a share; with none, the overall score is the criteria score, exactly as before
+  const share = a.cycle.kpiSharePct;
+  let overall = criteriaScore!;
+  let kpiHundredths: number | null = null;
+  const worked: Array<{ id: string; achievementBp: number; score: number }> = [];
+  if (share > 0) {
+    const bare = a.kpis.filter((k) => k.actual === null);
+    if (bare.length) throw new BusinessError(`Enter the actual result for every KPI before submitting — still to enter: ${bare.map((k) => k.kpiName).join(", ")}.`);
+    const bands = await getKpiBands(ctx.orgId);
+    for (const k of a.kpis) {
+      const bp = achievementBp(k.actual!.toFixed(4), k.target.toFixed(4), k.direction);
+      worked.push({ id: k.id, achievementBp: bp, score: scoreFromBands(bp, bands) });
+    }
+    kpiHundredths = kpiScoreOf(a.kpis.map((k) => ({ score: worked.find((w) => w.id === k.id)!.score, weight: k.weight })));
+    const blended = blendOverall(criteriaScore!, kpiHundredths, share);
+    if (blended === null) throw new BusinessError("There is no KPI result to score yet.");
+    overall = blended;
+  }
+  const u = await db.$transaction(async (tx) => {
+    for (const w of worked) await tx.appraisalKpi.update({ where: { id: w.id }, data: { achievementBp: w.achievementBp, score: w.score } });
+    return tx.appraisal.update({ where: { id }, data: { status: "SUBMITTED", submittedAt: new Date(), overallScore: overall, overallBand: bandFor(overall), criteriaScore, kpiScore: kpiHundredths, returnNote: null } });
+  });
+  await logAudit(ctx, { action: "APPRAISAL_SUBMIT", entity: "Appraisal", entityId: id, newValue: { employeeId: a.employeeId, score: overall, criteriaScore, kpiScore: kpiHundredths, kpiSharePct: share, cycle: a.cycle.name } });
   return u;
 }
 
@@ -382,7 +435,10 @@ export async function returnReview(ctx: Ctx, id: string, note: string) {
   if (a.status !== "SUBMITTED") throw new BusinessError("Only a submitted appraisal can be returned.");
   if (a.cycle.status === "CLOSED") throw new BusinessError("This cycle is closed.");
   if (!note || note.trim().length < 5) throw new BusinessError("Say what needs another look.");
-  const u = await db.appraisal.update({ where: { id }, data: { status: "DRAFT", returnNote: note.trim(), submittedAt: null, overallScore: null, overallBand: null } });
+  const u = await db.$transaction(async (tx) => {
+    await tx.appraisalKpi.updateMany({ where: { appraisalId: id }, data: { achievementBp: null, score: null } });
+    return tx.appraisal.update({ where: { id }, data: { status: "DRAFT", returnNote: note.trim(), submittedAt: null, overallScore: null, overallBand: null, criteriaScore: null, kpiScore: null } });
+  });
   await logAudit(ctx, { action: "APPRAISAL_RETURN", entity: "Appraisal", entityId: id, reason: note });
   return u;
 }
