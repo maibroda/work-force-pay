@@ -121,7 +121,9 @@ function resolvers(orgId: string): Record<string, () => Promise<string | undefin
     "/hr/job-descriptions/[id]": () => first(db.jobDescription.findFirst({ where, select: { id: true } })),
     "/hr/letters/[id]": () => first(db.generatedLetter.findFirst({ where, select: { id: true } })),
     "/hr/policies/[id]": () => first(db.companyPolicy.findFirst({ where, select: { id: true } })),
-    "/hr/relations/[id]": () => first(db.relationsCase.findFirst({ where, select: { id: true } })),
+    // misconduct is disciplinary (its own page and permission): the two pages each need a case of their own kind
+    "/hr/relations/[id]": () => first(db.relationsCase.findFirst({ where: { ...where, type: { not: "MISCONDUCT" } }, select: { id: true } })),
+    "/hr/discipline/[id]": () => first(db.relationsCase.findFirst({ where: { ...where, type: "MISCONDUCT" }, select: { id: true } })),
     "/hr/requisitions/[id]": () => first(db.jobRequisition.findFirst({ where, select: { id: true } })),
     "/inventory/[id]": () => first(db.inventoryItem.findFirst({ where, select: { id: true } })),
     "/payroll/loans/[id]": () => first(db.staffLoan.findFirst({ where, select: { id: true } })),
