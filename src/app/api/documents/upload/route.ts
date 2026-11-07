@@ -38,6 +38,9 @@ export async function POST(req: Request) {
   if (files.length > MAX_FILES_PER_UPLOAD) return NextResponse.json({ error: `Upload at most ${MAX_FILES_PER_UPLOAD} files at a time.` }, { status: 400 });
 
   const documentId = text(form, "documentId");
+  const taskKind = text(form, "taskKind");
+  const taskId = text(form, "taskId");
+  const task = taskId && (taskKind === "ONBOARDING" || taskKind === "EXIT") ? { kind: taskKind as "ONBOARDING" | "EXIT", id: taskId } : undefined;
   if (documentId && files.length > 1) return NextResponse.json({ error: "A replacement is one file." }, { status: 400 });
   const common = {
     employeeId: text(form, "employeeId") ?? "",
@@ -57,7 +60,7 @@ export async function POST(req: Request) {
     try {
       const bytes = Buffer.from(await file.arrayBuffer());
       if (documentId) await replaceDocument(ctx, documentId, { typeId: common.typeId || undefined, file: { name: file.name, bytes } });
-      else await uploadDocument(ctx, { ...common, file: { name: file.name, bytes } });
+      else await uploadDocument(ctx, { ...common, task, file: { name: file.name, bytes } });
       results.push({ name: file.name, ok: true });
     } catch (e) {
       if (e instanceof ForbiddenError) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

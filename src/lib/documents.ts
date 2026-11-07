@@ -170,3 +170,36 @@ export const LEGACY_TYPES: Record<string, { name: string; category: DocumentCate
   ACADEMIC_CERTIFICATE: { name: "Academic certificate", category: "EDUCATION_PROFESSIONAL", sensitive: false },
   OTHER: { name: "Other", category: "COMPLIANCE", sensitive: false },
 };
+
+// ───────────────────── Onboarding and exit steps that follow a document ─────────────────────
+
+export type TaskState = "PENDING" | "SUBMITTED" | "UNDER_REVIEW" | "COMPLETED";
+
+export const TASK_STATE_LABELS: Record<TaskState, string> = { PENDING: "Pending", SUBMITTED: "Submitted", UNDER_REVIEW: "Under review", COMPLETED: "Completed" };
+
+/** What a checklist step linked to a document shows: it follows the real document, and is Completed only when the document is approved. */
+export function taskStateFromDocument(status: DocumentStatus | null | undefined): TaskState {
+  if (status === "SUBMITTED") return "SUBMITTED";
+  if (status === "UNDER_REVIEW") return "UNDER_REVIEW";
+  if (status === "APPROVED") return "COMPLETED";
+  return "PENDING"; // no document, not yet submitted, rejected (to be replaced) or archived
+}
+
+/**
+ * The standard checklist steps that have an obvious document type, by step name. An administrator links them with one button (existing steps are never
+ * overridden). Broad steps such as "Documents collected (ID, certificates, references)" are left for the company to split into steps of their own.
+ */
+export const STANDARD_STEP_LINKS: { ONBOARDING: Record<string, string>; EXIT_CLEARANCE: Record<string, string> } = {
+  ONBOARDING: {
+    "Offer letter signed": "OFFER_LETTER",
+    "Employment contract signed & filed": "EMPLOYMENT_CONTRACT",
+    "Medical examination": "MEDICAL_EXAMINATION_REPORT",
+    "Guard / firearms license verified": "LICENCE",
+  },
+  EXIT_CLEARANCE: {
+    "Handover of duties": "HANDOVER_FORM",
+    "Exit interview conducted": "EXIT_INTERVIEW",
+    "Clearance sign-off": "CLEARANCE_FORM",
+    "Return of company property / equipment": "ASSET_RETURN",
+  },
+};

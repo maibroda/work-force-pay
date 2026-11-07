@@ -8,16 +8,21 @@
  *
  * Identification and medical documents (and the older reference-only records of those kinds) need document.sensitive: without it they are not listed
  * and "do not exist". Every query is scoped to the caller's company. Audit entries carry ids and field names, never a file name or a description.
+ *
+ * Part B adds the approval workflow: Pending, then Submitted (by someone who manages documents), then Under review (taken by an approver), then Approved or
+ * Rejected (a rejection needs a reason). The person who uploaded or submitted a document can never review it. A checklist step (onboarding or exit) linked to
+ * a document type follows its document and is completed only by the approved document.
  */
 import crypto from "node:crypto";
 import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { d } from "@/lib/dates";
-import { checkUpload, DOCUMENT_CATEGORIES, effectiveStatus, inlineViewable, LEGACY_TYPES, STANDARD_TYPES, type DocumentStatus, type FileKind } from "@/lib/documents";
+import { checkUpload, DOCUMENT_CATEGORIES, effectiveStatus, inlineViewable, LEGACY_TYPES, STANDARD_STEP_LINKS, STANDARD_TYPES, taskStateFromDocument, type DocumentStatus, type FileKind } from "@/lib/documents";
 import { decryptBytes, DocumentKeyError, documentKey, encryptBytes, linkSecret, signLink, verifyLink } from "@/lib/document-crypto";
-import { assertCan, BusinessError, db } from "./_base";
+import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
+import { ensureDefaultTemplates } from "./hr-policy";
 
 export const LINK_SECONDS = 300;
 const nowSeconds = () => Math.floor(Date.now() / 1000);
@@ -126,7 +131,10 @@ const fileSchema = z.object({ name: z.string().min(1, "The file has no name"), b
 
 export const uploadSchema = z.object({
   employeeId: z.string().min(1, "Choose the employee"),
-  typeId: z.string().min(1, "Choose the type of document"),
+  /** Not needed when the upload is for a checklist step: the step names the type. */
+  typeId: z.string().optional(),
+  /** Upload for an onboarding or exit checklist step linked to a document type. */
+  task: z.object({ kind: z.enum(["ONBOARDING", "EXIT"]), id: z.string().min(1) }).optional(),
   description: opt,
   issueDate: opt,
   expiryDate: opt,
@@ -177,11 +185,31 @@ async function storeVersion(
   return v;
 }
 
+/** A checklist step of this company, with the employee it belongs to and the document type it names. */
+async function loadTask(ctx: Ctx, ref: { kind: "ONBOARDING" | "EXIT"; id: string }) {
+  if (ref.kind === "ONBOARDING") {
+    const t = await db.onboardingTask.findFirst({ where: { id: ref.id, organizationId: ctx.orgId } });
+    if (!t) throw new BusinessError("Checklist step not found.");
+    return { employeeId: t.employeeId, documentTypeId: t.documentTypeId };
+  }
+  const t = await db.exitTask.findFirst({ where: { id: ref.id, organizationId: ctx.orgId }, include: { exitRecord: { select: { employeeId: true } } } });
+  if (!t) throw new BusinessError("Checklist step not found.");
+  return { employeeId: t.exitRecord.employeeId, documentTypeId: t.documentTypeId };
+}
+
 export async function uploadDocument(ctx: Ctx, raw: z.input<typeof uploadSchema>) {
   assertCan(ctx, "document.manage");
   const v = uploadSchema.parse(raw);
   await ensureDocumentTypes(ctx.orgId);
-  const type = await db.employeeDocumentType.findFirst({ where: { id: v.typeId, organizationId: ctx.orgId } });
+  let typeId = v.typeId;
+  if (v.task) {
+    const step = await loadTask(ctx, v.task);
+    if (step.employeeId !== v.employeeId) throw new BusinessError("That checklist step does not belong to this employee.");
+    if (!step.documentTypeId) throw new BusinessError("This step is not linked to a document type.");
+    typeId = step.documentTypeId;
+  }
+  if (!typeId) throw new BusinessError("Choose the type of document.");
+  const type = await db.employeeDocumentType.findFirst({ where: { id: typeId, organizationId: ctx.orgId } });
   if (!type) throw new BusinessError("Document type not found.");
   if (!type.active) throw new BusinessError("That document type is switched off.");
   if (type.sensitive) assertCan(ctx, "document.sensitive");
@@ -209,7 +237,13 @@ export async function uploadDocument(ctx: Ctx, raw: z.input<typeof uploadSchema>
       },
     });
     const version = await storeVersion(ctx, tx, document.id, 1, v.file, c);
-    await logAudit(ctx, { action: "DOCUMENT_UPLOAD", entity: "EmployeeDocument", entityId: document.id, newValue: { employeeId: emp.id, typeId: type.id, versionId: version.id, version: 1, sizeBytes: version.sizeBytes, kind: c.kind, status } }, tx);
+    await logAudit(ctx, { action: "DOCUMENT_UPLOAD", entity: "EmployeeDocument", entityId: document.id, newValue: { employeeId: emp.id, typeId: type.id, versionId: version.id, version: 1, sizeBytes: version.sizeBytes, kind: c.kind, status, taskKind: v.task?.kind ?? null, taskId: v.task?.id ?? null } }, tx);
+    if (v.task) {
+      // the step now follows this document (a type that needs no approval completes it on the spot)
+      if (v.task.kind === "ONBOARDING") await tx.onboardingTask.update({ where: { id: v.task.id }, data: { documentId: document.id } });
+      else await tx.exitTask.update({ where: { id: v.task.id }, data: { documentId: document.id } });
+      await syncTasks(tx, ctx, document);
+    }
     return { document, version };
   });
 }
@@ -237,13 +271,28 @@ export async function replaceDocument(ctx: Ctx, documentId: string, raw: z.input
     if (latest) await tx.employeeDocumentVersion.update({ where: { id: latest.id }, data: { replacedBy: ctx.name, replacedAt: new Date() } });
     const version = await storeVersion(ctx, tx, documentId, (latest?.version ?? 0) + 1, v.file, c);
     const status: DocumentStatus = type!.requiresApproval ? "PENDING" : "APPROVED";
-    const document = await tx.employeeDocument.update({ where: { id: documentId }, data: { typeId: type!.id, status, fileReference: c.safeName } });
+    // a changed file must be approved again: the workflow starts over
+    const document = await tx.employeeDocument.update({
+      where: { id: documentId },
+      data: { typeId: type!.id, status, fileReference: c.safeName, submittedBy: null, submittedByUserId: null, submittedAt: null, reviewedBy: null, reviewedByUserId: null, reviewStartedAt: null, reviewedAt: null, reviewNote: null },
+    });
     await logAudit(ctx, { action: "DOCUMENT_REPLACE", entity: "EmployeeDocument", entityId: documentId, newValue: { versionId: version.id, version: version.version, previousVersionId: latest?.id ?? null, typeId: type!.id, status } }, tx);
+    await syncTasks(tx, ctx, document);
     return { document, version };
   });
 }
 
 // ───────────────────────────── Reading ─────────────────────────────
+
+/** What the caller may do with a document next, from its status and who they are. Only a guide for the screen: every action checks again on the server. */
+function workflowActions(ctx: Ctx, doc: { status: DocumentStatus | null; submittedByUserId: string | null; reviewedByUserId: string | null; typeId: string | null; type: { requiresApproval: boolean } | null }, uploaderUserId: string | null) {
+  const own = ctx.userId === uploaderUserId || ctx.userId === doc.submittedByUserId;
+  return {
+    submit: can(ctx.role, "document.manage") && doc.status === "PENDING" && !!doc.type?.requiresApproval && !!doc.typeId,
+    startReview: can(ctx.role, "document.approve") && doc.status === "SUBMITTED" && !own,
+    decide: can(ctx.role, "document.approve") && !own && (doc.status === "SUBMITTED" || (doc.status === "UNDER_REVIEW" && doc.reviewedByUserId === ctx.userId)),
+  };
+}
 
 export async function listEmployeeDocuments(ctx: Ctx, employeeId: string, f: { includeArchived?: boolean } = {}) {
   assertCan(ctx, "document.view");
@@ -253,7 +302,7 @@ export async function listEmployeeDocuments(ctx: Ctx, employeeId: string, f: { i
     where: { organizationId: ctx.orgId, employeeId },
     include: {
       type: true,
-      versions: { orderBy: { version: "desc" }, select: { id: true, version: true, fileName: true, mimeType: true, sizeBytes: true, uploadedBy: true, uploadedAt: true, replacedBy: true, replacedAt: true } },
+      versions: { orderBy: { version: "desc" }, select: { id: true, version: true, fileName: true, mimeType: true, sizeBytes: true, uploadedBy: true, uploadedByUserId: true, uploadedAt: true, replacedBy: true, replacedAt: true } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -273,6 +322,14 @@ export async function listEmployeeDocuments(ctx: Ctx, employeeId: string, f: { i
         sensitive: r.type ? r.type.sensitive : (legacy?.sensitive ?? false),
         status: referenceOnly ? ("REFERENCE_ONLY" as const) : effectiveStatus(r.status ?? "PENDING", r.expiryDate, today),
         referenceOnly,
+        requiresApproval: r.type?.requiresApproval ?? null,
+        submittedBy: r.submittedBy,
+        submittedAt: r.submittedAt,
+        reviewedBy: r.reviewedBy,
+        reviewedAt: r.reviewedAt,
+        reviewNote: r.reviewNote,
+        // what this caller may do next (the server checks again when they do it)
+        actions: workflowActions(ctx, r, r.versions[0]?.uploadedByUserId ?? null),
         reference: r.documentNumber,
         description: r.description,
         issueDate: r.issueDate,
@@ -297,6 +354,177 @@ export async function listVersions(ctx: Ctx, documentId: string) {
     orderBy: { version: "desc" },
     select: { id: true, version: true, fileName: true, mimeType: true, sizeBytes: true, uploadedBy: true, uploadedAt: true, replacedBy: true, replacedAt: true },
   });
+}
+
+// ───────────────────────────── The approval workflow ─────────────────────────────
+
+/** Keeps every checklist step that follows this document in line with it: Completed only when the document is approved. */
+async function syncTasks(tx: Tx, ctx: Ctx, doc: { id: string; status: DocumentStatus | null; reviewedBy: string | null; reviewNote: string | null }) {
+  const state = taskStateFromDocument(doc.status);
+  const doneBy = doc.reviewedBy ? `Document approved (${doc.reviewedBy})` : "Document uploaded (no approval required)";
+  const note = doc.status === "REJECTED" && doc.reviewNote ? `Document rejected: ${doc.reviewNote}` : null;
+
+  const onboarding = await tx.onboardingTask.findMany({ where: { documentId: doc.id, organizationId: ctx.orgId, status: { not: "NOT_APPLICABLE" } } });
+  for (const t of onboarding) {
+    if (state === "COMPLETED" && t.status !== "DONE") {
+      await tx.onboardingTask.update({ where: { id: t.id }, data: { status: "DONE", completedBy: doneBy, completedAt: new Date(), notes: null } });
+      await logAudit(ctx, { action: "ONBOARDING_TASK_DOCUMENT_COMPLETE", entity: "Employee", entityId: t.employeeId, newValue: { taskId: t.id, documentId: doc.id } }, tx);
+    } else if (state !== "COMPLETED" && (t.status === "DONE" || t.notes !== note)) {
+      await tx.onboardingTask.update({ where: { id: t.id }, data: { status: "PENDING", completedBy: null, completedAt: null, notes: note } });
+      if (t.status === "DONE") await logAudit(ctx, { action: "ONBOARDING_TASK_DOCUMENT_REOPEN", entity: "Employee", entityId: t.employeeId, newValue: { taskId: t.id, documentId: doc.id } }, tx);
+    }
+  }
+  const exits = await tx.exitTask.findMany({ where: { documentId: doc.id, organizationId: ctx.orgId, status: { not: "NOT_APPLICABLE" } }, include: { exitRecord: { select: { employeeId: true } } } });
+  for (const t of exits) {
+    if (state === "COMPLETED" && t.status !== "DONE") {
+      await tx.exitTask.update({ where: { id: t.id }, data: { status: "DONE", completedBy: doneBy, completedAt: new Date(), notes: null } });
+      await logAudit(ctx, { action: "EXIT_TASK_DOCUMENT_COMPLETE", entity: "Employee", entityId: t.exitRecord.employeeId, newValue: { taskId: t.id, documentId: doc.id } }, tx);
+    } else if (state !== "COMPLETED" && (t.status === "DONE" || t.notes !== note)) {
+      await tx.exitTask.update({ where: { id: t.id }, data: { status: "PENDING", completedBy: null, completedAt: null, notes: note } });
+      if (t.status === "DONE") await logAudit(ctx, { action: "EXIT_TASK_DOCUMENT_REOPEN", entity: "Employee", entityId: t.exitRecord.employeeId, newValue: { taskId: t.id, documentId: doc.id } }, tx);
+    }
+  }
+}
+
+/** A document, with the person who uploaded its latest file (so they can be kept from reviewing it). */
+async function loadForWorkflow(ctx: Ctx, id: string) {
+  const doc = await loadDocument(ctx, id);
+  const latest = await db.employeeDocumentVersion.findFirst({ where: { documentId: id, organizationId: ctx.orgId }, orderBy: { version: "desc" }, select: { uploadedByUserId: true } });
+  return { doc, uploaderUserId: latest?.uploadedByUserId ?? null, hasFile: !!latest };
+}
+
+/** The person who uploaded or submitted a document is never the one who reviews it. */
+function assertNotOwn(ctx: Ctx, doc: { submittedByUserId: string | null }, uploaderUserId: string | null) {
+  if (ctx.userId === uploaderUserId || ctx.userId === doc.submittedByUserId) throw new BusinessError("You uploaded or submitted this document: someone else has to review it.");
+}
+
+/** Submit a pending document for review. */
+export async function submitDocument(ctx: Ctx, id: string) {
+  assertCan(ctx, "document.manage");
+  const { doc, hasFile } = await loadForWorkflow(ctx, id);
+  if (!doc.type) throw new BusinessError("Attach a file and choose the type of this document first.");
+  if (!doc.type.requiresApproval) throw new BusinessError("This type of document does not need approval.");
+  if (doc.status !== "PENDING") throw new BusinessError("Only a pending document can be submitted for review.");
+  if (!hasFile) throw new BusinessError("Upload the file first.");
+  return db.$transaction(async (tx) => {
+    const u = await tx.employeeDocument.update({ where: { id }, data: { status: "SUBMITTED", submittedBy: ctx.name, submittedByUserId: ctx.userId, submittedAt: new Date(), reviewedBy: null, reviewedByUserId: null, reviewStartedAt: null, reviewedAt: null, reviewNote: null } });
+    await logAudit(ctx, { action: "DOCUMENT_SUBMIT", entity: "EmployeeDocument", entityId: id, oldValue: { status: doc.status }, newValue: { status: "SUBMITTED" } }, tx);
+    await syncTasks(tx, ctx, u);
+    return u;
+  });
+}
+
+/** A reviewer takes a submitted document: it is now under review, by them. */
+export async function startReview(ctx: Ctx, id: string) {
+  assertCan(ctx, "document.approve");
+  const { doc, uploaderUserId } = await loadForWorkflow(ctx, id);
+  if (doc.status !== "SUBMITTED") throw new BusinessError("Only a submitted document can be taken for review.");
+  assertNotOwn(ctx, doc, uploaderUserId);
+  return db.$transaction(async (tx) => {
+    const u = await tx.employeeDocument.update({ where: { id }, data: { status: "UNDER_REVIEW", reviewedBy: ctx.name, reviewedByUserId: ctx.userId, reviewStartedAt: new Date() } });
+    await logAudit(ctx, { action: "DOCUMENT_REVIEW_START", entity: "EmployeeDocument", entityId: id, oldValue: { status: doc.status }, newValue: { status: "UNDER_REVIEW" } }, tx);
+    await syncTasks(tx, ctx, u);
+    return u;
+  });
+}
+
+/** The checks shared by approving and rejecting: a submitted (or under review by you) document, and not one you uploaded or submitted. */
+async function loadForDecision(ctx: Ctx, id: string) {
+  assertCan(ctx, "document.approve");
+  const { doc, uploaderUserId } = await loadForWorkflow(ctx, id);
+  if (doc.status !== "SUBMITTED" && doc.status !== "UNDER_REVIEW") throw new BusinessError("Only a submitted document can be approved or rejected.");
+  if (doc.status === "UNDER_REVIEW" && doc.reviewedByUserId !== ctx.userId) throw new BusinessError("Another reviewer has this document under review.");
+  assertNotOwn(ctx, doc, uploaderUserId);
+  return doc;
+}
+
+export async function approveDocument(ctx: Ctx, id: string, note?: string) {
+  const doc = await loadForDecision(ctx, id);
+  return db.$transaction(async (tx) => {
+    const u = await tx.employeeDocument.update({
+      where: { id },
+      data: { status: "APPROVED", reviewedBy: ctx.name, reviewedByUserId: ctx.userId, reviewStartedAt: doc.reviewStartedAt ?? new Date(), reviewedAt: new Date(), reviewNote: note?.trim() || null },
+    });
+    await logAudit(ctx, { action: "DOCUMENT_APPROVE", entity: "EmployeeDocument", entityId: id, oldValue: { status: doc.status }, newValue: { status: "APPROVED" } }, tx);
+    await syncTasks(tx, ctx, u);
+    return u;
+  });
+}
+
+/** A rejection always has a reason. The document is then replaced and submitted again. */
+export async function rejectDocument(ctx: Ctx, id: string, reason: string) {
+  const doc = await loadForDecision(ctx, id);
+  const why = String(reason ?? "").trim();
+  if (why.length < 5) throw new BusinessError("Say why the document is rejected (at least a few words).");
+  return db.$transaction(async (tx) => {
+    const u = await tx.employeeDocument.update({
+      where: { id },
+      data: { status: "REJECTED", reviewedBy: ctx.name, reviewedByUserId: ctx.userId, reviewStartedAt: doc.reviewStartedAt ?? new Date(), reviewedAt: new Date(), reviewNote: why },
+    });
+    await logAudit(ctx, { action: "DOCUMENT_REJECT", entity: "EmployeeDocument", entityId: id, oldValue: { status: doc.status }, newValue: { status: "REJECTED" }, reason: why }, tx);
+    await syncTasks(tx, ctx, u);
+    return u;
+  });
+}
+
+// ───────────────────────────── How a step shows its document ─────────────────────────────
+
+/** What a loader adds to an onboarding or exit task so a screen can show the document it follows. */
+export const TASK_DOCUMENT_INCLUDE = {
+  documentType: { select: { name: true, sensitive: true } },
+  document: { select: { id: true, status: true, reviewNote: true, versions: { orderBy: { version: "desc" as const }, take: 1, select: { id: true, mimeType: true } } } },
+} as const;
+
+interface TaskWithDocument {
+  id: string;
+  status: string;
+  documentTypeId: string | null;
+  documentType: { name: string; sensitive: boolean } | null;
+  document: { id: string; status: DocumentStatus | null; reviewNote: string | null; versions: Array<{ id: string; mimeType: string }> } | null;
+}
+
+/** The document side of a checklist step, for the caller: null when the step is not linked to a document type. A guide for the screen; the server checks every action. */
+export function taskDocumentView(ctx: Ctx, t: TaskWithDocument) {
+  if (!t.documentTypeId || !t.documentType) return null;
+  const sensitiveOk = !t.documentType.sensitive || can(ctx.role, "document.sensitive");
+  const v = t.document?.versions[0];
+  return {
+    typeName: t.documentType.name,
+    state: taskStateFromDocument(t.document?.status ?? null),
+    documentId: t.document?.id ?? null,
+    note: t.document?.status === "REJECTED" ? t.document.reviewNote : null,
+    current: v && sensitiveOk && can(ctx.role, "document.view") ? { id: v.id, canPreview: ["application/pdf", "image/png", "image/jpeg"].includes(v.mimeType) } : null,
+    canUpload: can(ctx.role, "document.manage") && sensitiveOk && t.status !== "NOT_APPLICABLE",
+  };
+}
+
+// ───────────────────────────── Linking checklist steps ─────────────────────────────
+
+/**
+ * Links the standard checklist steps that have an obvious document type (see STANDARD_STEP_LINKS) to that type. Only steps with no link yet are
+ * linked, so a step an administrator linked by hand is never overridden, and tasks that already exist are not changed (only steps made from now on follow
+ * a document). Returns how many steps were linked in each checklist.
+ */
+export async function linkStandardSteps(ctx: Ctx) {
+  assertCan(ctx, "document.configure");
+  assertCan(ctx, "hr.configure");
+  await ensureDocumentTypes(ctx.orgId);
+  const types = await db.employeeDocumentType.findMany({ where: { organizationId: ctx.orgId } });
+  const out = { onboarding: 0, exit: 0 };
+  for (const kind of ["ONBOARDING", "EXIT_CLEARANCE"] as const) {
+    await ensureDefaultTemplates(ctx.orgId, kind);
+    const links = STANDARD_STEP_LINKS[kind];
+    const steps = await db.checklistTemplateItem.findMany({ where: { organizationId: ctx.orgId, kind, documentTypeId: null, taskName: { in: Object.keys(links) } } });
+    for (const step of steps) {
+      const type = types.find((t) => t.code === links[step.taskName]);
+      if (!type) continue;
+      await db.checklistTemplateItem.update({ where: { id: step.id }, data: { documentTypeId: type.id } });
+      if (kind === "ONBOARDING") out.onboarding += 1;
+      else out.exit += 1;
+    }
+  }
+  await logAudit(ctx, { action: "CHECKLIST_STEPS_LINKED_TO_DOCUMENTS", entity: "ChecklistTemplateItem", newValue: out });
+  return out;
 }
 
 // ───────────────────────────── Links and files ─────────────────────────────
@@ -346,7 +574,10 @@ export async function archiveDocument(ctx: Ctx, id: string, reason?: string) {
   assertCan(ctx, "document.manage");
   const doc = await loadDocument(ctx, id);
   if (doc.status === "ARCHIVED") throw new BusinessError("This document is already archived.");
-  const u = await db.employeeDocument.update({ where: { id }, data: { status: "ARCHIVED", archivedBy: ctx.name, archivedAt: new Date() } });
-  await logAudit(ctx, { action: "DOCUMENT_ARCHIVE", entity: "EmployeeDocument", entityId: id, oldValue: { status: doc.status }, newValue: { status: "ARCHIVED" }, reason: reason?.trim() || undefined });
-  return u;
+  return db.$transaction(async (tx) => {
+    const u = await tx.employeeDocument.update({ where: { id }, data: { status: "ARCHIVED", archivedBy: ctx.name, archivedAt: new Date() } });
+    await logAudit(ctx, { action: "DOCUMENT_ARCHIVE", entity: "EmployeeDocument", entityId: id, oldValue: { status: doc.status }, newValue: { status: "ARCHIVED" }, reason: reason?.trim() || undefined }, tx);
+    await syncTasks(tx, ctx, u);
+    return u;
+  });
 }

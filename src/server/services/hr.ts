@@ -302,6 +302,7 @@ export async function completeOnboardingTask(ctx: Ctx, id: string) {
   assertCan(ctx, "hr.manage");
   const task = await db.onboardingTask.findFirst({ where: { id, organizationId: ctx.orgId } });
   if (!task) throw new BusinessError("Onboarding task not found.");
+  if (task.documentTypeId) throw new BusinessError("This step is completed by its document: upload it for approval, or mark the step not applicable with a reason.");
   const updated = await db.onboardingTask.update({
     where: { id },
     data: { status: "DONE", completedBy: ctx.name, completedAt: new Date() },
@@ -466,6 +467,7 @@ export async function completeExitTask(ctx: Ctx, id: string) {
     include: { exitRecord: true },
   });
   if (!task) throw new BusinessError("Clearance task not found.");
+  if (task.documentTypeId) throw new BusinessError("This step is completed by its document: upload it for approval, or mark the step not applicable with a reason.");
   const updated = await db.exitTask.update({
     where: { id },
     data: { status: "DONE", completedBy: ctx.name, completedAt: new Date() },

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ActionButton } from "@/components/action-button";
-import { archiveDocumentAction, issueDocumentLinkAction } from "@/app/actions/documents";
+import { approveDocumentAction, archiveDocumentAction, issueDocumentLinkAction, rejectDocumentAction, startReviewAction, submitDocumentAction } from "@/app/actions/documents";
 import { DocumentUpload, type UploadType } from "@/components/document-upload";
 import { toast } from "./toaster";
 
@@ -45,6 +45,7 @@ export function DocumentRowActions({
   referenceOnly,
   archived,
   types,
+  actions,
 }: {
   documentId: string;
   employeeId: string;
@@ -54,6 +55,8 @@ export function DocumentRowActions({
   referenceOnly: boolean;
   archived: boolean;
   types: UploadType[];
+  /** What the caller may do next with the document (the server checks again). */
+  actions: { submit: boolean; startReview: boolean; decide: boolean };
 }) {
   const [replacing, setReplacing] = useState(false);
   const [showVersions, setShowVersions] = useState(false);
@@ -69,6 +72,26 @@ export function DocumentRowActions({
           <Button size="sm" variant="outline" type="button" onClick={() => open(current.id, "download")}>
             Download
           </Button>
+        )}
+        {actions.submit && (
+          <ActionButton action={submitDocumentAction.bind(null, documentId)} confirm="Submit this document for review? A second person will approve or reject it." variant="success">
+            Submit for approval
+          </ActionButton>
+        )}
+        {actions.startReview && (
+          <ActionButton action={startReviewAction.bind(null, documentId)} variant="outline">
+            Take for review
+          </ActionButton>
+        )}
+        {actions.decide && (
+          <>
+            <ActionButton action={approveDocumentAction.bind(null, documentId)} confirm="Approve this document?" variant="success">
+              Approve
+            </ActionButton>
+            <ActionButton action={rejectDocumentAction.bind(null, documentId)} reason reasonPlaceholder="Why is it rejected? (required)" variant="outline">
+              Reject
+            </ActionButton>
+          </>
         )}
         {canManage && !archived && (
           <Button size="sm" variant="outline" type="button" onClick={() => setReplacing((x) => !x)}>

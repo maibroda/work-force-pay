@@ -64,7 +64,14 @@ export async function EmployeeDocuments({ ctx, employeeId }: { ctx: Ctx; employe
                     {fmtDate(r.expiryDate)}
                     {expiringSoon ? <Badge tone="amber" className="ml-1">expires soon</Badge> : null}
                   </TD>
-                  <TD>{r.status === "REFERENCE_ONLY" ? <Badge tone="gray">{STATUS_LABELS.REFERENCE_ONLY}</Badge> : <StatusBadge status={r.status} />}</TD>
+                  <TD className="max-w-48 whitespace-normal">
+                    {r.status === "REFERENCE_ONLY" ? <Badge tone="gray">{STATUS_LABELS.REFERENCE_ONLY}</Badge> : <StatusBadge status={r.status} />}
+                    {r.status === "PENDING" && r.requiresApproval && <div className="mt-1 text-[11px] text-muted-foreground">Needs approval: submit it for review</div>}
+                    {r.status === "SUBMITTED" && <div className="mt-1 text-[11px] text-muted-foreground">Submitted by {r.submittedBy} on {fmtDate(r.submittedAt)}</div>}
+                    {r.status === "UNDER_REVIEW" && <div className="mt-1 text-[11px] text-muted-foreground">Being reviewed by {r.reviewedBy}</div>}
+                    {(r.status === "APPROVED" || r.status === "EXPIRED") && r.reviewedBy && <div className="mt-1 text-[11px] text-muted-foreground">Approved by {r.reviewedBy} on {fmtDate(r.reviewedAt)}{r.reviewNote ? ` — ${r.reviewNote}` : ""}</div>}
+                    {r.status === "REJECTED" && <div className="mt-1 text-[11px] text-red-700">Rejected by {r.reviewedBy} on {fmtDate(r.reviewedAt)}: {r.reviewNote}</div>}
+                  </TD>
                   <TD className="text-xs">{fmtDate(r.updatedAt)}</TD>
                   <TD className="min-w-56">
                     <DocumentRowActions
@@ -76,6 +83,7 @@ export async function EmployeeDocuments({ ctx, employeeId }: { ctx: Ctx; employe
                       referenceOnly={r.referenceOnly}
                       archived={r.status === "ARCHIVED"}
                       types={uploadTypes}
+                      actions={r.actions}
                     />
                   </TD>
                 </TR>

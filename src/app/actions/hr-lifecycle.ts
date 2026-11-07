@@ -433,7 +433,8 @@ export async function editTemplateItemAction(v: V) {
       Object.entries(patch)
         .filter(([, x]) => x !== undefined)
         // Selects post "true"/"false" strings; the schema wants real booleans.
-        .map(([k, x]) => [k, x === "true" ? true : x === "false" ? false : x]),
+        // "none" is the way to say "no document type" for a step
+        .map(([k, x]) => [k, x === "true" ? true : x === "false" ? false : k === "documentTypeId" && x === "none" ? null : x]),
     );
     await policy.updateTemplateItem(ctx, String(id), clean as never);
     return { message: "Checklist step updated." };

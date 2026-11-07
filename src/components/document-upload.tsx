@@ -39,6 +39,7 @@ export function DocumentUpload({
   replaceDocumentId,
   fixedTypeId,
   needsType = false,
+  task,
   onDone,
 }: {
   employeeId: string;
@@ -48,6 +49,8 @@ export function DocumentUpload({
   fixedTypeId?: string;
   /** A record from before document management: the type must be chosen. */
   needsType?: boolean;
+  /** Upload for an onboarding or exit checklist step: the step names the type. */
+  task?: { kind: "ONBOARDING" | "EXIT"; id: string };
   onDone?: () => void;
 }) {
   const router = useRouter();
@@ -58,7 +61,7 @@ export function DocumentUpload({
   const [progress, setProgress] = useState<number | null>(null);
   const [results, setResults] = useState<Array<{ name: string; ok: boolean; error?: string }>>([]);
   const replacing = !!replaceDocumentId;
-  const showType = !replacing || needsType;
+  const showType = (!replacing && !task) || needsType;
   const type = types.find((t) => t.id === typeId);
   const busy = progress !== null;
 
@@ -97,6 +100,10 @@ export function DocumentUpload({
     fields.set("employeeId", employeeId);
     if (typeId) fields.set("typeId", typeId);
     if (replaceDocumentId) fields.set("documentId", replaceDocumentId);
+    if (task) {
+      fields.set("taskKind", task.kind);
+      fields.set("taskId", task.id);
+    }
     for (const k of ["description", "reference", "issueDate", "expiryDate"]) {
       const v = form.get(k);
       if (typeof v === "string" && v) fields.set(k, v);

@@ -100,6 +100,7 @@ export async function instantiateOnboardingTasks(
       dueDate: addDays(employee.employmentDate, t.dueOffsetDays),
       responsibleRole: t.responsibleRole,
       mandatory: t.mandatory,
+      documentTypeId: t.documentTypeId,
       sortOrder: i,
     })),
   });
@@ -134,6 +135,7 @@ export async function instantiateExitTasks(
       mandatory: t.mandatory,
       blocksSettlement: t.blocksSettlement,
       systemKey: t.systemKey,
+      documentTypeId: t.documentTypeId,
       sortOrder: i,
     })),
   });
@@ -144,7 +146,7 @@ export async function listChecklistTemplates(ctx: Ctx, kind: "ONBOARDING" | "EXI
   await ensureDefaultTemplates(ctx.orgId, kind);
   return db.checklistTemplateItem.findMany({
     where: { organizationId: ctx.orgId, kind },
-    include: { category: true },
+    include: { category: true, documentType: { select: { name: true } } },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
   });
 }
@@ -164,6 +166,8 @@ export const templateItemSchema = z.object({
   blocksSettlement: z.boolean().default(true),
   categoryId: opt,
   sortOrder: z.coerce.number().int().min(0).optional(),
+  /** The document type this step follows (completed by the approved document, not by hand). */
+  documentTypeId: opt,
 });
 
 export async function addTemplateItem(ctx: Ctx, raw: z.input<typeof templateItemSchema>) {
@@ -174,6 +178,7 @@ export async function addTemplateItem(ctx: Ctx, raw: z.input<typeof templateItem
     const cat = await db.employeeCategory.findFirst({ where: { id: v.categoryId, organizationId: ctx.orgId } });
     if (!cat) throw new BusinessError("Employee category not found.");
   }
+  if (v.documentTypeId && !(await db.employeeDocumentType.findFirst({ where: { id: v.documentTypeId, organizationId: ctx.orgId } }))) throw new BusinessError("Document type not found.");
   const dup = await db.checklistTemplateItem.findFirst({
     where: { organizationId: ctx.orgId, kind: v.kind, taskName: v.taskName },
   });
@@ -192,6 +197,7 @@ export async function addTemplateItem(ctx: Ctx, raw: z.input<typeof templateItem
       mandatory: v.mandatory,
       blocksSettlement: v.kind === "EXIT_CLEARANCE" ? v.blocksSettlement : false,
       categoryId: v.categoryId ?? null,
+      documentTypeId: v.documentTypeId ?? null,
       sortOrder: v.sortOrder ?? (max._max.sortOrder ?? -1) + 1,
     },
   });
@@ -204,12 +210,16 @@ export async function updateTemplateItem(
   id: string,
   raw: Partial<Pick<z.input<typeof templateItemSchema>, "taskName" | "dueOffsetDays" | "responsibleRole" | "mandatory" | "blocksSettlement" | "sortOrder">> & {
     active?: boolean;
+    /** Set to a type id to link the step to a document type; null clears the link. */
+    documentTypeId?: string | null;
   },
 ) {
   assertCan(ctx, "hr.configure");
   const old = await db.checklistTemplateItem.findFirst({ where: { id, organizationId: ctx.orgId } });
   if (!old) throw new BusinessError("Checklist step not found.");
   const patch = templateItemSchema.partial().extend({ active: z.boolean().optional() }).parse(raw);
+  const clearLink = raw.documentTypeId === null;
+  if (patch.documentTypeId && !(await db.employeeDocumentType.findFirst({ where: { id: patch.documentTypeId, organizationId: ctx.orgId } }))) throw new BusinessError("Document type not found.");
   if (patch.taskName && patch.taskName !== old.taskName) {
     const dup = await db.checklistTemplateItem.findFirst({
       where: { organizationId: ctx.orgId, kind: old.kind, taskName: patch.taskName, NOT: { id } },
@@ -228,6 +238,7 @@ export async function updateTemplateItem(
         : {}),
       ...(patch.sortOrder !== undefined ? { sortOrder: patch.sortOrder } : {}),
       ...(patch.active !== undefined ? { active: patch.active } : {}),
+      ...(patch.documentTypeId ? { documentTypeId: patch.documentTypeId } : clearLink ? { documentTypeId: null } : {}),
     },
   });
   await logAudit(ctx, {

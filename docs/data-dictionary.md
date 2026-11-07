@@ -1277,7 +1277,17 @@ Employee documents (ID, licenses, contracts, certificates). Metadata-only — fi
 | archivedBy | String |  |  |
 | archivedAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |
+| submittedBy | String |  | The approval workflow: submitted by one person, taken and decided by another (never the uploader or the submitter). |
+| submittedByUserId | String |  |  |
+| submittedAt | DateTime |  |  |
+| reviewedBy | String |  |  |
+| reviewedByUserId | String |  |  |
+| reviewStartedAt | DateTime |  |  |
+| reviewedAt | DateTime |  |  |
+| reviewNote | String |  | The reason for a rejection, or the approver's note. |
 | versions | → EmployeeDocumentVersion[] |  |  |
+| onboardingTasks | → OnboardingTask[] |  |  |
+| exitTasks | → ExitTask[] |  |  |
 
 ### EmployeeDocumentType
 
@@ -1300,6 +1310,9 @@ A kind of document within a category. Data, not code: an administrator adds, ren
 | createdAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |
 | documents | → EmployeeDocument[] |  |  |
+| templateItems | → ChecklistTemplateItem[] |  |  |
+| onboardingTasks | → OnboardingTask[] |  |  |
+| exitTasks | → ExitTask[] |  |  |
 
 ### EmployeeDocumentVersion
 
@@ -1404,6 +1417,10 @@ Per-employee onboarding checklist — standard tasks are seeded automatically on
 | responsibleRole | String |  | Who is expected to do it (free text — "HR", "IT", "Supervisor"), copied from the template. |
 | mandatory | Boolean |  |  |
 | createdAt | DateTime |  |  |
+| documentTypeId | String |  | Copied from the template when the task is made; the document that completes it is attached when it is uploaded. |
+| documentType | → EmployeeDocumentType |  |  |
+| documentId | String |  |  |
+| document | → EmployeeDocument |  |  |
 
 ### ExitRecord
 
@@ -1455,6 +1472,10 @@ Offboarding / exit management — maker/checker like StaffMovement. Approval set
 | mandatory | Boolean |  |  |
 | blocksSettlement | Boolean |  | When true the settlement can't be approved until this item is DONE / NOT_APPLICABLE. |
 | systemKey | String |  | "FINAL_SETTLEMENT" is auto-completed by the system when the settlement is approved. |
+| documentTypeId | String |  |  |
+| documentType | → EmployeeDocumentType |  |  |
+| documentId | String |  |  |
+| document | → EmployeeDocument |  |  |
 | createdAt | DateTime |  |  |
 
 ### HrPolicy
@@ -1550,6 +1571,8 @@ A checklist step that is instantiated onto every new hire (ONBOARDING) or every 
 | systemKey | String |  |  |
 | categoryId | String |  | Limit the step to one employee category (null = everyone). |
 | category | → EmployeeCategory |  |  |
+| documentTypeId | String |  | When set, the step follows an electronic document of this type (it is completed by the approved document, not by hand). |
+| documentType | → EmployeeDocumentType |  |  |
 | active | Boolean |  |  |
 | sortOrder | Int |  |  |
 | createdAt | DateTime |  |  |

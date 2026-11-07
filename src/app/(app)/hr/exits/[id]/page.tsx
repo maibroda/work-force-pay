@@ -8,6 +8,7 @@ import { naira } from "@/lib/money";
 import { fullName } from "@/lib/utils";
 import { FormPanel, KV, PageHeader, Section, Empty } from "@/components/page";
 import { ActionButton } from "@/components/action-button";
+import { TaskDocumentCell } from "@/components/task-document-cell";
 import { SmartForm } from "@/components/smart-form";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
@@ -130,10 +131,12 @@ export default async function ExitPage({ params }: { params: Promise<{ id: strin
                     </TD>
                     <TD>
                       {manage && t.status === "PENDING" && (
-                        <div className="flex gap-1">
-                          <ActionButton action={completeExitTaskAction.bind(null, t.id)} variant="success">
-                            Done
-                          </ActionButton>
+                        <div className="flex flex-wrap gap-1">
+                          <TaskDocumentCell ctx={ctx} kind="EXIT" task={t} employeeId={x.employeeId}>
+                            <ActionButton action={completeExitTaskAction.bind(null, t.id)} variant="success">
+                              Done
+                            </ActionButton>
+                          </TaskDocumentCell>
                           <ActionButton action={waiveTaskAction.bind(null, "exit", t.id)} reason reasonPlaceholder="Why doesn't it apply?" variant="outline">
                             N/A
                           </ActionButton>
