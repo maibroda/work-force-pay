@@ -9,7 +9,7 @@ Written 2026-11-07. **A proposal only: nothing is built and no migration is writ
 - **Reminders:** the HR daily digest (`src/server/services/reminders.ts`) already lists appraisals overdue or awaiting approval, contracts ending and probation reviews; it is the right place for "a plan review is due".
 - **Self-service:** employees already see and acknowledge their own appraisals (`/me/appraisals`), with an agree or disagree answer and a comment.
 - **Not there:** a structured plan with gaps, measurable targets, support, review milestones and an outcome; any employee-facing view of one; any reminder.
-- **No "line manager" link exists on the employee record** (the only supervisor link is a beat supervisor for operations). So "the manager of this employee" cannot be worked out by the system today (see question 2).
+- **A reporting-manager link does exist** on the employee record (`reportingManagerId`, set when an employee is created or edited, and already used to pick appraisal reviewers). **Correction of my first draft, which said there was none.** A manager is an employee, and is a user of the system only if they have a login; so a manager could be given a view of their own team's plans (see question 2).
 
 ## 2. What the PIP adds
 
@@ -49,7 +49,7 @@ Continuous feedback, the probation review ending in a confirmation decision, per
 ## 6. Questions for the founder (my recommendation in bold)
 
 1. **Is a PIP its own workflow, separate from the Disciplinary area?** **Yes**: a PIP is about capability, a sanction is about conduct, and mixing them would put a performance problem on a person's misconduct record.
-2. **Who may see a plan, and who is "the manager"?** The system has no line-manager link, so I propose **HR-run plans with a named plan owner chosen from the HR users** (plan owner = a person who reviews progress), and **no general manager access**. If you want line managers to see their own team's plans, that needs a manager link on the employee record first (a separate, small change). **Proposed: HR administrator and company administrator see and manage; the auditor sees read-only; the plan owner sees the plans they own.**
+2. **Who may see a plan, and who is "the manager"?** I propose **HR-run plans with a named plan owner chosen from the HR users** (plan owner = a person who reviews progress), and **no general manager access in this step**. The reporting-manager link exists, so letting a line manager see their own team's plans (and perhaps record reviews) is possible as a follow-up, but a plan is sensitive and a manager may be part of the problem, so I would add it only on your say-so. **Proposed: HR administrator and company administrator see and manage; the auditor sees read-only; the plan owner sees the plans they own.**
 3. **The limits (settings):** **default 60 days, longest 90, one extension of at most 30 days.** Please confirm or give your numbers, and have your lawyer review them.
 4. **Second-person approval** to start a plan and to approve its outcome: **yes both** (so one person cannot start a process against an employee and conclude it alone).
 5. **What follows an Unsuccessful outcome?** **Nothing automatic.** The plan closes and shows "Unsuccessful: decide the next step", and HR chooses (another plan, a transfer, a capability hearing, an exit) through the existing processes. Do you want a **"capability" case type** in the Disciplinary area for that hearing, or is the existing case system enough for now?
