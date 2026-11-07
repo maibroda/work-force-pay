@@ -63,7 +63,10 @@ export async function anonymizeEmployee(tx: Tx, orgId: string, employeeId: strin
   counts.contacts = (await tx.employeeContact.deleteMany({ where })).count;
   counts.guarantors = (await tx.employeeGuarantor.deleteMany({ where })).count;
   counts.changeRequests = (await tx.employeeChangeRequest.updateMany({ where, data: { proposed: { removed: true }, previous: { removed: true }, reason: REMOVED, decisionNote: null } })).count;
-  counts.documents = (await tx.employeeDocument.updateMany({ where, data: { fileReference: REMOVED, documentNumber: null, notes: null } })).count;
+  counts.documents = (await tx.employeeDocument.updateMany({ where, data: { fileReference: REMOVED, documentNumber: null, notes: null, description: null } })).count;
+  // the stored files themselves (encrypted bytes) go with the person; only their count and a placeholder name remain
+  counts.documentFiles = (await tx.employeeDocumentBlob.deleteMany({ where: { organizationId: orgId, version: { document: { employeeId } } } })).count;
+  await tx.employeeDocumentVersion.updateMany({ where: { organizationId: orgId, document: { employeeId } }, data: { fileName: REMOVED } });
   counts.disciplinary = (await tx.disciplinaryRecord.updateMany({ where, data: { description: REMOVED, actionTaken: null, remarks: null } })).count;
   counts.cases = (await tx.relationsCase.updateMany({ where, data: { summary: REMOVED, description: REMOVED, resolution: null } })).count;
   counts.caseNotes = caseIds.length ? (await tx.relationsCaseNote.updateMany({ where: { caseId: { in: caseIds } }, data: { note: REMOVED } })).count : 0;

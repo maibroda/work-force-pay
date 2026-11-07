@@ -66,6 +66,28 @@ enum DocumentType {
   OTHER
 }
 
+/// The seven categories of employee document. The TYPES inside them are data (EmployeeDocumentType).
+enum DocumentCategory {
+  EMPLOYMENT
+  IDENTIFICATION
+  EDUCATION_PROFESSIONAL
+  COMPLIANCE
+  MEDICAL
+  STATUTORY
+  EXIT
+}
+
+/// Pending (no approval yet) to Submitted to Under review to Approved or Rejected; Expired is worked out from the expiry date; Archived is a deliberate step.
+enum DocumentStatus {
+  PENDING
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  EXPIRED
+  ARCHIVED
+}
+
 enum TrainingStatus {
   VALID
   EXPIRED
@@ -561,6 +583,9 @@ model Organization {
   payRateProposals          PayRateProposal[]
   contractPayBases          ContractPayBasis[]
   publicHolidays            PublicHoliday[]
+  employeeDocumentTypes     EmployeeDocumentType[]
+  documentVersions          EmployeeDocumentVersion[]
+  documentBlobs             EmployeeDocumentBlob[]
   holidayCalendarYears      HolidayCalendarYear[]
   jobDescriptions           JobDescription[]
   kpis                      Kpi[]
@@ -2023,9 +2048,85 @@ model EmployeeDocument {
   notes          String?
   uploadedBy     String
   createdAt      DateTime     @default(now())
+  /// Electronic documents (2026-11-07). A row with no type and no versions is a reference-only record from before document management.
+  typeId         String?
+  type           EmployeeDocumentType? @relation(fields: [typeId], references: [id])
+  /// Null for a reference-only record: no approval is invented for it.
+  status         DocumentStatus?
+  description    String?
+  archivedBy     String?
+  archivedAt     DateTime?
+  updatedAt      DateTime     @default(now()) @updatedAt
+
+  versions EmployeeDocumentVersion[]
 
   @@index([organizationId, employeeId])
   @@index([organizationId, expiryDate])
+  @@index([organizationId, typeId])
+}
+
+/// A kind of document within a category. Data, not code: an administrator adds, renames or switches off types. Standard types are seeded for each company.
+model EmployeeDocumentType {
+  id               String           @id @default(cuid())
+  organizationId   String
+  organization     Organization     @relation(fields: [organizationId], references: [id])
+  category         DocumentCategory
+  code             String
+  name             String
+  requiresApproval Boolean          @default(true)
+  hasExpiry        Boolean          @default(false)
+  /// Needs the document-sensitive permission to open (identification and medical by default).
+  sensitive        Boolean          @default(false)
+  active           Boolean          @default(true)
+  standard         Boolean          @default(false)
+  sortOrder        Int              @default(0)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  documents EmployeeDocument[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, category])
+}
+
+/// One uploaded file of a document. A replacement is a new version: the earlier ones are kept and can be inspected. The bytes are in EmployeeDocumentBlob, so listing versions never loads them.
+model EmployeeDocumentVersion {
+  id               String           @id @default(cuid())
+  organizationId   String
+  organization     Organization     @relation(fields: [organizationId], references: [id])
+  documentId       String
+  document         EmployeeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  version          Int
+  fileName         String
+  mimeType         String
+  sizeBytes        Int
+  /// SHA-256 of the file as uploaded, checked again when it is read back.
+  sha256           String
+  uploadedBy       String
+  uploadedByUserId String?
+  uploadedAt       DateTime         @default(now())
+  /// Set when a newer version replaces this one.
+  replacedBy       String?
+  replacedAt       DateTime?
+
+  blob EmployeeDocumentBlob?
+
+  @@unique([documentId, version])
+  @@index([organizationId])
+}
+
+/// The file itself, encrypted (AES-256-GCM) before it is saved. Without the key (DOCUMENT_ENCRYPTION_KEY) it cannot be read.
+model EmployeeDocumentBlob {
+  versionId      String                  @id
+  version        EmployeeDocumentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization            @relation(fields: [organizationId], references: [id])
+  data           Bytes
+  iv             Bytes
+  authTag        Bytes
+  keyId          String                  @default("v1")
+
+  @@index([organizationId])
 }
 
 /// Training & certifications — critical for a security workforce (firearms license, first aid,

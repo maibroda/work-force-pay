@@ -69,6 +69,12 @@ describe("HR Lifecycle and Leave Management become one entry, HR", () => {
         for (const r of roles) if (can(r, s.perm)) expect(can(r, "hr.view"), r).toBe(true);
         continue;
       }
+      // Document types was added on 2026-11-07 (the document management request): it opens only to those who may configure documents, who are all HR staff
+      if (s.href === "/settings/document-types") {
+        expect(s.perm).toBe("document.configure");
+        for (const r of roles) if (can(r, s.perm)) expect(can(r, "hr.view"), r).toBe(true);
+        continue;
+      }
       expect(s.perm, s.href).toBe(was.get(s.href));
       for (const r of roles) expect(can(r, s.perm)).toBe(can(r, was.get(s.href)!));
     }

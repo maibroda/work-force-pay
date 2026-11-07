@@ -5,7 +5,8 @@ const nextConfig: NextConfig = {
   // The smoke test builds into its own folder so it never collides with a running dev server's .next.
   distDir: process.env.NEXT_DIST_DIR || ".next",
   serverExternalPackages: ["@prisma/client", "bcryptjs"],
-  experimental: { serverActions: { bodySizeLimit: "5mb" } },
+  // Document uploads: a 10 MB file plus its form fields is a little over Next's default 10 MB cap on a request body that passes through the middleware.
+  experimental: { serverActions: { bodySizeLimit: "5mb" }, middlewareClientMaxBodySize: "12mb" },
 };
 
 // Safe with no Sentry account: source-map upload silently no-ops without SENTRY_AUTH_TOKEN.

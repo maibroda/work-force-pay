@@ -26,6 +26,10 @@ export const PERMISSIONS = [
   "hr.configure", // edit the HR & lifecycle policy and the onboarding / exit checklist templates
   "discipline.view", // see misconduct cases and sanctions (needs hr.view as well: a misconduct case or sanction needs BOTH, so this only ever narrows access)
   "discipline.manage", // open and work misconduct cases, raise sanctions, and sign them off with hr.approve (needs hr.manage as well; a commendation needs only hr.manage)
+  "document.view", // see the register of an employee's documents and open the non-sensitive files (identification and medical files also need document.sensitive)
+  "document.manage", // upload, replace and archive an employee's documents; never delete
+  "document.sensitive", // open identification and medical files, and see them in the register
+  "document.configure", // add, rename and switch off the company's document types
   "relations.raise", // raise your own grievance or confidential concern (self-service)
   "settlement.manage", // prepare end-of-service settlements (compute, add manual lines, submit)
   "settlement.approve", // approve and release settlements into payroll (never the preparer)
@@ -152,6 +156,10 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "hr.configure",
     "discipline.view",
     "discipline.manage",
+    "document.view",
+    "document.manage",
+    "document.sensitive",
+    "document.configure",
     "settlement.manage",
     "inventory.view",
     "inventory.manage",
@@ -254,7 +262,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "payslip.distribute",
     "query.respond",
   ],
-  AUDITOR: [...READ_ALL, "discipline.view"], // audit needs the whole file, misconduct included
+  AUDITOR: [...READ_ALL, "discipline.view", "document.view"], // audit needs the whole file, misconduct included
   SUPERVISOR: [
     "dashboard.view",
     "operations.view",

@@ -33,7 +33,7 @@ export async function hrOverview(ctx: Ctx) {
       }),
       db.exitSettlement.groupBy({ by: ["status"], where: { organizationId: ctx.orgId }, _count: true }),
       db.employeeDocument.count({
-        where: { organizationId: ctx.orgId, expiryDate: { not: null, lte: new Date(Date.now() + 60 * 86400000) } },
+        where: { organizationId: ctx.orgId, expiryDate: { not: null, lte: new Date(Date.now() + 60 * 86400000) }, OR: [{ status: null }, { status: { not: "ARCHIVED" } }] },
       }),
     ]);
   const settlementCount = (s: string) => settlements.find((x) => x.status === s)?._count ?? 0;
