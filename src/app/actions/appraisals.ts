@@ -19,6 +19,16 @@ function entries(v: V, prefix: string) {
     });
 }
 
+/** Pulls `kpi_actual_<kpiId>` / `kpi_comment_<kpiId>` form fields into the list the service expects. */
+function kpiEntries(v: V) {
+  return Object.keys(v)
+    .filter((k) => k.startsWith("kpi_actual_"))
+    .map((k) => {
+      const kpiId = k.slice("kpi_actual_".length);
+      return { kpiId, actual: v[k] as string | undefined, comment: v[`kpi_comment_${kpiId}`] as string | undefined };
+    });
+}
+
 export async function launchCycleAction(v: V) {
   return act("appraisal.manage", async (ctx) => {
     const r = await ap.launchCycle(ctx, {
@@ -26,7 +36,7 @@ export async function launchCycleAction(v: V) {
       categoryIds: v.categoryId ? [String(v.categoryId)] : undefined,
       employeeIds: v.employeeId ? [String(v.employeeId)] : undefined,
     } as never);
-    const notes = [r.unassigned ? `${r.unassigned} have no reviewer yet — assign one` : "", r.skipped.length ? `${r.skipped.length} skipped for short service` : ""].filter(Boolean);
+    const notes = [r.unassigned ? `${r.unassigned} have no reviewer yet — assign one` : "", r.skipped.length ? `${r.skipped.length} left out (short service, or no KPIs for their category) — see the cycle page` : ""].filter(Boolean);
     return { message: `Cycle launched — ${r.created} appraisal(s) created${notes.length ? `; ${notes.join("; ")}` : ""}.`, redirectTo: `/hr/appraisals/cycle/${r.cycle.id}` };
   }, PAGES);
 }
@@ -61,6 +71,7 @@ export async function saveReviewAction(id: string, v: V) {
       goals: v.goals as string | undefined,
       reviewerComment: v.reviewerComment as string | undefined,
       recommendation: (v.recommendation as never) ?? "NONE",
+      kpis: kpiEntries(v),
     });
     return { message: "Draft saved." };
   }, PAGES);

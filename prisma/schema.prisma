@@ -562,6 +562,9 @@ model Organization {
   contractPayBases          ContractPayBasis[]
   publicHolidays            PublicHoliday[]
   holidayCalendarYears      HolidayCalendarYear[]
+  jobDescriptions           JobDescription[]
+  kpis                      Kpi[]
+  appraisalKpis             AppraisalKpi[]
   deployments               Deployment[]
   movements                 StaffMovement[]
   workRegister              WorkRegister[]
@@ -1878,6 +1881,7 @@ model EmployeeCategory {
   workRegister         WorkRegister[]
   requisitions         JobRequisition[]
   checklistItems       ChecklistTemplateItem[]
+  jobDescriptions      JobDescription[]
   kitPacks             KitPack[]
   trainingRequirements TrainingRequirement[]
   companyPolicies      CompanyPolicy[]
@@ -2242,6 +2246,8 @@ model HrPolicy {
   appraisalCommentAtOrBelow Int     @default(2)
   /// …or at or above this (0 = never).
   appraisalCommentAtOrAbove Int     @default(5)
+  /// KPI achievement bands: [{ fromBp, score }], 10,000 basis points = 100%. Null = the defaults in src/lib/performance.ts.
+  kpiBands                  Json?
   /// Employees with less service than this (at the period end) aren't included in a cycle.
   appraisalMinServiceDays   Int     @default(90)
 
@@ -4721,6 +4727,8 @@ model AppraisalCycle {
   dueDate        DateTime             @db.Date
   status         AppraisalCycleStatus @default(OPEN)
   createdBy      String
+  /// Whole percentage of the overall score that comes from KPI results (0 = KPIs do not count, as before).
+  kpiSharePct    Int                  @default(0)
   closedAt       DateTime?
   createdAt      DateTime             @default(now())
 
@@ -4748,6 +4756,12 @@ model Appraisal {
   /// Weighted average of the reviewer's ratings (1–5), fixed when the review is submitted.
   overallScore        Decimal?                @db.Decimal(4, 2)
   overallBand         String?
+  /// The weighted average of the reviewer's ratings and the KPI score (hundredths, 340 = 3.40), kept beside the blended overall score.
+  criteriaScore       Decimal?                @db.Decimal(4, 2)
+  kpiScore            Int?
+  /// The job description in force when the cycle was launched, if the employee's category had one.
+  jobDescriptionId    String?
+  jobDescription      JobDescription?         @relation(fields: [jobDescriptionId], references: [id])
   strengths           String?
   improvements        String?
   goals               String?
@@ -4766,6 +4780,7 @@ model Appraisal {
   updatedAt           DateTime                @updatedAt
 
   ratings AppraisalRating[]
+  kpis    AppraisalKpi[]
 
   @@unique([cycleId, employeeId])
   @@index([organizationId, status])
@@ -4790,6 +4805,103 @@ model AppraisalRating {
   comment        String?
 
   @@unique([appraisalId, criterionId])
+}
+
+enum KpiUnit {
+  PERCENT
+  COUNT
+  NAIRA
+  RATING
+}
+
+enum KpiDirection {
+  HIGHER_IS_BETTER
+  LOWER_IS_BETTER
+}
+
+enum JobDescriptionStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
+/// What a role is for, one per employee category and version. HR drafts it; a second person makes it active (it drives how
+/// people are rated). An active version is never edited: a change is a new draft, and the old version is retired.
+model JobDescription {
+  id                String               @id @default(cuid())
+  organizationId    String
+  organization      Organization         @relation(fields: [organizationId], references: [id])
+  categoryId        String
+  category          EmployeeCategory     @relation(fields: [categoryId], references: [id])
+  version           Int
+  title             String
+  purpose           String?
+  responsibilities  String?
+  status            JobDescriptionStatus @default(DRAFT)
+  draftedBy         String
+  draftedByUserId   String?
+  activatedBy       String?
+  activatedByUserId String?
+  activatedAt       DateTime?
+  retiredAt         DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  kpis       Kpi[]
+  appraisals Appraisal[]
+
+  @@unique([organizationId, categoryId, version])
+  @@index([organizationId, categoryId, status])
+}
+
+/// One measurable target under a job description. Edited only while the job description is a draft.
+model Kpi {
+  id               String         @id @default(cuid())
+  organizationId   String
+  organization     Organization   @relation(fields: [organizationId], references: [id])
+  jobDescriptionId String
+  jobDescription   JobDescription @relation(fields: [jobDescriptionId], references: [id], onDelete: Cascade)
+  name             String
+  description      String?
+  unit             KpiUnit
+  direction        KpiDirection
+  /// Exact decimal, above zero.
+  target           Decimal        @db.Decimal(16, 4)
+  /// Relative weight among the job description's KPIs (they need not add up to 100).
+  weight           Int            @default(10)
+  sortOrder        Int            @default(0)
+  createdAt        DateTime       @default(now())
+
+  appraisalKpis AppraisalKpi[]
+
+  @@unique([jobDescriptionId, name])
+  @@index([organizationId])
+}
+
+/// One KPI on one appraisal: a snapshot taken when the cycle is launched (so later edits never change a review under way),
+/// then the reviewer's actual result, and the achievement and score worked out from it.
+model AppraisalKpi {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  appraisalId    String
+  appraisal      Appraisal    @relation(fields: [appraisalId], references: [id], onDelete: Cascade)
+  kpiId          String
+  kpi            Kpi          @relation(fields: [kpiId], references: [id])
+  kpiName        String
+  unit           KpiUnit
+  direction      KpiDirection
+  target         Decimal      @db.Decimal(16, 4)
+  weight         Int
+  sortOrder      Int          @default(0)
+  actual         Decimal?     @db.Decimal(16, 4)
+  comment        String?
+  /// Basis points (10,000 = 100%) and the 1 to 5 score, fixed when the review is submitted.
+  achievementBp  Int?
+  score          Int?
+
+  @@unique([appraisalId, kpiId])
+  @@index([organizationId])
 }
 
 // ─────────────────────────── CHANGE CONTROL FOR SENSITIVE DETAILS ───────────────────────────

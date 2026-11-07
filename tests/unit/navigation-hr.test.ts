@@ -57,6 +57,12 @@ describe("HR Lifecycle and Leave Management become one entry, HR", () => {
   it("opens each page to exactly the roles that could see it before: same permission per page", () => {
     const was = new Map<string, Permission>(OLD);
     for (const s of HR_AREA.sections) {
+      // Job descriptions & KPIs was added on 2026-11-06 (they feed the appraisal): it opens to exactly the roles that may open Appraisals
+      if (s.href === "/hr/job-descriptions") {
+        expect(s.perm).toBe("appraisal.view");
+        for (const r of roles) expect(can(r, s.perm), r).toBe(can(r, was.get("/hr/appraisals")!));
+        continue;
+      }
       // Disciplinary was split from Employee relations on 2026-11-05 (the founder's decision): the new page opens to the new disciplinary permission, which only ever narrows access
       if (s.href === "/hr/discipline") {
         expect(s.perm).toBe("discipline.view");
@@ -89,7 +95,7 @@ describe("HR Lifecycle and Leave Management become one entry, HR", () => {
     // exit management is part of employee administration, with probation and confirmation on the employment contract
     const admin = HR_AREA.sections.filter((s) => s.group === "Employee administration").map((s) => s.href);
     for (const h of ["/hr/onboarding", "/hr/contracts", "/hr/exits", "/payroll/settlements", "/hr/attrition", "/hr/letters"]) expect(admin, h).toContain(h);
-    expect(HR_AREA.sections.filter((s) => s.group === "Performance management").map((s) => s.href)).toEqual(["/hr/appraisals", "/settings/appraisal-criteria"]);
+    expect(HR_AREA.sections.filter((s) => s.group === "Performance management").map((s) => s.href)).toEqual(["/hr/appraisals", "/hr/job-descriptions", "/settings/appraisal-criteria"]);
     expect(HR_AREA.sections.filter((s) => s.group === "Learning & development").map((s) => s.href)).toEqual(["/hr/training", "/settings/training-requirements"]);
     expect(HR_AREA.sections.filter((s) => s.group === "Employee relations").map((s) => s.href)).toEqual(["/hr/relations"]);
     expect(HR_AREA.sections.filter((s) => s.group === "Disciplinary").map((s) => s.href)).toEqual(["/hr/discipline"]);
