@@ -12,7 +12,8 @@ Branch `performance-improvement-plans`. One migration, `20261129090000_performan
 6. **Nothing else happens.** An Unsuccessful outcome **changes nothing about the employee** (no status, no pay, no sanction, no exit): it is only recorded and shown on the plan and in the HR reminders. HR decides what follows through the existing processes.
 7. **The employee** sees the plan from the moment it starts (not a draft, not a plan waiting to start, not an outcome that is not yet approved). They **acknowledge once**: Agree, or Disagree with a reason; a disagreement does not stop the plan and HR sees it. They may add **one comment to each review**. Nobody can answer for them, and another employee cannot reach their plan (the server says "not found").
 8. **Withdrawing.** A draft or a plan waiting to start can be withdrawn, with a reason, by whoever manages plans; a plan that has started needs the approve right. A closed or withdrawn plan can never be reopened; a new plan is a new record.
-9. **Audit.** Every step is logged by **ids and field names only**: never what a concern, objective, note, comment or response says (so a person can be erased without touching the append-only log). The HR reminders show names and dates, never the concerns.
+9. **Personal data.** A started plan is part of the copy of their data an employee can ask for (what their own page shows: never a draft or an unapproved outcome), and **erasing the employee removes the words** in every plan (concerns, objectives, review summaries, notes, their own response and comments) while the shape stays (that a plan existed, its dates, how it ended). The first version of this build missed both; found in review and fixed before merge.
+10. **Audit.** Every step is logged by **ids and field names only**: never what a concern, objective, note, comment or response says (so a person can be erased without touching the append-only log). The HR reminders show names and dates, never the concerns.
 
 ## A worked example
 
@@ -31,6 +32,7 @@ A guard's appraisal ends with the recommendation "Performance improvement plan" 
 | The audit log or the reminders carry what a concern or comment says | the audit test searches every `PIP_*` entry for each secret phrase; the reminders carry names and dates only |
 | A review is edited or backdated | reviews are never edited by any function; dates in the future or before the start are refused |
 | An appraisal starts a plan on its own | the appraisal tests: a plan is never created by approving an appraisal; only an explicit draft, only from an approved appraisal that recommended one |
+| A plan's words survive an erasure, or are missing from the employee's copy of their data | `pip-privacy.test.ts`: the export includes a started plan and leaves out drafts, unapproved outcomes and other people's plans; the erasure removes every word, keeps the shape and leaves the audit log untouched |
 | The migration loses data | round trip (up, down, up) on a copy of the seeded database: employees, appraisals and the HR policy unchanged and the schema identical |
 
 ## Assumptions (my recommended answers to the plan's questions; change any of them)
