@@ -589,6 +589,7 @@ model Organization {
   documentRequirements      EmployeeDocumentRequirement[]
   holidayCalendarYears      HolidayCalendarYear[]
   jobDescriptions           JobDescription[]
+  performanceFeedback       PerformanceFeedback[]
   kpis                      Kpi[]
   appraisalKpis             AppraisalKpi[]
   deployments               Deployment[]
@@ -2003,6 +2004,7 @@ model Employee {
   paymentTxns             PaymentTransaction[]
   leaveRequests           LeaveRequest[]
   directReports           Employee[]               @relation("ReportingLine")
+  feedbackReceived        PerformanceFeedback[]
   documents               EmployeeDocument[]
   trainings               EmployeeTraining[]
   disciplinaryRecords     DisciplinaryRecord[]
@@ -7480,4 +7482,38 @@ model HolidayCalendarYear {
   confirmedAt       DateTime     @default(now())
 
   @@unique([organizationId, year])
+}
+
+// ─────────────────────────── CONTINUOUS FEEDBACK ───────────────────────────
+
+enum FeedbackKind {
+  RECOGNITION
+  COACHING
+}
+
+/// A short, dated note about an employee from their reporting manager or HR. The employee always sees it (no private notes about performance) and may reply once.
+/// Never edited: a mistake is voided with a reason, and kept. It changes no pay, status, discipline or appraisal score.
+model PerformanceFeedback {
+  id               String       @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  employeeId       String
+  employee         Employee     @relation(fields: [employeeId], references: [id])
+  authorUserId     String
+  authorName       String
+  authorEmployeeId String?
+  kind             FeedbackKind
+  body             String
+  /// The day the feedback is about (not in the future).
+  relatesOn        DateTime     @db.Date
+  employeeReply    String?
+  employeeReplyAt  DateTime?
+  voidedAt         DateTime?
+  voidedByUserId   String?
+  voidedBy         String?
+  voidReason       String?
+  createdAt        DateTime     @default(now())
+
+  @@index([organizationId, employeeId, relatesOn])
+  @@index([organizationId, authorUserId])
 }

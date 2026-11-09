@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { getAppraisal, eligibleReviewers } from "@/server/services/appraisals";
 import { BusinessError } from "@/server/services/_base";
+import { feedbackForAppraisal } from "@/server/services/feedback";
+import { FEEDBACK_KIND_LABELS, type FeedbackKind } from "@/lib/feedback";
 import { KIND_LABELS, RATING_LABELS, RATINGS, RECOMMENDATIONS, RECOMMENDATION_LABELS } from "@/lib/appraisal";
 import { can } from "@/lib/auth/permissions";
 import { fmtDate } from "@/lib/dates";
@@ -36,6 +38,8 @@ export default async function AppraisalPage({ params }: { params: Promise<{ id: 
   });
   if (!a) notFound();
   const reviewers = a.can.assign ? await eligibleReviewers(ctx) : [];
+  // feedback dated inside this cycle's period: read-only evidence for the reviewer and HR, never a score (nothing for the employee, who reads their own under My feedback)
+  const feedback = a.redacted ? [] : await feedbackForAppraisal(ctx, a.id);
   const score = a.overallScore != null ? num(a.overallScore) : null;
   const showReviewer = !a.redacted;
   const high = a.policy.above;
@@ -111,6 +115,28 @@ export default async function AppraisalPage({ params }: { params: Promise<{ id: 
           <Stat label="Recommendation" value={RECOMMENDATION_LABELS[a.recommendation]} />
           <Stat label="Self vs reviewer" value={a.selfGap == null ? "—" : `${a.selfGap > 0 ? "+" : ""}${a.selfGap.toFixed(2)}`} sub="Employee's own average minus the reviewer's" />
         </StatGrid>
+      )}
+
+      {feedback.length > 0 && (
+        <Section title="Feedback in this period" description="Notes recorded about this employee during the period, for you to read while rating. They are evidence only: nothing here changes a rating or a recommendation. The employee has seen every one of them.">
+          <ul className="space-y-2 text-sm">
+            {feedback.map((f) => (
+              <li key={f.id} className="rounded-md border p-2">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <Badge tone={f.kind === "RECOGNITION" ? "green" : "amber"}>{FEEDBACK_KIND_LABELS[f.kind as FeedbackKind]}</Badge>
+                  <span>{fmtDate(f.relatesOn)}</span>
+                  <span className="text-muted-foreground">by {f.authorName}</span>
+                </div>
+                <p className="mt-1 whitespace-pre-line">{f.body}</p>
+                {f.employeeReply && (
+                  <p className="mt-1 rounded bg-muted/50 px-2 py-1 text-xs">
+                    <b>Employee&apos;s reply:</b> {f.employeeReply}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Section>
       )}
 
       <Section title="Ratings" flush>

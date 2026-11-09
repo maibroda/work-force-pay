@@ -76,6 +76,8 @@ export async function anonymizeEmployee(tx: Tx, orgId: string, employeeId: strin
     await tx.appraisal.updateMany({ where, data: { employeeSelfComment: null, strengths: null, improvements: null, goals: null, reviewerComment: null, returnNote: null, approvalNote: null, employeeResponse: null } })
   ).count;
   if (appraisals.length) await tx.appraisalRating.updateMany({ where: { appraisalId: { in: appraisals.map((a) => a.id) } }, data: { selfComment: null, comment: null } });
+  // feedback about them: the words go (the note, their reply and the reason an entry was voided); what stays is the shape (that an entry existed, its kind and date)
+  counts.feedback = (await tx.performanceFeedback.updateMany({ where, data: { body: REMOVED, employeeReply: null, voidReason: null } })).count;
   counts.dataRequests = (await tx.dataAccessRequest.updateMany({ where, data: { requesterName: REMOVED, identityNote: null, completionNote: null, refusalReason: null } })).count;
   if (candidateIds.length) {
     await tx.candidate.updateMany({ where: { id: { in: candidateIds } }, data: { firstName: "Anonymised", lastName: "Candidate", phone: null, email: null, resumeReference: null, notes: null, rejectionReason: REMOVED, anonymizedAt: now } });

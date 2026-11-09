@@ -72,6 +72,8 @@ export const PERMISSIONS = [
   "appraisal.manage", // launch and close cycles, assign reviewers, edit the criteria
   "appraisal.review", // rate the staff you're assigned to review
   "appraisal.approve", // sign off a submitted appraisal (never its reviewer)
+  "feedback.give", // write feedback about your own direct reports (HR: about anyone); read the feedback you gave and your team's
+  "feedback.manage", // read everyone's feedback and void an entry made in error (with a reason)
   "employee.approve", // approve a change to an employee's bank, tax or pension details (never the requester)
   "payrate.approve", // approve a pay-affecting proposal: a personal monthly gross for an employee, or a contract's paid-days basis; and confirm the company's public holidays for a year (never the person who proposed it, never for yourself)
   "period.close", // soft-close an accounting period, and still post into a soft-closed one
@@ -170,6 +172,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "appraisal.manage",
     "appraisal.review",
     "appraisal.approve",
+    "feedback.give",
+    "feedback.manage",
     "client.view",
     "structure.view",
     "override.manage",
@@ -188,6 +192,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "query.respond",
   ],
   OPERATIONS: [
+    "feedback.give", // about their own direct reports
     "sales.view",
     "sales.view.all", // read-only: they see the sales records but change nothing
     "sales.handover.accept", // and, once designated, accept the handover of an accepted quote
@@ -276,6 +281,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "leave.apply",
     "relations.raise",
     "appraisal.review",
+    "feedback.give",
   ],
   EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise"],
   // the bureau's sales person sees the CRM and nothing else: no payroll, employee, client or finance data

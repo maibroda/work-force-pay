@@ -56,7 +56,7 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
   if (!e) throw new BusinessError("Employee not found.");
   const where = { organizationId: orgId, employeeId };
 
-  const [contracts, exits, settlements, onboarding, deployments, movements, attendance, payslips, loans, leave, training, documents, discipline, cases, contacts, guarantors, appraisals, acks, letters, changes, candidate, kit] =
+  const [contracts, exits, settlements, onboarding, deployments, movements, attendance, payslips, loans, leave, training, documents, discipline, cases, contacts, guarantors, appraisals, acks, letters, changes, candidate, kit, feedback] =
     await Promise.all([
       db.employmentContract.findMany({ where, orderBy: { startDate: "asc" } }),
       db.exitRecord.findMany({ where, orderBy: { createdAt: "asc" } }),
@@ -80,6 +80,8 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
       db.employeeChangeRequest.findMany({ where, orderBy: { createdAt: "asc" } }),
       db.candidate.findFirst({ where: { organizationId: orgId, employeeId }, include: { interviews: { orderBy: { round: "asc" } }, offers: { orderBy: { createdAt: "asc" } } } }),
       outstandingKitValue(orgId, employeeId),
+      // feedback recorded about them (never an entry voided as a mistake)
+      db.performanceFeedback.findMany({ where: { ...where, voidedAt: null }, orderBy: [{ relatesOn: "asc" }, { createdAt: "asc" }] }),
     ]);
 
   const confidential = cases.filter((c) => c.confidential).length;
@@ -185,6 +187,10 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
         yourResponseComment: a.employeeResponse,
         criteria: a.ratings.map((r) => ({ criterion: r.criterionName, yourRating: r.selfRating, reviewerRating: r.rating, comment: r.comment })),
       })),
+    },
+    feedback: {
+      title: "Feedback recorded about you",
+      records: feedback.map((f) => ({ date: dt(f.relatesOn), kind: words(f.kind), from: f.authorName, text: f.body, yourReply: f.employeeReply })),
     },
     policies: { title: "Policies you have acknowledged", records: acks.map((a) => ({ policy: a.version.policy.title, version: a.version.version, acknowledgedOn: dt(a.acknowledgedAt), how: a.method === "RECORDED" ? "paper sign-off recorded by HR" : "by you" })) },
     letters: { title: "Letters issued to you", records: letters.map((l) => ({ reference: l.referenceNumber, type: words(l.type), subject: l.subject, issuedOn: dt(l.createdAt), text: l.body })) },
