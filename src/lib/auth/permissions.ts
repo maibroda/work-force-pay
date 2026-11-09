@@ -74,6 +74,9 @@ export const PERMISSIONS = [
   "appraisal.approve", // sign off a submitted appraisal (never its reviewer)
   "feedback.give", // write feedback about your own direct reports (HR: about anyone); read the feedback you gave and your team's
   "feedback.manage", // read everyone's feedback and void an entry made in error (with a reason)
+  "pip.view", // see performance improvement plans (personal and sensitive: not part of hr.view)
+  "pip.manage", // draft a plan, add its objectives, record reviews and propose its outcome; be named as a plan's owner
+  "pip.approve", // start a plan and approve its outcome (never the person who drafted or owns it, nor who proposed the outcome)
   "employee.approve", // approve a change to an employee's bank, tax or pension details (never the requester)
   "payrate.approve", // approve a pay-affecting proposal: a personal monthly gross for an employee, or a contract's paid-days basis; and confirm the company's public holidays for a year (never the person who proposed it, never for yourself)
   "period.close", // soft-close an accounting period, and still post into a soft-closed one
@@ -174,6 +177,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "appraisal.approve",
     "feedback.give",
     "feedback.manage",
+    "pip.view",
+    "pip.manage",
     "client.view",
     "structure.view",
     "override.manage",
@@ -269,7 +274,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "payslip.distribute",
     "query.respond",
   ],
-  AUDITOR: [...READ_ALL, "discipline.view", "document.view"], // audit needs the whole file, misconduct included
+  AUDITOR: [...READ_ALL, "discipline.view", "document.view", "pip.view"], // audit needs the whole file, misconduct included
   SUPERVISOR: [
     "dashboard.view",
     "operations.view",

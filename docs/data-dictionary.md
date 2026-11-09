@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-225 tables and 169 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+229 tables and 172 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -206,6 +206,10 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | appraisalCriteria | → AppraisalCriterion[] |  |  |
 | appraisalCycles | → AppraisalCycle[] |  |  |
 | appraisals | → Appraisal[] |  |  |
+| improvementPlans | → PerformanceImprovementPlan[] |  |  |
+| pipObjectives | → PipObjective[] |  |  |
+| pipReviews | → PipReview[] |  |  |
+| pipAssessments | → PipReviewAssessment[] |  |  |
 | regions | → Region[] |  |  |
 | branches | → Branch[] |  |  |
 | profitCentres | → ProfitCentre[] |  |  |
@@ -1252,6 +1256,7 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | policyAcknowledgements | → PolicyAcknowledgement[] |  |  |
 | dataAccessRequests | → DataAccessRequest[] |  |  |
 | appraisals | → Appraisal[] |  |  |
+| improvementPlans | → PerformanceImprovementPlan[] |  |  |
 | erasures | → EmployeeErasure[] |  |  |
 | journalLines | → JournalLine[] |  |  |
 
@@ -1517,6 +1522,11 @@ One per organization — every number a buyer might want to change without a cod
 | probationAlertDays | Int |  |  |
 | offerValidityDays | Int |  |  |
 | relationsCaseSlaDays | Int |  |  |
+| pipDefaultDays | Int |  |  |
+| pipMaxDays | Int |  |  |
+| pipMaxExtensions | Int |  |  |
+| pipMaxExtensionDays | Int |  |  |
+| pipReviewIntervalDays | Int |  |  |
 | dailyRateDivisor | Int |  | Monthly pay ÷ this = one day's pay (30 = calendar-month convention; 26 = working days). |
 | leaveEncashmentEnabled | Boolean |  |  |
 | leaveEncashmentBasis | EosPayBasis |  |  |
@@ -3690,6 +3700,7 @@ One employee's review in a cycle: self-assessment, then the reviewer's ratings, 
 | updatedAt | DateTime |  |  |
 | ratings | → AppraisalRating[] |  |  |
 | kpis | → AppraisalKpi[] |  |  |
+| improvementPlans | → PerformanceImprovementPlan[] |  |  |
 
 ### AppraisalRating
 
@@ -5634,6 +5645,111 @@ A short, dated note about an employee from their reporting manager or HR. The em
 | voidReason | String |  |  |
 | createdAt | DateTime |  |  |
 
+### PerformanceImprovementPlan
+
+A structured plan to bring an employee's performance up to the standard (capability, not conduct: it is not a sanction and changes no pay or status). Drafted by HR, started by a second person, reviewed at milestones, and closed with an outcome that a second person approves. At most one open plan per employee (checked in the service).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| employeeId | String | yes |  |
+| employee | → Employee |  |  |
+| appraisalId | String |  | The appraisal this plan was started from, if any (a plan is never started automatically by an appraisal). |
+| appraisal | → Appraisal |  |  |
+| status | PipStatus |  |  |
+| concerns | String | yes |  |
+| startDate | DateTime | yes |  |
+| endDate | DateTime | yes |  |
+| originalEndDate | DateTime | yes |  |
+| extensionsUsed | Int |  |  |
+| ownerUserId | String | yes |  |
+| ownerName | String | yes |  |
+| draftedByUserId | String | yes |  |
+| draftedBy | String | yes |  |
+| submittedAt | DateTime |  |  |
+| activatedAt | DateTime |  |  |
+| activatedByUserId | String |  |  |
+| activatedBy | String |  |  |
+| activationNote | String |  |  |
+| returnNote | String |  |  |
+| nextReviewDue | DateTime |  |  |
+| proposedOutcome | PipOutcome |  |  |
+| proposedEndDate | DateTime |  |  |
+| proposedNote | String |  |  |
+| proposedByUserId | String |  |  |
+| proposedBy | String |  |  |
+| proposedAt | DateTime |  |  |
+| outcome | PipOutcome |  |  |
+| outcomeNote | String |  |  |
+| outcomeApprovedByUserId | String |  |  |
+| outcomeApprovedBy | String |  |  |
+| closedAt | DateTime |  |  |
+| withdrawnAt | DateTime |  |  |
+| withdrawnBy | String |  |  |
+| withdrawReason | String |  |  |
+| acknowledgedAt | DateTime |  |  |
+| employeeAgreed | Boolean |  |  |
+| employeeResponse | String |  |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+| objectives | → PipObjective[] |  |  |
+| reviews | → PipReview[] |  |  |
+
+### PipObjective
+
+One thing the employee is to put right: the gap, the measurable target, the support the company gives, and when.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| planId | String | yes |  |
+| plan | → PerformanceImprovementPlan |  |  |
+| sortOrder | Int |  |  |
+| gap | String | yes |  |
+| target | String | yes |  |
+| support | String |  |  |
+| dueDate | DateTime | yes |  |
+| createdAt | DateTime |  |  |
+| assessments | → PipReviewAssessment[] |  |  |
+
+### PipReview
+
+A review at a milestone. Append-only: once recorded it is never edited (the employee may add one comment of their own).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| planId | String | yes |  |
+| plan | → PerformanceImprovementPlan |  |  |
+| reviewedOn | DateTime | yes |  |
+| summary | String | yes |  |
+| recordedByUserId | String | yes |  |
+| recordedBy | String | yes |  |
+| employeeComment | String |  |  |
+| employeeCommentAt | DateTime |  |  |
+| createdAt | DateTime |  |  |
+| assessments | → PipReviewAssessment[] |  |  |
+
+### PipReviewAssessment
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| reviewId | String | yes |  |
+| review | → PipReview |  |  |
+| objectiveId | String | yes |  |
+| objective | → PipObjective |  |  |
+| result | PipObjectiveResult | yes |  |
+| note | String |  |  |
+
 ## Fixed sets of values
 
 ### Role
@@ -6337,4 +6453,16 @@ Whether an outbound message is a service message (about an active contract) or m
 ### FeedbackKind
 
 `RECOGNITION`, `COACHING`
+
+### PipStatus
+
+`DRAFT`, `AWAITING_APPROVAL`, `ACTIVE`, `OUTCOME_PROPOSED`, `CLOSED`, `WITHDRAWN`
+
+### PipOutcome
+
+`SUCCESSFUL`, `EXTENDED`, `UNSUCCESSFUL`
+
+### PipObjectiveResult
+
+`OPEN`, `MET`, `PARTLY_MET`, `NOT_MET`
 

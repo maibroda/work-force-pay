@@ -279,6 +279,11 @@ export const hrPolicySchema = z
     probationAlertDays: day,
     offerValidityDays: z.coerce.number().int().min(1).max(180),
     relationsCaseSlaDays: z.coerce.number().int().min(1).max(365),
+    pipDefaultDays: z.coerce.number().int().min(1).max(365),
+    pipMaxDays: z.coerce.number().int().min(1).max(365),
+    pipMaxExtensions: z.coerce.number().int().min(0).max(5),
+    pipMaxExtensionDays: z.coerce.number().int().min(1).max(365),
+    pipReviewIntervalDays: z.coerce.number().int().min(1).max(90),
     dailyRateDivisor: z.coerce.number().int().min(1).max(31),
     leaveEncashmentEnabled: z.boolean(),
     leaveEncashmentBasis: z.enum(["GROSS", "BASIC"]),
@@ -340,6 +345,8 @@ export async function updateHrPolicy(ctx: Ctx, raw: z.input<typeof hrPolicySchem
   const nextDefault = v.defaultProbationMonths ?? old.defaultProbationMonths;
   if (nextDefault > nextMax)
     throw new BusinessError("The default probation can't be longer than the maximum probation.");
+  if ((v.pipDefaultDays ?? old.pipDefaultDays) > (v.pipMaxDays ?? old.pipMaxDays))
+    throw new BusinessError("The default plan length can't be longer than the longest plan length.");
   if (v.guarantorCategoryIds?.length) {
     const found = await db.employeeCategory.count({ where: { organizationId: ctx.orgId, id: { in: v.guarantorCategoryIds } } });
     if (found !== new Set(v.guarantorCategoryIds).size) throw new BusinessError("An employee category you chose doesn't exist.");

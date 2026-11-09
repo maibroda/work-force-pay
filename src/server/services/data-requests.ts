@@ -56,7 +56,7 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
   if (!e) throw new BusinessError("Employee not found.");
   const where = { organizationId: orgId, employeeId };
 
-  const [contracts, exits, settlements, onboarding, deployments, movements, attendance, payslips, loans, leave, training, documents, discipline, cases, contacts, guarantors, appraisals, acks, letters, changes, candidate, kit, feedback] =
+  const [contracts, exits, settlements, onboarding, deployments, movements, attendance, payslips, loans, leave, training, documents, discipline, cases, contacts, guarantors, appraisals, acks, letters, changes, candidate, kit, plans, feedback] =
     await Promise.all([
       db.employmentContract.findMany({ where, orderBy: { startDate: "asc" } }),
       db.exitRecord.findMany({ where, orderBy: { createdAt: "asc" } }),
@@ -80,6 +80,12 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
       db.employeeChangeRequest.findMany({ where, orderBy: { createdAt: "asc" } }),
       db.candidate.findFirst({ where: { organizationId: orgId, employeeId }, include: { interviews: { orderBy: { round: "asc" } }, offers: { orderBy: { createdAt: "asc" } } } }),
       outstandingKitValue(orgId, employeeId),
+      // a performance improvement plan, once started: what the employee's own page shows (never a draft or an outcome not yet approved)
+      db.performanceImprovementPlan.findMany({
+        where: { ...where, status: { notIn: ["DRAFT", "AWAITING_APPROVAL"] }, NOT: { status: "WITHDRAWN", activatedAt: null } },
+        include: { objectives: { orderBy: { sortOrder: "asc" } }, reviews: { orderBy: [{ reviewedOn: "asc" }, { createdAt: "asc" }], include: { assessments: true } } },
+        orderBy: { createdAt: "asc" },
+      }),
       // feedback recorded about them (never an entry voided as a mistake)
       db.performanceFeedback.findMany({ where: { ...where, voidedAt: null }, orderBy: [{ relatesOn: "asc" }, { createdAt: "asc" }] }),
     ]);
@@ -187,6 +193,24 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
         yourResponseComment: a.employeeResponse,
         criteria: a.ratings.map((r) => ({ criterion: r.criterionName, yourRating: r.selfRating, reviewerRating: r.rating, comment: r.comment })),
       })),
+    },
+    improvementPlans: {
+      title: "Performance improvement plans (once started)",
+      records: plans.map((p) => {
+        const latest = new Map<string, string>();
+        for (const r of p.reviews) for (const a of r.assessments) latest.set(a.objectiveId, a.result);
+        return {
+          period: `${iso(p.startDate)} to ${iso(p.endDate)}`,
+          status: words(p.status),
+          reviewedWith: p.ownerName,
+          concerns: p.concerns,
+          outcome: p.status === "CLOSED" ? words(p.outcome) : null,
+          yourResponse: p.acknowledgedAt ? (p.employeeAgreed ? "agreed" : "disagreed") : null,
+          yourResponseComment: p.employeeResponse,
+          objectives: p.objectives.map((o) => ({ gap: o.gap, target: o.target, support: o.support, dueOn: dt(o.dueDate), resultSoFar: words(latest.get(o.id) ?? "OPEN") })),
+          reviews: p.reviews.map((r) => ({ date: dt(r.reviewedOn), summary: r.summary, yourComment: r.employeeComment })),
+        };
+      }),
     },
     feedback: {
       title: "Feedback recorded about you",

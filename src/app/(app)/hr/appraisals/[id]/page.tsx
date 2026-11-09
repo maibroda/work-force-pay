@@ -5,6 +5,7 @@ import { getAppraisal, eligibleReviewers } from "@/server/services/appraisals";
 import { BusinessError } from "@/server/services/_base";
 import { feedbackForAppraisal } from "@/server/services/feedback";
 import { FEEDBACK_KIND_LABELS, type FeedbackKind } from "@/lib/feedback";
+import { eligibleOwners } from "@/server/services/pip";
 import { KIND_LABELS, RATING_LABELS, RATINGS, RECOMMENDATIONS, RECOMMENDATION_LABELS } from "@/lib/appraisal";
 import { can } from "@/lib/auth/permissions";
 import { fmtDate } from "@/lib/dates";
@@ -25,6 +26,7 @@ import {
   saveSelfAssessmentAction,
   submitReviewAction,
 } from "@/app/actions/appraisals";
+import { planFromAppraisalAction } from "@/app/actions/pip";
 
 const ratingOptions = RATINGS.map((r) => ({ value: String(r), label: `${r} — ${RATING_LABELS[r]}` }));
 const label = (s: string) => s.replace(/_/g, " ").toLowerCase();
@@ -40,6 +42,9 @@ export default async function AppraisalPage({ params }: { params: Promise<{ id: 
   const reviewers = a.can.assign ? await eligibleReviewers(ctx) : [];
   // feedback dated inside this cycle's period: read-only evidence for the reviewer and HR, never a score (nothing for the employee, who reads their own under My feedback)
   const feedback = a.redacted ? [] : await feedbackForAppraisal(ctx, a.id);
+  // an approved appraisal that recommended a plan can be turned into a draft plan by someone who manages plans (never automatic)
+  const canStartPlan = !a.redacted && a.recommendation === "PERFORMANCE_PLAN" && (a.status === "APPROVED" || a.status === "ACKNOWLEDGED") && can(ctx.role, "pip.manage");
+  const planOwners = canStartPlan ? await eligibleOwners(ctx) : [];
   const score = a.overallScore != null ? num(a.overallScore) : null;
   const showReviewer = !a.redacted;
   const high = a.policy.above;
@@ -291,6 +296,21 @@ export default async function AppraisalPage({ params }: { params: Promise<{ id: 
               I disagree
             </ActionButton>
           </div>
+        </Section>
+      )}
+
+      {canStartPlan && (
+        <Section title="Improvement plan" description="This appraisal recommended a performance improvement plan. Starting one copies the areas to improve into a draft: nothing happens to the employee until the plan is submitted, approved by a second person and started.">
+          <SmartForm
+            columns={3}
+            submitLabel="Draft a plan from this appraisal"
+            action={planFromAppraisalAction.bind(null, a.id)}
+            fields={[
+              { name: "startDate", label: "Start date", type: "date", required: true },
+              { name: "days", label: "Length in days (blank = the company default)", type: "number", min: 1 },
+              { name: "ownerUserId", label: "Plan owner (reviews progress)", type: "select", required: true, options: planOwners.map((u) => ({ value: u.id, label: u.name })) },
+            ]}
+          />
         </Section>
       )}
 
