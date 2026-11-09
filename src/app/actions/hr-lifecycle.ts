@@ -21,12 +21,13 @@ const zeroIsNone = (n: unknown) => (n === undefined ? undefined : Number(n) === 
 // ───────────────────────────── Policy & templates ─────────────────────────────
 
 /** Each settings form saves its own section; blank numeric fields leave a value unchanged. */
-export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuity" | "severance" | "loans" | "reminders" | "retention" | "records" | "appraisal" | "training" | "changes" | "privacy" | "dpo", v: V) {
+export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuity" | "severance" | "loans" | "reminders" | "retention" | "records" | "appraisal" | "pip" | "training" | "changes" | "privacy" | "dpo", v: V) {
   return act(
     "hr.configure",
     async (ctx) => {
       let patch: V = {};
       if (section === "terms") patch = v;
+      if (section === "pip") patch = v;
       if (section === "leave")
         patch = {
           leaveEncashmentEnabled: v.leaveEncashmentEnabled,

@@ -76,6 +76,20 @@ export async function anonymizeEmployee(tx: Tx, orgId: string, employeeId: strin
     await tx.appraisal.updateMany({ where, data: { employeeSelfComment: null, strengths: null, improvements: null, goals: null, reviewerComment: null, returnNote: null, approvalNote: null, employeeResponse: null } })
   ).count;
   if (appraisals.length) await tx.appraisalRating.updateMany({ where: { appraisalId: { in: appraisals.map((a) => a.id) } }, data: { selfComment: null, comment: null } });
+  // performance improvement plans: the words go (concerns, objectives, review summaries, notes, the employee's own response and comments); what stays is the shape (that a plan existed, its dates and how it ended)
+  const plans = await tx.performanceImprovementPlan.findMany({ where, select: { id: true } });
+  const planIds = plans.map((p) => p.id);
+  counts.improvementPlans = (
+    await tx.performanceImprovementPlan.updateMany({
+      where,
+      data: { concerns: REMOVED, activationNote: null, returnNote: null, proposedNote: null, outcomeNote: null, withdrawReason: null, employeeResponse: null },
+    })
+  ).count;
+  if (planIds.length) {
+    await tx.pipObjective.updateMany({ where: { planId: { in: planIds } }, data: { gap: REMOVED, target: REMOVED, support: null } });
+    await tx.pipReview.updateMany({ where: { planId: { in: planIds } }, data: { summary: REMOVED, employeeComment: null } });
+    await tx.pipReviewAssessment.updateMany({ where: { review: { planId: { in: planIds } } }, data: { note: null } });
+  }
   counts.dataRequests = (await tx.dataAccessRequest.updateMany({ where, data: { requesterName: REMOVED, identityNote: null, completionNote: null, refusalReason: null } })).count;
   if (candidateIds.length) {
     await tx.candidate.updateMany({ where: { id: { in: candidateIds } }, data: { firstName: "Anonymised", lastName: "Candidate", phone: null, email: null, resumeReference: null, notes: null, rejectionReason: REMOVED, anonymizedAt: now } });
