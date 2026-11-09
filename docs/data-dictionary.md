@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-228 tables and 171 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+229 tables and 172 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -40,6 +40,7 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | documentRequirements | → EmployeeDocumentRequirement[] |  |  |
 | holidayCalendarYears | → HolidayCalendarYear[] |  |  |
 | jobDescriptions | → JobDescription[] |  |  |
+| performanceFeedback | → PerformanceFeedback[] |  |  |
 | kpis | → Kpi[] |  |  |
 | appraisalKpis | → AppraisalKpi[] |  |  |
 | deployments | → Deployment[] |  |  |
@@ -1233,6 +1234,7 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | paymentTxns | → PaymentTransaction[] |  |  |
 | leaveRequests | → LeaveRequest[] |  |  |
 | directReports | → Employee[] |  |  |
+| feedbackReceived | → PerformanceFeedback[] |  |  |
 | documents | → EmployeeDocument[] |  |  |
 | trainings | → EmployeeTraining[] |  |  |
 | disciplinaryRecords | → DisciplinaryRecord[] |  |  |
@@ -5618,6 +5620,31 @@ The company's confirmation that its list of public holidays for a year is comple
 | confirmedByUserId | String | yes |  |
 | confirmedAt | DateTime |  |  |
 
+### PerformanceFeedback
+
+A short, dated note about an employee from their reporting manager or HR. The employee always sees it (no private notes about performance) and may reply once. Never edited: a mistake is voided with a reason, and kept. It changes no pay, status, discipline or appraisal score.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| employeeId | String | yes |  |
+| employee | → Employee |  |  |
+| authorUserId | String | yes |  |
+| authorName | String | yes |  |
+| authorEmployeeId | String |  |  |
+| kind | FeedbackKind | yes |  |
+| body | String | yes |  |
+| relatesOn | DateTime | yes | The day the feedback is about (not in the future). |
+| employeeReply | String |  |  |
+| employeeReplyAt | DateTime |  |  |
+| voidedAt | DateTime |  |  |
+| voidedByUserId | String |  |  |
+| voidedBy | String |  |  |
+| voidReason | String |  |  |
+| createdAt | DateTime |  |  |
+
 ### PerformanceImprovementPlan
 
 A structured plan to bring an employee's performance up to the standard (capability, not conduct: it is not a sanction and changes no pay or status). Drafted by HR, started by a second person, reviewed at milestones, and closed with an outcome that a second person approves. At most one open plan per employee (checked in the service).
@@ -6422,6 +6449,10 @@ Whether an outbound message is a service message (about an active contract) or m
 ### PaidDaysBasis
 
 `CALENDAR_DAYS`, `WORKING_DAYS`
+
+### FeedbackKind
+
+`RECOGNITION`, `COACHING`
 
 ### PipStatus
 
