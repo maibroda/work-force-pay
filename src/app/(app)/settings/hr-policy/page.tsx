@@ -45,6 +45,7 @@ export default async function HrPolicyPage() {
             { name: "retirementAge", label: "Retirement age", type: "number", min: 40, max: 80, defaultValue: p.retirementAge },
             { name: "contractAlertDays", label: "Warn this many days before a contract ends", type: "number", min: 0, defaultValue: p.contractAlertDays },
             { name: "probationAlertDays", label: "Warn this many days before probation ends", type: "number", min: 0, defaultValue: p.probationAlertDays },
+            { name: "probationEscalationDays", label: "Escalate an undecided probation after this many days past its end (0 = never)", type: "number", min: 0, max: 90, defaultValue: p.probationEscalationDays, help: "It then also appears in the approvals list of the HR digest and overview." },
             { name: "offerValidityDays", label: "Job offers stay valid for (days)", type: "number", min: 1, defaultValue: p.offerValidityDays },
             { name: "relationsCaseSlaDays", label: "Employee-relations case target (days)", type: "number", min: 1, defaultValue: p.relationsCaseSlaDays },
             { name: "dailyRateDivisor", label: "Days in a month for a day's pay", type: "number", min: 1, max: 31, defaultValue: p.dailyRateDivisor, help: "30 = calendar convention; 26 = working days. Drives every end-of-service formula." },

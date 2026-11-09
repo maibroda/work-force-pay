@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
-import { getContract } from "@/server/services/contracts";
+import { getContract, probationHistory } from "@/server/services/contracts";
+import { db } from "@/lib/db";
+import { AGAINST_REASON_MIN } from "@/lib/probation";
 import { probationAppraisalFor } from "@/server/services/appraisals";
 import { getHrPolicy } from "@/server/services/hr-policy";
 import { RECOMMENDATION_LABELS } from "@/lib/appraisal";
@@ -13,8 +15,9 @@ import { fmtDate } from "@/lib/dates";
 import { fullName } from "@/lib/utils";
 import { FormPanel, KV, PageHeader, Section } from "@/components/page";
 import { SmartForm } from "@/components/smart-form";
-import { StatusBadge } from "@/components/ui/badge";
-import { decideProbationAction, renewContractAction } from "@/app/actions/hr-lifecycle";
+import { Badge, StatusBadge } from "@/components/ui/badge";
+import { decideProbationAction, markProbationInformedAction, renewContractAction } from "@/app/actions/hr-lifecycle";
+import { generateLetterAction } from "@/app/actions/letters";
 import { startProbationAppraisalAction } from "@/app/actions/appraisals";
 
 const TYPES = ["PERMANENT", "FIXED_TERM", "PROBATION", "CASUAL", "CONSULTANT", "INTERNSHIP"];
@@ -30,6 +33,10 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
   const reviewing = active && (c.probationOutcome === "PENDING" || c.probationOutcome === "EXTENDED");
   const [pa, policy] = reviewing ? await Promise.all([probationAppraisalFor(ctx.orgId, c), getHrPolicy(ctx.orgId)]) : [null, null];
   const paOpen = pa && (pa.status === "DRAFT" || pa.status === "SUBMITTED");
+  // the decisions made about this probation, what the signed-off appraisal recommends, and whether a failed probation has had an exit started
+  const history = await probationHistory(ctx, c.id);
+  const recommendation = pa && (pa.status === "APPROVED" || pa.status === "ACKNOWLEDGED") && pa.recommendation !== "NONE" ? pa.recommendation : null;
+  const exitStarted = c.probationOutcome === "FAILED" ? (await db.exitRecord.count({ where: { organizationId: ctx.orgId, employeeId: c.employeeId, status: { in: ["PENDING", "APPROVED", "PROCESSED"] } } })) > 0 : true;
   return (
     <>
       <PageHeader
@@ -64,6 +71,61 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
           ]}
         />
       </Section>
+
+      {c.probationOutcome === "FAILED" && active && !exitStarted && (
+        <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <b>Probation not confirmed, and no exit has been started.</b> The employee stays on the payroll until one is. What follows (notice, pay, any rule in the contract) is for HR and your adviser to decide; nothing happens automatically.{" "}
+          <Link className="font-medium underline" href={`/employees/${c.employeeId}?tab=lifecycle`}>
+            Start the exit process
+          </Link>
+        </p>
+      )}
+      {c.probationOutcome === "CONFIRMED" && manage && (
+        <div className="mb-4">
+          <ActionButton action={generateLetterAction.bind(null, { type: "PROBATION_CONFIRMATION", employeeId: c.employeeId })} confirm="Generate the probation confirmation letter?" variant="outline">
+            Generate the confirmation letter
+          </ActionButton>
+        </div>
+      )}
+      {history.length > 0 && (
+        <Section title="Probation decisions" description="Each decision, who made it and why, with the probation appraisal that supported it. A decision is never edited; a later one is added." flush>
+          <ul className="divide-y text-sm">
+            {history.map((x) => (
+              <li key={x.id} className="space-y-1 px-4 py-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusBadge status={x.decision} />
+                  <span>
+                    {x.decidedBy}, {fmtDate(x.decidedAt)}
+                  </span>
+                  {x.extensionMonths ? <span className="text-xs text-muted-foreground">extended by {x.extensionMonths} month(s) to {fmtDate(x.effectiveDate)}</span> : null}
+                  {x.decision === "CONFIRMED" && x.effectiveDate ? <span className="text-xs text-muted-foreground">permanent from {fmtDate(x.effectiveDate)}</span> : null}
+                  {x.againstRecommendation && <Badge tone="amber">against the appraisal&apos;s recommendation</Badge>}
+                </div>
+                {x.note && <p className="whitespace-pre-line text-sm">{x.note}</p>}
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  {x.appraisalId ? (
+                    <Link className="text-primary underline" href={`/hr/appraisals/${x.appraisalId}`}>
+                      Probation appraisal{x.appraisalScore != null ? ` ${(x.appraisalScore / 100).toFixed(2)}` : ""}
+                      {x.appraisalRecommendation && x.appraisalRecommendation !== "NONE" ? ` · recommended: ${RECOMMENDATION_LABELS[x.appraisalRecommendation]}` : ""}
+                    </Link>
+                  ) : (
+                    <span>No probation appraisal behind this decision</span>
+                  )}
+                  {x.informedAt ? (
+                    <span>Employee told {fmtDate(x.informedAt)} by {x.informedBy}</span>
+                  ) : manage ? (
+                    <ActionButton action={markProbationInformedAction.bind(null, x.id)} confirm="Record that the employee has been told? They will then see one line about this decision." variant="outline">
+                      Mark the employee as told
+                    </ActionButton>
+                  ) : (
+                    <span>Employee not yet told</span>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
 
       {reviewing && can(ctx.role, "appraisal.view") && (
         <Section
@@ -102,6 +164,11 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
         </Section>
       )}
 
+      {approve && reviewing && recommendation && (
+        <p className="mb-3 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+          The signed-off probation appraisal recommends: <b>{RECOMMENDATION_LABELS[recommendation]}</b>. You may decide otherwise, but a decision against it needs a fuller reason (at least {AGAINST_REASON_MIN} characters) and is marked on the record. Whoever reviewed or signed off that appraisal cannot make the decision.
+        </p>
+      )}
       {approve && reviewing && (
         <div className="grid gap-5 lg:grid-cols-3">
           <FormPanel title="Confirm probation" open>

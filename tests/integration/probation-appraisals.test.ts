@@ -19,7 +19,7 @@ async function setup(opts: { probationStartedDaysAgo?: number } = {}) {
   const startedAgo = opts.probationStartedDaysAgo ?? 60;
   const emp = await createEmployee(hr, { firstName: "On", lastName: "Probation", employmentDate: iso(addDays(todayUtc(), -startedAgo)), categoryId: t.guardId, reportingManagerId: mgr.id });
   const contract = await createContract(hr, { employeeId: emp.id, type: "PROBATION", jobTitle: "Guard", startDate: iso(addDays(todayUtc(), -startedAgo)), probationMonths: 3 });
-  return { t, hr, reviewer, emp, contract, approver: t.ctx("HR_ADMIN", null, 2), mgr };
+  return { t, hr, reviewer, emp, contract, approver: t.ctx("HR_ADMIN", null, 2), decider: t.ctx("HR_ADMIN", null, 3), mgr };
 }
 type S = Awaited<ReturnType<typeof setup>>;
 
@@ -84,22 +84,22 @@ describe("starting a probation appraisal", () => {
 describe("confirming probation", () => {
   it("doesn't need an appraisal unless the policy says so", async () => {
     const s = await setup();
-    const r = await decideProbation(s.approver, s.contract.id, { decision: "CONFIRMED" });
+    const r = await decideProbation(s.decider, s.contract.id, { decision: "CONFIRMED" });
     expect(r.contract.probationOutcome).toBe("CONFIRMED");
   });
 
   it("waits for a signed-off appraisal when the policy requires one", async () => {
     const s = await setup();
     await updateHrPolicy(s.hr, { probationRequiresAppraisal: true });
-    await expect(decideProbation(s.approver, s.contract.id, { decision: "CONFIRMED" })).rejects.toThrow(/none has been started/);
+    await expect(decideProbation(s.decider, s.contract.id, { decision: "CONFIRMED" })).rejects.toThrow(/none has been started/);
 
     const { appraisal } = await startProbationAppraisal(s.hr, s.contract.id);
-    await expect(decideProbation(s.approver, s.contract.id, { decision: "CONFIRMED" })).rejects.toThrow(/still being written/);
+    await expect(decideProbation(s.decider, s.contract.id, { decision: "CONFIRMED" })).rejects.toThrow(/still being written/);
     await takeTo(s, appraisal.id, 4, "submitted");
-    await expect(decideProbation(s.approver, s.contract.id, { decision: "CONFIRMED" })).rejects.toThrow(/awaiting sign-off/);
+    await expect(decideProbation(s.decider, s.contract.id, { decision: "CONFIRMED" })).rejects.toThrow(/awaiting sign-off/);
     await approveAppraisal(s.approver, appraisal.id);
 
-    const r = await decideProbation(s.approver, s.contract.id, { decision: "CONFIRMED" });
+    const r = await decideProbation(s.decider, s.contract.id, { decision: "CONFIRMED" });
     expect(r.contract.probationOutcome).toBe("CONFIRMED");
     expect(r.next).not.toBeNull(); // the permanent contract still follows
   });
@@ -109,18 +109,18 @@ describe("confirming probation", () => {
     await updateHrPolicy(s.hr, { probationRequiresAppraisal: true, probationMinScore: 3.5 });
     const { appraisal } = await startProbationAppraisal(s.hr, s.contract.id);
     await takeTo(s, appraisal.id, 3, "approved"); // scores 3.00
-    await expect(decideProbation(s.approver, s.contract.id, { decision: "CONFIRMED" })).rejects.toThrow(/scored 3\.00, below the minimum of 3\.50/);
+    await expect(decideProbation(s.decider, s.contract.id, { decision: "CONFIRMED" })).rejects.toThrow(/scored 3\.00, below the minimum of 3\.50/);
     // extending isn't blocked, and a better appraisal after the extension lets confirmation through
-    const ext = await decideProbation(s.approver, s.contract.id, { decision: "EXTENDED", extensionMonths: 1, note: "Needs more time on nights" });
+    const ext = await decideProbation(s.decider, s.contract.id, { decision: "EXTENDED", extensionMonths: 1, note: "Needs more time on nights" });
     expect(ext.contract.probationOutcome).toBe("EXTENDED");
     const again = await startProbationAppraisal(s.hr, s.contract.id);
     await takeTo(s, again.appraisal.id, 4, "approved");
-    expect((await decideProbation(s.approver, s.contract.id, { decision: "CONFIRMED" })).contract.probationOutcome).toBe("CONFIRMED");
+    expect((await decideProbation(s.decider, s.contract.id, { decision: "CONFIRMED" })).contract.probationOutcome).toBe("CONFIRMED");
 
     // failing is never gated
     const s2 = await setup();
     await updateHrPolicy(s2.hr, { probationRequiresAppraisal: true, probationMinScore: 4.5 });
-    expect((await decideProbation(s2.approver, s2.contract.id, { decision: "FAILED", note: "Absent without leave twice" })).contract.probationOutcome).toBe("FAILED");
+    expect((await decideProbation(s2.decider, s2.contract.id, { decision: "FAILED", note: "Absent without leave twice" })).contract.probationOutcome).toBe("FAILED");
 
     await expect(updateHrPolicy(s.hr, { probationMinScore: 6 })).rejects.toThrow();
     await expect(updateHrPolicy(s.hr, { probationMinScore: -1 })).rejects.toThrow();
@@ -135,7 +135,7 @@ describe("confirming probation", () => {
     await takeTo(s, oa.id, 5, "approved");
     expect(await probationAppraisalFor(s.t.org.id, s.contract)).toBeNull();
     await expect(assertProbationAppraisalAllows(s.t.org.id, s.contract)).rejects.toThrow(/none has been started/);
-    await expect(decideProbation(s.approver, s.contract.id, { decision: "CONFIRMED" })).rejects.toThrow(/none has been started/);
+    await expect(decideProbation(s.decider, s.contract.id, { decision: "CONFIRMED" })).rejects.toThrow(/none has been started/);
     // an annual appraisal over the same dates isn't a probation appraisal either
     const annual = await launchCycle(s.hr, { name: `Annual ${uid()}`, kind: "ANNUAL", periodStart: iso(s.contract.startDate), periodEnd: iso(addDays(todayUtc(), 5)), dueDate: iso(addDays(todayUtc(), 20)), employeeIds: [s.emp.id] });
     expect(annual.created).toBe(1);

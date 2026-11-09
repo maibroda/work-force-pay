@@ -10,7 +10,9 @@ import { addDays, d, iso } from "@/lib/dates";
 import { addMonths } from "@/lib/leave";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
-import { assertProbationAppraisalAllows } from "./appraisals";
+import { assertProbationAppraisalAllows, probationAppraisalFor } from "./appraisals";
+import { checkAgainstReason, decisionConflict, departsFromRecommendation, employeeLine, type ProbationDecisionKind } from "@/lib/probation";
+import { num } from "@/lib/money";
 import { getHrPolicy, todayUtc } from "./hr-policy";
 import { nextNumber } from "./numbering";
 
@@ -188,7 +190,11 @@ export const probationDecisionSchema = z.object({
   noticePeriodDays: z.coerce.number().int().min(0).max(365).optional(),
 });
 
-/** HR's probation review: confirm (converting a probationary contract to permanent), extend, or fail. */
+/**
+ * HR's probation review: confirm (converting a probationary contract to permanent), extend, or fail. Every decision is also kept as a record (ProbationDecision):
+ * who, when, why, and a snapshot of the signed-off probation appraisal behind it. Two rules apply when there is a probation appraisal: **the person who reviewed or
+ * signed it off does not also decide**, and **a decision against its recommendation needs a fuller reason** (it is never blocked, and it is marked).
+ */
 export async function decideProbation(ctx: Ctx, id: string, raw: z.input<typeof probationDecisionSchema>) {
   assertCan(ctx, "hr.approve");
   const v = probationDecisionSchema.parse(raw);
@@ -200,33 +206,66 @@ export async function decideProbation(ctx: Ctx, id: string, raw: z.input<typeof 
   if (v.decision !== "CONFIRMED" && (!v.note || v.note.length < 5))
     throw new BusinessError("Record the reason for this probation decision.");
 
+  // the probation appraisal behind this decision: its reviewer and approver do not decide, and a decision against its recommendation needs a fuller reason
+  const appraisal = await probationAppraisalFor(ctx.orgId, c);
+  const conflict = decisionConflict(ctx.userId, appraisal ? { reviewerUserId: appraisal.reviewerUserId, approvedByUserId: appraisal.approvedByUserId } : null);
+  if (conflict) throw new BusinessError(conflict);
+  const released = appraisal && (appraisal.status === "APPROVED" || appraisal.status === "ACKNOWLEDGED") ? appraisal : null;
+  const against = departsFromRecommendation(v.decision, released?.recommendation ?? null);
+  if (against) {
+    const bad = checkAgainstReason(v.note);
+    if (bad) throw new BusinessError(bad);
+  }
+  const record = (effectiveDate: Date | null, extensionMonths: number | null = null) => ({
+    organizationId: ctx.orgId,
+    employeeId: c.employeeId,
+    contractId: c.id,
+    decision: v.decision,
+    decidedByUserId: ctx.userId,
+    decidedBy: ctx.name,
+    note: v.note ?? null,
+    extensionMonths,
+    effectiveDate,
+    appraisalId: released?.id ?? null,
+    appraisalScore: released?.overallScore != null ? Math.round(num(released.overallScore) * 100) : null,
+    appraisalRecommendation: released?.recommendation ?? null,
+    againstRecommendation: against,
+  });
+
   if (v.decision === "EXTENDED") {
     const policy = await getHrPolicy(ctx.orgId);
     if (!v.extensionMonths) throw new BusinessError("Say how many months to extend probation by.");
     const total = c.probationMonths + v.extensionMonths;
     if (total > policy.maxProbationMonths)
       throw new BusinessError(`Probation would reach ${total} month(s); the HR policy allows at most ${policy.maxProbationMonths}.`);
-    const updated = await db.employmentContract.update({
-      where: { id },
-      data: {
-        probationMonths: total,
-        probationEndDate: addDays(addMonths(addDays(c.probationEndDate!, 1), v.extensionMonths), -1),
-        probationOutcome: "EXTENDED",
-        probationExtensions: { increment: 1 },
-        notes: [c.notes, `Probation extended ${v.extensionMonths}m: ${v.note}`].filter(Boolean).join("\n"),
-      },
+    const newEnd = addDays(addMonths(addDays(c.probationEndDate!, 1), v.extensionMonths), -1);
+    return db.$transaction(async (tx) => {
+      const updated = await tx.employmentContract.update({
+        where: { id },
+        data: {
+          probationMonths: total,
+          probationEndDate: newEnd,
+          probationOutcome: "EXTENDED",
+          probationExtensions: { increment: 1 },
+          notes: [c.notes, `Probation extended ${v.extensionMonths}m: ${v.note}`].filter(Boolean).join("\n"),
+        },
+      });
+      await tx.probationDecision.create({ data: record(newEnd, v.extensionMonths) });
+      await logAudit(ctx, { action: "PROBATION_EXTEND", entity: "Employee", entityId: c.employeeId, oldValue: c, newValue: updated, reason: v.note }, tx);
+      return { contract: updated, next: null };
     });
-    await logAudit(ctx, { action: "PROBATION_EXTEND", entity: "Employee", entityId: c.employeeId, oldValue: c, newValue: updated, reason: v.note });
-    return { contract: updated, next: null };
   }
 
   if (v.decision === "FAILED") {
-    const updated = await db.employmentContract.update({
-      where: { id },
-      data: { probationOutcome: "FAILED", notes: [c.notes, `Probation failed: ${v.note}`].filter(Boolean).join("\n") },
+    return db.$transaction(async (tx) => {
+      const updated = await tx.employmentContract.update({
+        where: { id },
+        data: { probationOutcome: "FAILED", notes: [c.notes, `Probation failed: ${v.note}`].filter(Boolean).join("\n") },
+      });
+      await tx.probationDecision.create({ data: record(null) });
+      await logAudit(ctx, { action: "PROBATION_FAIL", entity: "Employee", entityId: c.employeeId, oldValue: c, newValue: updated, reason: v.note }, tx);
+      return { contract: updated, next: null };
     });
-    await logAudit(ctx, { action: "PROBATION_FAIL", entity: "Employee", entityId: c.employeeId, oldValue: c, newValue: updated, reason: v.note });
-    return { contract: updated, next: null };
   }
 
   // CONFIRMED
@@ -234,9 +273,11 @@ export async function decideProbation(ctx: Ctx, id: string, raw: z.input<typeof 
   return db.$transaction(async (tx) => {
     const confirmed = await tx.employmentContract.update({ where: { id }, data: { probationOutcome: "CONFIRMED" } });
     let next = null;
+    let permanentFrom: Date | null = null;
     if (c.type === "PROBATION") {
       const startStr = v.effectiveDate ?? iso(addDays(c.probationEndDate ?? todayUtc(), 1));
       if (d(startStr) <= c.startDate) throw new BusinessError("The confirmation date must be after the contract started.");
+      permanentFrom = d(startStr);
       await tx.employmentContract.update({
         where: { id },
         data: { status: "SUPERSEDED", endDate: addDays(d(startStr), -1) },
@@ -256,9 +297,39 @@ export async function decideProbation(ctx: Ctx, id: string, raw: z.input<typeof 
         c.id,
       );
     }
+    await tx.probationDecision.create({ data: record(permanentFrom) });
     await logAudit(ctx, { action: "PROBATION_CONFIRM", entity: "Employee", entityId: c.employeeId, oldValue: c, newValue: next ?? confirmed, reason: v.note }, tx);
     return { contract: confirmed, next };
   });
+}
+
+/** The decisions made about a contract's probation, newest first (anyone who can read contracts). */
+export async function probationHistory(ctx: Ctx, contractId: string) {
+  assertCan(ctx, "hr.view");
+  const c = await db.employmentContract.findFirst({ where: { id: contractId, organizationId: ctx.orgId }, select: { id: true } });
+  if (!c) throw new BusinessError("Contract not found.");
+  return db.probationDecision.findMany({ where: { contractId, organizationId: ctx.orgId }, orderBy: [{ decidedAt: "desc" }, { id: "desc" }] });
+}
+
+/** HR records that the employee has been told. Only then does the employee see a line about the decision. */
+export async function markProbationInformed(ctx: Ctx, decisionId: string) {
+  assertCan(ctx, "hr.manage");
+  const x = await db.probationDecision.findFirst({ where: { id: decisionId, organizationId: ctx.orgId } });
+  if (!x) throw new BusinessError("Decision not found.");
+  if (x.informedAt) throw new BusinessError("This decision is already marked as told to the employee.");
+  const u = await db.probationDecision.update({ where: { id: decisionId }, data: { informedAt: new Date(), informedBy: ctx.name } });
+  await logAudit(ctx, { action: "PROBATION_INFORMED", entity: "ProbationDecision", entityId: decisionId, newValue: { employeeId: x.employeeId, decision: x.decision } });
+  return u;
+}
+
+/** The one line the signed-in employee sees about their latest probation decision that HR has told them about. Never the reasons. */
+export async function myProbationOutcome(ctx: Ctx) {
+  if (!ctx.employeeId) return null;
+  const x = await db.probationDecision.findFirst({ where: { organizationId: ctx.orgId, employeeId: ctx.employeeId, informedAt: { not: null } }, orderBy: [{ decidedAt: "desc" }, { id: "desc" }] });
+  if (!x) return null;
+  const date = x.effectiveDate ? iso(x.effectiveDate) : null;
+  const line = employeeLine({ decision: x.decision as ProbationDecisionKind, informed: true, date });
+  return line ? { line, decision: x.decision as ProbationDecisionKind, date } : null;
 }
 
 /** Called when an exit is approved: the active contract ends on the last working date. */

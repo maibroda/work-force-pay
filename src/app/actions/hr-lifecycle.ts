@@ -143,6 +143,12 @@ export async function renewContractAction(id: string, v: V) {
     return { message: `Renewed as ${c.contractNumber}.`, redirectTo: `/hr/contracts/${c.id}` };
   }, HR);
 }
+export async function markProbationInformedAction(id: string) {
+  return act("hr.manage", async (ctx) => {
+    await contracts.markProbationInformed(ctx, id);
+    return { message: "Recorded. The employee can now see a line about this decision." };
+  }, HR);
+}
 export async function decideProbationAction(id: string, v: V) {
   return act("hr.approve", async (ctx) => {
     const r = await contracts.decideProbation(ctx, id, v as never);
