@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AWARD_STATUS_LABELS, awardStatusAfter, nominatorConflict, parseMilestoneYears, upcomingMilestones } from "@/lib/recognition";
 import { hideSmallGroups, MIN_GROUP, WELFARE_KIND_LABELS, WELFARE_KINDS } from "@/lib/welfare";
+import { ROLE_PERMISSIONS, type Role } from "@/lib/auth/permissions";
 
 // Welfare and recognition, step 1 (the founder's go of 2026-11-10, plan docs/plans/welfare-recognition-plan.md).
 // Dates are plain "YYYY-MM-DD" days; no clock is read here.
@@ -92,5 +93,13 @@ describe("milestone anniversaries coming up", () => {
   it("puts a 29 February joiner's anniversary on 28 February in a year without one", () => {
     expect(upcomingMilestones([{ id: "t", employmentDate: "2020-02-29" }], "2026-02-01", [6], 60)).toEqual([{ employeeId: "t", years: 6, on: "2026-02-28" }]);
     expect(upcomingMilestones([{ id: "t", employmentDate: "2016-02-29" }], "2028-02-01", [12], 60)).toEqual([{ employeeId: "t", years: 12, on: "2028-02-29" }]);
+  });
+});
+
+describe("who holds the welfare right", () => {
+  // the founder's decision of 2026-11-10: welfare cases are read by the HR administrator only, not by the company or super administrators who otherwise hold every permission
+  it("is held by the HR administrator alone", () => {
+    const holders = (Object.keys(ROLE_PERMISSIONS) as Role[]).filter((r) => ROLE_PERMISSIONS[r].includes("welfare.manage"));
+    expect(holders).toEqual(["HR_ADMIN"]);
   });
 });

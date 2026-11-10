@@ -22,7 +22,6 @@ async function login(t: Awaited<ReturnType<typeof isolatedOrg>>, role: Ctx["role
 async function world() {
   const t = await isolatedOrg();
   const hr = await login(t, "HR_ADMIN");
-  const boss = await login(t, "COMPANY_ADMIN");
   const guard = await createEmployee(hr, { firstName: "Gbenga", lastName: "Supported", employmentDate: "2023-01-05", categoryId: t.guardId });
   const other = await createEmployee(hr, { firstName: "Hauwa", lastName: "Other", employmentDate: "2023-01-05", categoryId: t.guardId });
   const me = await login(t, "EMPLOYEE", guard.id);
@@ -30,11 +29,11 @@ async function world() {
   const raise = (ctx: Ctx, over: Record<string, unknown> = {}) =>
     raiseCase(ctx, { type: "WELFARE", welfareKind: "BEREAVEMENT", summary: "Death of my mother", description: SECRET, ...over } as never);
   const welfareCase = (over: Record<string, unknown> = {}) => raise(me, over);
-  return { t, hr, boss, guard, other, me, meOther, raise, welfareCase };
+  return { t, hr, guard, other, me, meOther, raise, welfareCase };
 }
 type W = Awaited<ReturnType<typeof world>>;
-/** Roles that read HR records but must not see welfare cases. */
-const readers = async (w: W) => [await login(w.t, "AUDITOR"), await login(w.t, "FINANCE")];
+/** Roles that read HR records (or hold every other permission) but must not see welfare cases: the founder's decision of 2026-11-10 is that only the HR administrator reads them, so the company and super administrators are refused too. */
+const readers = async (w: W) => [await login(w.t, "AUDITOR"), await login(w.t, "FINANCE"), await login(w.t, "COMPANY_ADMIN"), await login(w.t, "SUPER_ADMIN")];
 
 describe("raising a welfare case", () => {
   it("an employee raises one for themselves with a kind; it is always confidential and open", async () => {
@@ -71,10 +70,10 @@ describe("raising a welfare case", () => {
 });
 
 describe("who may read and work a welfare case", () => {
-  it("HR and the administrators (the welfare right) read it in full", async () => {
+  it("the HR administrator (the welfare right) reads it in full", async () => {
     const w = await world();
     const c = await w.welfareCase();
-    for (const ctx of [w.hr, w.boss]) {
+    for (const ctx of [w.hr]) {
       expect((await listCases(ctx, {})).find((x) => x.id === c.id)).toMatchObject({ summary: "Death of my mother" });
       expect(await getCase(ctx, c.id)).toMatchObject({ redacted: false, description: SECRET });
     }

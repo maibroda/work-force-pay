@@ -5,7 +5,7 @@ Branch `welfare-recognition`. One migration, `20261203090000_welfare_and_recogni
 ## The rules, step by step
 
 1. **Welfare support is a kind of case** (the existing case system), always confidential. An employee raises it from **My cases and support** and must choose a kind (bereavement, hardship, health, family or housing, other). HR with the new `welfare.manage` permission can also open one on someone's behalf.
-2. **Who can read a welfare case: only holders of `welfare.manage`**: the HR administrator, and the company and super administrators, who hold every permission by design (see "Assumptions"). For everyone else (the auditor, finance, anyone else who reads HR records, other employees, other companies) the case is **"not found"**, not "forbidden". The same rule is applied in every place a case can surface: the case list and its filters, the single case, the employee's HR timeline and the HR digest. The employee who raised it always reads their own.
+2. **Who can read a welfare case: only the HR administrator** (the sole holder of `welfare.manage`, by your decision: the company and super administrators are refused too). For everyone else (the administrators, the auditor, finance, anyone else who reads HR records, other employees, other companies) the case is **"not found"**, not "forbidden". The same rule is applied in every place a case can surface: the case list and its filters, the single case, the employee's HR timeline and the HR digest. The employee who raised it always reads their own.
 3. **Misconduct handling is unchanged**: a welfare case is hidden by the same mechanism that hides misconduct cases from people without the disciplinary permission, extended by one more type.
 4. **The welfare summary** counts requests opened in a year, by kind, **never with a name**. Any group of **fewer than five** is shown as "fewer than 5" (zero stays zero), so a single person cannot be picked out. Only `welfare.manage` can open it.
 5. **Award types** (HR with `hr.configure`): a name (no duplicate however typed), an optional long-service year, and whether the award may be shown on the board. An award type is switched off, never deleted; awards already made stay.
@@ -18,13 +18,13 @@ Branch `welfare-recognition`. One migration, `20261203090000_welfare_and_recogni
 
 ## A worked example
 
-An employee, EMP-000025, raises a welfare case, kind **Bereavement**, with a description. The HR administrator opens **Employee relations cases** and reads it; the auditor and the finance officer open the same case link and get "Case not found", and it appears in none of their lists. The HR digest that morning mentions **no** welfare case. At year end, **Welfare summary** shows Bereavement as "fewer than 5" because only two people asked; the total is also "fewer than 5". Separately, a supervisor nominates a direct report for **Employee of the quarter** with two sentences of reason. The HR administrator approves it. The employee now sees it under **My recognition**, with the choice to be shown on the board; they agree, and every colleague sees it on **Recognition board**. Had HR declined it, the employee would never have known.
+An employee, EMP-000025, raises a welfare case, kind **Bereavement**, with a description. The HR administrator opens **Employee relations cases** and reads it; the company administrator, the auditor and the finance officer open the same case link and get "Case not found", and it appears in none of their lists. The HR digest that morning mentions **no** welfare case. At year end, **Welfare summary** shows Bereavement as "fewer than 5" because only two people asked; the total is also "fewer than 5". Separately, a supervisor nominates a direct report for **Employee of the quarter** with two sentences of reason. The HR administrator approves it. The employee now sees it under **My recognition**, with the choice to be shown on the board; they agree, and every colleague sees it on **Recognition board**. Had HR declined it, the employee would never have known.
 
 ## What could go wrong, and what proves it does not
 
 | Risk | Test |
 | --- | --- |
-| A welfare case is read by someone without `welfare.manage` | `welfare.test.ts`: the auditor, finance, another employee and another company are each refused or "not found" on the list, the single case and every action; the owner reads their own |
+| A welfare case is read by someone without `welfare.manage` | `welfare.test.ts`: the company and super administrators, the auditor, finance, another employee and another company are each refused or "not found" on the list, the single case and every action; the owner reads their own |
 | A welfare case leaks through a side door (timeline, digest) | `welfare.test.ts`: the timeline and the HR digest for roles without the right never mention it |
 | A small group identifies a person | unit `hideSmallGroups` (zero stays zero, 1 to 4 hidden, 5 shown) and the summary test |
 | A manager nominates someone who is not their report, or HR nominates themselves | `recognition.test.ts`: refused with "not found" / refusal as designed |
@@ -36,7 +36,7 @@ An employee, EMP-000025, raises a welfare case, kind **Bereavement**, with a des
 
 ## Assumptions (my recommended answers to the plan's questions; change any of them)
 
-See the plan for the ten questions. In short: welfare cases are readable only by `welfare.manage` (HR administrator, plus the company and super administrators, who hold every permission); the summary hides groups under five; award decisions need a person other than the nominator; the employee hears only of approved awards; the board is opt-in by the recipient; milestone years are a company setting (5, 10, 15, 20); **no money, gifts or budgets**; no notifications; engagement surveys are a later step.
+See the plan for the ten questions. In short: welfare cases are readable only by `welfare.manage` (the HR administrator alone, your decision of 2026-11-10); the summary hides groups under five; award decisions need a person other than the nominator; the employee hears only of approved awards; the board is opt-in by the recipient; milestone years are a company setting (5, 10, 15, 20); **no money, gifts or budgets**; no notifications; engagement surveys are a later step.
 
 Smaller choices you did not ask for: **the old page "My grievances" is renamed "My cases and support"** (same address); the welfare kind is required when the type is Welfare; an award type's long-service year is optional.
 
@@ -46,6 +46,8 @@ Smaller choices you did not ask for: **the old page "My grievances" is renamed "
 - **Not built:** engagement surveys, gifts or money for an award, public sharing, notifications, welfare follow-up scheduling, a separate welfare officer role.
 - Browser checks are reported in the task report (what was seen on screen and what was not).
 
-## For your decision
+## Decided: HR administrator only
 
-**Company and super administrators can read welfare cases**, because in this system an administrator holds every permission. The plan asked for "the few people in HR who handle it". If you want welfare narrower than the company administrator (HR administrator only), that is a small change (withhold `welfare.manage` from the administrators, as `subscription.manage` is withheld) but it means a company with no HR administrator has nobody who can read a welfare case. I have not made that change; tell me which you want.
+You decided on 2026-11-10 that welfare cases are read by **the HR administrator only**. `welfare.manage` is therefore withheld from the company administrator and the super administrator (who otherwise hold every permission), the same way `subscription.manage` is withheld. The test `tests/unit/welfare-recognition.test.ts` fails if any other role is ever given it, and `welfare.test.ts` checks that both administrators, the auditor, finance, other employees and other companies get "not found".
+
+**Consequence to know about:** a company that has **no HR administrator** has nobody who can read or work a welfare case (the employee who raised it still reads their own). A company should keep at least one HR administrator.

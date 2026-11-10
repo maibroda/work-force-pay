@@ -74,7 +74,7 @@ export const PERMISSIONS = [
   "appraisal.approve", // sign off a submitted appraisal (never its reviewer)
   "feedback.give", // write feedback about your own direct reports (HR: about anyone); read the feedback you gave and your team's
   "feedback.manage", // read everyone's feedback and void an entry made in error (with a reason)
-  "welfare.manage", // read and work welfare support cases (the most sensitive: narrower than other confidential cases) and see the welfare counts
+  "welfare.manage", // read and work welfare support cases and see the welfare counts: the HR administrator ONLY (withheld from the administrators below)
   "recognition.nominate", // nominate an employee for an award: HR about anyone, a manager about their own direct reports
   "pip.view", // see performance improvement plans (personal and sensitive: not part of hr.view)
   "pip.manage", // draft a plan, add its objectives, record reviews and propose its outcome; be named as a plan's owner
@@ -149,9 +149,10 @@ const READ_ALL: Permission[] = [
 ];
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
-  SUPER_ADMIN: ALL,
-  // a company's administrator holds everything EXCEPT changing its own subscription: otherwise any company could give itself every module
-  COMPANY_ADMIN: ALL.filter((p) => p !== "subscription.manage" && p !== "pricebook.manage"),
+  // welfare cases are the most sensitive records we hold: the founder decided (2026-11-10) that ONLY the HR administrator reads them, so neither administrator role holds welfare.manage
+  SUPER_ADMIN: ALL.filter((p) => p !== "welfare.manage"),
+  // a company's administrator holds everything EXCEPT changing its own subscription (otherwise any company could give itself every module) and the welfare right
+  COMPANY_ADMIN: ALL.filter((p) => p !== "subscription.manage" && p !== "pricebook.manage" && p !== "welfare.manage"),
   HR_ADMIN: [
     "dashboard.view",
     "employee.view",
