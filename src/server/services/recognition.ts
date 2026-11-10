@@ -145,7 +145,7 @@ export async function listAwards(ctx: Ctx, f: { status?: AwardStatus } = {}) {
 /** The signed-in employee's own APPROVED awards. A nomination still being considered, or one rejected or withdrawn, is not shown. */
 export async function myRecognition(ctx: Ctx) {
   if (!ctx.employeeId) return [];
-  const rows = await db.recognitionAward.findMany({ where: { organizationId: ctx.orgId, employeeId: ctx.employeeId, status: "APPROVED" }, include: { type: true }, orderBy: { awardedOn: "desc" } });
+  const rows = await db.recognitionAward.findMany({ where: { organizationId: ctx.orgId, employeeId: ctx.employeeId, status: "APPROVED" }, select: { id: true, citation: true, awardedOn: true, announceAgreed: true, type: { select: { name: true, mayAnnounce: true } } }, orderBy: { awardedOn: "desc" } });
   return rows.map((a) => ({ id: a.id, awardName: a.type.name, citation: a.citation, awardedOn: a.awardedOn, mayAnnounce: a.type.mayAnnounce, announceAgreed: a.announceAgreed }));
 }
 

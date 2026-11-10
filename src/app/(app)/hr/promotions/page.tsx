@@ -1,6 +1,6 @@
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
-import { PROMOTION_STATUSES, PROMOTION_STATUS_LABELS, PROMOTION_WARNING_LABELS, type PromotionStatus, type PromotionWarning } from "@/lib/career";
+import { PROMOTION_STATUSES, PROMOTION_STATUS_LABELS, PROMOTION_WARNING_LABELS, type PromotionStatus } from "@/lib/career";
 import { listPromotions, listRoles, promotionEvidence } from "@/server/services/career";
 import { db } from "@/server/services/_base";
 import { Empty, FilterBar, FilterField, FormPanel, KV, PageHeader, Section } from "@/components/page";

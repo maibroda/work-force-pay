@@ -252,8 +252,9 @@ export async function myCareer(ctx: Ctx) {
   const since = await roleSince(ctx.orgId, emp.id, emp.categoryId, emp.employmentDate);
   const months = monthsBetween(since, todayIso());
   const [paths, promo] = await Promise.all([
-    db.careerPath.findMany({ where: { organizationId: ctx.orgId, fromCategoryId: emp.categoryId, active: true }, include: { toCategory: { select: { name: true } } }, orderBy: { toCategory: { name: "asc" } } }),
-    db.promotionProposal.findFirst({ where: { organizationId: ctx.orgId, employeeId: emp.id, status: { in: ["APPROVED", "APPLIED"] } }, orderBy: { proposedAt: "desc" }, include: { toCategory: { select: { name: true } } } }),
+    // only the fields the page shows: the employee's page must never be handed the proposer's reason, a note, a user id or a warning, even in what the server streams while it renders
+    db.careerPath.findMany({ where: { organizationId: ctx.orgId, fromCategoryId: emp.categoryId, active: true }, select: { minMonths: true, requiredCourse: true, toCategory: { select: { name: true } } }, orderBy: { toCategory: { name: "asc" } } }),
+    db.promotionProposal.findFirst({ where: { organizationId: ctx.orgId, employeeId: emp.id, status: { in: ["APPROVED", "APPLIED"] } }, orderBy: { proposedAt: "desc" }, select: { status: true, intendedOn: true, appliedAt: true, toCategory: { select: { name: true } } } }),
   ]);
   const progress = [];
   for (const p of paths)

@@ -266,6 +266,9 @@ describe("who sees what", () => {
     expect((await myCareer(w.me1)).promotion).toBeNull();
     await approvePromotion(w.boss, q.id, "Reviewed and agreed");
     expect((await myCareer(w.me1)).promotion).toMatchObject({ toRole: expect.any(String), status: "APPROVED" });
+    // exactly these fields and nothing else: never the reason, a note, a user id or a warning
+    expect(Object.keys((await myCareer(w.me1)).promotion!).sort()).toEqual(["appliedAt", "intendedOn", "status", "toRole"]);
+    expect(JSON.stringify(await myCareer(w.me1))).not.toMatch(/SECRET/);
     const other = await login(w.t, "EMPLOYEE", w.g2.id);
     expect((await myCareer(other)).promotion).toBeNull();
     expect(await myCareer(await login(w.t, "EMPLOYEE"))).toMatchObject({ promotion: null, paths: [] });
