@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-236 tables and 179 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+240 tables and 181 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -48,6 +48,10 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | trainingNeeds | → TrainingNeed[] |  |  |
 | recognitionAwardTypes | → RecognitionAwardType[] |  |  |
 | recognitionAwards | → RecognitionAward[] |  |  |
+| careerPaths | → CareerPath[] |  |  |
+| promotionProposals | → PromotionProposal[] |  |  |
+| successionRoles | → SuccessionRole[] |  |  |
+| successionCandidates | → SuccessionCandidate[] |  |  |
 | kpis | → Kpi[] |  |  |
 | appraisalKpis | → AppraisalKpi[] |  |  |
 | deployments | → Deployment[] |  |  |
@@ -1157,6 +1161,11 @@ A per-cost-center, per-period budget for budget-vs-actual variance reporting.
 | kitPacks | → KitPack[] |  |  |
 | trainingRequirements | → TrainingRequirement[] |  |  |
 | companyPolicies | → CompanyPolicy[] |  |  |
+| careerPathsFrom | → CareerPath[] |  |  |
+| careerPathsTo | → CareerPath[] |  |  |
+| promotionsFrom | → PromotionProposal[] |  |  |
+| promotionsTo | → PromotionProposal[] |  |  |
+| successionRoles | → SuccessionRole[] |  |  |
 
 ### EmployeeImportBatch
 
@@ -1246,6 +1255,8 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | trainingEnrolments | → TrainingEnrolment[] |  |  |
 | trainingNeeds | → TrainingNeed[] |  |  |
 | recognitionAwards | → RecognitionAward[] |  |  |
+| promotionProposals | → PromotionProposal[] |  |  |
+| successionCandidates | → SuccessionCandidate[] |  |  |
 | documents | → EmployeeDocument[] |  |  |
 | trainings | → EmployeeTraining[] |  |  |
 | disciplinaryRecords | → DisciplinaryRecord[] |  |  |
@@ -1535,6 +1546,7 @@ One per organization — every number a buyer might want to change without a cod
 | probationAlertDays | Int |  |  |
 | probationEscalationDays | Int |  | An undecided probation moves to the approvals list once it has been past its end date for this many days (0 = never). |
 | longServiceYears | Int[] |  | The anniversaries (in whole years) HR is prompted about for long-service recognition. A prompt only: never an award. |
+| promotionApplyAlertDays | Int |  | An approved promotion not yet applied for this many days is flagged in the HR digest (0 = never). |
 | offerValidityDays | Int |  |  |
 | relationsCaseSlaDays | Int |  |  |
 | pipDefaultDays | Int |  |  |
@@ -5927,6 +5939,94 @@ A nomination and, once a second person approves it, an award. Never edited: a mi
 | announceAgreed | Boolean |  | The recipient's answer to being shown on the recognition board (null = not asked or not answered). |
 | announceAnsweredAt | DateTime |  |  |
 
+### CareerPath
+
+A move the company says one role (employee category) can lead to, with what it asks first. Guidance only: it warns, it never blocks a proposal.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| fromCategoryId | String | yes |  |
+| fromCategory | → EmployeeCategory |  |  |
+| toCategoryId | String | yes |  |
+| toCategory | → EmployeeCategory |  |  |
+| minMonths | Int |  | Months of service in the current role the company asks for (null = none asked). |
+| requiredCourse | String |  | A course (by its training-requirement name) the company asks for (null = none asked). |
+| active | Boolean |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+
+### PromotionProposal
+
+A proposal that an employee moves to another role (category), and the decision on it. A record of a decision only: approving it changes no category, pay or payroll figure.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| employeeId | String | yes |  |
+| employee | → Employee |  |  |
+| fromCategoryId | String | yes |  |
+| fromCategory | → EmployeeCategory |  |  |
+| toCategoryId | String | yes |  |
+| toCategory | → EmployeeCategory |  |  |
+| reason | String | yes |  |
+| intendedOn | DateTime | yes |  |
+| status | PromotionStatus |  |  |
+| warnings | String[] |  | The warning codes that applied when it was proposed (never text). |
+| proposedByUserId | String | yes |  |
+| proposedBy | String | yes |  |
+| proposedAt | DateTime |  |  |
+| decidedByUserId | String |  |  |
+| decidedBy | String |  |  |
+| decidedAt | DateTime |  |  |
+| decisionNote | String |  | The reason for a decline, or for approving despite a warning. |
+| withdrawnByUserId | String |  |  |
+| withdrawnBy | String |  |  |
+| withdrawnAt | DateTime |  |  |
+| withdrawReason | String |  |  |
+| appliedByUserId | String |  |  |
+| appliedBy | String |  |  |
+| appliedAt | DateTime |  |  |
+
+### SuccessionRole
+
+A critical role (an employee category) the HR administrator keeps successors for. Read only by the HR administrator.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| categoryId | String | yes |  |
+| category | → EmployeeCategory |  |  |
+| active | Boolean |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| candidates | → SuccessionCandidate[] |  |  |
+
+### SuccessionCandidate
+
+One named successor for a critical role, with how ready they are. Kept by a person; nothing is scored or suggested.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| roleId | String | yes |  |
+| role | → SuccessionRole |  |  |
+| employeeId | String | yes |  |
+| employee | → Employee |  |  |
+| readiness | SuccessionReadiness | yes |  |
+| reason | String |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+
 ## Fixed sets of values
 
 ### Role
@@ -6670,4 +6770,12 @@ Whether an outbound message is a service message (about an active contract) or m
 ### RecognitionStatus
 
 `NOMINATED`, `APPROVED`, `REJECTED`, `WITHDRAWN`
+
+### PromotionStatus
+
+`PROPOSED`, `APPROVED`, `DECLINED`, `WITHDRAWN`, `APPLIED`
+
+### SuccessionReadiness
+
+`READY_NOW`, `READY_1_2_YEARS`, `READY_3_PLUS`
 

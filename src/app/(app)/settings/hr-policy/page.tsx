@@ -166,6 +166,16 @@ export default async function HrPolicyPage() {
         />
       </Section>
 
+      <Section title="Promotions" description="A promotion that has been approved but not yet applied (the employee's role changed and the promotion marked applied) is flagged in the HR digest after this many days.">
+        <SmartForm
+          columns={3}
+          submitLabel="Save"
+          resetOnSuccess={false}
+          action={updateHrPolicyAction.bind(null, "career")}
+          fields={[{ name: "promotionApplyAlertDays", label: "Flag an approved, unapplied promotion after (days, 0 = never)", type: "number", min: 0, max: 90, defaultValue: p.promotionApplyAlertDays }]}
+        />
+      </Section>
+
       <Section title="Staff loans & advances" description="Affordability limits checked when a loan or advance is requested. Set a limit to 0 for no limit.">
         <SmartForm
           columns={3}

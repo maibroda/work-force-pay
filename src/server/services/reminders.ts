@@ -272,6 +272,15 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
       ),
     ),
   );
+  // an approved promotion not yet applied for the company's number of days (0 = never flagged): HR has to change the role and mark it applied
+  if (policy.promotionApplyAlertDays > 0) {
+    const waiting = await db.promotionProposal.findMany({
+      where: { organizationId: orgId, status: "APPROVED", decidedAt: { lte: addDays(today, -policy.promotionApplyAlertDays) } },
+      include: { employee: { select: { id: true, employeeNumber: true, firstName: true, lastName: true } }, toCategory: { select: { name: true } } },
+      orderBy: { decidedAt: "asc" },
+    });
+    add(section("promotions-unapplied", "Approved promotions not yet applied", waiting.map((p) => ({ text: `${name(p.employee)} — approved for ${p.toCategory.name}, not yet applied`, path: "/hr/promotions" }))));
+  }
   add(
     section(
       "policies",
