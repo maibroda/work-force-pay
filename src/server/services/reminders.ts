@@ -89,7 +89,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
         include: { employee: true },
         orderBy: { dueDate: "asc" },
       }),
-      db.relationsCase.findMany({ where: { organizationId: orgId, status: { in: OPEN_CASE as never }, dueDate: { lte: caseHorizon } }, include: { employee: true }, orderBy: { dueDate: "asc" } }),
+      db.relationsCase.findMany({ where: { organizationId: orgId, status: { in: OPEN_CASE as never }, dueDate: { lte: caseHorizon }, type: { not: "WELFARE" } }, include: { employee: true }, orderBy: { dueDate: "asc" } }),
       kitHeldByLeavers(orgId),
       loansOwedByLeavers(orgId),
       db.employeeDocument.findMany({ where: { organizationId: orgId, expiryDate: { not: null, lte: addDays(today, 30) }, OR: [{ status: null }, { status: { not: "ARCHIVED" } }] }, include: { employee: true, type: true }, orderBy: { expiryDate: "asc" } }),

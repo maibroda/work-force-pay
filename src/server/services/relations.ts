@@ -21,16 +21,19 @@ import { logAudit } from "./audit";
 import { getHrPolicy, todayUtc } from "./hr-policy";
 import { raiseDisciplinary } from "./hr";
 import { nextNumber } from "./numbering";
+import { WELFARE_KINDS } from "@/lib/welfare";
 
-const CASE_TYPES = ["GRIEVANCE", "MISCONDUCT", "HARASSMENT", "WHISTLEBLOWING", "COUNSELLING", "MEDIATION", "OTHER"] as const;
+const CASE_TYPES = ["GRIEVANCE", "MISCONDUCT", "HARASSMENT", "WHISTLEBLOWING", "COUNSELLING", "MEDIATION", "WELFARE", "OTHER"] as const;
 /** What an employee may open for themselves — misconduct is HR's to open about someone. */
-const SELF_TYPES = ["GRIEVANCE", "HARASSMENT", "WHISTLEBLOWING"];
-const ALWAYS_CONFIDENTIAL = ["HARASSMENT", "WHISTLEBLOWING"];
+const SELF_TYPES = ["GRIEVANCE", "HARASSMENT", "WHISTLEBLOWING", "WELFARE"];
+const ALWAYS_CONFIDENTIAL = ["HARASSMENT", "WHISTLEBLOWING", "WELFARE"];
 const OPEN_STATUSES = ["OPEN", "INVESTIGATING", "HEARING"];
 
 /** Which page a case belongs to: misconduct is disciplinary; everything else is employee relations. */
 export type CaseScope = "relations" | "discipline";
 const isMisconduct = (c: { type: string }) => c.type === "MISCONDUCT";
+/** Welfare support (bereavement, hardship, health, family): the most sensitive kind, read and worked only with welfare.manage. */
+const isWelfare = (c: { type: string }) => c.type === "WELFARE";
 
 /** The "which kinds of case" part of a query. With no scope, a caller sees every kind they are allowed to. */
 function scopeWhere(ctx: Ctx, scope?: CaseScope) {
@@ -38,13 +41,16 @@ function scopeWhere(ctx: Ctx, scope?: CaseScope) {
     assertCan(ctx, "discipline.view");
     return { type: "MISCONDUCT" as const };
   }
-  if (scope === "relations" || !can(ctx.role, "discipline.view")) return { type: { not: "MISCONDUCT" as const } };
-  return {};
+  const hidden: Array<"MISCONDUCT" | "WELFARE"> = [];
+  if (scope === "relations" || !can(ctx.role, "discipline.view")) hidden.push("MISCONDUCT");
+  if (!can(ctx.role, "welfare.manage")) hidden.push("WELFARE");
+  return hidden.length ? { type: { notIn: hidden } } : {};
 }
 
-/** A misconduct case needs the disciplinary permission as well as the HR one that was already needed. */
+/** A misconduct case needs the disciplinary permission as well as the HR one that was already needed; a welfare case needs the welfare one. */
 function assertDisciplinary(ctx: Ctx, c: { type: string }) {
   if (isMisconduct(c)) assertCan(ctx, "discipline.manage");
+  if (isWelfare(c)) assertCan(ctx, "welfare.manage");
 }
 
 export const caseSchema = z.object({
@@ -52,12 +58,15 @@ export const caseSchema = z.object({
   type: z.enum(CASE_TYPES),
   severity: z.enum(["LOW", "MEDIUM", "HIGH"]).default("MEDIUM"),
   confidential: z.boolean().optional(),
+  /** For a welfare case only: the kind of support asked for (required then). */
+  welfareKind: z.enum(WELFARE_KINDS).optional(),
   summary: z.string().trim().min(5, "Give the case a short summary").max(200),
   description: z.string().trim().min(10, "Describe what happened"),
 });
 
 export async function raiseCase(ctx: Ctx, raw: z.input<typeof caseSchema>) {
   const v = caseSchema.parse(raw);
+  if (v.type === "WELFARE" && !v.welfareKind) throw new BusinessError("Choose the kind of support you are asking for.");
   const hr = can(ctx.role, "hr.manage");
   let employeeId = v.employeeId;
   let selfRaised = false;
@@ -85,6 +94,7 @@ export async function raiseCase(ctx: Ctx, raw: z.input<typeof caseSchema>) {
         type: v.type,
         severity: v.severity,
         confidential: ALWAYS_CONFIDENTIAL.includes(v.type) ? true : (v.confidential ?? false),
+        welfareKind: v.type === "WELFARE" ? v.welfareKind! : null,
         summary: v.summary,
         description: v.description,
         raisedBy: ctx.name,
@@ -108,12 +118,13 @@ async function loadCase(ctx: Ctx, id: string) {
   if (!c) throw new BusinessError("Case not found.");
   // someone without disciplinary access is not even told that a misconduct case exists
   if (isMisconduct(c) && !can(ctx.role, "discipline.view")) throw new BusinessError("Case not found.");
+  if (isWelfare(c) && !can(ctx.role, "welfare.manage")) throw new BusinessError("Case not found.");
   return c;
 }
 
 /** Read-only HR viewers see a confidential case exist, but not what it contains. */
 const canSeeContent = (ctx: Ctx, c: { confidential: boolean; type: string }) =>
-  !c.confidential || (can(ctx.role, "hr.manage") && (!isMisconduct(c) || can(ctx.role, "discipline.manage")));
+  !c.confidential || (can(ctx.role, "hr.manage") && (!isMisconduct(c) || can(ctx.role, "discipline.manage")) && (!isWelfare(c) || can(ctx.role, "welfare.manage")));
 
 function redact<T extends CaseRow>(ctx: Ctx, c: T): T & { redacted: boolean } {
   if (canSeeContent(ctx, c)) return { ...c, redacted: false };

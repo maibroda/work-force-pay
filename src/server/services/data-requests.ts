@@ -56,7 +56,7 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
   if (!e) throw new BusinessError("Employee not found.");
   const where = { organizationId: orgId, employeeId };
 
-  const [contracts, exits, settlements, onboarding, deployments, movements, attendance, payslips, loans, leave, training, documents, discipline, cases, contacts, guarantors, appraisals, acks, letters, changes, candidate, kit, plans, probationDecisions, feedback, trainingEnrolments, trainingNeeds] =
+  const [contracts, exits, settlements, onboarding, deployments, movements, attendance, payslips, loans, leave, training, documents, discipline, cases, contacts, guarantors, appraisals, acks, letters, changes, candidate, kit, plans, probationDecisions, feedback, trainingEnrolments, trainingNeeds, recognition] =
     await Promise.all([
       db.employmentContract.findMany({ where, orderBy: { startDate: "asc" } }),
       db.exitRecord.findMany({ where, orderBy: { createdAt: "asc" } }),
@@ -94,6 +94,8 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
       db.trainingEnrolment.findMany({ where, include: { session: { include: { programme: { select: { name: true } } } } }, orderBy: { createdAt: "asc" } }),
       // training needs recorded about them
       db.trainingNeed.findMany({ where, orderBy: { createdAt: "asc" } }),
+      // recognition awards they have received (never a nomination still being considered, which they have not been told about)
+      db.recognitionAward.findMany({ where: { ...where, status: "APPROVED" }, include: { type: { select: { name: true } } }, orderBy: { awardedOn: "asc" } }),
     ]);
 
   const confidential = cases.filter((c) => c.confidential).length;
@@ -221,6 +223,10 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
     probationDecisions: {
       title: "Decisions about your probation",
       records: probationDecisions.map((x) => ({ decision: words(x.decision), decidedOn: dt(x.decidedAt), reason: x.note, extendedByMonths: x.extensionMonths, effectiveFrom: dt(x.effectiveDate), toldToYouOn: dt(x.informedAt) })),
+    },
+    recognition: {
+      title: "Recognition awards you have received",
+      records: recognition.map((x) => ({ award: x.type.name, awardedOn: dt(x.awardedOn), citation: x.citation, agreedToBeShownOnTheBoard: x.announceAgreed })),
     },
     trainingEnrolments: {
       title: "Training sessions you were enrolled in",

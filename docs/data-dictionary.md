@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-234 tables and 177 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+236 tables and 179 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -46,6 +46,8 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | trainingSessions | → TrainingSession[] |  |  |
 | trainingEnrolments | → TrainingEnrolment[] |  |  |
 | trainingNeeds | → TrainingNeed[] |  |  |
+| recognitionAwardTypes | → RecognitionAwardType[] |  |  |
+| recognitionAwards | → RecognitionAward[] |  |  |
 | kpis | → Kpi[] |  |  |
 | appraisalKpis | → AppraisalKpi[] |  |  |
 | deployments | → Deployment[] |  |  |
@@ -1243,6 +1245,7 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | probationDecisions | → ProbationDecision[] |  |  |
 | trainingEnrolments | → TrainingEnrolment[] |  |  |
 | trainingNeeds | → TrainingNeed[] |  |  |
+| recognitionAwards | → RecognitionAward[] |  |  |
 | documents | → EmployeeDocument[] |  |  |
 | trainings | → EmployeeTraining[] |  |  |
 | disciplinaryRecords | → DisciplinaryRecord[] |  |  |
@@ -1531,6 +1534,7 @@ One per organization — every number a buyer might want to change without a cod
 | contractAlertDays | Int |  |  |
 | probationAlertDays | Int |  |  |
 | probationEscalationDays | Int |  | An undecided probation moves to the approvals list once it has been past its end date for this many days (0 = never). |
+| longServiceYears | Int[] |  | The anniversaries (in whole years) HR is prompted about for long-service recognition. A prompt only: never an award. |
 | offerValidityDays | Int |  |  |
 | relationsCaseSlaDays | Int |  |  |
 | pipDefaultDays | Int |  |  |
@@ -1802,6 +1806,7 @@ Pre-employment vetting step (references, ID, police clearance, guarantor, medica
 | severity | CaseSeverity |  |  |
 | status | CaseStatus |  |  |
 | confidential | Boolean |  | Confidential cases show only their existence (not content) to read-only HR viewers. |
+| welfareKind | WelfareKind |  | For a welfare case only: the kind of support asked for. |
 | summary | String | yes |  |
 | description | String | yes |  |
 | raisedBy | String | yes |  |
@@ -5874,6 +5879,54 @@ A person who needs a course: from a compliance gap, an appraisal recommendation,
 | createdBy | String | yes |  |
 | createdAt | DateTime |  |  |
 
+### RecognitionAwardType
+
+A kind of award the company gives (Employee of the month, Safety star, 5 years' service). The company starts with none. Handles no money.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| name | String | yes |  |
+| description | String |  |  |
+| longServiceYears | Int |  | For a long-service award: the years it marks (a prompt for HR; never awarded automatically). |
+| mayAnnounce | Boolean |  | Whether an approved award of this kind may appear on the recognition board, if the recipient agrees. |
+| active | Boolean |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| awards | → RecognitionAward[] |  |  |
+
+### RecognitionAward
+
+A nomination and, once a second person approves it, an award. Never edited: a mistake is a withdrawal with a reason.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| employeeId | String | yes |  |
+| employee | → Employee |  |  |
+| typeId | String | yes |  |
+| type | → RecognitionAwardType |  |  |
+| citation | String | yes |  |
+| status | RecognitionStatus |  |  |
+| nominatedByUserId | String | yes |  |
+| nominatedBy | String | yes |  |
+| nominatedAt | DateTime |  |  |
+| decidedByUserId | String |  |  |
+| decidedBy | String |  |  |
+| decidedAt | DateTime |  |  |
+| decisionNote | String |  | The reason for a rejection. |
+| awardedOn | DateTime |  |  |
+| withdrawnByUserId | String |  |  |
+| withdrawnBy | String |  |  |
+| withdrawnAt | DateTime |  |  |
+| withdrawReason | String |  |  |
+| announceAgreed | Boolean |  | The recipient's answer to being shown on the recognition board (null = not asked or not answered). |
+| announceAnsweredAt | DateTime |  |  |
+
 ## Fixed sets of values
 
 ### Role
@@ -5972,7 +6025,7 @@ Why an employee is leaving — drives attrition analytics and (for REDUNDANCY) s
 
 ### RelationsCaseType
 
-`GRIEVANCE`, `MISCONDUCT`, `HARASSMENT`, `WHISTLEBLOWING`, `COUNSELLING`, `MEDIATION`, `OTHER`
+`GRIEVANCE`, `MISCONDUCT`, `HARASSMENT`, `WHISTLEBLOWING`, `COUNSELLING`, `MEDIATION`, `WELFARE`, `OTHER`
 
 ### CaseSeverity
 
@@ -6609,4 +6662,12 @@ Whether an outbound message is a service message (about an active contract) or m
 ### TrainingPriority
 
 `LOW`, `NORMAL`, `HIGH`
+
+### WelfareKind
+
+`BEREAVEMENT`, `FINANCIAL_HARDSHIP`, `HEALTH_WELLBEING`, `FAMILY`, `HOUSING_TRANSPORT`, `OTHER`
+
+### RecognitionStatus
+
+`NOMINATED`, `APPROVED`, `REJECTED`, `WITHDRAWN`
 

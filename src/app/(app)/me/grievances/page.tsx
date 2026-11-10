@@ -7,6 +7,7 @@ import { SmartForm } from "@/components/smart-form";
 import { StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { raiseCaseAction } from "@/app/actions/hr-lifecycle";
+import { WELFARE_KIND_LABELS, WELFARE_KINDS } from "@/lib/welfare";
 
 export default async function MyGrievancesPage() {
   const ctx = await requirePage("relations.raise");
@@ -14,21 +15,22 @@ export default async function MyGrievancesPage() {
   return (
     <>
       <PageHeader
-        title="My grievances & concerns"
-        description="Raise a grievance, a harassment complaint or a whistleblowing concern. Harassment and whistleblowing cases are always confidential. HR investigates and you can follow the status here."
+        title="My cases and support"
+        description="Raise a grievance, a harassment complaint or a whistleblowing concern, or ask for welfare support if you are going through something hard (a bereavement, hardship, your health, a family or housing difficulty). Harassment, whistleblowing and welfare cases are always confidential: welfare support is seen only by the few people in HR who handle it. Asking for support never counts against you. HR investigates and you can follow the status here."
       />
       {!ctx.employeeId ? (
         <Section title="Not available">
           <p className="text-sm text-muted-foreground">Your login isn&apos;t linked to an employee record yet — ask HR to link it.</p>
         </Section>
       ) : (
-        <FormPanel title="Raise a concern" open={!rows.length}>
+        <FormPanel title="Raise a concern or ask for support" open={!rows.length}>
           <SmartForm
             columns={2}
             submitLabel="Submit"
             action={raiseCaseAction}
             fields={[
-              { name: "type", label: "What is it about?", type: "select", required: true, options: enumOptions(["GRIEVANCE", "HARASSMENT", "WHISTLEBLOWING"]) },
+              { name: "type", label: "What is it about?", type: "select", required: true, options: [...enumOptions(["GRIEVANCE", "HARASSMENT", "WHISTLEBLOWING"]), { value: "WELFARE", label: "Welfare support" }] },
+              { name: "welfareKind", label: "If it is welfare support: what kind?", type: "select", options: WELFARE_KINDS.map((k) => ({ value: k, label: WELFARE_KIND_LABELS[k] })) },
               { name: "severity", label: "How serious is it?", type: "select", defaultValue: "MEDIUM", options: enumOptions(["LOW", "MEDIUM", "HIGH"]) },
               { name: "summary", label: "Summary", required: true, span: 2 },
               { name: "description", label: "What happened (who, when, where)", type: "textarea", required: true, span: 2 },

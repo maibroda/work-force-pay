@@ -236,6 +236,8 @@ enum RelationsCaseType {
   WHISTLEBLOWING
   COUNSELLING
   MEDIATION
+  /// Welfare support: always confidential, and handled only by people with welfare.manage.
+  WELFARE
   OTHER
 }
 
@@ -595,6 +597,8 @@ model Organization {
   trainingSessions          TrainingSession[]
   trainingEnrolments        TrainingEnrolment[]
   trainingNeeds             TrainingNeed[]
+  recognitionAwardTypes     RecognitionAwardType[]
+  recognitionAwards         RecognitionAward[]
   kpis                      Kpi[]
   appraisalKpis             AppraisalKpi[]
   deployments               Deployment[]
@@ -2017,6 +2021,7 @@ model Employee {
   probationDecisions      ProbationDecision[]
   trainingEnrolments      TrainingEnrolment[]
   trainingNeeds           TrainingNeed[]
+  recognitionAwards       RecognitionAward[]
   documents               EmployeeDocument[]
   trainings               EmployeeTraining[]
   disciplinaryRecords     DisciplinaryRecord[]
@@ -2340,6 +2345,8 @@ model HrPolicy {
   probationAlertDays     Int @default(30)
   /// An undecided probation moves to the approvals list once it has been past its end date for this many days (0 = never).
   probationEscalationDays Int @default(7)
+  /// The anniversaries (in whole years) HR is prompted about for long-service recognition. A prompt only: never an award.
+  longServiceYears        Int[] @default([5, 10, 15, 20])
   offerValidityDays      Int @default(14)
   relationsCaseSlaDays   Int @default(21)
 
@@ -2701,6 +2708,8 @@ model RelationsCase {
   status         CaseStatus        @default(OPEN)
   /// Confidential cases show only their existence (not content) to read-only HR viewers.
   confidential   Boolean           @default(false)
+  /// For a welfare case only: the kind of support asked for.
+  welfareKind    WelfareKind?
   summary        String
   description    String
   raisedBy       String
@@ -7834,6 +7843,77 @@ model TrainingNeed {
   metAt          DateTime?
   createdBy      String
   createdAt      DateTime           @default(now())
+
+  @@index([organizationId, status])
+  @@index([organizationId, employeeId])
+}
+
+// ─────────────────────────── WELFARE AND RECOGNITION ───────────────────────────
+
+enum WelfareKind {
+  BEREAVEMENT
+  FINANCIAL_HARDSHIP
+  HEALTH_WELLBEING
+  FAMILY
+  HOUSING_TRANSPORT
+  OTHER
+}
+
+enum RecognitionStatus {
+  NOMINATED
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+/// A kind of award the company gives (Employee of the month, Safety star, 5 years' service). The company starts with none. Handles no money.
+model RecognitionAwardType {
+  id               String       @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  name             String
+  description      String?
+  /// For a long-service award: the years it marks (a prompt for HR; never awarded automatically).
+  longServiceYears Int?
+  /// Whether an approved award of this kind may appear on the recognition board, if the recipient agrees.
+  mayAnnounce      Boolean      @default(false)
+  active           Boolean      @default(true)
+  createdBy        String
+  createdAt        DateTime     @default(now())
+
+  awards RecognitionAward[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, active])
+}
+
+/// A nomination and, once a second person approves it, an award. Never edited: a mistake is a withdrawal with a reason.
+model RecognitionAward {
+  id                String               @id @default(cuid())
+  organizationId    String
+  organization      Organization         @relation(fields: [organizationId], references: [id])
+  employeeId        String
+  employee          Employee             @relation(fields: [employeeId], references: [id])
+  typeId            String
+  type              RecognitionAwardType @relation(fields: [typeId], references: [id])
+  citation          String
+  status            RecognitionStatus    @default(NOMINATED)
+  nominatedByUserId String
+  nominatedBy       String
+  nominatedAt       DateTime             @default(now())
+  decidedByUserId   String?
+  decidedBy         String?
+  decidedAt         DateTime?
+  /// The reason for a rejection.
+  decisionNote      String?
+  awardedOn         DateTime?            @db.Date
+  withdrawnByUserId String?
+  withdrawnBy       String?
+  withdrawnAt       DateTime?
+  withdrawReason    String?
+  /// The recipient's answer to being shown on the recognition board (null = not asked or not answered).
+  announceAgreed    Boolean?
+  announceAnsweredAt DateTime?
 
   @@index([organizationId, status])
   @@index([organizationId, employeeId])

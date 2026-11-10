@@ -150,6 +150,7 @@ export async function employeeTimeline(ctx: Ctx, employeeId: string): Promise<Ti
   const seeCases = can(ctx.role, "hr.manage");
   // sanctions and misconduct cases are disciplinary: they show only to someone with disciplinary access (praise shows to all)
   const seeDiscipline = can(ctx.role, "discipline.view");
+  const seeWelfare = can(ctx.role, "welfare.manage");
 
   ev.push({
     date: emp.employmentDate,
@@ -195,7 +196,7 @@ export async function employeeTimeline(ctx: Ctx, employeeId: string): Promise<Ti
       tone: x.type === "COMMENDATION" ? "green" : "amber",
     });
   if (seeCases)
-    for (const c of cases.filter((k) => k.type !== "MISCONDUCT" || seeDiscipline))
+    for (const c of cases.filter((k) => (k.type !== "MISCONDUCT" || seeDiscipline) && (k.type !== "WELFARE" || seeWelfare)))
       ev.push({
         date: c.openedAt,
         kind: "Relations",
