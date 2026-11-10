@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-242 tables and 183 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+245 tables and 183 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -48,6 +48,9 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | trainingNeeds | → TrainingNeed[] |  |  |
 | trainingRequests | → TrainingRequest[] |  |  |
 | trainingEvaluations | → TrainingEvaluation[] |  |  |
+| skills | → Skill[] |  |  |
+| roleSkills | → RoleSkill[] |  |  |
+| skillAssessments | → SkillAssessment[] |  |  |
 | recognitionAwardTypes | → RecognitionAwardType[] |  |  |
 | recognitionAwards | → RecognitionAward[] |  |  |
 | careerPaths | → CareerPath[] |  |  |
@@ -1168,6 +1171,7 @@ A per-cost-center, per-period budget for budget-vs-actual variance reporting.
 | promotionsFrom | → PromotionProposal[] |  |  |
 | promotionsTo | → PromotionProposal[] |  |  |
 | successionRoles | → SuccessionRole[] |  |  |
+| roleSkills | → RoleSkill[] |  |  |
 
 ### EmployeeImportBatch
 
@@ -1257,6 +1261,7 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | trainingEnrolments | → TrainingEnrolment[] |  |  |
 | trainingNeeds | → TrainingNeed[] |  |  |
 | trainingRequests | → TrainingRequest[] |  |  |
+| skillAssessments | → SkillAssessment[] |  |  |
 | recognitionAwards | → RecognitionAward[] |  |  |
 | promotionProposals | → PromotionProposal[] |  |  |
 | successionCandidates | → SuccessionCandidate[] |  |  |
@@ -1590,6 +1595,7 @@ One per organization — every number a buyer might want to change without a cod
 | guarantorSeparateVerifier | Boolean |  | Someone other than whoever recorded a guarantor must verify them. |
 | trainingAlertDays | Int |  | Flag a certificate this many days before it expires. |
 | trainingEvaluationDays | Int |  | The manager is asked whether a course was applied on the job this many days after the session (0 = never asked). |
+| skillReassessDays | Int |  | A skill assessment older than this many days is listed as stale for HR (0 = never). |
 | sensitiveChangeApproval | Boolean |  | A change needs a second person's approval (otherwise anyone who can edit an employee can change it). |
 | bankChangeWatchDays | Int |  | Payroll validation warns when an employee's bank account was changed within this many days (0 = off). |
 | appraisalSelfAssessment | Boolean |  | Employees rate themselves before their manager does. |
@@ -6074,6 +6080,61 @@ One answer about a course that was attended: the participant's (was it useful?) 
 | comment | String |  |  |
 | byUserId | String | yes |  |
 | byName | String | yes |  |
+| createdAt | DateTime |  |  |
+
+### Skill
+
+A skill the company cares about (Shift supervision, First aid response). The company starts with none. Linked to the courses that build it by course name.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| name | String | yes |  |
+| description | String |  |  |
+| courses | String[] |  | The courses that build this skill, by course name (matched the way training compliance matches course names). |
+| active | Boolean |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| roleSkills | → RoleSkill[] |  |  |
+| assessments | → SkillAssessment[] |  |  |
+
+### RoleSkill
+
+The level of a skill a role (employee category) needs, 1 (Aware) to 4 (Expert).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| categoryId | String | yes |  |
+| category | → EmployeeCategory |  |  |
+| skillId | String | yes |  |
+| skill | → Skill |  |  |
+| requiredLevel | Int | yes |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+
+### SkillAssessment
+
+One assessment of one person's level of one skill. Append-only: the current level is the latest; a correction is a new assessment. The employee reads all of it.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| employeeId | String | yes |  |
+| employee | → Employee |  |  |
+| skillId | String | yes |  |
+| skill | → Skill |  |  |
+| level | Int | yes |  |
+| comment | String |  |  |
+| assessedOn | DateTime | yes |  |
+| assessedByUserId | String | yes |  |
+| assessedBy | String | yes |  |
 | createdAt | DateTime |  |  |
 
 ## Fixed sets of values

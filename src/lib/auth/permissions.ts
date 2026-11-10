@@ -78,6 +78,7 @@ export const PERMISSIONS = [
   "recognition.nominate", // nominate an employee for an award: HR about anyone, a manager about their own direct reports
   "career.propose", // propose that an employee moves to another role (category): HR about anyone, a manager about their own direct reports; a record of a decision only
   "training.request", // ask for a course for an employee and evaluate a course they attended: HR about anyone, a manager about their own direct reports
+  "skills.assess", // assess an employee's skill level: HR about anyone, a manager about their own direct reports; a record, never a score that changes pay or an appraisal
   "succession.manage", // keep the succession list (critical roles and their successors): the HR administrator ONLY, withheld from the administrators below
   "pip.view", // see performance improvement plans (personal and sensitive: not part of hr.view)
   "pip.manage", // draft a plan, add its objectives, record reviews and propose its outcome; be named as a plan's owner
@@ -188,6 +189,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "career.propose",
     "succession.manage",
     "training.request",
+    "skills.assess",
     "pip.view",
     "pip.manage",
     "client.view",
@@ -212,6 +214,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "recognition.nominate", // about their own direct reports
     "career.propose", // about their own direct reports
     "training.request", // about their own direct reports
+    "skills.assess", // about their own direct reports
     "sales.view",
     "sales.view.all", // read-only: they see the sales records but change nothing
     "sales.handover.accept", // and, once designated, accept the handover of an accepted quote
@@ -304,6 +307,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "recognition.nominate",
     "career.propose",
     "training.request",
+    "skills.assess",
   ],
   EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise"],
   // the bureau's sales person sees the CRM and nothing else: no payroll, employee, client or finance data
