@@ -32,6 +32,7 @@ import { describeHours } from "@/lib/breaches";
 import { STATE_LABELS } from "@/lib/training-compliance";
 import { appraisalAttention } from "./appraisals";
 import { planAttention } from "./pip";
+import { daysOverdue, escalated } from "@/lib/probation";
 
 const OPEN_CASE = ["OPEN", "INVESTIGATING", "HEARING"];
 const SHOWN = 10;
@@ -66,7 +67,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
   const contractHorizon = addDays(today, policy.contractAlertDays);
   const probationHorizon = addDays(today, policy.probationAlertDays);
   const caseHorizon = addDays(today, 3);
-  const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records, training, appraisals, changes, policies, dataRequests, breaches, retention, plans] =
+  const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records, training, appraisals, changes, policies, dataRequests, breaches, retention, plans, failedProbations] =
     await Promise.all([
       db.organization.findUniqueOrThrow({ where: { id: orgId }, select: { name: true } }),
       db.jobRequisition.findMany({ where: { organizationId: orgId, status: "PENDING_APPROVAL" }, orderBy: { createdAt: "asc" } }),
@@ -101,8 +102,20 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
       breachesNeedingAttention(orgId, new Date()),
       retentionAttention(orgId, today),
       withPip ? planAttention(orgId, today) : null,
+      // a probation recorded as failed whose employee is still here and has no exit under way: HR still has to decide what follows
+      db.employmentContract.findMany({
+        where: {
+          organizationId: orgId,
+          status: "ACTIVE",
+          probationOutcome: "FAILED",
+          employee: { status: { in: ["ACTIVE", "ON_LEAVE"] }, exitRecords: { none: { status: { in: ["PENDING", "APPROVED", "PROCESSED"] } } } },
+        },
+        include: { employee: true },
+        orderBy: { updatedAt: "asc" },
+      }),
     ]);
 
+  const escalatedProbations = probation.filter((c) => escalated(daysOverdue(iso(c.probationEndDate!), iso(today)), policy.probationEscalationDays));
   const sections: DigestSection[] = [];
   const add = (s: DigestSection) => s.count && sections.push(s);
 
@@ -116,6 +129,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
       ...changes.map((c) => ({ text: `${c.kind.toLowerCase()} details change — ${name(c.employee)} (requested by ${c.requestedBy})`, path: "/employees/change-requests" })),
       ...(plans?.awaitingApproval ?? []).map((p) => ({ text: `Improvement plan to start — ${name(p.employee)} (drafted by ${p.draftedBy})`, path: `/hr/improvement-plans/${p.id}` })),
       ...(plans?.outcomeAwaiting ?? []).map((p) => ({ text: `Improvement plan outcome — ${name(p.employee)} (proposed by ${p.proposedBy ?? "—"})`, path: `/hr/improvement-plans/${p.id}` })),
+      ...escalatedProbations.map((c) => ({ text: `Probation decision overdue ${daysOverdue(iso(c.probationEndDate!), iso(today))} days — ${name(c.employee)} (probation ended ${fmtDate(c.probationEndDate)})`, path: `/hr/contracts/${c.id}` })),
       ...appraisals.awaiting.map((a) => ({ text: `Appraisal — ${name(a.employee)} (${a.cycle.name}), reviewed by ${a.reviewerName ?? "—"}`, path: `/hr/appraisals/${a.id}` })),
       ...loans.map((l) => ({ text: `${l.type === "SALARY_ADVANCE" ? "Salary advance" : "Staff loan"} ${l.loanNumber} — ${name(l.employee)}, ${naira(l.principal)}`, path: `/payroll/loans/${l.id}` })),
     ]),
@@ -155,9 +169,16 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
       "probation",
       "Probation reviews",
       probation.map((c) => ({
-        text: `${name(c.employee)}: probation ${c.probationEndDate! < today ? "ended" : "ends"} ${fmtDate(c.probationEndDate)}${c.probationEndDate! < today ? " — overdue" : ""}${appraisalNote(c)}`,
+        text: `${name(c.employee)}: probation ${c.probationEndDate! < today ? "ended" : "ends"} ${fmtDate(c.probationEndDate)}${c.probationEndDate! < today ? ` (${daysOverdue(iso(c.probationEndDate!), iso(today))} days ago) — overdue` : ""}${appraisalNote(c)}`,
         path: `/hr/contracts/${c.id}`,
       })),
+    ),
+  );
+  add(
+    section(
+      "probation-failed",
+      "Probation not confirmed: no exit started",
+      failedProbations.map((c) => ({ text: `${name(c.employee)} — probation not confirmed, no exit started`, path: `/employees/${c.employeeId}?tab=lifecycle` })),
     ),
   );
   if (noContract)

@@ -590,6 +590,7 @@ model Organization {
   holidayCalendarYears      HolidayCalendarYear[]
   jobDescriptions           JobDescription[]
   performanceFeedback       PerformanceFeedback[]
+  probationDecisions        ProbationDecision[]
   kpis                      Kpi[]
   appraisalKpis             AppraisalKpi[]
   deployments               Deployment[]
@@ -2009,6 +2010,7 @@ model Employee {
   leaveRequests           LeaveRequest[]
   directReports           Employee[]               @relation("ReportingLine")
   feedbackReceived        PerformanceFeedback[]
+  probationDecisions      ProbationDecision[]
   documents               EmployeeDocument[]
   trainings               EmployeeTraining[]
   disciplinaryRecords     DisciplinaryRecord[]
@@ -2327,6 +2329,8 @@ model HrPolicy {
   retirementAge          Int @default(60)
   contractAlertDays      Int @default(60)
   probationAlertDays     Int @default(30)
+  /// An undecided probation moves to the approvals list once it has been past its end date for this many days (0 = never).
+  probationEscalationDays Int @default(7)
   offerValidityDays      Int @default(14)
   relationsCaseSlaDays   Int @default(21)
 
@@ -2513,6 +2517,7 @@ model EmploymentContract {
   previousContractId  String?
   previousContract    EmploymentContract?      @relation("ContractChain", fields: [previousContractId], references: [id])
   renewals            EmploymentContract[]     @relation("ContractChain")
+  decisions           ProbationDecision[]
   terminatedAt        DateTime?                @db.Date
   terminationReason   String?
   notes               String?
@@ -7663,4 +7668,40 @@ model PipReviewAssessment {
 
   @@unique([reviewId, objectiveId])
   @@index([objectiveId])
+}
+
+// ─────────────────────────── PROBATION DECISIONS ───────────────────────────
+
+/// One probation decision (confirm, extend or fail), append-only: who, when, why, and a snapshot of the probation appraisal that supported it.
+/// The contract keeps its current outcome (probationOutcome) exactly as before; this is the history behind it.
+model ProbationDecision {
+  id                        String                   @id @default(cuid())
+  organizationId            String
+  organization              Organization             @relation(fields: [organizationId], references: [id])
+  employeeId                String
+  employee                  Employee                 @relation(fields: [employeeId], references: [id])
+  contractId                String
+  contract                  EmploymentContract       @relation(fields: [contractId], references: [id])
+  decision                  ProbationOutcome
+  decidedByUserId           String
+  decidedBy                 String
+  decidedAt                 DateTime                 @default(now())
+  note                      String?
+  /// Confirm: months not used. Extend: the months added.
+  extensionMonths           Int?
+  /// Confirm: the date the permanent contract starts. Extend: the new probation end date. Fail: none.
+  effectiveDate             DateTime?                @db.Date
+  /// The signed-off probation appraisal behind the decision, as it stood then (no foreign key: a snapshot).
+  appraisalId               String?
+  /// Its overall score in hundredths (3.80 = 380).
+  appraisalScore            Int?
+  appraisalRecommendation   AppraisalRecommendation?
+  /// The decision went against that recommendation (and so carried the fuller reason).
+  againstRecommendation     Boolean                  @default(false)
+  /// When HR told the employee: only then does the employee see a line about it.
+  informedAt                DateTime?
+  informedBy                String?
+
+  @@index([organizationId, employeeId])
+  @@index([contractId, decidedAt])
 }

@@ -92,6 +92,9 @@ export async function anonymizeEmployee(tx: Tx, orgId: string, employeeId: strin
     await tx.pipReview.updateMany({ where: { planId: { in: planIds } }, data: { summary: REMOVED, employeeComment: null } });
     await tx.pipReviewAssessment.updateMany({ where: { review: { planId: { in: planIds } } }, data: { note: null } });
   }
+  // probation decisions: the reasons go (on each decision, and the same words written into the contract's notes); what stays is the shape (the decision, its dates and who decided)
+  counts.probationDecisions = (await tx.probationDecision.updateMany({ where, data: { note: REMOVED } })).count;
+  await tx.employmentContract.updateMany({ where, data: { notes: null } });
   counts.dataRequests = (await tx.dataAccessRequest.updateMany({ where, data: { requesterName: REMOVED, identityNote: null, completionNote: null, refusalReason: null } })).count;
   if (candidateIds.length) {
     await tx.candidate.updateMany({ where: { id: { in: candidateIds } }, data: { firstName: "Anonymised", lastName: "Candidate", phone: null, email: null, resumeReference: null, notes: null, rejectionReason: REMOVED, anonymizedAt: now } });

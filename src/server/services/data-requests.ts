@@ -56,7 +56,7 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
   if (!e) throw new BusinessError("Employee not found.");
   const where = { organizationId: orgId, employeeId };
 
-  const [contracts, exits, settlements, onboarding, deployments, movements, attendance, payslips, loans, leave, training, documents, discipline, cases, contacts, guarantors, appraisals, acks, letters, changes, candidate, kit, plans, feedback] =
+  const [contracts, exits, settlements, onboarding, deployments, movements, attendance, payslips, loans, leave, training, documents, discipline, cases, contacts, guarantors, appraisals, acks, letters, changes, candidate, kit, plans, probationDecisions, feedback] =
     await Promise.all([
       db.employmentContract.findMany({ where, orderBy: { startDate: "asc" } }),
       db.exitRecord.findMany({ where, orderBy: { createdAt: "asc" } }),
@@ -86,6 +86,8 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
         include: { objectives: { orderBy: { sortOrder: "asc" } }, reviews: { orderBy: [{ reviewedOn: "asc" }, { createdAt: "asc" }], include: { assessments: true } } },
         orderBy: { createdAt: "asc" },
       }),
+      // decisions about their probation (confirm, extend or fail), with the reason recorded
+      db.probationDecision.findMany({ where, orderBy: [{ decidedAt: "asc" }, { id: "asc" }] }),
       // feedback recorded about them (never an entry voided as a mistake)
       db.performanceFeedback.findMany({ where: { ...where, voidedAt: null }, orderBy: [{ relatesOn: "asc" }, { createdAt: "asc" }] }),
     ]);
@@ -211,6 +213,10 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
           reviews: p.reviews.map((r) => ({ date: dt(r.reviewedOn), summary: r.summary, yourComment: r.employeeComment })),
         };
       }),
+    },
+    probationDecisions: {
+      title: "Decisions about your probation",
+      records: probationDecisions.map((x) => ({ decision: words(x.decision), decidedOn: dt(x.decidedAt), reason: x.note, extendedByMonths: x.extensionMonths, effectiveFrom: dt(x.effectiveDate), toldToYouOn: dt(x.informedAt) })),
     },
     feedback: {
       title: "Feedback recorded about you",

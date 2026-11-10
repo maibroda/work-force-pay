@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { employeeLocationHistory } from "@/server/services/operations";
 import { employeePayslips } from "@/server/services/payroll";
 import { myLeave } from "@/server/services/leave";
+import { myProbationOutcome } from "@/server/services/contracts";
 import { d, fmtDate, fmtShort, iso, monthEnd, monthStart, MONTHS } from "@/lib/dates";
 import { naira } from "@/lib/money";
 import { employeePensionYtd } from "@/lib/pension-summary";
@@ -27,6 +28,7 @@ export default async function MePage({
   });
   if (!e) return <Empty>Employee record not found.</Empty>;
   const leave = await myLeave(ctx);
+  const probation = await myProbationOutcome(ctx);
   if (!leave) return <Empty>Employee record not found.</Empty>;
   const slips = await employeePayslips(ctx, e.id);
   const latest = slips[0];
@@ -68,6 +70,7 @@ export default async function MePage({
           Bank: {e.bankName} · {e.accountNumber ? `••••${e.accountNumber.slice(-4)}` : "missing"} · Pension
           PIN {e.pensionPin ?? "—"} ({e.pfa ?? "—"})
         </p>
+        {probation && <p className="mt-2 rounded-md bg-muted/50 px-2 py-1 text-xs">{probation.line}</p>}
       </Card>
       <Card className="p-4">
         <div className="flex items-center justify-between">

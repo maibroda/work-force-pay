@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-229 tables and 172 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+230 tables and 172 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -41,6 +41,7 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | holidayCalendarYears | → HolidayCalendarYear[] |  |  |
 | jobDescriptions | → JobDescription[] |  |  |
 | performanceFeedback | → PerformanceFeedback[] |  |  |
+| probationDecisions | → ProbationDecision[] |  |  |
 | kpis | → Kpi[] |  |  |
 | appraisalKpis | → AppraisalKpi[] |  |  |
 | deployments | → Deployment[] |  |  |
@@ -1235,6 +1236,7 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | leaveRequests | → LeaveRequest[] |  |  |
 | directReports | → Employee[] |  |  |
 | feedbackReceived | → PerformanceFeedback[] |  |  |
+| probationDecisions | → ProbationDecision[] |  |  |
 | documents | → EmployeeDocument[] |  |  |
 | trainings | → EmployeeTraining[] |  |  |
 | disciplinaryRecords | → DisciplinaryRecord[] |  |  |
@@ -1520,6 +1522,7 @@ One per organization — every number a buyer might want to change without a cod
 | retirementAge | Int |  |  |
 | contractAlertDays | Int |  |  |
 | probationAlertDays | Int |  |  |
+| probationEscalationDays | Int |  | An undecided probation moves to the approvals list once it has been past its end date for this many days (0 = never). |
 | offerValidityDays | Int |  |  |
 | relationsCaseSlaDays | Int |  |  |
 | pipDefaultDays | Int |  |  |
@@ -1637,6 +1640,7 @@ The employee's own terms of employment (distinct from `Contract`, which is a CLI
 | previousContractId | String |  |  |
 | previousContract | → EmploymentContract |  |  |
 | renewals | → EmploymentContract[] |  |  |
+| decisions | → ProbationDecision[] |  |  |
 | terminatedAt | DateTime |  |  |
 | terminationReason | String |  |  |
 | notes | String |  |  |
@@ -5749,6 +5753,33 @@ A review at a milestone. Append-only: once recorded it is never edited (the empl
 | objective | → PipObjective |  |  |
 | result | PipObjectiveResult | yes |  |
 | note | String |  |  |
+
+### ProbationDecision
+
+One probation decision (confirm, extend or fail), append-only: who, when, why, and a snapshot of the probation appraisal that supported it. The contract keeps its current outcome (probationOutcome) exactly as before; this is the history behind it.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| employeeId | String | yes |  |
+| employee | → Employee |  |  |
+| contractId | String | yes |  |
+| contract | → EmploymentContract |  |  |
+| decision | ProbationOutcome | yes |  |
+| decidedByUserId | String | yes |  |
+| decidedBy | String | yes |  |
+| decidedAt | DateTime |  |  |
+| note | String |  |  |
+| extensionMonths | Int |  | Confirm: months not used. Extend: the months added. |
+| effectiveDate | DateTime |  | Confirm: the date the permanent contract starts. Extend: the new probation end date. Fail: none. |
+| appraisalId | String |  | The signed-off probation appraisal behind the decision, as it stood then (no foreign key: a snapshot). |
+| appraisalScore | Int |  | Its overall score in hundredths (3.80 = 380). |
+| appraisalRecommendation | AppraisalRecommendation |  |  |
+| againstRecommendation | Boolean |  | The decision went against that recommendation (and so carried the fuller reason). |
+| informedAt | DateTime |  | When HR told the employee: only then does the employee see a line about it. |
+| informedBy | String |  |  |
 
 ## Fixed sets of values
 
