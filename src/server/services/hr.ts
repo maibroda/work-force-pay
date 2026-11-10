@@ -112,11 +112,13 @@ export const trainingSchema = z.object({
   fileReference: opt,
 });
 
-export async function addTraining(ctx: Ctx, raw: z.input<typeof trainingSchema>) {
+/** Records a certificate. `opts.enrolmentId` says it was created by a training attendance (so a correction can revoke exactly that record); `opts.tx` joins the caller's transaction. */
+export async function addTraining(ctx: Ctx, raw: z.input<typeof trainingSchema>, opts: { enrolmentId?: string; tx?: Tx } = {}) {
   assertCan(ctx, "hr.manage");
   const v = trainingSchema.parse(raw);
   await assertEmployee(ctx, v.employeeId);
-  const rec = await db.employeeTraining.create({
+  const client = opts.tx ?? db;
+  const rec = await client.employeeTraining.create({
     data: {
       organizationId: ctx.orgId,
       employeeId: v.employeeId,
@@ -127,6 +129,7 @@ export async function addTraining(ctx: Ctx, raw: z.input<typeof trainingSchema>)
       expiryDate: v.expiryDate ? d(v.expiryDate) : null,
       fileReference: v.fileReference ?? null,
       recordedBy: ctx.name,
+      enrolmentId: opts.enrolmentId ?? null,
     },
   });
   await logAudit(ctx, {
@@ -134,7 +137,7 @@ export async function addTraining(ctx: Ctx, raw: z.input<typeof trainingSchema>)
     entity: "Employee",
     entityId: v.employeeId,
     newValue: rec,
-  });
+  }, opts.tx ?? db);
   return rec;
 }
 
