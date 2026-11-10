@@ -56,7 +56,7 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
   if (!e) throw new BusinessError("Employee not found.");
   const where = { organizationId: orgId, employeeId };
 
-  const [contracts, exits, settlements, onboarding, deployments, movements, attendance, payslips, loans, leave, training, documents, discipline, cases, contacts, guarantors, appraisals, acks, letters, changes, candidate, kit, plans, probationDecisions, feedback, trainingEnrolments, trainingNeeds, recognition, promotions] =
+  const [contracts, exits, settlements, onboarding, deployments, movements, attendance, payslips, loans, leave, training, documents, discipline, cases, contacts, guarantors, appraisals, acks, letters, changes, candidate, kit, plans, probationDecisions, feedback, trainingEnrolments, trainingNeeds, recognition, trainingEvaluations, trainingRequests, promotions] =
     await Promise.all([
       db.employmentContract.findMany({ where, orderBy: { startDate: "asc" } }),
       db.exitRecord.findMany({ where, orderBy: { createdAt: "asc" } }),
@@ -96,6 +96,10 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
       db.trainingNeed.findMany({ where, orderBy: { createdAt: "asc" } }),
       // recognition awards they have received (never a nomination still being considered, which they have not been told about)
       db.recognitionAward.findMany({ where: { ...where, status: "APPROVED" }, include: { type: { select: { name: true } } }, orderBy: { awardedOn: "asc" } }),
+      // training evaluations: their own answers and the manager's evaluation of them (never anyone else's answer)
+      db.trainingEvaluation.findMany({ where: { enrolment: { employeeId: where.employeeId }, organizationId: where.organizationId }, select: { kind: true, rating: true, comment: true, byName: true, createdAt: true, enrolment: { select: { session: { select: { sessionDate: true, programme: { select: { name: true } } } } } } }, orderBy: { createdAt: "asc" } }),
+      // training requests that were accepted (never one declined, withdrawn or still being considered, which they have not been told about)
+      db.trainingRequest.findMany({ where: { ...where, status: "ACCEPTED" }, select: { courseName: true, reason: true, requestedAt: true }, orderBy: { requestedAt: "asc" } }),
       // promotions decided for them (approved or applied); never a proposal still being considered or declined, which they have not been told about. Succession is never included.
       db.promotionProposal.findMany({ where: { ...where, status: { in: ["APPROVED", "APPLIED"] } }, include: { fromCategory: { select: { name: true } }, toCategory: { select: { name: true } } }, orderBy: { proposedAt: "asc" } }),
     ]);
@@ -225,6 +229,14 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
     probationDecisions: {
       title: "Decisions about your probation",
       records: probationDecisions.map((x) => ({ decision: words(x.decision), decidedOn: dt(x.decidedAt), reason: x.note, extendedByMonths: x.extensionMonths, effectiveFrom: dt(x.effectiveDate), toldToYouOn: dt(x.informedAt) })),
+    },
+    trainingEvaluations: {
+      title: "Your answers about courses, and your manager's evaluations of your training",
+      records: trainingEvaluations.map((x) => ({ about: x.enrolment.session.programme.name, courseDate: dt(x.enrolment.session.sessionDate), givenBy: x.kind === "MANAGER" ? x.byName : "you", rating: x.rating, comment: x.comment })),
+    },
+    trainingRequests: {
+      title: "Training requested for you (accepted requests)",
+      records: trainingRequests.map((x) => ({ course: x.courseName, requestedOn: dt(x.requestedAt), reason: x.reason })),
     },
     promotions: {
       title: "Promotions decided for you",

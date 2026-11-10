@@ -8,13 +8,13 @@
  */
 import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
-import { d, iso } from "@/lib/dates";
-import { isGap } from "@/lib/training-compliance";
+import { addDays, d, iso } from "@/lib/dates";
+import { appliesTo, assess, isGap } from "@/lib/training-compliance";
 import { canEnrol, canMarkAttendance, certificateExpiry, monthRange, NEED_SOURCES, needStatusAfter, sameCourse, seatsLeft, type NeedEvent, type NeedStatus } from "@/lib/training-plan";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
 import { addTraining } from "./hr";
-import { todayUtc } from "./hr-policy";
+import { getHrPolicy, todayUtc } from "./hr-policy";
 import { complianceFor } from "./training";
 
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date like 2026-11-30");
@@ -352,4 +352,33 @@ export async function myTraining(ctx: Ctx) {
       .filter((r) => r.status === "ATTENDED")
       .map((r) => ({ programmeName: r.session.programme.name, sessionDate: r.session.sessionDate, certificateExpires: r.certificate?.expiryDate ? iso(r.certificate.expiryDate) : null })),
   };
+}
+
+/**
+ * What the signed-in employee is required to hold, and where each course stands: the SAME rule as the HR compliance screen (`assess`), for their own record only.
+ * It changes nothing and tells nobody else. Selects only what it returns.
+ */
+export async function myRequiredTraining(ctx: Ctx) {
+  if (!ctx.employeeId) return [];
+  const emp = await db.employee.findFirst({ where: { id: ctx.employeeId, organizationId: ctx.orgId }, select: { categoryId: true, employmentDate: true } });
+  if (!emp) return [];
+  const policy = await getHrPolicy(ctx.orgId);
+  const [requirements, certs] = await Promise.all([
+    db.trainingRequirement.findMany({ where: { organizationId: ctx.orgId, active: true }, select: { courseName: true, categoryId: true, graceDays: true }, orderBy: { courseName: "asc" } }),
+    db.employeeTraining.findMany({ where: { organizationId: ctx.orgId, employeeId: ctx.employeeId }, select: { courseName: true, expiryDate: true, status: true } }),
+  ]);
+  const today = todayUtc();
+  return requirements
+    .filter((r) => appliesTo(r, emp.categoryId))
+    .map((r) => {
+      const a = assess(r, certs, emp.employmentDate, today, policy.trainingAlertDays);
+      return {
+        courseName: r.courseName,
+        state: a.state,
+        expires: a.expiryDate ? iso(a.expiryDate) : null,
+        daysLeft: a.daysLeft,
+        // a new joiner has until the end of the grace period
+        dueBy: a.state === "GRACE" ? iso(addDays(emp.employmentDate, r.graceDays)) : null,
+      };
+    });
 }

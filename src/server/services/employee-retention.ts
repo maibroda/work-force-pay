@@ -103,6 +103,9 @@ export async function anonymizeEmployee(tx: Tx, orgId: string, employeeId: strin
   // promotions: the words go (the reason, a decision note and a withdrawal reason); what stays is the shape. Succession: the one-line reason goes, the entry stays.
   counts.promotionProposals = (await tx.promotionProposal.updateMany({ where, data: { reason: REMOVED, decisionNote: null, withdrawReason: null } })).count;
   counts.successionEntries = (await tx.successionCandidate.updateMany({ where, data: { reason: null } })).count;
+  // training evaluations (about their courses) and requests: the words go; the ratings, the kinds and the statuses stay
+  counts.trainingEvaluations = (await tx.trainingEvaluation.updateMany({ where: { organizationId: orgId, enrolment: { employeeId } }, data: { comment: null } })).count;
+  counts.trainingRequests = (await tx.trainingRequest.updateMany({ where, data: { reason: REMOVED, decisionNote: null, withdrawReason: null } })).count;
   counts.dataRequests = (await tx.dataAccessRequest.updateMany({ where, data: { requesterName: REMOVED, identityNote: null, completionNote: null, refusalReason: null } })).count;
   if (candidateIds.length) {
     await tx.candidate.updateMany({ where: { id: { in: candidateIds } }, data: { firstName: "Anonymised", lastName: "Candidate", phone: null, email: null, resumeReference: null, notes: null, rejectionReason: REMOVED, anonymizedAt: now } });

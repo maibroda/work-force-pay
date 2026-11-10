@@ -272,6 +272,16 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
       ),
     ),
   );
+  // training evaluations a manager has been asked for and not yet given (the company's number of days after the session; 0 = never asked)
+  if (policy.trainingEvaluationDays > 0) {
+    const due = await db.trainingEnrolment.findMany({
+      where: { organizationId: orgId, status: "ATTENDED", session: { sessionDate: { lte: addDays(today, -policy.trainingEvaluationDays) } }, evaluations: { none: { kind: "MANAGER" } } },
+      select: { employee: { select: { id: true, employeeNumber: true, firstName: true, lastName: true } }, session: { select: { programme: { select: { name: true } } } } },
+      orderBy: { session: { sessionDate: "asc" } },
+      take: 200,
+    });
+    add(section("training-evaluations-due", "Training evaluations the manager has not given", due.map((x) => ({ text: `${name(x.employee)} — ${x.session.programme.name}`, path: "/hr/training-evaluations" }))));
+  }
   // an approved promotion not yet applied for the company's number of days (0 = never flagged): HR has to change the role and mark it applied
   if (policy.promotionApplyAlertDays > 0) {
     const waiting = await db.promotionProposal.findMany({
