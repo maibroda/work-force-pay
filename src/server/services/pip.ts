@@ -65,9 +65,9 @@ async function checkOwner(ctx: Ctx, userId: string) {
 }
 
 /** The result of each objective is its latest assessment (a review never edits an earlier one). */
-function withResults(p: Loaded) {
+function withResults<O extends { id: string }>(p: { objectives: O[]; reviews: Array<{ assessments: Array<{ objectiveId: string; result: string; note?: string | null }> }> }) {
   const latest = new Map<string, { result: string; note: string | null }>();
-  for (const r of p.reviews) for (const a of r.assessments) latest.set(a.objectiveId, { result: a.result, note: a.note });
+  for (const r of p.reviews) for (const a of r.assessments) latest.set(a.objectiveId, { result: a.result, note: a.note ?? null });
   return p.objectives.map((o) => ({ ...o, result: latest.get(o.id)?.result ?? "OPEN", resultNote: latest.get(o.id)?.note ?? null }));
 }
 
@@ -391,11 +391,32 @@ export async function eligibleOwners(ctx: Ctx) {
 /** The signed-in employee's own plans, once started: what they need to see, and nothing internal (no unapproved outcome, no drafts, no other person's plan). */
 export async function myPlans(ctx: Ctx) {
   if (!ctx.employeeId) return [];
+  // only the fields the employee's page shows. The proposed or decided outcome, who drafted or approved the plan, the activation note and a reviewer's notes on an
+  // objective are never fetched; the outcome is fetched separately, and only for a plan that is closed
   const rows = await db.performanceImprovementPlan.findMany({
     where: { organizationId: ctx.orgId, employeeId: ctx.employeeId, status: { notIn: ["DRAFT", "AWAITING_APPROVAL"] } },
-    include: PLAN_INCLUDE,
+    select: {
+      id: true,
+      status: true,
+      concerns: true,
+      startDate: true,
+      endDate: true,
+      ownerName: true,
+      activatedAt: true,
+      acknowledgedAt: true,
+      employeeAgreed: true,
+      employeeResponse: true,
+      objectives: { orderBy: { sortOrder: "asc" as const }, select: { id: true, gap: true, target: true, support: true, dueDate: true } },
+      reviews: {
+        orderBy: [{ reviewedOn: "asc" as const }, { createdAt: "asc" as const }],
+        select: { id: true, reviewedOn: true, summary: true, employeeComment: true, assessments: { select: { objectiveId: true, result: true } } },
+      },
+    },
     orderBy: { createdAt: "desc" },
   });
+  const closedIds = rows.filter((p) => p.status === "CLOSED").map((p) => p.id);
+  const closed = closedIds.length ? await db.performanceImprovementPlan.findMany({ where: { id: { in: closedIds }, organizationId: ctx.orgId, employeeId: ctx.employeeId }, select: { id: true, outcome: true } }) : [];
+  const outcomeOf = new Map(closed.map((c) => [c.id, c.outcome]));
   return rows
     .filter((p) => employeeMaySee(p.status as PipStatus, p.activatedAt))
     .map((p) => ({
@@ -407,7 +428,7 @@ export async function myPlans(ctx: Ctx) {
       ownerName: p.ownerName,
       objectives: withResults(p).map((o) => ({ id: o.id, gap: o.gap, target: o.target, support: o.support, dueDate: o.dueDate, result: o.result })),
       reviews: p.reviews.map((r) => ({ id: r.id, reviewedOn: r.reviewedOn, summary: r.summary, employeeComment: r.employeeComment, assessments: r.assessments.map((a) => ({ objectiveId: a.objectiveId, result: a.result })) })),
-      outcome: p.status === "CLOSED" ? p.outcome : null,
+      outcome: p.status === "CLOSED" ? (outcomeOf.get(p.id) ?? null) : null,
       acknowledgedAt: p.acknowledgedAt,
       employeeAgreed: p.employeeAgreed,
       employeeResponse: p.employeeResponse,

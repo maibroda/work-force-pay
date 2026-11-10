@@ -2,7 +2,17 @@
 
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
-## Not yet merged (branch `career-succession`, one migration: 20261204090000_career_and_succession)
+## Not yet merged (branch `employee-pages-select`, no migration)
+
+- **Employee pages fetch only the fields they show** (found by a browser check of the career build, then an audit of the employee-facing queries; the founder's go of 2026-11-10). **Nothing the employee sees changes.** Several pages asked the database for a whole row and picked the fields to show afterwards, so withheld text (a proposed outcome, a reviewer's reasoning, a note, a user id) was fetched and could reach the data the server streams while it renders a page, even though the page never printed it. I believe this reached the browser only in the dev server's debug stream, not in a production build, but I have not confirmed that. The queries now select only what the page shows, and anything withheld until a release is fetched only once it is released:
+  - **My improvement plan:** not the outcome (fetched only for a closed plan), who drafted or approved the plan, the activation note, or a reviewer's note on an objective.
+  - **My cases and support:** not the description, the handler or other internal fields; the resolution is fetched only for a resolved case.
+  - **The probation line on the employee's home page:** the decision and its date only, never the reasoning or the appraisal snapshot.
+  - **My appraisals:** the cycle, the status and, only for a signed-off appraisal, the score and band; never a reviewer's comment, a recommendation or a note.
+  - **My feedback:** the author's name, never their user id or anything about a void. (My career and My recognition were fixed in #175.)
+- Tests (written first, and shown to fail against the old code): `tests/integration/employee-pages-select.test.ts` looks at what is actually asked of the database for each of the five pages. The existing improvement-plan, relations, appraisal, feedback and probation tests pass unchanged. **Not changed:** other pages and services that read whole rows for staff (HR and managers read what they are entitled to), and `myChanges` (not used by any page).
+
+## Merged in #174 (one migration: 20261204090000_career_and_succession)
 
 - **Career and succession, step 1** (the founder's go of 2026-11-10; plan: `docs/plans/career-succession-plan.md`, #173). **Built on my recommended answers**: you did not answer the plan's ten questions; they are listed in the explain-back note. **Nothing here changes a person's role, pay, payslip or any payroll figure.**
 - **Promotion proposals are a record of a decision, never a change** (HR > Performance management > **Promotions**). HR proposes that an employee moves to another role (their employee category: there is no job title or grade yet), a manager only for **their own direct reports**, nobody for themselves. **Someone other than the proposer decides**; a decline needs a reason. **Approving changes nothing**: HR then changes the role on the employee's record, proposes the new pay through the existing pay-rate proposal (with its own approval), and marks the promotion **Applied**, which the system accepts only once the employee's role really is the new one. A proposal is refused if the employee's role has changed since it was made. A manager can withdraw their own undecided proposal; after approval only someone with the approve right can withdraw it.

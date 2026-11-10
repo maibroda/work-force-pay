@@ -172,10 +172,15 @@ export async function getCase(ctx: Ctx, id: string) {
 /** An employee's own cases — status and outcome only, never the investigators' notes. */
 export async function myCases(ctx: Ctx) {
   if (!ctx.employeeId) return [];
+  // only the fields the page shows; the resolution is fetched only for a case that has been resolved (never a handler's note or a draft)
   const rows = await db.relationsCase.findMany({
     where: { organizationId: ctx.orgId, employeeId: ctx.employeeId, selfRaised: true },
+    select: { id: true, caseNumber: true, type: true, status: true, summary: true, openedAt: true, dueDate: true, outcome: true, resolvedAt: true },
     orderBy: { openedAt: "desc" },
   });
+  const resolvedIds = rows.filter((c) => c.resolvedAt).map((c) => c.id);
+  const resolutions = resolvedIds.length ? await db.relationsCase.findMany({ where: { id: { in: resolvedIds }, organizationId: ctx.orgId, employeeId: ctx.employeeId }, select: { id: true, resolution: true } }) : [];
+  const resolutionOf = new Map(resolutions.map((r) => [r.id, r.resolution]));
   return rows.map((c) => ({
     id: c.id,
     caseNumber: c.caseNumber,
@@ -185,7 +190,7 @@ export async function myCases(ctx: Ctx) {
     openedAt: c.openedAt,
     dueDate: c.dueDate,
     outcome: c.outcome,
-    resolution: c.resolvedAt ? c.resolution : null,
+    resolution: c.resolvedAt ? (resolutionOf.get(c.id) ?? null) : null,
   }));
 }
 

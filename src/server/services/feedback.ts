@@ -84,7 +84,11 @@ export async function listFeedback(ctx: Ctx, f: FeedbackFilters = {}) {
 /** The signed-in employee's own entries: everything recorded about them that has not been voided. */
 export async function myFeedback(ctx: Ctx) {
   if (!ctx.employeeId) return [];
-  const rows = await db.performanceFeedback.findMany({ where: { organizationId: ctx.orgId, employeeId: ctx.employeeId, voidedAt: null }, orderBy: [{ relatesOn: "desc" }, { createdAt: "desc" }] });
+  const rows = await db.performanceFeedback.findMany({
+    where: { organizationId: ctx.orgId, employeeId: ctx.employeeId, voidedAt: null },
+    select: { id: true, kind: true, body: true, relatesOn: true, authorName: true, employeeReply: true, employeeReplyAt: true, createdAt: true },
+    orderBy: [{ relatesOn: "desc" }, { createdAt: "desc" }],
+  });
   return rows.map((r) => ({ id: r.id, kind: r.kind as FeedbackKind, body: r.body, relatesOn: r.relatesOn, authorName: r.authorName, reply: r.employeeReply, replyAt: r.employeeReplyAt, createdAt: r.createdAt }));
 }
 
