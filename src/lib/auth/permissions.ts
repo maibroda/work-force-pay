@@ -74,6 +74,8 @@ export const PERMISSIONS = [
   "appraisal.approve", // sign off a submitted appraisal (never its reviewer)
   "feedback.give", // write feedback about your own direct reports (HR: about anyone); read the feedback you gave and your team's
   "feedback.manage", // read everyone's feedback and void an entry made in error (with a reason)
+  "welfare.manage", // read and work welfare support cases (the most sensitive: narrower than other confidential cases) and see the welfare counts
+  "recognition.nominate", // nominate an employee for an award: HR about anyone, a manager about their own direct reports
   "pip.view", // see performance improvement plans (personal and sensitive: not part of hr.view)
   "pip.manage", // draft a plan, add its objectives, record reviews and propose its outcome; be named as a plan's owner
   "pip.approve", // start a plan and approve its outcome (never the person who drafted or owns it, nor who proposed the outcome)
@@ -177,6 +179,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "appraisal.approve",
     "feedback.give",
     "feedback.manage",
+    "welfare.manage",
+    "recognition.nominate",
     "pip.view",
     "pip.manage",
     "client.view",
@@ -198,6 +202,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
   OPERATIONS: [
     "feedback.give", // about their own direct reports
+    "recognition.nominate", // about their own direct reports
     "sales.view",
     "sales.view.all", // read-only: they see the sales records but change nothing
     "sales.handover.accept", // and, once designated, accept the handover of an accepted quote
@@ -287,6 +292,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "relations.raise",
     "appraisal.review",
     "feedback.give",
+    "recognition.nominate",
   ],
   EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise"],
   // the bureau's sales person sees the CRM and nothing else: no payroll, employee, client or finance data

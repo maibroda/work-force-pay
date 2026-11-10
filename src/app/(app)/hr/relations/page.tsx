@@ -11,6 +11,7 @@ import { Input, Select } from "@/components/ui/input";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { raiseCaseAction } from "@/app/actions/hr-lifecycle";
+import { WELFARE_KIND_LABELS, WELFARE_KINDS } from "@/lib/welfare";
 
 // misconduct is disciplinary: it has its own page (Disciplinary)
 const TYPES = ["GRIEVANCE", "HARASSMENT", "WHISTLEBLOWING", "COUNSELLING", "MEDIATION", "OTHER"];
@@ -19,6 +20,8 @@ const STATUSES = ["OPEN", "INVESTIGATING", "HEARING", "RESOLVED", "CLOSED"];
 export default async function RelationsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const ctx = await requirePage("hr.view");
   const sp = await searchParams;
+  // welfare support is only for the people who hold the welfare right: it is not offered to anyone else
+  const types = can(ctx.role, "welfare.manage") ? [...TYPES, "WELFARE"] : TYPES;
   const [rows, stats, o] = await Promise.all([
     listCases(ctx, { status: sp.status, type: sp.type, q: sp.q, overdue: sp.overdue === "1", scope: "relations" }),
     caseStats(ctx, "relations"),
@@ -44,7 +47,8 @@ export default async function RelationsPage({ searchParams }: { searchParams: Pr
             action={raiseCaseAction}
             fields={[
               { name: "employeeId", label: "Employee the case is about", type: "select", required: true, options: o.employees },
-              { name: "type", label: "Type", type: "select", required: true, options: enumOptions(TYPES) },
+              { name: "type", label: "Type", type: "select", required: true, options: enumOptions(types) },
+              ...(types.includes("WELFARE") ? [{ name: "welfareKind", label: "Kind of support (welfare cases only)", type: "select" as const, options: WELFARE_KINDS.map((k) => ({ value: k, label: WELFARE_KIND_LABELS[k] })) }] : []),
               { name: "severity", label: "Severity", type: "select", defaultValue: "MEDIUM", options: enumOptions(["LOW", "MEDIUM", "HIGH"]) },
               { name: "summary", label: "Summary", required: true, span: 2 },
               { name: "confidential", label: "Confidential (harassment and whistleblowing always are)", type: "checkbox" },
@@ -71,7 +75,7 @@ export default async function RelationsPage({ searchParams }: { searchParams: Pr
         <FilterField label="Type">
           <Select name="type" defaultValue={sp.type ?? ""}>
             <option value="">All</option>
-            {TYPES.map((t) => (
+            {types.map((t) => (
               <option key={t} value={t}>
                 {t.charAt(0) + t.slice(1).toLowerCase()}
               </option>

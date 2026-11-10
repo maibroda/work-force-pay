@@ -156,6 +156,16 @@ export default async function HrPolicyPage() {
         />
       </Section>
 
+      <Section title="Recognition" description="The long-service years at which the Recognition page prompts HR to consider an award. Nothing is awarded automatically.">
+        <SmartForm
+          columns={3}
+          submitLabel="Save"
+          resetOnSuccess={false}
+          action={updateHrPolicyAction.bind(null, "recognition")}
+          fields={[{ name: "longServiceYears", label: "Long-service years, separated by commas (at most ten)", defaultValue: p.longServiceYears.join(", "), placeholder: "5, 10, 15, 20", span: 2 }]}
+        />
+      </Section>
+
       <Section title="Staff loans & advances" description="Affordability limits checked when a loan or advance is requested. Set a limit to 0 for no limit.">
         <SmartForm
           columns={3}

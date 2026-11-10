@@ -8,6 +8,8 @@ import * as hr from "@/server/services/hr";
 import * as eos from "@/server/services/settlements";
 import * as reminders from "@/server/services/reminders";
 import * as retention from "@/server/services/retention";
+import { parseMilestoneYears } from "@/lib/recognition";
+import { BusinessError } from "@/server/services/_base";
 const act = actFor("hr-lifecycle.ts");
 
 type V = Record<string, unknown>;
@@ -21,13 +23,18 @@ const zeroIsNone = (n: unknown) => (n === undefined ? undefined : Number(n) === 
 // ───────────────────────────── Policy & templates ─────────────────────────────
 
 /** Each settings form saves its own section; blank numeric fields leave a value unchanged. */
-export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuity" | "severance" | "loans" | "reminders" | "retention" | "records" | "appraisal" | "pip" | "training" | "changes" | "privacy" | "dpo", v: V) {
+export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuity" | "severance" | "loans" | "reminders" | "retention" | "records" | "appraisal" | "recognition" | "pip" | "training" | "changes" | "privacy" | "dpo", v: V) {
   return act(
     "hr.configure",
     async (ctx) => {
       let patch: V = {};
       if (section === "terms") patch = v;
       if (section === "pip") patch = v;
+      if (section === "recognition") {
+        const years = parseMilestoneYears(String(v.longServiceYears ?? ""));
+        if (!years) throw new BusinessError("Give the long-service years as whole numbers from 1 to 60, separated by commas (at most ten), for example 5, 10, 15, 20.");
+        patch = { longServiceYears: years };
+      }
       if (section === "leave")
         patch = {
           leaveEncashmentEnabled: v.leaveEncashmentEnabled,
@@ -296,7 +303,7 @@ export async function hireCandidateAction(v: V) {
 /** Open to anyone who may raise a case; the service decides what each role may open. */
 export async function raiseCaseAction(v: V) {
   return act(undefined, async (ctx) => {
-    const c = await rel.raiseCase(ctx, v as never);
+    const c = await rel.raiseCase(ctx, { ...v, welfareKind: v.type === "WELFARE" ? v.welfareKind || undefined : undefined } as never);
     return {
       message: `${c.caseNumber} raised.`,
       redirectTo: ctx.role === "EMPLOYEE" || ctx.role === "SUPERVISOR" ? "/me/grievances" : `/hr/${c.type === "MISCONDUCT" ? "discipline" : "relations"}/${c.id}`,

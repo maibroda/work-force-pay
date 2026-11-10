@@ -98,6 +98,8 @@ export async function anonymizeEmployee(tx: Tx, orgId: string, employeeId: strin
   // training: the words go (why someone did not attend, a need's note and the reason it was dropped); what stays is the shape (that they were enrolled, the result, the course and the dates)
   counts.trainingEnrolments = (await tx.trainingEnrolment.updateMany({ where, data: { absenceReason: null } })).count;
   counts.trainingNeeds = (await tx.trainingNeed.updateMany({ where, data: { note: null, droppedReason: null } })).count;
+  // recognition awards: the words go (the citation, a rejection's reason and a withdrawal's reason); what stays is the shape (that an award existed, its kind, status and dates)
+  counts.recognitionAwards = (await tx.recognitionAward.updateMany({ where, data: { citation: REMOVED, decisionNote: null, withdrawReason: null } })).count;
   counts.dataRequests = (await tx.dataAccessRequest.updateMany({ where, data: { requesterName: REMOVED, identityNote: null, completionNote: null, refusalReason: null } })).count;
   if (candidateIds.length) {
     await tx.candidate.updateMany({ where: { id: { in: candidateIds } }, data: { firstName: "Anonymised", lastName: "Candidate", phone: null, email: null, resumeReference: null, notes: null, rejectionReason: REMOVED, anonymizedAt: now } });
