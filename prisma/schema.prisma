@@ -591,6 +591,10 @@ model Organization {
   jobDescriptions           JobDescription[]
   performanceFeedback       PerformanceFeedback[]
   probationDecisions        ProbationDecision[]
+  trainingProgrammes        TrainingProgramme[]
+  trainingSessions          TrainingSession[]
+  trainingEnrolments        TrainingEnrolment[]
+  trainingNeeds             TrainingNeed[]
   kpis                      Kpi[]
   appraisalKpis             AppraisalKpi[]
   deployments               Deployment[]
@@ -2011,6 +2015,8 @@ model Employee {
   directReports           Employee[]               @relation("ReportingLine")
   feedbackReceived        PerformanceFeedback[]
   probationDecisions      ProbationDecision[]
+  trainingEnrolments      TrainingEnrolment[]
+  trainingNeeds           TrainingNeed[]
   documents               EmployeeDocument[]
   trainings               EmployeeTraining[]
   disciplinaryRecords     DisciplinaryRecord[]
@@ -2192,6 +2198,9 @@ model EmployeeTraining {
   fileReference     String?
   recordedBy        String
   createdAt         DateTime       @default(now())
+  /// The training enrolment whose attendance created this record, if it was created that way (null for a certificate HR recorded by hand).
+  enrolmentId       String?             @unique
+  enrolment         TrainingEnrolment?  @relation(fields: [enrolmentId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, employeeId])
   @@index([organizationId, expiryDate])
@@ -7704,4 +7713,128 @@ model ProbationDecision {
 
   @@index([organizationId, employeeId])
   @@index([contractId, decidedAt])
+}
+
+// ─────────────────────────── TRAINING NEEDS AND CALENDAR ───────────────────────────
+
+enum TrainingSessionStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum TrainingAttendance {
+  ENROLLED
+  ATTENDED
+  ABSENT
+}
+
+enum TrainingNeedSource {
+  COMPLIANCE
+  APPRAISAL
+  REQUEST
+  OTHER
+}
+
+enum TrainingNeedStatus {
+  OPEN
+  PLANNED
+  MET
+  DROPPED
+}
+
+enum TrainingPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+/// A course the company runs or buys. Its name is the course name a certificate carries, so attending a session of it satisfies a required course of the same name.
+model TrainingProgramme {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  provider       String?
+  /// How long the certificate stays valid, in months (null = it does not expire).
+  validityMonths Int?
+  active         Boolean      @default(true)
+  createdBy      String
+  createdAt      DateTime     @default(now())
+
+  sessions TrainingSession[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, active])
+}
+
+/// A dated occurrence of a programme, with seats (a hard limit; no waiting list).
+model TrainingSession {
+  id              String                @id @default(cuid())
+  organizationId  String
+  organization    Organization          @relation(fields: [organizationId], references: [id])
+  programmeId     String
+  programme       TrainingProgramme     @relation(fields: [programmeId], references: [id])
+  sessionDate     DateTime              @db.Date
+  startTime       String?
+  venue           String?
+  trainer         String?
+  seats           Int
+  status          TrainingSessionStatus @default(SCHEDULED)
+  completedAt     DateTime?
+  cancelledAt     DateTime?
+  cancelledReason String?
+  createdBy       String
+  createdAt       DateTime              @default(now())
+
+  enrolments TrainingEnrolment[]
+
+  @@index([organizationId, sessionDate])
+  @@index([programmeId])
+}
+
+/// One person in one session, and whether they attended. Marking Attended creates the certificate record (EmployeeTraining.enrolmentId).
+model TrainingEnrolment {
+  id             String             @id @default(cuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  sessionId      String
+  session        TrainingSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       Employee           @relation(fields: [employeeId], references: [id])
+  status         TrainingAttendance @default(ENROLLED)
+  absenceReason  String?
+  enrolledBy     String
+  markedBy       String?
+  markedAt       DateTime?
+  createdAt      DateTime           @default(now())
+
+  certificate EmployeeTraining?
+
+  @@unique([sessionId, employeeId])
+  @@index([organizationId, employeeId])
+}
+
+/// A person who needs a course: from a compliance gap, an appraisal recommendation, a request or anything else. Added by HR, never automatically.
+model TrainingNeed {
+  id             String             @id @default(cuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  employeeId     String
+  employee       Employee           @relation(fields: [employeeId], references: [id])
+  courseName     String
+  source         TrainingNeedSource
+  note           String?
+  priority       TrainingPriority   @default(NORMAL)
+  dueBy          DateTime?          @db.Date
+  status         TrainingNeedStatus @default(OPEN)
+  /// The appraisal it came from, if any (no foreign key: a reference only).
+  appraisalId    String?
+  droppedReason  String?
+  metAt          DateTime?
+  createdBy      String
+  createdAt      DateTime           @default(now())
+
+  @@index([organizationId, status])
+  @@index([organizationId, employeeId])
 }

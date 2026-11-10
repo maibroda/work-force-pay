@@ -27,6 +27,7 @@ import {
   submitReviewAction,
 } from "@/app/actions/appraisals";
 import { planFromAppraisalAction } from "@/app/actions/pip";
+import { needFromAppraisalAction } from "@/app/actions/training-plan";
 
 const ratingOptions = RATINGS.map((r) => ({ value: String(r), label: `${r} — ${RATING_LABELS[r]}` }));
 const label = (s: string) => s.replace(/_/g, " ").toLowerCase();
@@ -45,6 +46,8 @@ export default async function AppraisalPage({ params }: { params: Promise<{ id: 
   // an approved appraisal that recommended a plan can be turned into a draft plan by someone who manages plans (never automatic)
   const canStartPlan = !a.redacted && a.recommendation === "PERFORMANCE_PLAN" && (a.status === "APPROVED" || a.status === "ACKNOWLEDGED") && can(ctx.role, "pip.manage");
   const planOwners = canStartPlan ? await eligibleOwners(ctx) : [];
+  // an approved appraisal that recommended further training can add a training need, naming the course (never automatic)
+  const canAddTrainingNeed = !a.redacted && a.recommendation === "TRAINING" && (a.status === "APPROVED" || a.status === "ACKNOWLEDGED") && can(ctx.role, "hr.manage");
   const score = a.overallScore != null ? num(a.overallScore) : null;
   const showReviewer = !a.redacted;
   const high = a.policy.above;
@@ -296,6 +299,17 @@ export default async function AppraisalPage({ params }: { params: Promise<{ id: 
               I disagree
             </ActionButton>
           </div>
+        </Section>
+      )}
+
+      {canAddTrainingNeed && (
+        <Section title="Training need" description="This appraisal recommended further training. Name the course to add it to the training needs list; nothing is added until you do, and the person is then enrolled on a session from the Training calendar.">
+          <SmartForm
+            columns={2}
+            submitLabel="Add to training needs"
+            action={needFromAppraisalAction.bind(null, a.id)}
+            fields={[{ name: "courseName", label: "Course", required: true, placeholder: "e.g. Report writing" }]}
+          />
         </Section>
       )}
 

@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-230 tables and 172 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+234 tables and 177 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -42,6 +42,10 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | jobDescriptions | → JobDescription[] |  |  |
 | performanceFeedback | → PerformanceFeedback[] |  |  |
 | probationDecisions | → ProbationDecision[] |  |  |
+| trainingProgrammes | → TrainingProgramme[] |  |  |
+| trainingSessions | → TrainingSession[] |  |  |
+| trainingEnrolments | → TrainingEnrolment[] |  |  |
+| trainingNeeds | → TrainingNeed[] |  |  |
 | kpis | → Kpi[] |  |  |
 | appraisalKpis | → AppraisalKpi[] |  |  |
 | deployments | → Deployment[] |  |  |
@@ -1237,6 +1241,8 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | directReports | → Employee[] |  |  |
 | feedbackReceived | → PerformanceFeedback[] |  |  |
 | probationDecisions | → ProbationDecision[] |  |  |
+| trainingEnrolments | → TrainingEnrolment[] |  |  |
+| trainingNeeds | → TrainingNeed[] |  |  |
 | documents | → EmployeeDocument[] |  |  |
 | trainings | → EmployeeTraining[] |  |  |
 | disciplinaryRecords | → DisciplinaryRecord[] |  |  |
@@ -1401,6 +1407,8 @@ Training & certifications — critical for a security workforce (firearms licens
 | fileReference | String |  |  |
 | recordedBy | String | yes |  |
 | createdAt | DateTime |  |  |
+| enrolmentId | String |  | The training enrolment whose attendance created this record, if it was created that way (null for a certificate HR recorded by hand). (unique) |
+| enrolment | → TrainingEnrolment |  |  |
 
 ### DisciplinaryRecord
 
@@ -5781,6 +5789,91 @@ One probation decision (confirm, extend or fail), append-only: who, when, why, a
 | informedAt | DateTime |  | When HR told the employee: only then does the employee see a line about it. |
 | informedBy | String |  |  |
 
+### TrainingProgramme
+
+A course the company runs or buys. Its name is the course name a certificate carries, so attending a session of it satisfies a required course of the same name.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| name | String | yes |  |
+| provider | String |  |  |
+| validityMonths | Int |  | How long the certificate stays valid, in months (null = it does not expire). |
+| active | Boolean |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| sessions | → TrainingSession[] |  |  |
+
+### TrainingSession
+
+A dated occurrence of a programme, with seats (a hard limit; no waiting list).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| programmeId | String | yes |  |
+| programme | → TrainingProgramme |  |  |
+| sessionDate | DateTime | yes |  |
+| startTime | String |  |  |
+| venue | String |  |  |
+| trainer | String |  |  |
+| seats | Int | yes |  |
+| status | TrainingSessionStatus |  |  |
+| completedAt | DateTime |  |  |
+| cancelledAt | DateTime |  |  |
+| cancelledReason | String |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| enrolments | → TrainingEnrolment[] |  |  |
+
+### TrainingEnrolment
+
+One person in one session, and whether they attended. Marking Attended creates the certificate record (EmployeeTraining.enrolmentId).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| sessionId | String | yes |  |
+| session | → TrainingSession |  |  |
+| employeeId | String | yes |  |
+| employee | → Employee |  |  |
+| status | TrainingAttendance |  |  |
+| absenceReason | String |  |  |
+| enrolledBy | String | yes |  |
+| markedBy | String |  |  |
+| markedAt | DateTime |  |  |
+| createdAt | DateTime |  |  |
+| certificate | → EmployeeTraining |  |  |
+
+### TrainingNeed
+
+A person who needs a course: from a compliance gap, an appraisal recommendation, a request or anything else. Added by HR, never automatically.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| employeeId | String | yes |  |
+| employee | → Employee |  |  |
+| courseName | String | yes |  |
+| source | TrainingNeedSource | yes |  |
+| note | String |  |  |
+| priority | TrainingPriority |  |  |
+| dueBy | DateTime |  |  |
+| status | TrainingNeedStatus |  |  |
+| appraisalId | String |  | The appraisal it came from, if any (no foreign key: a reference only). |
+| droppedReason | String |  |  |
+| metAt | DateTime |  |  |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+
 ## Fixed sets of values
 
 ### Role
@@ -6496,4 +6589,24 @@ Whether an outbound message is a service message (about an active contract) or m
 ### PipObjectiveResult
 
 `OPEN`, `MET`, `PARTLY_MET`, `NOT_MET`
+
+### TrainingSessionStatus
+
+`SCHEDULED`, `COMPLETED`, `CANCELLED`
+
+### TrainingAttendance
+
+`ENROLLED`, `ATTENDED`, `ABSENT`
+
+### TrainingNeedSource
+
+`COMPLIANCE`, `APPRAISAL`, `REQUEST`, `OTHER`
+
+### TrainingNeedStatus
+
+`OPEN`, `PLANNED`, `MET`, `DROPPED`
+
+### TrainingPriority
+
+`LOW`, `NORMAL`, `HIGH`
 

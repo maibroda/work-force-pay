@@ -56,7 +56,7 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
   if (!e) throw new BusinessError("Employee not found.");
   const where = { organizationId: orgId, employeeId };
 
-  const [contracts, exits, settlements, onboarding, deployments, movements, attendance, payslips, loans, leave, training, documents, discipline, cases, contacts, guarantors, appraisals, acks, letters, changes, candidate, kit, plans, probationDecisions, feedback] =
+  const [contracts, exits, settlements, onboarding, deployments, movements, attendance, payslips, loans, leave, training, documents, discipline, cases, contacts, guarantors, appraisals, acks, letters, changes, candidate, kit, plans, probationDecisions, feedback, trainingEnrolments, trainingNeeds] =
     await Promise.all([
       db.employmentContract.findMany({ where, orderBy: { startDate: "asc" } }),
       db.exitRecord.findMany({ where, orderBy: { createdAt: "asc" } }),
@@ -90,6 +90,10 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
       db.probationDecision.findMany({ where, orderBy: [{ decidedAt: "asc" }, { id: "asc" }] }),
       // feedback recorded about them (never an entry voided as a mistake)
       db.performanceFeedback.findMany({ where: { ...where, voidedAt: null }, orderBy: [{ relatesOn: "asc" }, { createdAt: "asc" }] }),
+      // training sessions they were enrolled in, and whether they attended
+      db.trainingEnrolment.findMany({ where, include: { session: { include: { programme: { select: { name: true } } } } }, orderBy: { createdAt: "asc" } }),
+      // training needs recorded about them
+      db.trainingNeed.findMany({ where, orderBy: { createdAt: "asc" } }),
     ]);
 
   const confidential = cases.filter((c) => c.confidential).length;
@@ -217,6 +221,14 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
     probationDecisions: {
       title: "Decisions about your probation",
       records: probationDecisions.map((x) => ({ decision: words(x.decision), decidedOn: dt(x.decidedAt), reason: x.note, extendedByMonths: x.extensionMonths, effectiveFrom: dt(x.effectiveDate), toldToYouOn: dt(x.informedAt) })),
+    },
+    trainingEnrolments: {
+      title: "Training sessions you were enrolled in",
+      records: trainingEnrolments.map((x) => ({ course: x.session.programme.name, sessionDate: dt(x.session.sessionDate), sessionStatus: words(x.session.status), result: words(x.status), reasonNotAttended: x.absenceReason, markedOn: dt(x.markedAt) })),
+    },
+    trainingNeeds: {
+      title: "Training needs recorded about you",
+      records: trainingNeeds.map((x) => ({ course: x.courseName, why: words(x.source), note: x.note, priority: words(x.priority), dueBy: dt(x.dueBy), status: words(x.status), reasonDropped: x.droppedReason })),
     },
     feedback: {
       title: "Feedback recorded about you",
