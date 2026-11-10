@@ -597,6 +597,8 @@ model Organization {
   trainingSessions          TrainingSession[]
   trainingEnrolments        TrainingEnrolment[]
   trainingNeeds             TrainingNeed[]
+  trainingRequests          TrainingRequest[]
+  trainingEvaluations       TrainingEvaluation[]
   recognitionAwardTypes     RecognitionAwardType[]
   recognitionAwards         RecognitionAward[]
   careerPaths               CareerPath[]
@@ -2030,6 +2032,7 @@ model Employee {
   probationDecisions      ProbationDecision[]
   trainingEnrolments      TrainingEnrolment[]
   trainingNeeds           TrainingNeed[]
+  trainingRequests        TrainingRequest[]
   recognitionAwards       RecognitionAward[]
   promotionProposals      PromotionProposal[]
   successionCandidates    SuccessionCandidate[]
@@ -2427,6 +2430,8 @@ model HrPolicy {
   // Training compliance
   /// Flag a certificate this many days before it expires.
   trainingAlertDays Int @default(60)
+  /// The manager is asked whether a course was applied on the job this many days after the session (0 = never asked).
+  trainingEvaluationDays Int @default(60)
 
   // Change control for bank, tax and pension details
   /// A change needs a second person's approval (otherwise anyone who can edit an employee can change it).
@@ -7832,6 +7837,7 @@ model TrainingEnrolment {
   createdAt      DateTime           @default(now())
 
   certificate EmployeeTraining?
+  evaluations TrainingEvaluation[]
 
   @@unique([sessionId, employeeId])
   @@index([organizationId, employeeId])
@@ -7856,6 +7862,8 @@ model TrainingNeed {
   metAt          DateTime?
   createdBy      String
   createdAt      DateTime           @default(now())
+  /// The manager's request this need came from, if it did.
+  request        TrainingRequest?
 
   @@index([organizationId, status])
   @@index([organizationId, employeeId])
@@ -8036,4 +8044,63 @@ model SuccessionCandidate {
 
   @@unique([roleId, employeeId])
   @@index([organizationId, employeeId])
+}
+
+// ─────────────────────────── TRAINING REQUESTS AND EVALUATION ───────────────────────────
+
+enum TrainingRequestStatus {
+  REQUESTED
+  ACCEPTED
+  DECLINED
+  WITHDRAWN
+}
+
+enum TrainingEvaluationKind {
+  PARTICIPANT
+  MANAGER
+}
+
+/// A manager's request for a course for one of their direct reports (HR for anyone). HR decides; accepting only adds a training need.
+model TrainingRequest {
+  id                String                @id @default(cuid())
+  organizationId    String
+  organization      Organization          @relation(fields: [organizationId], references: [id])
+  employeeId        String
+  employee          Employee              @relation(fields: [employeeId], references: [id])
+  courseName        String
+  reason            String
+  status            TrainingRequestStatus @default(REQUESTED)
+  requestedByUserId String
+  requestedBy       String
+  requestedAt       DateTime              @default(now())
+  decidedByUserId   String?
+  decidedBy         String?
+  decidedAt         DateTime?
+  /// The reason for a decline.
+  decisionNote      String?
+  withdrawReason    String?
+  /// The training need an accepted request created.
+  needId            String?               @unique
+  need              TrainingNeed?         @relation(fields: [needId], references: [id])
+
+  @@index([organizationId, status])
+  @@index([organizationId, employeeId])
+}
+
+/// One answer about a course that was attended: the participant's (was it useful?) or the manager's (was it applied on the job?). Changes nothing about the person.
+model TrainingEvaluation {
+  id             String                 @id @default(cuid())
+  organizationId String
+  organization   Organization           @relation(fields: [organizationId], references: [id])
+  enrolmentId    String
+  enrolment      TrainingEnrolment      @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
+  kind           TrainingEvaluationKind
+  rating         Int
+  comment        String?
+  byUserId       String
+  byName         String
+  createdAt      DateTime               @default(now())
+
+  @@unique([enrolmentId, kind])
+  @@index([organizationId, kind])
 }

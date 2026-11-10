@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-240 tables and 181 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+242 tables and 183 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -46,6 +46,8 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | trainingSessions | → TrainingSession[] |  |  |
 | trainingEnrolments | → TrainingEnrolment[] |  |  |
 | trainingNeeds | → TrainingNeed[] |  |  |
+| trainingRequests | → TrainingRequest[] |  |  |
+| trainingEvaluations | → TrainingEvaluation[] |  |  |
 | recognitionAwardTypes | → RecognitionAwardType[] |  |  |
 | recognitionAwards | → RecognitionAward[] |  |  |
 | careerPaths | → CareerPath[] |  |  |
@@ -1254,6 +1256,7 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | probationDecisions | → ProbationDecision[] |  |  |
 | trainingEnrolments | → TrainingEnrolment[] |  |  |
 | trainingNeeds | → TrainingNeed[] |  |  |
+| trainingRequests | → TrainingRequest[] |  |  |
 | recognitionAwards | → RecognitionAward[] |  |  |
 | promotionProposals | → PromotionProposal[] |  |  |
 | successionCandidates | → SuccessionCandidate[] |  |  |
@@ -1586,6 +1589,7 @@ One per organization — every number a buyer might want to change without a cod
 | guarantorMaxPerPerson | Int |  | The most employees one person may guarantee at the same time. |
 | guarantorSeparateVerifier | Boolean |  | Someone other than whoever recorded a guarantor must verify them. |
 | trainingAlertDays | Int |  | Flag a certificate this many days before it expires. |
+| trainingEvaluationDays | Int |  | The manager is asked whether a course was applied on the job this many days after the session (0 = never asked). |
 | sensitiveChangeApproval | Boolean |  | A change needs a second person's approval (otherwise anyone who can edit an employee can change it). |
 | bankChangeWatchDays | Int |  | Payroll validation warns when an employee's bank account was changed within this many days (0 = off). |
 | appraisalSelfAssessment | Boolean |  | Employees rate themselves before their manager does. |
@@ -5867,6 +5871,7 @@ One person in one session, and whether they attended. Marking Attended creates t
 | markedAt | DateTime |  |  |
 | createdAt | DateTime |  |  |
 | certificate | → EmployeeTraining |  |  |
+| evaluations | → TrainingEvaluation[] |  |  |
 
 ### TrainingNeed
 
@@ -5890,6 +5895,7 @@ A person who needs a course: from a compliance gap, an appraisal recommendation,
 | metAt | DateTime |  |  |
 | createdBy | String | yes |  |
 | createdAt | DateTime |  |  |
+| request | → TrainingRequest |  | The manager's request this need came from, if it did. |
 
 ### RecognitionAwardType
 
@@ -6026,6 +6032,49 @@ One named successor for a critical role, with how ready they are. Kept by a pers
 | createdBy | String | yes |  |
 | createdAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |
+
+### TrainingRequest
+
+A manager's request for a course for one of their direct reports (HR for anyone). HR decides; accepting only adds a training need.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| employeeId | String | yes |  |
+| employee | → Employee |  |  |
+| courseName | String | yes |  |
+| reason | String | yes |  |
+| status | TrainingRequestStatus |  |  |
+| requestedByUserId | String | yes |  |
+| requestedBy | String | yes |  |
+| requestedAt | DateTime |  |  |
+| decidedByUserId | String |  |  |
+| decidedBy | String |  |  |
+| decidedAt | DateTime |  |  |
+| decisionNote | String |  | The reason for a decline. |
+| withdrawReason | String |  |  |
+| needId | String |  | The training need an accepted request created. (unique) |
+| need | → TrainingNeed |  |  |
+
+### TrainingEvaluation
+
+One answer about a course that was attended: the participant's (was it useful?) or the manager's (was it applied on the job?). Changes nothing about the person.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| enrolmentId | String | yes |  |
+| enrolment | → TrainingEnrolment |  |  |
+| kind | TrainingEvaluationKind | yes |  |
+| rating | Int | yes |  |
+| comment | String |  |  |
+| byUserId | String | yes |  |
+| byName | String | yes |  |
+| createdAt | DateTime |  |  |
 
 ## Fixed sets of values
 
@@ -6778,4 +6827,12 @@ Whether an outbound message is a service message (about an active contract) or m
 ### SuccessionReadiness
 
 `READY_NOW`, `READY_1_2_YEARS`, `READY_3_PLUS`
+
+### TrainingRequestStatus
+
+`REQUESTED`, `ACCEPTED`, `DECLINED`, `WITHDRAWN`
+
+### TrainingEvaluationKind
+
+`PARTICIPANT`, `MANAGER`
 
