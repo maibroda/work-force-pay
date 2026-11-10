@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-245 tables and 183 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+252 tables and 186 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -51,6 +51,11 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | skills | → Skill[] |  |  |
 | roleSkills | → RoleSkill[] |  |  |
 | skillAssessments | → SkillAssessment[] |  |  |
+| surveys | → Survey[] |  |  |
+| surveyQuestions | → SurveyQuestion[] |  |  |
+| surveyAccessCodes | → SurveyAccessCode[] |  |  |
+| surveyKioskSessions | → SurveyKioskSession[] |  |  |
+| surveyAggregates | → SurveyAggregate[] |  |  |
 | recognitionAwardTypes | → RecognitionAwardType[] |  |  |
 | recognitionAwards | → RecognitionAward[] |  |  |
 | careerPaths | → CareerPath[] |  |  |
@@ -1262,6 +1267,7 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | trainingNeeds | → TrainingNeed[] |  |  |
 | trainingRequests | → TrainingRequest[] |  |  |
 | skillAssessments | → SkillAssessment[] |  |  |
+| surveyAccessCodes | → SurveyAccessCode[] |  |  |
 | recognitionAwards | → RecognitionAward[] |  |  |
 | promotionProposals | → PromotionProposal[] |  |  |
 | successionCandidates | → SuccessionCandidate[] |  |  |
@@ -1596,6 +1602,7 @@ One per organization — every number a buyer might want to change without a cod
 | trainingAlertDays | Int |  | Flag a certificate this many days before it expires. |
 | trainingEvaluationDays | Int |  | The manager is asked whether a course was applied on the job this many days after the session (0 = never asked). |
 | skillReassessDays | Int |  | A skill assessment older than this many days is listed as stale for HR (0 = never). |
+| surveyRetentionMonths | Int |  | Raw survey answers are deleted this many months after a survey closes (0 = never deleted automatically); the anonymised results are kept. |
 | sensitiveChangeApproval | Boolean |  | A change needs a second person's approval (otherwise anyone who can edit an employee can change it). |
 | bankChangeWatchDays | Int |  | Payroll validation warns when an employee's bank account was changed within this many days (0 = off). |
 | appraisalSelfAssessment | Boolean |  | Employees rate themselves before their manager does. |
@@ -6137,6 +6144,125 @@ One assessment of one person's level of one skill. Append-only: the current leve
 | assessedBy | String | yes |  |
 | createdAt | DateTime |  |  |
 
+### Survey
+
+An engagement survey: a few five-point statements and optional comments, for everyone, one role or one department.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| title | String | yes |  |
+| intro | String |  |  |
+| categoryId | String |  | The audience: everyone when both are null, otherwise one role or one department. |
+| departmentId | String |  |  |
+| opensOn | DateTime | yes |  |
+| closesOn | DateTime | yes |  |
+| status | SurveyStatus |  |  |
+| invitedCount | Int |  | Employees invited when it was opened. |
+| closedAt | DateTime |  |  |
+| followUp | String |  | What the company is doing about the results; every invited employee can read it. |
+| rawDeletedAt | DateTime |  | When the raw answers were deleted (the anonymised results are kept in SurveyAggregate). |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| questions | → SurveyQuestion[] |  |  |
+| codes | → SurveyAccessCode[] |  |  |
+| sessions | → SurveyKioskSession[] |  |  |
+| aggregate | → SurveyAggregate |  |  |
+
+### SurveyQuestion
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| surveyId | String | yes |  |
+| survey | → Survey |  |  |
+| position | Int | yes |  |
+| kind | SurveyQuestionKind | yes |  |
+| text | String | yes |  |
+| answers | → SurveyAnswer[] |  |  |
+
+### SurveyAccessCode
+
+One invited employee's single-use access code (stored only as a hash). It is the participation record: HR sees counts of used and unused, never which.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| surveyId | String | yes |  |
+| survey | → Survey |  |  |
+| employeeId | String | yes |  |
+| employee | → Employee |  |  |
+| categoryId | String |  | The group the person belonged to when invited (for a breakdown, shown only when safe). |
+| departmentId | String |  |  |
+| codeHash | String | yes | (unique) |
+| status | SurveyCodeStatus |  |  |
+| usedOn | DateTime |  | The day it was used (a day only). |
+| createdAt | DateTime |  |  |
+
+### SurveyResponse
+
+One submitted survey. NO person, NO user, NO time: only the survey and the group labels used for a breakdown. The id is a random UUID.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| surveyId | String | yes |  |
+| categoryId | String |  |  |
+| departmentId | String |  |  |
+| answers | → SurveyAnswer[] |  |  |
+
+### SurveyAnswer
+
+One answer. No time, a random id. A comment HR hides (for example one that names a person) stays out of the results.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| responseId | String | yes |  |
+| response | → SurveyResponse |  |  |
+| questionId | String | yes |  |
+| question | → SurveyQuestion |  |  |
+| value | Int |  |  |
+| comment | String |  |  |
+| hidden | Boolean |  |  |
+| hiddenReason | String |  |  |
+
+### SurveyKioskSession
+
+A record that an authorised HR representative ran an assisted session: the survey, the day and the device. Never who took part.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| surveyId | String | yes |  |
+| survey | → Survey |  |  |
+| day | DateTime | yes |  |
+| deviceLabel | String | yes |  |
+| startedByUserId | String | yes |  |
+| createdAt | DateTime |  |  |
+
+### SurveyAggregate
+
+The anonymised results kept after the raw answers are deleted.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| surveyId | String | yes | (unique) |
+| survey | → Survey |  |  |
+| summary | Json | yes |  |
+| createdAt | DateTime |  |  |
+
 ## Fixed sets of values
 
 ### Role
@@ -6896,4 +7022,16 @@ Whether an outbound message is a service message (about an active contract) or m
 ### TrainingEvaluationKind
 
 `PARTICIPANT`, `MANAGER`
+
+### SurveyStatus
+
+`DRAFT`, `OPEN`, `CLOSED`
+
+### SurveyQuestionKind
+
+`SCALE`, `COMMENT`
+
+### SurveyCodeStatus
+
+`ACTIVE`, `USED`, `CANCELLED`
 

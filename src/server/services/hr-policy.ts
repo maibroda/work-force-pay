@@ -282,6 +282,7 @@ export const hrPolicySchema = z
     promotionApplyAlertDays: z.coerce.number().int().min(0).max(90),
     trainingEvaluationDays: z.coerce.number().int().min(0).max(365),
     skillReassessDays: z.coerce.number().int().min(0).max(1825),
+    surveyRetentionMonths: z.coerce.number().int().min(0).max(120),
     offerValidityDays: z.coerce.number().int().min(1).max(180),
     relationsCaseSlaDays: z.coerce.number().int().min(1).max(365),
     pipDefaultDays: z.coerce.number().int().min(1).max(365),

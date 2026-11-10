@@ -79,6 +79,8 @@ export const PERMISSIONS = [
   "career.propose", // propose that an employee moves to another role (category): HR about anyone, a manager about their own direct reports; a record of a decision only
   "training.request", // ask for a course for an employee and evaluate a course they attended: HR about anyone, a manager about their own direct reports
   "skills.assess", // assess an employee's skill level: HR about anyone, a manager about their own direct reports; a record, never a score that changes pay or an appraisal
+  "survey.manage", // create, open and close an engagement survey, hide a comment, write the follow-up note: the HR administrator ONLY (withheld from the administrators below)
+  "survey.assist", // run an assisted survey session for employees without a login: the HR administrator ONLY, never a supervisor
   "succession.manage", // keep the succession list (critical roles and their successors): the HR administrator ONLY, withheld from the administrators below
   "pip.view", // see performance improvement plans (personal and sensitive: not part of hr.view)
   "pip.manage", // draft a plan, add its objectives, record reviews and propose its outcome; be named as a plan's owner
@@ -154,9 +156,9 @@ const READ_ALL: Permission[] = [
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   // welfare cases are the most sensitive records we hold: the founder decided (2026-11-10) that ONLY the HR administrator reads them, so neither administrator role holds welfare.manage
-  SUPER_ADMIN: ALL.filter((p) => p !== "welfare.manage" && p !== "succession.manage"),
+  SUPER_ADMIN: ALL.filter((p) => p !== "welfare.manage" && p !== "succession.manage" && p !== "survey.manage" && p !== "survey.assist"),
   // a company's administrator holds everything EXCEPT changing its own subscription (otherwise any company could give itself every module) and the welfare right
-  COMPANY_ADMIN: ALL.filter((p) => p !== "subscription.manage" && p !== "pricebook.manage" && p !== "welfare.manage" && p !== "succession.manage"),
+  COMPANY_ADMIN: ALL.filter((p) => p !== "subscription.manage" && p !== "pricebook.manage" && p !== "welfare.manage" && p !== "succession.manage" && p !== "survey.manage" && p !== "survey.assist"),
   HR_ADMIN: [
     "dashboard.view",
     "employee.view",
@@ -188,6 +190,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "recognition.nominate",
     "career.propose",
     "succession.manage",
+    "survey.manage",
+    "survey.assist",
     "training.request",
     "skills.assess",
     "pip.view",

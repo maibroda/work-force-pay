@@ -176,6 +176,16 @@ export default async function HrPolicyPage() {
         />
       </Section>
 
+      <Section title="Surveys" description="Raw survey answers are deleted this many months after a survey closes; the anonymised results are kept. The default is 24. 0 = never deleted automatically.">
+        <SmartForm
+          columns={3}
+          submitLabel="Save"
+          resetOnSuccess={false}
+          action={updateHrPolicyAction.bind(null, "surveys")}
+          fields={[{ name: "surveyRetentionMonths", label: "Delete raw answers after (months, 0 = never)", type: "number", min: 0, max: 120, defaultValue: p.surveyRetentionMonths }]}
+        />
+      </Section>
+
       <Section title="Staff loans & advances" description="Affordability limits checked when a loan or advance is requested. Set a limit to 0 for no limit.">
         <SmartForm
           columns={3}
