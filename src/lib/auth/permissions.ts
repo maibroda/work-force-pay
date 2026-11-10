@@ -76,6 +76,8 @@ export const PERMISSIONS = [
   "feedback.manage", // read everyone's feedback and void an entry made in error (with a reason)
   "welfare.manage", // read and work welfare support cases and see the welfare counts: the HR administrator ONLY (withheld from the administrators below)
   "recognition.nominate", // nominate an employee for an award: HR about anyone, a manager about their own direct reports
+  "career.propose", // propose that an employee moves to another role (category): HR about anyone, a manager about their own direct reports; a record of a decision only
+  "succession.manage", // keep the succession list (critical roles and their successors): the HR administrator ONLY, withheld from the administrators below
   "pip.view", // see performance improvement plans (personal and sensitive: not part of hr.view)
   "pip.manage", // draft a plan, add its objectives, record reviews and propose its outcome; be named as a plan's owner
   "pip.approve", // start a plan and approve its outcome (never the person who drafted or owns it, nor who proposed the outcome)
@@ -150,9 +152,9 @@ const READ_ALL: Permission[] = [
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   // welfare cases are the most sensitive records we hold: the founder decided (2026-11-10) that ONLY the HR administrator reads them, so neither administrator role holds welfare.manage
-  SUPER_ADMIN: ALL.filter((p) => p !== "welfare.manage"),
+  SUPER_ADMIN: ALL.filter((p) => p !== "welfare.manage" && p !== "succession.manage"),
   // a company's administrator holds everything EXCEPT changing its own subscription (otherwise any company could give itself every module) and the welfare right
-  COMPANY_ADMIN: ALL.filter((p) => p !== "subscription.manage" && p !== "pricebook.manage" && p !== "welfare.manage"),
+  COMPANY_ADMIN: ALL.filter((p) => p !== "subscription.manage" && p !== "pricebook.manage" && p !== "welfare.manage" && p !== "succession.manage"),
   HR_ADMIN: [
     "dashboard.view",
     "employee.view",
@@ -182,6 +184,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "feedback.manage",
     "welfare.manage",
     "recognition.nominate",
+    "career.propose",
+    "succession.manage",
     "pip.view",
     "pip.manage",
     "client.view",
@@ -204,6 +208,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   OPERATIONS: [
     "feedback.give", // about their own direct reports
     "recognition.nominate", // about their own direct reports
+    "career.propose", // about their own direct reports
     "sales.view",
     "sales.view.all", // read-only: they see the sales records but change nothing
     "sales.handover.accept", // and, once designated, accept the handover of an accepted quote
@@ -294,6 +299,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "appraisal.review",
     "feedback.give",
     "recognition.nominate",
+    "career.propose",
   ],
   EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise"],
   // the bureau's sales person sees the CRM and nothing else: no payroll, employee, client or finance data

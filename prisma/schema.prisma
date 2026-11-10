@@ -599,6 +599,10 @@ model Organization {
   trainingNeeds             TrainingNeed[]
   recognitionAwardTypes     RecognitionAwardType[]
   recognitionAwards         RecognitionAward[]
+  careerPaths               CareerPath[]
+  promotionProposals        PromotionProposal[]
+  successionRoles           SuccessionRole[]
+  successionCandidates      SuccessionCandidate[]
   kpis                      Kpi[]
   appraisalKpis             AppraisalKpi[]
   deployments               Deployment[]
@@ -1926,6 +1930,11 @@ model EmployeeCategory {
   kitPacks             KitPack[]
   trainingRequirements TrainingRequirement[]
   companyPolicies      CompanyPolicy[]
+  careerPathsFrom      CareerPath[]       @relation("CareerPathFrom")
+  careerPathsTo        CareerPath[]       @relation("CareerPathTo")
+  promotionsFrom       PromotionProposal[] @relation("PromotionFrom")
+  promotionsTo         PromotionProposal[] @relation("PromotionTo")
+  successionRoles      SuccessionRole[]
 
   @@unique([organizationId, code])
 }
@@ -2022,6 +2031,8 @@ model Employee {
   trainingEnrolments      TrainingEnrolment[]
   trainingNeeds           TrainingNeed[]
   recognitionAwards       RecognitionAward[]
+  promotionProposals      PromotionProposal[]
+  successionCandidates    SuccessionCandidate[]
   documents               EmployeeDocument[]
   trainings               EmployeeTraining[]
   disciplinaryRecords     DisciplinaryRecord[]
@@ -2347,6 +2358,8 @@ model HrPolicy {
   probationEscalationDays Int @default(7)
   /// The anniversaries (in whole years) HR is prompted about for long-service recognition. A prompt only: never an award.
   longServiceYears        Int[] @default([5, 10, 15, 20])
+  /// An approved promotion not yet applied for this many days is flagged in the HR digest (0 = never).
+  promotionApplyAlertDays Int @default(14)
   offerValidityDays      Int @default(14)
   relationsCaseSlaDays   Int @default(21)
 
@@ -7916,5 +7929,111 @@ model RecognitionAward {
   announceAnsweredAt DateTime?
 
   @@index([organizationId, status])
+  @@index([organizationId, employeeId])
+}
+
+enum PromotionStatus {
+  PROPOSED
+  APPROVED
+  DECLINED
+  WITHDRAWN
+  APPLIED
+}
+
+enum SuccessionReadiness {
+  READY_NOW
+  READY_1_2_YEARS
+  READY_3_PLUS
+}
+
+/// A move the company says one role (employee category) can lead to, with what it asks first. Guidance only: it warns, it never blocks a proposal.
+model CareerPath {
+  id              String           @id @default(cuid())
+  organizationId  String
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  fromCategoryId  String
+  fromCategory    EmployeeCategory @relation("CareerPathFrom", fields: [fromCategoryId], references: [id])
+  toCategoryId    String
+  toCategory      EmployeeCategory @relation("CareerPathTo", fields: [toCategoryId], references: [id])
+  /// Months of service in the current role the company asks for (null = none asked).
+  minMonths       Int?
+  /// A course (by its training-requirement name) the company asks for (null = none asked).
+  requiredCourse  String?
+  active          Boolean          @default(true)
+  createdBy       String
+  createdAt       DateTime         @default(now())
+
+  @@unique([organizationId, fromCategoryId, toCategoryId])
+  @@index([organizationId, active])
+}
+
+/// A proposal that an employee moves to another role (category), and the decision on it. A record of a decision only: approving it changes no category, pay or payroll figure.
+model PromotionProposal {
+  id                String            @id @default(cuid())
+  organizationId    String
+  organization      Organization      @relation(fields: [organizationId], references: [id])
+  employeeId        String
+  employee          Employee          @relation(fields: [employeeId], references: [id])
+  fromCategoryId    String
+  fromCategory      EmployeeCategory  @relation("PromotionFrom", fields: [fromCategoryId], references: [id])
+  toCategoryId      String
+  toCategory        EmployeeCategory  @relation("PromotionTo", fields: [toCategoryId], references: [id])
+  reason            String
+  intendedOn        DateTime          @db.Date
+  status            PromotionStatus   @default(PROPOSED)
+  /// The warning codes that applied when it was proposed (never text).
+  warnings          String[]          @default([])
+  proposedByUserId  String
+  proposedBy        String
+  proposedAt        DateTime          @default(now())
+  decidedByUserId   String?
+  decidedBy         String?
+  decidedAt         DateTime?
+  /// The reason for a decline, or for approving despite a warning.
+  decisionNote      String?
+  withdrawnByUserId String?
+  withdrawnBy       String?
+  withdrawnAt       DateTime?
+  withdrawReason    String?
+  appliedByUserId   String?
+  appliedBy         String?
+  appliedAt         DateTime?
+
+  @@index([organizationId, status])
+  @@index([organizationId, employeeId])
+}
+
+/// A critical role (an employee category) the HR administrator keeps successors for. Read only by the HR administrator.
+model SuccessionRole {
+  id             String                @id @default(cuid())
+  organizationId String
+  organization   Organization          @relation(fields: [organizationId], references: [id])
+  categoryId     String
+  category       EmployeeCategory      @relation(fields: [categoryId], references: [id])
+  active         Boolean               @default(true)
+  createdBy      String
+  createdAt      DateTime              @default(now())
+
+  candidates SuccessionCandidate[]
+
+  @@unique([organizationId, categoryId])
+}
+
+/// One named successor for a critical role, with how ready they are. Kept by a person; nothing is scored or suggested.
+model SuccessionCandidate {
+  id             String              @id @default(cuid())
+  organizationId String
+  organization   Organization        @relation(fields: [organizationId], references: [id])
+  roleId         String
+  role           SuccessionRole      @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       Employee            @relation(fields: [employeeId], references: [id])
+  readiness      SuccessionReadiness
+  reason         String?
+  createdBy      String
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@unique([roleId, employeeId])
   @@index([organizationId, employeeId])
 }

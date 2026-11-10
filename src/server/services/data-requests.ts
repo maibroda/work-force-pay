@@ -56,7 +56,7 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
   if (!e) throw new BusinessError("Employee not found.");
   const where = { organizationId: orgId, employeeId };
 
-  const [contracts, exits, settlements, onboarding, deployments, movements, attendance, payslips, loans, leave, training, documents, discipline, cases, contacts, guarantors, appraisals, acks, letters, changes, candidate, kit, plans, probationDecisions, feedback, trainingEnrolments, trainingNeeds, recognition] =
+  const [contracts, exits, settlements, onboarding, deployments, movements, attendance, payslips, loans, leave, training, documents, discipline, cases, contacts, guarantors, appraisals, acks, letters, changes, candidate, kit, plans, probationDecisions, feedback, trainingEnrolments, trainingNeeds, recognition, promotions] =
     await Promise.all([
       db.employmentContract.findMany({ where, orderBy: { startDate: "asc" } }),
       db.exitRecord.findMany({ where, orderBy: { createdAt: "asc" } }),
@@ -96,6 +96,8 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
       db.trainingNeed.findMany({ where, orderBy: { createdAt: "asc" } }),
       // recognition awards they have received (never a nomination still being considered, which they have not been told about)
       db.recognitionAward.findMany({ where: { ...where, status: "APPROVED" }, include: { type: { select: { name: true } } }, orderBy: { awardedOn: "asc" } }),
+      // promotions decided for them (approved or applied); never a proposal still being considered or declined, which they have not been told about. Succession is never included.
+      db.promotionProposal.findMany({ where: { ...where, status: { in: ["APPROVED", "APPLIED"] } }, include: { fromCategory: { select: { name: true } }, toCategory: { select: { name: true } } }, orderBy: { proposedAt: "asc" } }),
     ]);
 
   const confidential = cases.filter((c) => c.confidential).length;
@@ -223,6 +225,10 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
     probationDecisions: {
       title: "Decisions about your probation",
       records: probationDecisions.map((x) => ({ decision: words(x.decision), decidedOn: dt(x.decidedAt), reason: x.note, extendedByMonths: x.extensionMonths, effectiveFrom: dt(x.effectiveDate), toldToYouOn: dt(x.informedAt) })),
+    },
+    promotions: {
+      title: "Promotions decided for you",
+      records: promotions.map((x) => ({ from: x.fromCategory.name, to: x.toCategory.name, status: x.status, intendedOn: dt(x.intendedOn), appliedOn: dt(x.appliedAt), reason: x.reason })),
     },
     recognition: {
       title: "Recognition awards you have received",
