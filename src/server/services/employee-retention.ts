@@ -106,6 +106,8 @@ export async function anonymizeEmployee(tx: Tx, orgId: string, employeeId: strin
   // training evaluations (about their courses) and requests: the words go; the ratings, the kinds and the statuses stay
   counts.trainingEvaluations = (await tx.trainingEvaluation.updateMany({ where: { organizationId: orgId, enrolment: { employeeId } }, data: { comment: null } })).count;
   counts.trainingRequests = (await tx.trainingRequest.updateMany({ where, data: { reason: REMOVED, decisionNote: null, withdrawReason: null } })).count;
+  // skill assessments: the comments go; the skill, the level, who assessed and when stay (the shape)
+  counts.skillAssessments = (await tx.skillAssessment.updateMany({ where, data: { comment: null } })).count;
   counts.dataRequests = (await tx.dataAccessRequest.updateMany({ where, data: { requesterName: REMOVED, identityNote: null, completionNote: null, refusalReason: null } })).count;
   if (candidateIds.length) {
     await tx.candidate.updateMany({ where: { id: { in: candidateIds } }, data: { firstName: "Anonymised", lastName: "Candidate", phone: null, email: null, resumeReference: null, notes: null, rejectionReason: REMOVED, anonymizedAt: now } });

@@ -1,12 +1,13 @@
 import { requirePage } from "@/lib/auth/session";
 import { myCareer } from "@/server/services/career";
+import { myLearningPaths } from "@/server/services/skills";
 import { fmtDate } from "@/lib/dates";
 import { Empty, PageHeader, Section } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 
 export default async function MyCareerPage() {
   const ctx = await requirePage();
-  const c = await myCareer(ctx);
+  const [c, learning] = await Promise.all([myCareer(ctx), myLearningPaths(ctx)]);
   return (
     <>
       <PageHeader title="My career" description="Your role now, the roles the company says it can lead to, and how you stand against what it asks. This is guidance, not a promise: a promotion is a decision made by people at the company." />
@@ -51,6 +52,27 @@ export default async function MyCareerPage() {
               </ul>
             )}
           </Section>
+          {learning.some((p) => p.skills.length > 0) && (
+            <Section title="Skills to build" description="For each role your career path can lead to, the skills it needs where you are below the level, or not yet assessed, and the courses that build them. A guide, not a promise.">
+              <ul className="space-y-3 text-sm">
+                {learning
+                  .filter((p) => p.skills.length > 0)
+                  .map((p) => (
+                    <li key={p.toRole}>
+                      <b>To reach {p.toRole}</b>
+                      <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
+                        {p.skills.map((s) => (
+                          <li key={s.skillId}>
+                            {s.name}: {s.status === "NOT_ASSESSED" ? "not assessed yet" : `you are at ${s.current}, the role needs ${s.requiredLevel}`}
+                            {s.courses.length ? `. Courses that build it: ${s.courses.join(", ")}.` : "."}
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+              </ul>
+            </Section>
+          )}
         </>
       )}
     </>

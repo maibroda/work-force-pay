@@ -599,6 +599,9 @@ model Organization {
   trainingNeeds             TrainingNeed[]
   trainingRequests          TrainingRequest[]
   trainingEvaluations       TrainingEvaluation[]
+  skills                    Skill[]
+  roleSkills                RoleSkill[]
+  skillAssessments          SkillAssessment[]
   recognitionAwardTypes     RecognitionAwardType[]
   recognitionAwards         RecognitionAward[]
   careerPaths               CareerPath[]
@@ -1937,6 +1940,7 @@ model EmployeeCategory {
   promotionsFrom       PromotionProposal[] @relation("PromotionFrom")
   promotionsTo         PromotionProposal[] @relation("PromotionTo")
   successionRoles      SuccessionRole[]
+  roleSkills           RoleSkill[]
 
   @@unique([organizationId, code])
 }
@@ -2033,6 +2037,7 @@ model Employee {
   trainingEnrolments      TrainingEnrolment[]
   trainingNeeds           TrainingNeed[]
   trainingRequests        TrainingRequest[]
+  skillAssessments        SkillAssessment[]
   recognitionAwards       RecognitionAward[]
   promotionProposals      PromotionProposal[]
   successionCandidates    SuccessionCandidate[]
@@ -2432,6 +2437,8 @@ model HrPolicy {
   trainingAlertDays Int @default(60)
   /// The manager is asked whether a course was applied on the job this many days after the session (0 = never asked).
   trainingEvaluationDays Int @default(60)
+  /// A skill assessment older than this many days is listed as stale for HR (0 = never).
+  skillReassessDays Int @default(365)
 
   // Change control for bank, tax and pension details
   /// A change needs a second person's approval (otherwise anyone who can edit an employee can change it).
@@ -8103,4 +8110,61 @@ model TrainingEvaluation {
 
   @@unique([enrolmentId, kind])
   @@index([organizationId, kind])
+}
+
+// ─────────────────────────── SKILLS AND SKILL GAPS ───────────────────────────
+
+/// A skill the company cares about (Shift supervision, First aid response). The company starts with none. Linked to the courses that build it by course name.
+model Skill {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  description    String?
+  /// The courses that build this skill, by course name (matched the way training compliance matches course names).
+  courses        String[]     @default([])
+  active         Boolean      @default(true)
+  createdBy      String
+  createdAt      DateTime     @default(now())
+
+  roleSkills  RoleSkill[]
+  assessments SkillAssessment[]
+
+  @@unique([organizationId, name])
+}
+
+/// The level of a skill a role (employee category) needs, 1 (Aware) to 4 (Expert).
+model RoleSkill {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  categoryId     String
+  category       EmployeeCategory @relation(fields: [categoryId], references: [id])
+  skillId        String
+  skill          Skill            @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  requiredLevel  Int
+  createdBy      String
+  createdAt      DateTime         @default(now())
+
+  @@unique([categoryId, skillId])
+  @@index([organizationId])
+}
+
+/// One assessment of one person's level of one skill. Append-only: the current level is the latest; a correction is a new assessment. The employee reads all of it.
+model SkillAssessment {
+  id               String       @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  employeeId       String
+  employee         Employee     @relation(fields: [employeeId], references: [id])
+  skillId          String
+  skill            Skill        @relation(fields: [skillId], references: [id])
+  level            Int
+  comment          String?
+  assessedOn       DateTime     @db.Date
+  assessedByUserId String
+  assessedBy       String
+  createdAt        DateTime     @default(now())
+
+  @@index([organizationId, employeeId, skillId])
 }
