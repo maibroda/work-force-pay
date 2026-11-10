@@ -323,8 +323,17 @@ export async function myQueue(ctx: Ctx) {
 /** The employee's own appraisals; scores are shown only once signed off. */
 export async function myAppraisals(ctx: Ctx) {
   if (!ctx.employeeId) return [];
-  const rows = await db.appraisal.findMany({ where: { organizationId: ctx.orgId, employeeId: ctx.employeeId }, include: { cycle: true }, orderBy: { createdAt: "desc" } });
-  return rows.map((a) => ({ ...a, overallScore: a.status === "APPROVED" || a.status === "ACKNOWLEDGED" ? a.overallScore : null, overallBand: a.status === "APPROVED" || a.status === "ACKNOWLEDGED" ? a.overallBand : null }));
+  // only the fields the page shows, and a score only for an appraisal that has been signed off: nothing withheld (a reviewer's comment, a recommendation, a note,
+  // a score not yet released) is fetched at all, so it cannot reach the page's data even by accident
+  const rows = await db.appraisal.findMany({
+    where: { organizationId: ctx.orgId, employeeId: ctx.employeeId },
+    select: { id: true, status: true, cycle: { select: { name: true, kind: true, periodStart: true, periodEnd: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+  const released = rows.filter((a) => a.status === "APPROVED" || a.status === "ACKNOWLEDGED").map((a) => a.id);
+  const scores = released.length ? await db.appraisal.findMany({ where: { id: { in: released }, organizationId: ctx.orgId, employeeId: ctx.employeeId }, select: { id: true, overallScore: true, overallBand: true } }) : [];
+  const byId = new Map(scores.map((s) => [s.id, s]));
+  return rows.map((a) => ({ ...a, overallScore: byId.get(a.id)?.overallScore ?? null, overallBand: byId.get(a.id)?.overallBand ?? null }));
 }
 
 export async function employeeAppraisals(ctx: Ctx, employeeId: string) {

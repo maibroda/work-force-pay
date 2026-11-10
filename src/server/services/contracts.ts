@@ -325,7 +325,12 @@ export async function markProbationInformed(ctx: Ctx, decisionId: string) {
 /** The one line the signed-in employee sees about their latest probation decision that HR has told them about. Never the reasons. */
 export async function myProbationOutcome(ctx: Ctx) {
   if (!ctx.employeeId) return null;
-  const x = await db.probationDecision.findFirst({ where: { organizationId: ctx.orgId, employeeId: ctx.employeeId, informedAt: { not: null } }, orderBy: [{ decidedAt: "desc" }, { id: "desc" }] });
+  // only the decision and its date: the decider's reasoning, the appraisal snapshot and any note are never fetched
+  const x = await db.probationDecision.findFirst({
+    where: { organizationId: ctx.orgId, employeeId: ctx.employeeId, informedAt: { not: null } },
+    select: { decision: true, effectiveDate: true },
+    orderBy: [{ decidedAt: "desc" }, { id: "desc" }],
+  });
   if (!x) return null;
   const date = x.effectiveDate ? iso(x.effectiveDate) : null;
   const line = employeeLine({ decision: x.decision as ProbationDecisionKind, informed: true, date });
