@@ -535,6 +535,7 @@ export const ANALYTICS_AREA: Area = {
   key: "analytics",
   title: "Analytics",
   sections: [
+    { group: "Payroll & workforce cost", href: "/analytics/workforce", label: "Workforce overview", perm: "analytics.view" },
     { group: "Payroll & workforce cost", href: "/analytics/payroll", label: "Payroll analytics", perm: "analytics.view" },
     { group: "Payroll & workforce cost", href: "/analytics/workforce-cost", label: "Workforce cost", perm: "analytics.view" },
     { group: "Payroll & workforce cost", href: "/analytics/client-cost", label: "Client cost", perm: "analytics.view" },
