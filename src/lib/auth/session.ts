@@ -112,13 +112,15 @@ export async function verifyLoginChallenge(token: string): Promise<string | null
 /** `allowUnenrolled`: reachable even by someone whose role must use two-factor and hasn't set it up (the page where they do). */
 export interface GateOptions {
   allowUnenrolled?: boolean;
+  /** A second permission that also opens the page (a Delegated HR Officer holding one function has no general HR permission). The page still declares its main permission first, so the route check can read it. */
+  orPermission?: Permission;
 }
 
 /** For pages: redirect to login when signed out, to /forbidden when not permitted, to My security when two-factor is compulsory and missing. */
 export async function requirePage(permission?: Permission, opts: GateOptions = {}): Promise<Ctx> {
   const ctx = await getSession();
   if (!ctx) redirect("/login");
-  if (permission && !canCtx(ctx, permission)) redirect("/forbidden");
+  if (permission && !canCtx(ctx, permission) && !(opts.orPermission && canCtx(ctx, opts.orPermission))) redirect("/forbidden");
   if (ctx.entitlements) {
     // the middleware sets this from the request's own address (overwriting anything the browser sent), so it holds on every visit, soft navigations included
     const off = pageRefusal(ctx, (await headers()).get("x-wfp-path"));

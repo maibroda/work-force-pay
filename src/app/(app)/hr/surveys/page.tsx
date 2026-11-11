@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { canCtx } from "@/lib/hr-functions";
 import { listSurveys } from "@/server/services/survey";
@@ -16,9 +15,8 @@ const TONE: Record<string, "amber" | "green" | "red" | "gray" | "blue"> = { DRAF
 const LABEL: Record<string, string> = { DRAFT: "Draft", SCHEDULED: "Opens later", OPEN: "Open", CLOSED: "Closed" };
 
 export default async function SurveysPage() {
-  const ctx = await requirePage();
   // HR viewers, and a Delegated HR Officer holding the Surveys function (who has no general HR permission)
-  if (!canCtx(ctx, "hr.view") && !canCtx(ctx, "survey.manage")) redirect("/forbidden");
+  const ctx = await requirePage("hr.view", { orPermission: "survey.manage" });
   // only roles and departments: this page is open to a Delegated HR Officer holding the Surveys function, who must not be handed the list of employees
   const [rows, categories, departments] = await Promise.all([listSurveys(ctx), db.employeeCategory.findMany({ where: { organizationId: ctx.orgId }, select: { id: true, name: true }, orderBy: { name: "asc" } }), db.department.findMany({ where: { organizationId: ctx.orgId }, select: { id: true, name: true }, orderBy: { name: "asc" } })]);
   const opts = { categories: categories.map((c) => ({ value: c.id, label: c.name })), departments: departments.map((c) => ({ value: c.id, label: c.name })) };
