@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-252 tables and 186 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+253 tables and 187 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -56,6 +56,7 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | surveyAccessCodes | → SurveyAccessCode[] |  |  |
 | surveyKioskSessions | → SurveyKioskSession[] |  |  |
 | surveyAggregates | → SurveyAggregate[] |  |  |
+| userFunctionGrants | → UserFunctionGrant[] |  |  |
 | recognitionAwardTypes | → RecognitionAwardType[] |  |  |
 | recognitionAwards | → RecognitionAward[] |  |  |
 | careerPaths | → CareerPath[] |  |  |
@@ -1051,6 +1052,9 @@ Which bureau staff may work in which client organization. Whoever manages the bu
 | failedLoginAttempts | Int |  |  |
 | lockedUntil | DateTime |  |  |
 | sessionVersion | Int |  |  |
+| external | Boolean |  | An outsourced HR officer or administrator (not an employee of the company): requires two-factor sign-in and an end date. |
+| accessEndsOn | DateTime |  | The last day this person can sign in (required for an external user). Null = no end. |
+| functionGrants | → UserFunctionGrant[] |  |  |
 | totpSecret | String |  |  |
 | totpEnabled | Boolean |  |  |
 | totpVerifiedAt | DateTime |  |  |
@@ -6263,11 +6267,33 @@ The anonymised results kept after the raw answers are deleted.
 | summary | Json | yes |  |
 | createdAt | DateTime |  |  |
 
+### UserFunctionGrant
+
+One of four fixed HR functions granted to a Delegated HR Officer by the Company Administrator. Live until revoked or past its end date.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| userId | String | yes |  |
+| user | → User |  |  |
+| function | HrFunction | yes |  |
+| reason | String | yes | Why it was granted (kept; never shown outside Settings > HR officers). |
+| grantedByUserId | String | yes |  |
+| grantedBy | String | yes |  |
+| grantedAt | DateTime |  |  |
+| endsOn | DateTime |  | The last day it counts (null = no end). |
+| revokedAt | DateTime |  |  |
+| revokedByUserId | String |  |  |
+| revokedBy | String |  |  |
+| revokeReason | String |  |  |
+
 ## Fixed sets of values
 
 ### Role
 
-`SUPER_ADMIN`, `COMPANY_ADMIN`, `HR_ADMIN`, `OPERATIONS`, `PAYROLL_ADMIN`, `FINANCE`, `AUDITOR`, `SUPERVISOR`, `EMPLOYEE`, `CLIENT_APPROVER`, `CLIENT_HR`, `BUSINESS_DEV`, `SALES_REP`, `SALES_MANAGER`, `ACCOUNT_MANAGER`
+`SUPER_ADMIN`, `COMPANY_ADMIN`, `HR_ADMIN`, `HR_OFFICER`, `OPERATIONS`, `PAYROLL_ADMIN`, `FINANCE`, `AUDITOR`, `SUPERVISOR`, `EMPLOYEE`, `CLIENT_APPROVER`, `CLIENT_HR`, `BUSINESS_DEV`, `SALES_REP`, `SALES_MANAGER`, `ACCOUNT_MANAGER`
 
 ### EmployeeStatus
 
@@ -7034,4 +7060,8 @@ Whether an outbound message is a service message (about an active contract) or m
 ### SurveyCodeStatus
 
 `ACTIVE`, `USED`, `CANCELLED`
+
+### HrFunction
+
+`WELFARE`, `SURVEYS`, `SURVEY_ASSIST`, `SUCCESSION`
 

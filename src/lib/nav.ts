@@ -111,6 +111,8 @@ export interface AreaSection {
   href: string;
   label: string;
   perm: Permission;
+  /** A second permission that also opens the page (a Delegated HR Officer holding one function has no general HR permission). */
+  orPerm?: Permission;
   /** The job it belongs to (the first row of tabs). */
   group: string;
   bureauOnly?: boolean;
@@ -180,7 +182,7 @@ export interface Visibility {
 
 /** The pages of an area this person may open, in the area's order. */
 export function visibleSections(area: Area, v: Visibility): AreaSection[] {
-  return area.sections.filter((s) => v.can(s.perm) && v.allowed(s.href) && (!s.bureauOnly || v.bureau) && (!s.salesOnly || Boolean(v.sales)) && (!s.clientOnly || Boolean(v.client)));
+  return area.sections.filter((s) => (v.can(s.perm) || (s.orPerm !== undefined && v.can(s.orPerm))) && v.allowed(s.href) && (!s.bureauOnly || v.bureau) && (!s.salesOnly || Boolean(v.sales)) && (!s.clientOnly || Boolean(v.client)));
 }
 
 /** The sidebar entry for an area: its name, leading to the first page the person may open; null (no entry) if they may open none. */
@@ -398,8 +400,9 @@ export const HR_AREA: Area = {
     { group: "Performance management", href: "/settings/career-paths", label: "Career paths", perm: "hr.configure" },
     { group: "Performance management", href: "/settings/skills", label: "Skills", perm: "hr.configure" },
     { group: "Employee relations", href: "/hr/relations", label: "Employee relations cases", perm: "hr.view" },
+    { group: "Employee relations", href: "/hr/welfare-cases", label: "Welfare cases", perm: "welfare.manage" },
     { group: "Employee relations", href: "/hr/welfare-summary", label: "Welfare summary", perm: "welfare.manage" },
-    { group: "Employee relations", href: "/hr/surveys", label: "Surveys", perm: "hr.view" },
+    { group: "Employee relations", href: "/hr/surveys", label: "Surveys", perm: "hr.view", orPerm: "survey.manage" },
     { group: "Disciplinary", href: "/hr/discipline", label: "Disciplinary cases & sanctions", perm: "discipline.view" },
     { group: "Learning & development", href: "/hr/training", label: "Training compliance", perm: "hr.view" },
     { group: "Learning & development", href: "/hr/training-calendar", label: "Training calendar", perm: "hr.view" },
@@ -519,6 +522,7 @@ export const SETTINGS_AREA: Area = {
     { group: "Company", href: "/settings/cost-centers", label: "Cost centers", perm: "payroll.view" },
     { group: "People & access", href: "/settings/users", label: "Users", perm: "users.manage" },
     { group: "People & access", href: "/settings/roles", label: "Roles", perm: "dashboard.view" },
+    { group: "People & access", href: "/settings/hr-officers", label: "HR officers", perm: "hr.officer.manage" },
     { group: "Plan & modules", href: "/settings/subscription", label: "Subscription", perm: "subscription.view" },
     { group: "Plan & modules", href: "/settings/entitlements", label: "Module switch", perm: "subscription.manage" },
     { group: "Plan & modules", href: "/settings/price-book", label: "Software price book", perm: "pricebook.manage" },

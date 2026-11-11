@@ -5,6 +5,8 @@ import { requirePage } from "@/lib/auth/session";
 import { twoFactorStateFor } from "@/lib/auth/two-factor-gate";
 import { twoFactorReminder } from "@/lib/two-factor-policy";
 import { can } from "@/lib/auth/permissions";
+import { canCtx, HR_FUNCTION_LABELS } from "@/lib/hr-functions";
+import { unheldFunctionsFor } from "@/server/services/hr-officers";
 import { AREAS, EMPLOYEE_SECTIONS, NAV, SELF_NAV, areaEntry, visibleSections, type JumpPage } from "@/lib/nav";
 import { pageAllowed } from "@/lib/entitlements/guard";
 import { db } from "@/lib/db";
@@ -21,12 +23,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const ctx = await requirePage(undefined, { allowUnenrolled: true });
   const [org, gate, salesSetting] = await Promise.all([db.organization.findUnique({ where: { id: ctx.orgId } }), twoFactorStateFor(ctx), db.crmSetting.findUnique({ where: { organizationId: ctx.orgId }, select: { enabled: true } })]);
   const salesOn = salesSetting?.enabled ?? false;
+  // the Company Administrator is told when a function (such as welfare cases) has nobody to hold it: until someone does, those records stay unreadable
+  const unheld = canCtx(ctx, "hr.officer.manage") ? await unheldFunctionsFor(ctx) : [];
   const home = ctx.homeOrgId ? await db.organization.findUnique({ where: { id: ctx.homeOrgId }, select: { name: true } }) : null;
   const showBureau = Boolean(org?.isBureau || ctx.homeOrgId);
   const reminder = twoFactorReminder(gate.state, gate.enforceFrom, new Date(new Date().toISOString().slice(0, 10)));
   // What this person may see: their role, the company's modules, and whether they are in a bureau. An area (Payroll and so on) is ONE sidebar entry leading to the first of its pages
   // they may open; its pages are tabs inside it. Nothing here grants access: every page checks permission and module itself.
-  const vis = { can: (p: Parameters<typeof can>[1]) => can(ctx.role, p), allowed: (href: string) => pageAllowed(ctx.entitlements, href), bureau: showBureau, sales: salesOn, client: ctx.role === "CLIENT_APPROVER" || ctx.role === "CLIENT_HR" };
+  const vis = { can: (p: Parameters<typeof can>[1]) => canCtx(ctx, p), allowed: (href: string) => pageAllowed(ctx.entitlements, href), bureau: showBureau, sales: salesOn, client: ctx.role === "CLIENT_APPROVER" || ctx.role === "CLIENT_HR" };
   const areas = AREAS.map((area) => ({ area, sections: visibleSections(area, vis) })).filter((x) => x.sections.length);
   const groups = [
     ...(["SUPERVISOR", "EMPLOYEE"].includes(ctx.role) ? SELF_NAV : []),
@@ -41,7 +45,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           const entry = found && areaEntry(found.area, vis);
           return entry && found ? [{ href: entry.href, label: entry.label, section: i.section, owns: [...(found.area.home ? [found.area.home] : []), ...found.sections.flatMap((s) => [s.href, ...(s.also ?? [])])] }] : [];
         }
-        const ok = can(ctx.role, i.perm) && (!i.bureauOnly || showBureau) && (!i.salesOnly || salesOn) && (!i.clientOnly || ctx.role === "CLIENT_APPROVER" || ctx.role === "CLIENT_HR") && pageAllowed(ctx.entitlements, i.href);
+        const ok = canCtx(ctx, i.perm) && (!i.bureauOnly || showBureau) && (!i.salesOnly || salesOn) && (!i.clientOnly || ctx.role === "CLIENT_APPROVER" || ctx.role === "CLIENT_HR") && pageAllowed(ctx.entitlements, i.href);
         return ok ? [{ href: i.href, label: i.label, section: i.section, owns: undefined as string[] | undefined }] : [];
       }),
     }))
@@ -55,7 +59,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     jump.push({ href, label, where });
   };
   for (const { area, sections } of areas) for (const s of sections) addJump(s.href, s.label, `${area.title} › ${s.group}`);
-  for (const s of EMPLOYEE_SECTIONS) if (can(ctx.role, s.perm) && pageAllowed(ctx.entitlements, s.href)) addJump(s.href, s.label, "Employees");
+  for (const s of EMPLOYEE_SECTIONS) if (canCtx(ctx, s.perm) && pageAllowed(ctx.entitlements, s.href)) addJump(s.href, s.label, "Employees");
   for (const g of groups) for (const i of g.items) if (!i.owns) addJump(i.href, i.label, g.title);
   return (
     <div className="min-h-screen">
@@ -90,6 +94,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 Back to {home?.name ?? "the bureau"}
               </button>
             </form>
+          </div>
+        )}
+        {unheld.length > 0 && (
+          <div className="no-print border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+            Nobody holds: {unheld.map((f) => HR_FUNCTION_LABELS[f]).join(", ")}. Those records cannot be read until an HR administrator or an HR officer holds the function.{" "}
+            <Link className="font-medium underline" href="/settings/hr-officers">
+              HR officers
+            </Link>
           </div>
         )}
         {reminder && (

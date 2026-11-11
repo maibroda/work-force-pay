@@ -3,7 +3,10 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { SignJWT, jwtVerify } from "jose";
 import { db } from "@/lib/db";
-import { can, ForbiddenError, type Permission, type Role } from "./permissions";
+import { ForbiddenError, type Permission, type Role } from "./permissions";
+import { accessEnded, canCtx } from "@/lib/hr-functions";
+import { iso } from "@/lib/dates";
+import { loadGrantPermissions } from "@/server/services/hr-officers";
 import type { Ctx } from "./context";
 import { TwoFactorRequiredError, twoFactorStateFor } from "./two-factor-gate";
 import { pageRefusal } from "@/server/services/entitlement-guard";
@@ -55,9 +58,11 @@ export async function getSession(): Promise<Ctx | null> {
     const userId = String(payload.userId);
     const current = await db.user.findUnique({
       where: { id: userId },
-      select: { sessionVersion: true, active: true, organizationId: true, role: true },
+      select: { sessionVersion: true, active: true, organizationId: true, role: true, accessEndsOn: true },
     });
     if (!current || !current.active || current.sessionVersion !== payload.sessionVersion) return null;
+    // an external officer's access ends after their end date, whatever the token says
+    if (accessEnded(current.accessEndsOn ? iso(current.accessEndsOn) : null, iso(new Date()))) return null;
     // Working in a client organization: the token says so, but access is re-checked against the database on every request, so
     // revoking someone's access (or deactivating them) takes effect at once and a token can't be made to point somewhere new.
     const orgId = String(payload.orgId);
@@ -75,6 +80,8 @@ export async function getSession(): Promise<Ctx | null> {
       ip: h.get("x-forwarded-for") ?? null,
       // undefined while every module's switch is OFF (the state until platform staff turn one on), which is what makes every guard allow
       entitlements: await loadEntitlements(orgId),
+      // live function grants, read now: revoking one takes effect on the very next request
+      grants: current.role === "HR_OFFICER" ? await loadGrantPermissions(userId) : undefined,
     };
   } catch {
     return null;
@@ -105,13 +112,15 @@ export async function verifyLoginChallenge(token: string): Promise<string | null
 /** `allowUnenrolled`: reachable even by someone whose role must use two-factor and hasn't set it up (the page where they do). */
 export interface GateOptions {
   allowUnenrolled?: boolean;
+  /** A second permission that also opens the page (a Delegated HR Officer holding one function has no general HR permission). The page still declares its main permission first, so the route check can read it. */
+  orPermission?: Permission;
 }
 
 /** For pages: redirect to login when signed out, to /forbidden when not permitted, to My security when two-factor is compulsory and missing. */
 export async function requirePage(permission?: Permission, opts: GateOptions = {}): Promise<Ctx> {
   const ctx = await getSession();
   if (!ctx) redirect("/login");
-  if (permission && !can(ctx.role, permission)) redirect("/forbidden");
+  if (permission && !canCtx(ctx, permission) && !(opts.orPermission && canCtx(ctx, opts.orPermission))) redirect("/forbidden");
   if (ctx.entitlements) {
     // the middleware sets this from the request's own address (overwriting anything the browser sent), so it holds on every visit, soft navigations included
     const off = pageRefusal(ctx, (await headers()).get("x-wfp-path"));
@@ -125,7 +134,7 @@ export async function requirePage(permission?: Permission, opts: GateOptions = {
 export async function requireAction(permission?: Permission, opts: GateOptions = {}): Promise<Ctx> {
   const ctx = await getSession();
   if (!ctx) throw new ForbiddenError("signed-in");
-  if (permission && !can(ctx.role, permission)) throw new ForbiddenError(permission);
+  if (permission && !canCtx(ctx, permission)) throw new ForbiddenError(permission);
   if (!opts.allowUnenrolled && (await twoFactorStateFor(ctx)).state === "BLOCKED") throw new TwoFactorRequiredError();
   return ctx;
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Ctx } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
+import { canCtx } from "@/lib/hr-functions";
 import type { getCase } from "@/server/services/relations";
 import { db } from "@/lib/db";
 import { enumOptions } from "@/server/options";
@@ -19,6 +20,7 @@ import {
   resolveCaseAction,
   setCaseStatusAction,
 } from "@/app/actions/hr-lifecycle";
+import { addWelfareNoteAction, assignWelfareAction, closeWelfareAction, resolveWelfareAction, setWelfareStatusAction } from "@/app/actions/welfare";
 
 const OPEN = ["OPEN", "INVESTIGATING", "HEARING"];
 
@@ -26,15 +28,21 @@ const OPEN = ["OPEN", "INVESTIGATING", "HEARING"];
  * One case file, shown under Employee relations or under Disciplinary (misconduct). The server enforces who may do what;
  * the flags here only decide which buttons to show. A misconduct case needs the disciplinary permission as well as the HR one.
  */
-export async function CaseFile({ ctx, c }: { ctx: Ctx; c: Awaited<ReturnType<typeof getCase>> }) {
+export async function CaseFile({ ctx, c, welfare = false }: { ctx: Ctx; c: Awaited<ReturnType<typeof getCase>>; welfare?: boolean }) {
   const misconduct = c.type === "MISCONDUCT";
   const disciplinary = !misconduct || can(ctx.role, "discipline.manage");
-  const manage = can(ctx.role, "hr.manage") && disciplinary;
-  const approve = can(ctx.role, "hr.approve") && disciplinary;
+  // the welfare lane (src/app/(app)/hr/welfare-cases): the welfare permission alone is enough, and the welfare actions are used; elsewhere nothing changes
+  const lane = welfare && c.type === "WELFARE" && canCtx(ctx, "welfare.manage");
+  const manage = lane || (can(ctx.role, "hr.manage") && disciplinary);
+  const approve = lane || (can(ctx.role, "hr.approve") && disciplinary);
+  const reopen = can(ctx.role, "hr.approve") && disciplinary;
+  const A = lane
+    ? { note: addWelfareNoteAction, assign: assignWelfareAction, status: setWelfareStatusAction, resolve: resolveWelfareAction, close: closeWelfareAction }
+    : { note: addCaseNoteAction, assign: assignCaseAction, status: setCaseStatusAction, resolve: resolveCaseAction, close: closeCaseAction };
   const isOpen = OPEN.includes(c.status);
   const staff = manage
     ? await db.user.findMany({
-        where: { organizationId: ctx.orgId, active: true, role: { in: ["HR_ADMIN", "COMPANY_ADMIN", "SUPER_ADMIN"] } },
+        where: { organizationId: ctx.orgId, active: true, role: { in: ["HR_ADMIN", "HR_OFFICER", "COMPANY_ADMIN", "SUPER_ADMIN"] } },
         orderBy: { name: "asc" },
       })
     : [];
@@ -45,7 +53,7 @@ export async function CaseFile({ ctx, c }: { ctx: Ctx; c: Awaited<ReturnType<typ
     <>
       <PageHeader
         title={`${c.caseNumber} — ${c.redacted ? "Confidential case" : c.summary}`}
-        crumbs={[misconduct ? { href: "/hr/discipline", label: "Disciplinary" } : { href: "/hr/relations", label: "Employee relations" }]}
+        crumbs={[lane ? { href: "/hr/welfare-cases", label: "Welfare cases" } : misconduct ? { href: "/hr/discipline", label: "Disciplinary" } : { href: "/hr/relations", label: "Employee relations" }]}
         description={
           <span className="flex flex-wrap items-center gap-2">
             <StatusBadge status={c.status} /> {c.type.replace(/_/g, " ").toLowerCase()} · <StatusBadge status={c.severity} />
@@ -56,26 +64,26 @@ export async function CaseFile({ ctx, c }: { ctx: Ctx; c: Awaited<ReturnType<typ
         actions={
           <>
             {manage && c.status === "OPEN" && (
-              <ActionButton action={setCaseStatusAction.bind(null, c.id, "INVESTIGATING")} variant="outline">
+              <ActionButton action={A.status.bind(null, c.id, "INVESTIGATING")} variant="outline">
                 Start investigation
               </ActionButton>
             )}
             {manage && c.status === "INVESTIGATING" && (
-              <ActionButton action={setCaseStatusAction.bind(null, c.id, "HEARING")} variant="outline">
+              <ActionButton action={A.status.bind(null, c.id, "HEARING")} variant="outline">
                 Move to hearing
               </ActionButton>
             )}
             {manage && c.status === "HEARING" && (
-              <ActionButton action={setCaseStatusAction.bind(null, c.id, "INVESTIGATING")} variant="outline">
+              <ActionButton action={A.status.bind(null, c.id, "INVESTIGATING")} variant="outline">
                 Back to investigation
               </ActionButton>
             )}
             {approve && c.status === "RESOLVED" && (
-              <ActionButton action={closeCaseAction.bind(null, c.id)} variant="success">
+              <ActionButton action={A.close.bind(null, c.id)} variant="success">
                 Sign off & close
               </ActionButton>
             )}
-            {approve && (c.status === "RESOLVED" || c.status === "CLOSED") && (
+            {reopen && (c.status === "RESOLVED" || c.status === "CLOSED") && (
               <ActionButton action={reopenCaseAction.bind(null, c.id)} reason reasonPlaceholder="Appeal / new evidence — why re-open?" variant="outline">
                 Re-open
               </ActionButton>
@@ -143,7 +151,7 @@ export async function CaseFile({ ctx, c }: { ctx: Ctx; c: Awaited<ReturnType<typ
               <SmartForm
                 columns={3}
                 submitLabel="Add entry"
-                action={addCaseNoteAction.bind(null, c.id)}
+                action={A.note.bind(null, c.id)}
                 fields={[
                   { name: "kind", label: "Kind", type: "select", defaultValue: "NOTE", options: enumOptions(["NOTE", "INVESTIGATION", "HEARING", "EVIDENCE", "DECISION", "APPEAL"]) },
                   { name: "note", label: "Entry", type: "textarea", required: true, span: 3 },
@@ -157,7 +165,7 @@ export async function CaseFile({ ctx, c }: { ctx: Ctx; c: Awaited<ReturnType<typ
                 <SmartForm
                   columns={1}
                   submitLabel="Assign"
-                  action={assignCaseAction.bind(null, c.id)}
+                  action={A.assign.bind(null, c.id)}
                   fields={[{ name: "assignedTo", label: "Handled by", type: "select", required: true, defaultValue: c.assignedTo ?? "", options: staff.map((u) => ({ value: u.name, label: `${u.name} (${u.role.replace(/_/g, " ").toLowerCase()})` })) }]}
                 />
               </FormPanel>
@@ -165,7 +173,7 @@ export async function CaseFile({ ctx, c }: { ctx: Ctx; c: Awaited<ReturnType<typ
                 <SmartForm
                   columns={1}
                   submitLabel="Resolve case"
-                  action={resolveCaseAction.bind(null, c.id)}
+                  action={A.resolve.bind(null, c.id)}
                   fields={[
                     { name: "outcome", label: "Finding", type: "select", required: true, options: enumOptions(["SUBSTANTIATED", "PARTIALLY_SUBSTANTIATED", "UNSUBSTANTIATED", "RESOLVED_INFORMALLY", "WITHDRAWN"]) },
                     { name: "resolution", label: "What was found and decided", type: "textarea", required: true },

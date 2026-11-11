@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
-import { can } from "@/lib/auth/permissions";
+import { canCtx } from "@/lib/hr-functions";
 import { listSurveys } from "@/server/services/survey";
-import { options } from "@/server/options";
+import { db } from "@/lib/db";
 import { fmtDate } from "@/lib/dates";
 import { Empty, FormPanel, PageHeader, Section } from "@/components/page";
 import { ActionButton } from "@/components/action-button";
@@ -15,9 +15,12 @@ const TONE: Record<string, "amber" | "green" | "red" | "gray" | "blue"> = { DRAF
 const LABEL: Record<string, string> = { DRAFT: "Draft", SCHEDULED: "Opens later", OPEN: "Open", CLOSED: "Closed" };
 
 export default async function SurveysPage() {
-  const ctx = await requirePage("hr.view");
-  const [rows, opts] = await Promise.all([listSurveys(ctx), options(ctx)]);
-  const canManage = can(ctx.role, "survey.manage");
+  // HR viewers, and a Delegated HR Officer holding the Surveys function (who has no general HR permission)
+  const ctx = await requirePage("hr.view", { orPermission: "survey.manage" });
+  // only roles and departments: this page is open to a Delegated HR Officer holding the Surveys function, who must not be handed the list of employees
+  const [rows, categories, departments] = await Promise.all([listSurveys(ctx), db.employeeCategory.findMany({ where: { organizationId: ctx.orgId }, select: { id: true, name: true }, orderBy: { name: "asc" } }), db.department.findMany({ where: { organizationId: ctx.orgId }, select: { id: true, name: true }, orderBy: { name: "asc" } })]);
+  const opts = { categories: categories.map((c) => ({ value: c.id, label: c.name })), departments: departments.map((c) => ({ value: c.id, label: c.name })) };
+  const canManage = canCtx(ctx, "survey.manage");
   return (
     <>
       <PageHeader

@@ -19,6 +19,8 @@ enum Role {
   SUPER_ADMIN
   COMPANY_ADMIN
   HR_ADMIN
+  /// A Delegated HR Officer: nothing in HR until a function is granted (UserFunctionGrant).
+  HR_OFFICER
   OPERATIONS
   PAYROLL_ADMIN
   FINANCE
@@ -607,6 +609,7 @@ model Organization {
   surveyAccessCodes         SurveyAccessCode[]
   surveyKioskSessions       SurveyKioskSession[]
   surveyAggregates          SurveyAggregate[]
+  userFunctionGrants        UserFunctionGrant[]
   recognitionAwardTypes     RecognitionAwardType[]
   recognitionAwards         RecognitionAward[]
   careerPaths               CareerPath[]
@@ -1812,6 +1815,12 @@ model User {
 
   // Bumped on logout-everywhere / password change — invalidates every outstanding session JWT at once.
   sessionVersion Int @default(1)
+
+  /// An outsourced HR officer or administrator (not an employee of the company): requires two-factor sign-in and an end date.
+  external      Boolean   @default(false)
+  /// The last day this person can sign in (required for an external user). Null = no end.
+  accessEndsOn  DateTime? @db.Date
+  functionGrants UserFunctionGrant[]
 
   // TOTP two-factor authentication (optional; not yet enforced by role).
   totpSecret     String?
@@ -8315,4 +8324,37 @@ model SurveyAggregate {
   survey         Survey       @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   summary        Json
   createdAt      DateTime     @default(now())
+}
+
+// ─────────────────────────── DELEGATED HR OFFICER ───────────────────────────
+
+enum HrFunction {
+  WELFARE
+  SURVEYS
+  SURVEY_ASSIST
+  SUCCESSION
+}
+
+/// One of four fixed HR functions granted to a Delegated HR Officer by the Company Administrator. Live until revoked or past its end date.
+model UserFunctionGrant {
+  id               String       @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  userId           String
+  user             User         @relation(fields: [userId], references: [id])
+  function         HrFunction
+  /// Why it was granted (kept; never shown outside Settings > HR officers).
+  reason           String
+  grantedByUserId  String
+  grantedBy        String
+  grantedAt        DateTime     @default(now())
+  /// The last day it counts (null = no end).
+  endsOn           DateTime?    @db.Date
+  revokedAt        DateTime?
+  revokedByUserId  String?
+  revokedBy        String?
+  revokeReason     String?
+
+  @@index([userId, function])
+  @@index([organizationId])
 }

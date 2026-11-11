@@ -14,7 +14,8 @@
  */
 import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
-import { can } from "@/lib/auth/permissions";
+import { can, ForbiddenError, type Permission } from "@/lib/auth/permissions";
+import { canCtx } from "@/lib/hr-functions";
 import { addDays, iso } from "@/lib/dates";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
@@ -35,15 +36,29 @@ const isMisconduct = (c: { type: string }) => c.type === "MISCONDUCT";
 /** Welfare support (bereavement, hardship, health, family): the most sensitive kind, read and worked only with welfare.manage. */
 const isWelfare = (c: { type: string }) => c.type === "WELFARE";
 
+/**
+ * The welfare lane: a Delegated HR Officer holding the Welfare function has no HR permission at all, yet may read and work WELFARE cases, and only those. For every other
+ * case they get "Case not found". Everyone else is checked exactly as before.
+ */
+const inWelfareLane = (ctx: Ctx) => ctx.role === "HR_OFFICER" && canCtx(ctx, "welfare.manage");
+function assertHr(ctx: Ctx, permission: Permission) {
+  if (inWelfareLane(ctx)) return;
+  assertCan(ctx, permission);
+}
+
 /** The "which kinds of case" part of a query. With no scope, a caller sees every kind they are allowed to. */
 function scopeWhere(ctx: Ctx, scope?: CaseScope) {
+  if (inWelfareLane(ctx)) {
+    if (scope === "discipline") throw new ForbiddenError("discipline.view");
+    return { type: "WELFARE" as const };
+  }
   if (scope === "discipline") {
     assertCan(ctx, "discipline.view");
     return { type: "MISCONDUCT" as const };
   }
   const hidden: Array<"MISCONDUCT" | "WELFARE"> = [];
   if (scope === "relations" || !can(ctx.role, "discipline.view")) hidden.push("MISCONDUCT");
-  if (!can(ctx.role, "welfare.manage")) hidden.push("WELFARE");
+  if (!canCtx(ctx, "welfare.manage")) hidden.push("WELFARE");
   return hidden.length ? { type: { notIn: hidden } } : {};
 }
 
@@ -118,13 +133,14 @@ async function loadCase(ctx: Ctx, id: string) {
   if (!c) throw new BusinessError("Case not found.");
   // someone without disciplinary access is not even told that a misconduct case exists
   if (isMisconduct(c) && !can(ctx.role, "discipline.view")) throw new BusinessError("Case not found.");
-  if (isWelfare(c) && !can(ctx.role, "welfare.manage")) throw new BusinessError("Case not found.");
+  if (isWelfare(c) && !canCtx(ctx, "welfare.manage")) throw new BusinessError("Case not found.");
+  if (inWelfareLane(ctx) && !isWelfare(c)) throw new BusinessError("Case not found.");
   return c;
 }
 
 /** Read-only HR viewers see a confidential case exist, but not what it contains. */
 const canSeeContent = (ctx: Ctx, c: { confidential: boolean; type: string }) =>
-  !c.confidential || (can(ctx.role, "hr.manage") && (!isMisconduct(c) || can(ctx.role, "discipline.manage")) && (!isWelfare(c) || can(ctx.role, "welfare.manage")));
+  !c.confidential || (inWelfareLane(ctx) && isWelfare(c)) || (can(ctx.role, "hr.manage") && (!isMisconduct(c) || can(ctx.role, "discipline.manage")) && (!isWelfare(c) || can(ctx.role, "welfare.manage")));
 
 function redact<T extends CaseRow>(ctx: Ctx, c: T): T & { redacted: boolean } {
   if (canSeeContent(ctx, c)) return { ...c, redacted: false };
@@ -132,7 +148,7 @@ function redact<T extends CaseRow>(ctx: Ctx, c: T): T & { redacted: boolean } {
 }
 
 export async function listCases(ctx: Ctx, f: { status?: string; type?: string; q?: string; overdue?: boolean; scope?: CaseScope } = {}) {
-  assertCan(ctx, "hr.view");
+  assertHr(ctx, "hr.view");
   const today = todayUtc();
   const rows = await db.relationsCase.findMany({
     where: {
@@ -165,7 +181,7 @@ export async function listCases(ctx: Ctx, f: { status?: string; type?: string; q
 }
 
 export async function getCase(ctx: Ctx, id: string) {
-  assertCan(ctx, "hr.view");
+  assertHr(ctx, "hr.view");
   return redact(ctx, await loadCase(ctx, id));
 }
 
@@ -212,7 +228,7 @@ async function appendNote(
 }
 
 export async function addCaseNote(ctx: Ctx, caseId: string, raw: z.input<typeof noteSchema>) {
-  assertCan(ctx, "hr.manage");
+  assertHr(ctx, "hr.manage");
   const v = noteSchema.parse(raw);
   const c = await loadCase(ctx, caseId);
   assertDisciplinary(ctx, c);
@@ -223,7 +239,7 @@ export async function addCaseNote(ctx: Ctx, caseId: string, raw: z.input<typeof 
 }
 
 export async function assignCase(ctx: Ctx, caseId: string, assignedTo: string) {
-  assertCan(ctx, "hr.manage");
+  assertHr(ctx, "hr.manage");
   const c = await loadCase(ctx, caseId);
   assertDisciplinary(ctx, c);
   if (!OPEN_STATUSES.includes(c.status)) throw new BusinessError("Only an open case can be assigned.");
@@ -240,7 +256,7 @@ const NEXT: Record<string, string[]> = {
 };
 
 export async function setCaseStatus(ctx: Ctx, caseId: string, status: "INVESTIGATING" | "HEARING") {
-  assertCan(ctx, "hr.manage");
+  assertHr(ctx, "hr.manage");
   const c = await loadCase(ctx, caseId);
   assertDisciplinary(ctx, c);
   if (!(NEXT[c.status] ?? []).includes(status))
@@ -259,7 +275,7 @@ export const resolveSchema = z.object({
 });
 
 export async function resolveCase(ctx: Ctx, caseId: string, raw: z.input<typeof resolveSchema>) {
-  assertCan(ctx, "hr.manage");
+  assertHr(ctx, "hr.manage");
   const v = resolveSchema.parse(raw);
   const c = await loadCase(ctx, caseId);
   assertDisciplinary(ctx, c);
@@ -277,7 +293,7 @@ export async function resolveCase(ctx: Ctx, caseId: string, raw: z.input<typeof 
 
 /** Sign-off that a resolved case is complete. A second pair of eyes, hence hr.approve. */
 export async function closeCase(ctx: Ctx, caseId: string) {
-  assertCan(ctx, "hr.approve");
+  assertHr(ctx, "hr.approve");
   const c = await loadCase(ctx, caseId);
   assertDisciplinary(ctx, c);
   if (c.status !== "RESOLVED") throw new BusinessError("Resolve the case before closing it.");
@@ -345,7 +361,7 @@ export async function issueSanctionFromCase(ctx: Ctx, caseId: string, raw: z.inp
 
 /** Headline numbers for the HR overview and the two case pages (misconduct is counted under discipline, not employee relations). */
 export async function caseStats(ctx: Ctx, scope?: CaseScope) {
-  assertCan(ctx, "hr.view");
+  assertHr(ctx, "hr.view");
   const today = todayUtc();
   const kind = scopeWhere(ctx, scope);
   const [open, overdue, resolved, byType] = await Promise.all([

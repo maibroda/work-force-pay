@@ -23,8 +23,8 @@ export const CLIENT_ROLES: readonly string[] = ["CLIENT_APPROVER", "CLIENT_HR"];
  */
 
 export async function twoFactorStateFor(who: { userId: string; orgId: string; role: string }): Promise<{ state: TwoFactorState; enforceFrom: Date | null }> {
-  // a client's own people always sign in with a second factor: no grace period, no policy to switch off
-  if (CLIENT_ROLES.includes(who.role)) {
+  // a client's own people, and a Delegated HR Officer (who may hold welfare cases and other sensitive records, and may be outsourced), always sign in with a second factor: no grace period, no policy to switch off
+  if (CLIENT_ROLES.includes(who.role) || who.role === "HR_OFFICER") {
     const u = await db.user.findUnique({ where: { id: who.userId }, select: { totpEnabled: true } });
     return { state: u?.totpEnabled ? "ENROLLED" : "BLOCKED", enforceFrom: null };
   }
