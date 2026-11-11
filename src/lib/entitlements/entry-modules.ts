@@ -44,6 +44,7 @@ export const PAGE_MODULES: Record<string, EntryModule> = {
   "/analytics/payroll": "analytics",
   "/analytics/profitability": "analytics",
   "/analytics/variance": "analytics",
+  "/analytics/workforce": "analytics",
   "/analytics/workforce-cost": "analytics",
   "/beats": "contracts_deployment",
   "/beats/bids": "contracts_deployment",

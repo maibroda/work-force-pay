@@ -25,6 +25,7 @@ const OLD_SETTINGS: Record<string, Permission> = {
 };
 const OLD_ANALYTICS: Record<string, Permission> = {
   "/analytics/payroll": "analytics.view",
+  "/analytics/workforce": "analytics.view", // added with the Workforce overview
   "/analytics/workforce-cost": "analytics.view",
   "/analytics/client-cost": "analytics.view",
   "/analytics/profitability": "analytics.view",
