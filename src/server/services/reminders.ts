@@ -16,6 +16,7 @@ import { logger } from "@/lib/logger";
 import { naira } from "@/lib/money";
 import { fullName } from "@/lib/utils";
 import { assertCan, db } from "./_base";
+import { openSurveysFor } from "./survey";
 import { logAudit } from "./audit";
 import { entitledOrgs } from "./entitlement-switch";
 import { getHrPolicy, todayUtc } from "./hr-policy";
@@ -281,6 +282,11 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
       take: 200,
     });
     add(section("training-evaluations-due", "Training evaluations the manager has not given", due.map((x) => ({ text: `${name(x.employee)} — ${x.session.programme.name}`, path: "/hr/training-evaluations" }))));
+  }
+  // a survey that is open: its title and the counts (never who took part)
+  {
+    const surveys = await openSurveysFor(orgId, today);
+    add(section("surveys-open", "Surveys open", surveys.map((x) => ({ text: `${x.title} — ${x.took} of ${x.invited} have taken part, ${x.daysLeft} day(s) left`, path: `/hr/surveys/${x.id}` }))));
   }
   // an approved promotion not yet applied for the company's number of days (0 = never flagged): HR has to change the role and mark it applied
   if (policy.promotionApplyAlertDays > 0) {

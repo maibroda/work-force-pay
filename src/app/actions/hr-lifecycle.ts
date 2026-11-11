@@ -23,7 +23,7 @@ const zeroIsNone = (n: unknown) => (n === undefined ? undefined : Number(n) === 
 // ───────────────────────────── Policy & templates ─────────────────────────────
 
 /** Each settings form saves its own section; blank numeric fields leave a value unchanged. */
-export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuity" | "severance" | "loans" | "reminders" | "retention" | "records" | "appraisal" | "recognition" | "career" | "pip" | "training" | "changes" | "privacy" | "dpo", v: V) {
+export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuity" | "severance" | "loans" | "reminders" | "retention" | "records" | "appraisal" | "recognition" | "career" | "surveys" | "pip" | "training" | "changes" | "privacy" | "dpo", v: V) {
   return act(
     "hr.configure",
     async (ctx) => {
@@ -31,6 +31,7 @@ export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuit
       if (section === "terms") patch = v;
       if (section === "pip") patch = v;
       if (section === "career") patch = v;
+      if (section === "surveys") patch = { surveyRetentionMonths: v.surveyRetentionMonths };
       if (section === "recognition") {
         const years = parseMilestoneYears(String(v.longServiceYears ?? ""));
         if (!years) throw new BusinessError("Give the long-service years as whole numbers from 1 to 60, separated by commas (at most ten), for example 5, 10, 15, 20.");

@@ -85,6 +85,8 @@ export function limitKey(ip: string, token: string): string {
 
 /** The public unsubscribe address: 30 a minute from one address. */
 export const unsubscribeLimiter = createLimiter({ limit: 30, windowMs: 60_000 });
+/** Someone typing survey access codes with no login (a QR code or a shared device): 30 tries a minute for one survey from one address. */
+export const surveyCodeLimiter = createLimiter({ limit: 30, windowMs: 60_000 });
 /** A person downloading data (CSV exports, reports, data-request files): 10 in five minutes. */
 export const exportLimiter = createLimiter({ limit: 10, windowMs: 5 * 60_000 });
 /** A person sending email to contacts from the sales module: 60 an hour. */

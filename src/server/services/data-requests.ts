@@ -56,7 +56,7 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
   if (!e) throw new BusinessError("Employee not found.");
   const where = { organizationId: orgId, employeeId };
 
-  const [contracts, exits, settlements, onboarding, deployments, movements, attendance, payslips, loans, leave, training, documents, discipline, cases, contacts, guarantors, appraisals, acks, letters, changes, candidate, kit, plans, probationDecisions, feedback, trainingEnrolments, trainingNeeds, recognition, trainingEvaluations, trainingRequests, skillAssessments, promotions] =
+  const [contracts, exits, settlements, onboarding, deployments, movements, attendance, payslips, loans, leave, training, documents, discipline, cases, contacts, guarantors, appraisals, acks, letters, changes, candidate, kit, plans, probationDecisions, feedback, trainingEnrolments, trainingNeeds, recognition, trainingEvaluations, trainingRequests, skillAssessments, surveyParticipation, promotions] =
     await Promise.all([
       db.employmentContract.findMany({ where, orderBy: { startDate: "asc" } }),
       db.exitRecord.findMany({ where, orderBy: { createdAt: "asc" } }),
@@ -102,6 +102,8 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
       db.trainingRequest.findMany({ where: { ...where, status: "ACCEPTED" }, select: { courseName: true, reason: true, requestedAt: true }, orderBy: { requestedAt: "asc" } }),
       // their skill assessments: the employee reads all of it (the level, who assessed, when and the comment)
       db.skillAssessment.findMany({ where, select: { level: true, comment: true, assessedOn: true, assessedBy: true, skill: { select: { name: true } } }, orderBy: { assessedOn: "asc" } }),
+      // the surveys they took part in and the day: never an answer (an answer carries no person, so it cannot be in their copy)
+      db.surveyAccessCode.findMany({ where: { ...where, status: "USED" }, select: { usedOn: true, survey: { select: { title: true } } }, orderBy: { usedOn: "asc" } }),
       // promotions decided for them (approved or applied); never a proposal still being considered or declined, which they have not been told about. Succession is never included.
       db.promotionProposal.findMany({ where: { ...where, status: { in: ["APPROVED", "APPLIED"] } }, include: { fromCategory: { select: { name: true } }, toCategory: { select: { name: true } } }, orderBy: { proposedAt: "asc" } }),
     ]);
@@ -239,6 +241,10 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
     trainingRequests: {
       title: "Training requested for you (accepted requests)",
       records: trainingRequests.map((x) => ({ course: x.courseName, requestedOn: dt(x.requestedAt), reason: x.reason })),
+    },
+    surveys: {
+      title: "Surveys you took part in",
+      records: surveyParticipation.map((x) => ({ survey: x.survey.title, tookPartOn: dt(x.usedOn) })),
     },
     skillAssessments: {
       title: "Your skill assessments",

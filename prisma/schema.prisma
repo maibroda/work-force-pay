@@ -602,6 +602,11 @@ model Organization {
   skills                    Skill[]
   roleSkills                RoleSkill[]
   skillAssessments          SkillAssessment[]
+  surveys                   Survey[]
+  surveyQuestions           SurveyQuestion[]
+  surveyAccessCodes         SurveyAccessCode[]
+  surveyKioskSessions       SurveyKioskSession[]
+  surveyAggregates          SurveyAggregate[]
   recognitionAwardTypes     RecognitionAwardType[]
   recognitionAwards         RecognitionAward[]
   careerPaths               CareerPath[]
@@ -2038,6 +2043,7 @@ model Employee {
   trainingNeeds           TrainingNeed[]
   trainingRequests        TrainingRequest[]
   skillAssessments        SkillAssessment[]
+  surveyAccessCodes       SurveyAccessCode[]
   recognitionAwards       RecognitionAward[]
   promotionProposals      PromotionProposal[]
   successionCandidates    SuccessionCandidate[]
@@ -2439,6 +2445,8 @@ model HrPolicy {
   trainingEvaluationDays Int @default(60)
   /// A skill assessment older than this many days is listed as stale for HR (0 = never).
   skillReassessDays Int @default(365)
+  /// Raw survey answers are deleted this many months after a survey closes (0 = never deleted automatically); the anonymised results are kept.
+  surveyRetentionMonths Int @default(24)
 
   // Change control for bank, tax and pension details
   /// A change needs a second person's approval (otherwise anyone who can edit an employee can change it).
@@ -8167,4 +8175,144 @@ model SkillAssessment {
   createdAt        DateTime     @default(now())
 
   @@index([organizationId, employeeId, skillId])
+}
+
+// ─────────────────────────── ENGAGEMENT SURVEYS ───────────────────────────
+// Anonymous by design: an ANSWER carries no person, no user, no time and a random id (a UUID, not an id that orders by time). Who has taken part is kept only on the
+// access-code row, and no page lists it: HR sees counts. The code and the answer are separated in one step: the code is marked used, the answer is stored without it.
+
+enum SurveyStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+enum SurveyQuestionKind {
+  SCALE
+  COMMENT
+}
+
+enum SurveyCodeStatus {
+  ACTIVE
+  USED
+  CANCELLED
+}
+
+/// An engagement survey: a few five-point statements and optional comments, for everyone, one role or one department.
+model Survey {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  title          String
+  intro          String?
+  /// The audience: everyone when both are null, otherwise one role or one department.
+  categoryId     String?
+  departmentId   String?
+  opensOn        DateTime     @db.Date
+  closesOn       DateTime     @db.Date
+  status         SurveyStatus @default(DRAFT)
+  /// Employees invited when it was opened.
+  invitedCount   Int          @default(0)
+  closedAt       DateTime?
+  /// What the company is doing about the results; every invited employee can read it.
+  followUp       String?
+  /// When the raw answers were deleted (the anonymised results are kept in SurveyAggregate).
+  rawDeletedAt   DateTime?
+  createdBy      String
+  createdAt      DateTime     @default(now())
+
+  questions SurveyQuestion[]
+  codes     SurveyAccessCode[]
+  sessions  SurveyKioskSession[]
+  aggregate SurveyAggregate?
+
+  @@index([organizationId, status])
+}
+
+model SurveyQuestion {
+  id             String             @id @default(cuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  surveyId       String
+  survey         Survey             @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  position       Int
+  kind           SurveyQuestionKind
+  text           String
+
+  answers SurveyAnswer[]
+
+  @@index([surveyId, position])
+}
+
+/// One invited employee's single-use access code (stored only as a hash). It is the participation record: HR sees counts of used and unused, never which.
+model SurveyAccessCode {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  surveyId       String
+  survey         Survey           @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       Employee         @relation(fields: [employeeId], references: [id])
+  /// The group the person belonged to when invited (for a breakdown, shown only when safe).
+  categoryId     String?
+  departmentId   String?
+  codeHash       String           @unique
+  status         SurveyCodeStatus @default(ACTIVE)
+  /// The day it was used (a day only).
+  usedOn         DateTime?        @db.Date
+  createdAt      DateTime         @default(now())
+
+  @@index([surveyId, status])
+  @@index([surveyId, employeeId])
+}
+
+/// One submitted survey. NO person, NO user, NO time: only the survey and the group labels used for a breakdown. The id is a random UUID.
+model SurveyResponse {
+  id           String  @id @default(uuid())
+  surveyId     String
+  categoryId   String?
+  departmentId String?
+
+  answers SurveyAnswer[]
+
+  @@index([surveyId])
+}
+
+/// One answer. No time, a random id. A comment HR hides (for example one that names a person) stays out of the results.
+model SurveyAnswer {
+  id           String         @id @default(uuid())
+  responseId   String
+  response     SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  questionId   String
+  question     SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  value        Int?
+  comment      String?
+  hidden       Boolean        @default(false)
+  hiddenReason String?
+
+  @@index([questionId])
+}
+
+/// A record that an authorised HR representative ran an assisted session: the survey, the day and the device. Never who took part.
+model SurveyKioskSession {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  surveyId        String
+  survey          Survey       @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  day             DateTime     @db.Date
+  deviceLabel     String
+  startedByUserId String
+  createdAt       DateTime     @default(now())
+}
+
+/// The anonymised results kept after the raw answers are deleted.
+model SurveyAggregate {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  surveyId       String       @unique
+  survey         Survey       @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  summary        Json
+  createdAt      DateTime     @default(now())
 }
