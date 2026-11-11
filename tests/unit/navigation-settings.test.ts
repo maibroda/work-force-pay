@@ -14,6 +14,7 @@ const OLD_SETTINGS: Record<string, Permission> = {
   "/settings/organization": "dashboard.view",
   "/settings/users": "users.manage",
   "/settings/roles": "dashboard.view",
+  "/settings/hr-officers": "hr.officer.manage", // added with the Delegated HR Officer (governance step 1)
   "/settings/subscription": "subscription.view",
   "/settings/entitlements": "subscription.manage",
   "/settings/price-book": "pricebook.manage",

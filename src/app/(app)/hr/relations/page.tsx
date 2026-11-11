@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
+import { canCtx } from "@/lib/hr-functions";
 import { caseStats, listCases } from "@/server/services/relations";
 import { options, enumOptions } from "@/server/options";
 import { fmtDate } from "@/lib/dates";
@@ -21,7 +22,7 @@ export default async function RelationsPage({ searchParams }: { searchParams: Pr
   const ctx = await requirePage("hr.view");
   const sp = await searchParams;
   // welfare support is only for the people who hold the welfare right: it is not offered to anyone else
-  const types = can(ctx.role, "welfare.manage") ? [...TYPES, "WELFARE"] : TYPES;
+  const types = canCtx(ctx, "welfare.manage") ? [...TYPES, "WELFARE"] : TYPES;
   const [rows, stats, o] = await Promise.all([
     listCases(ctx, { status: sp.status, type: sp.type, q: sp.q, overdue: sp.overdue === "1", scope: "relations" }),
     caseStats(ctx, "relations"),

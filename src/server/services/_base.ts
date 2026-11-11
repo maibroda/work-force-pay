@@ -1,7 +1,8 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { Ctx } from "@/lib/auth/context";
-import { can, ForbiddenError, type Permission } from "@/lib/auth/permissions";
+import { ForbiddenError, type Permission } from "@/lib/auth/permissions";
+import { canCtx } from "@/lib/hr-functions";
 
 export type Tx = Prisma.TransactionClient | PrismaClient;
 export { db };
@@ -15,7 +16,7 @@ export class BusinessError extends Error {
 
 /** Defence in depth: services re-check permissions even when the caller already did. */
 export function assertCan(ctx: Ctx, permission: Permission) {
-  if (!can(ctx.role, permission)) throw new ForbiddenError(permission);
+  if (!canCtx(ctx, permission)) throw new ForbiddenError(permission);
 }
 
 /** Every org-owned query goes through this to force tenancy scoping. */

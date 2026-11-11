@@ -1,5 +1,5 @@
 import type { Entitlements } from "@/lib/entitlements/guard";
-import type { Role } from "./permissions";
+import type { Permission, Role } from "./permissions";
 
 /** Request context passed to every service. organizationId scopes ALL data access. */
 export interface Ctx {
@@ -14,4 +14,6 @@ export interface Ctx {
   ip?: string | null;
   /** What the company's modules allow, for the guards in src/server/services/entitlement-guard.ts. Not set by anything yet (E3b), so nothing is checked. */
   entitlements?: Entitlements;
+  /** The permissions opened by a Delegated HR Officer's live function grants, read from the database on every request (never from the token). Empty or unset for everyone else. */
+  grants?: Permission[];
 }

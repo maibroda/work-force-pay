@@ -2,6 +2,8 @@ export type Role =
   | "SUPER_ADMIN"
   | "COMPANY_ADMIN"
   | "HR_ADMIN"
+  /** A Delegated HR Officer: can do almost nothing until the Company Administrator grants one or more of four fixed HR functions (src/lib/hr-functions.ts). */
+  | "HR_OFFICER"
   | "OPERATIONS"
   | "PAYROLL_ADMIN"
   | "FINANCE"
@@ -79,6 +81,7 @@ export const PERMISSIONS = [
   "career.propose", // propose that an employee moves to another role (category): HR about anyone, a manager about their own direct reports; a record of a decision only
   "training.request", // ask for a course for an employee and evaluate a course they attended: HR about anyone, a manager about their own direct reports
   "skills.assess", // assess an employee's skill level: HR about anyone, a manager about their own direct reports; a record, never a score that changes pay or an appraisal
+  "hr.officer.manage", // appoint a Delegated HR Officer and grant or revoke their functions: the Company Administrator (and platform staff) ONLY, never the HR administrator
   "survey.manage", // create, open and close an engagement survey, hide a comment, write the follow-up note: the HR administrator ONLY (withheld from the administrators below)
   "survey.assist", // run an assisted survey session for employees without a login: the HR administrator ONLY, never a supervisor
   "succession.manage", // keep the succession list (critical roles and their successors): the HR administrator ONLY, withheld from the administrators below
@@ -314,6 +317,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "skills.assess",
   ],
   EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise"],
+  // nothing in HR until a function is granted (see canCtx in src/lib/hr-functions.ts)
+  HR_OFFICER: ["self.view", "self.security"],
   // the bureau's sales person sees the CRM and nothing else: no payroll, employee, client or finance data
   BUSINESS_DEV: ["blueprint.manage", "crm.view", "crm.manage", "sales.view", "sales.manage", "sales.case.manage", "healthcheck.view", "self.security"],
   // a company's own sales people see the sales module and nothing else: no bureau pipeline, payroll, employee, client or finance data. They differ only in WHICH records they see:

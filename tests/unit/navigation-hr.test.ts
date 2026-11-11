@@ -90,6 +90,12 @@ describe("HR Lifecycle and Leave Management become one entry, HR", () => {
         for (const r of roles) if (can(r, s.perm)) expect(can(r, "hr.view"), r).toBe(true);
         continue;
       }
+      // Welfare cases was added with the Delegated HR Officer (governance step 1): the page for the welfare function, which only the HR administrator holds among the standing roles
+      if (s.href === "/hr/welfare-cases") {
+        expect(s.perm).toBe("welfare.manage");
+        for (const r of roles) if (can(r, s.perm)) expect(can(r, "hr.view"), r).toBe(true);
+        continue;
+      }
       expect(s.perm, s.href).toBe(was.get(s.href));
       for (const r of roles) expect(can(r, s.perm)).toBe(can(r, was.get(s.href)!));
     }
@@ -118,7 +124,7 @@ describe("HR Lifecycle and Leave Management become one entry, HR", () => {
     for (const h of ["/hr/onboarding", "/hr/contracts", "/hr/exits", "/payroll/settlements", "/hr/attrition", "/hr/letters"]) expect(admin, h).toContain(h);
     expect(HR_AREA.sections.filter((s) => s.group === "Performance management").map((s) => s.href)).toEqual(["/hr/appraisals", "/hr/feedback", "/hr/improvement-plans", "/hr/recognition", "/hr/promotions", "/hr/skills", "/hr/succession", "/hr/job-descriptions", "/settings/appraisal-criteria", "/settings/career-paths", "/settings/skills"]);
     expect(HR_AREA.sections.filter((s) => s.group === "Learning & development").map((s) => s.href)).toEqual(["/hr/training", "/hr/training-calendar", "/hr/training-needs", "/hr/training-requests", "/hr/training-evaluations", "/settings/training-requirements"]);
-    expect(HR_AREA.sections.filter((s) => s.group === "Employee relations").map((s) => s.href)).toEqual(["/hr/relations", "/hr/welfare-summary", "/hr/surveys"]);
+    expect(HR_AREA.sections.filter((s) => s.group === "Employee relations").map((s) => s.href)).toEqual(["/hr/relations", "/hr/welfare-cases", "/hr/welfare-summary", "/hr/surveys"]);
     expect(HR_AREA.sections.filter((s) => s.group === "Disciplinary").map((s) => s.href)).toEqual(["/hr/discipline"]);
   });
 });

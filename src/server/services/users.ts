@@ -5,6 +5,8 @@ import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { countLoginFailure, logUnknownAccount, recordAuthEvent, type AuthMeta } from "./auth-audit";
 import { isLocked } from "@/lib/auth/login-guard";
+import { accessEnded } from "@/lib/hr-functions";
+import { iso } from "@/lib/dates";
 
 /**
  * Returns null uniformly for "no such user", "wrong password", "account locked" AND "account switched off" — none distinguishes
@@ -20,6 +22,11 @@ export async function authenticate(email: string, password: string, meta: AuthMe
     return null;
   }
   if (!user.active) {
+    await recordAuthEvent(user, "LOGIN_FAILED", "ACCOUNT_INACTIVE", meta, { step: "PASSWORD" });
+    return null;
+  }
+  // an outsourced officer's access ends after their end date (the day itself still works); recorded like a switched-off account, so it cannot be told apart from one from outside
+  if (accessEnded(user.accessEndsOn ? iso(user.accessEndsOn) : null, iso(new Date()))) {
     await recordAuthEvent(user, "LOGIN_FAILED", "ACCOUNT_INACTIVE", meta, { step: "PASSWORD" });
     return null;
   }

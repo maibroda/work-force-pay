@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
-import { can } from "@/lib/auth/permissions";
+import { canCtx } from "@/lib/hr-functions";
 import { MIN_RESPONSES, SCALE_LABELS } from "@/lib/survey";
 import { getSurvey, results } from "@/server/services/survey";
 import { BusinessError } from "@/server/services/_base";
@@ -27,7 +27,7 @@ export default async function SurveyPage({ params }: { params: Promise<{ id: str
   }
   const closed = s.state === "CLOSED";
   const r = closed ? await results(ctx, id) : null;
-  const canAssist = can(ctx.role, "survey.assist");
+  const canAssist = canCtx(ctx, "survey.assist");
   return (
     <>
       <PageHeader title={s.title} description={`${s.intro ? s.intro + " " : ""}Opens ${fmtDate(s.opensOn)}, closes ${fmtDate(s.closesOn)}.`} />

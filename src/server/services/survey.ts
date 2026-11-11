@@ -18,7 +18,13 @@ import type { Ctx } from "@/lib/auth/context";
 import { d, iso } from "@/lib/dates";
 import { surveyCodeLimiter } from "@/lib/rate-limit";
 import { MAX_QUESTIONS, COMMENT_MAX, QUESTION_TEXT_MAX, MIN_RESPONSES, breakdown, generateCode, hashCode, normaliseCode, retentionDue, summarise, surveyState, type GroupCount, type ScaleSummary } from "@/lib/survey";
+import { canCtx } from "@/lib/hr-functions";
 import { assertCan, BusinessError, db } from "./_base";
+
+/** Reading surveys and their results: HR viewers, and a Delegated HR Officer who holds the Surveys function (who has no general HR permission). */
+function assertSurveyReader(ctx: Ctx) {
+  if (!canCtx(ctx, "hr.view")) assertCan(ctx, "survey.manage");
+}
 import { logAudit } from "./audit";
 import { getHrPolicy, todayUtc } from "./hr-policy";
 
@@ -164,7 +170,7 @@ function groups(codes: Array<{ employeeId: string; status: string; categoryId: s
 }
 
 export async function listSurveys(ctx: Ctx) {
-  assertCan(ctx, "hr.view");
+  assertSurveyReader(ctx);
   const rows = await db.survey.findMany({
     where: { organizationId: ctx.orgId },
     select: { id: true, title: true, status: true, opensOn: true, closesOn: true, invitedCount: true, closedAt: true, rawDeletedAt: true },
@@ -223,7 +229,7 @@ function groupResult(rows: Array<{ key: string; label: string; invited: number; 
 
 /** The results of a closed survey, without picking a person out. After the retention period they come from the kept anonymised summary. */
 export async function results(ctx: Ctx, id: string) {
-  assertCan(ctx, "hr.view");
+  assertSurveyReader(ctx);
   const s = await db.survey.findFirst({ where: { id, organizationId: ctx.orgId }, include: { aggregate: { select: { summary: true } } } });
   if (!s) throw new BusinessError(NOT_FOUND);
   const state = surveyState(s.status, iso(s.opensOn), iso(s.closesOn), todayIso());
