@@ -96,6 +96,11 @@ export async function runRetentionNow(ctx: Ctx) {
   return r;
 }
 
+/** How many candidates are past the period, as of `now`, for the due view and the digest (read only). */
+export async function dueCandidateCount(orgId: string, months: number, now: Date): Promise<number> {
+  return months > 0 ? (await eligibleCandidates(orgId, months, now)).length : 0;
+}
+
 /** How many candidates the next run would anonymize, for the settings page. */
 export async function retentionPreview(ctx: Ctx) {
   assertCan(ctx, "hr.view");
