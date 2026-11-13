@@ -29,6 +29,7 @@ import { policyAttention } from "./policies";
 import { requestsNeedingAttention } from "./data-requests";
 import { breachesNeedingAttention } from "./breaches";
 import { retentionAttention } from "./employee-retention";
+import { retentionNotices } from "./retention-due";
 import { describeHours } from "@/lib/breaches";
 import { STATE_LABELS } from "@/lib/training-compliance";
 import { appraisalAttention } from "./appraisals";
@@ -68,7 +69,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
   const contractHorizon = addDays(today, policy.contractAlertDays);
   const probationHorizon = addDays(today, policy.probationAlertDays);
   const caseHorizon = addDays(today, 3);
-  const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records, training, appraisals, changes, policies, dataRequests, breaches, retention, plans, failedProbations] =
+  const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records, training, appraisals, changes, policies, dataRequests, breaches, retention, plans, failedProbations, retentionDue] =
     await Promise.all([
       db.organization.findUniqueOrThrow({ where: { id: orgId }, select: { name: true } }),
       db.jobRequisition.findMany({ where: { organizationId: orgId, status: "PENDING_APPROVAL" }, orderBy: { createdAt: "asc" } }),
@@ -114,6 +115,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
         include: { employee: true },
         orderBy: { updatedAt: "asc" },
       }),
+      retentionNotices(orgId, today),
     ]);
 
   const escalatedProbations = probation.filter((c) => escalated(daysOverdue(iso(c.probationEndDate!), iso(today)), policy.probationEscalationDays));
@@ -331,6 +333,9 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
       [
         ...(retention.pending ? [{ text: `${retention.pending} erasure request(s) waiting for a second person to approve`, path: "/hr/retention" }] : []),
         ...(retention.ready ? [{ text: `${retention.ready} former employee(s) are past the retention period with nothing in the way`, path: "/hr/retention" }] : []),
+        ...(retentionDue.pastCategories ? [{ text: `${retentionDue.pastCategories} kind(s) of record have items past their retention period`, path: "/hr/retention-schedule" }] : []),
+        ...(retentionDue.soonCategories ? [{ text: `${retentionDue.soonCategories} kind(s) of record have items reaching the end of their retention period within 90 days`, path: "/hr/retention-schedule" }] : []),
+        ...(retentionDue.holdsToReview ? [{ text: `${retentionDue.holdsToReview} legal hold(s) are due for a review`, path: "/hr/retention-schedule" }] : []),
       ],
     ),
   );

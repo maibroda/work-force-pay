@@ -315,7 +315,9 @@ describe("what is due", () => {
     expect(by.EMPLOYEE_FILE).toMatchObject({ measured: true, due: 2, held: 1 });
     expect(by.UNSUCCESSFUL_APPLICANTS).toMatchObject({ measured: true, due: 0 });
     expect(by.RAW_SURVEYS).toMatchObject({ measured: true, due: 0 });
-    for (const c of ["APPRAISALS", "DISCIPLINARY", "WELFARE_CASES", "AUDIT_LOGS", "ACCESS_LOGS", "SUCCESSION"] as const) expect(by[c], c).toMatchObject({ measured: false });
+    // step 3b-1 measures the rest; only the two that cannot be worked out say "not measured"
+    for (const c of ["APPRAISALS", "DISCIPLINARY", "WELFARE_CASES", "AUDIT_LOGS", "SUCCESSION"] as const) expect(by[c], c).toMatchObject({ measured: true });
+    for (const c of ["ACCESS_LOGS", "SURVEY_REPORTS"] as const) expect(by[c], c).toMatchObject({ measured: false });
     expect(d.categories).toHaveLength(15);
     expect(JSON.stringify(d)).not.toContain("Okafor");
   });

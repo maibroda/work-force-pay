@@ -101,6 +101,52 @@ export const APPLIED_FROM_POLICY: Partial<Record<RetentionCategory, "employeeRet
 
 export const MAX_PERIOD_MONTHS = 1200;
 
+/**
+ * The triggers the system can work out today for each category. A rule may name another trigger (the schedule is a record for the lawyer); the due view then says it is not measured
+ * rather than guessing. ACCESS_LOGS has no account-closure date to count from, and the anonymised survey reports are kept indefinitely.
+ */
+export const MEASURABLE_TRIGGERS: Partial<Record<RetentionCategory, readonly RetentionTrigger[]>> = {
+  EMPLOYEE_FILE: ["AFTER_EXIT"],
+  APPRAISALS: ["AFTER_EXIT"],
+  PROBATION: ["AFTER_EXIT"],
+  FEEDBACK: ["AFTER_EXIT"],
+  IMPROVEMENT_PLANS: ["AFTER_EXIT"],
+  DISCIPLINARY: ["AFTER_EXIT"],
+  TRAINING: ["AFTER_EXIT"],
+  SKILLS: ["AFTER_EXIT"],
+  WELFARE_CASES: ["AFTER_CLOSURE", "AFTER_EXIT"],
+  SUCCESSION: ["AFTER_RECORD_DATE", "AFTER_EXIT"],
+  RAW_SURVEYS: ["AFTER_SURVEY_CLOSE"],
+  AUDIT_LOGS: ["AFTER_RECORD_DATE"],
+  UNSUCCESSFUL_APPLICANTS: ["AFTER_RECRUITMENT_CLOSE"],
+};
+export const triggerMeasurable = (category: RetentionCategory, trigger: string): boolean => (MEASURABLE_TRIGGERS[category] as readonly string[] | undefined)?.includes(trigger) ?? false;
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** The day a period of whole months ends, counted from a day ("YYYY-MM-DD"): the same day of the month, or the last day of a shorter month. */
+export function expiryDay(base: string, months: number): string {
+  const [y, m, d] = base.split("-").map(Number);
+  const total = y * 12 + (m - 1) + months;
+  const ny = Math.floor(total / 12);
+  const nm = total % 12;
+  const lastDay = new Date(Date.UTC(ny, nm + 1, 0)).getUTCDate();
+  return `${ny}-${pad2(nm + 1)}-${pad2(Math.min(d, lastDay))}`;
+}
+
+const plusDays = (day: string, n: number): string => new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+
+export const SOON_DAYS = 90;
+export type Expiry = "NONE" | "PAST" | "SOON" | "LATER";
+
+/** Where a record stands against its period: past it (on or after the expiry day), expiring within 90 days, later, or no period at all. */
+export function expiryStatus(base: string, months: number, today: string, soonDays = SOON_DAYS): Expiry {
+  if (months <= 0) return "NONE";
+  const end = expiryDay(base, months);
+  if (end <= today) return "PAST";
+  return end <= plusDays(today, soonDays) ? "SOON" : "LATER";
+}
+
 /** A rule must make sense: deleting or anonymising needs a period of at least a month; keeping has no period; a period is whole months up to a hundred years. */
 export function checkRule(r: { periodMonths: number; trigger: string; action: string }): string | null {
   if (!Number.isInteger(r.periodMonths) || r.periodMonths < 0 || r.periodMonths > MAX_PERIOD_MONTHS) return `The period is a whole number of months, from 0 to ${MAX_PERIOD_MONTHS}.`;

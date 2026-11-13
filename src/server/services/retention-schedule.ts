@@ -29,11 +29,10 @@ import {
 } from "@/lib/retention-schedule";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
-import { retentionOverview } from "./employee-retention";
 import { getHrPolicy, todayUtc } from "./hr-policy";
-import { retentionPreview } from "./retention";
-import { categoryHeld } from "./retention-holds";
-import { expiredSurveyCount } from "./survey";
+import { measureCategories } from "./retention-due";
+
+export { retentionNotices } from "./retention-due";
 
 const todayIso = () => iso(todayUtc());
 
@@ -200,25 +199,9 @@ export async function releaseHold(ctx: Ctx, id: string, reason: string) {
 }
 
 /**
- * What is due, as counts. Only three categories can be measured today (the ones the system already applies); the rest say "not measured yet". Counts only: no name, and nothing here
- * deletes anything.
+ * What is due, as counts, for every category the system can work out (retention-due.ts); the rest say why they are not measured. Counts only: no name, and nothing here deletes anything.
  */
 export async function dueView(ctx: Ctx) {
   assertCan(ctx, "hr.view");
-  const policy = await getHrPolicy(ctx.orgId);
-  const [overview, applicants, surveysDue, applicantsHeld, surveysHeld] = await Promise.all([
-    retentionOverview(ctx),
-    retentionPreview(ctx),
-    expiredSurveyCount(ctx.orgId, policy.surveyRetentionMonths),
-    categoryHeld(ctx.orgId, "UNSUCCESSFUL_APPLICANTS"),
-    categoryHeld(ctx.orgId, "RAW_SURVEYS"),
-  ]);
-  const categories = RETENTION_CATEGORIES.map((category) => {
-    const base = { category, label: RETENTION_CATEGORY_LABELS[category], measured: false, due: 0, held: 0, off: false };
-    if (category === "EMPLOYEE_FILE") return { ...base, measured: true, due: overview.due.length, held: overview.due.filter((x) => x.onHold).length, off: overview.years <= 0 };
-    if (category === "UNSUCCESSFUL_APPLICANTS") return { ...base, measured: true, due: applicants.due, held: applicantsHeld ? applicants.due : 0, off: applicants.months <= 0 };
-    if (category === "RAW_SURVEYS") return { ...base, measured: true, due: surveysDue, held: surveysHeld ? surveysDue : 0, off: policy.surveyRetentionMonths <= 0 };
-    return base;
-  });
-  return { categories };
+  return { categories: await measureCategories(ctx.orgId) };
 }

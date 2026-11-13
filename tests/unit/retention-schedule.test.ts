@@ -9,6 +9,9 @@ import {
   RETENTION_TRIGGERS,
   checkHoldInput,
   checkRule,
+  expiryDay,
+  expiryStatus,
+  triggerMeasurable,
   holdBlocks,
   holdBlocksPerson,
   holdNeedsReview,
@@ -120,5 +123,34 @@ describe("the existing erasure rules know about a hold", () => {
     const blocked = erasureBlockers({ ...facts, onHold: true });
     expect(blocked).toHaveLength(1);
     expect(blocked[0]).toMatch(/legal hold/i);
+  });
+});
+
+describe("when a record's period ends (governance step 3b: measuring what is due)", () => {
+  it("adds whole months to a day, keeping the day of the month and clamping to the end of a shorter month", () => {
+    expect(expiryDay("2020-03-15", 72)).toBe("2026-03-15");
+    expect(expiryDay("2026-01-31", 1)).toBe("2026-02-28");
+    expect(expiryDay("2027-12-31", 2)).toBe("2028-02-29"); // a leap year
+    expect(expiryDay("2026-11-30", 3)).toBe("2027-02-28");
+    expect(expiryDay("2026-11-13", 24)).toBe("2028-11-13");
+    expect(expiryDay("2026-11-13", 0)).toBe("2026-11-13");
+  });
+  it("is PAST on and after the expiry day, SOON in the 90 days before it, LATER before that, and NONE when there is no period", () => {
+    expect(expiryStatus("2020-11-13", 72, "2026-11-13")).toBe("PAST"); // expires today
+    expect(expiryStatus("2020-11-12", 72, "2026-11-13")).toBe("PAST");
+    expect(expiryStatus("2020-11-14", 72, "2026-11-13")).toBe("SOON"); // tomorrow
+    expect(expiryStatus("2021-02-11", 72, "2026-11-13")).toBe("SOON"); // exactly 90 days ahead (2027-02-11)
+    expect(expiryStatus("2021-02-12", 72, "2026-11-13")).toBe("LATER"); // 91 days ahead
+    expect(expiryStatus("2020-01-01", 0, "2026-11-13")).toBe("NONE");
+  });
+  it("measures only the triggers the system can actually work out for a category, and says so for the rest", () => {
+    expect(triggerMeasurable("DISCIPLINARY", "AFTER_EXIT")).toBe(true);
+    expect(triggerMeasurable("DISCIPLINARY", "AFTER_CLOSURE")).toBe(false);
+    expect(triggerMeasurable("WELFARE_CASES", "AFTER_CLOSURE")).toBe(true);
+    expect(triggerMeasurable("WELFARE_CASES", "AFTER_EXIT")).toBe(true);
+    expect(triggerMeasurable("SUCCESSION", "AFTER_RECORD_DATE")).toBe(true);
+    expect(triggerMeasurable("AUDIT_LOGS", "AFTER_RECORD_DATE")).toBe(true);
+    expect(triggerMeasurable("ACCESS_LOGS", "AFTER_ACCOUNT_CLOSURE")).toBe(false); // not measured yet: the log has no account-closure date
+    expect(triggerMeasurable("SURVEY_REPORTS", "AFTER_SURVEY_CLOSE")).toBe(false); // kept indefinitely: nothing to measure
   });
 });

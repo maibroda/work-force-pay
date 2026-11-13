@@ -6,7 +6,18 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `governance-step3`, one migration: 20261211090000_retention_schedule_and_holds)
+
+## Not yet merged (branch `governance-step3b1`, no migration)
+
+- **HR governance, step 3b-1: measuring what is due, and telling HR** (the founder's "go with governance step 3b"). **I split 3b in two.** This half **only measures and tells HR; it deletes and changes nothing.** The half that removes things (the retention run, confirmed by a second person) needs your answers first: it is written up as `docs/plans/hr-governance-step3b2-plan.md`, seven questions with recommended answers. **No money is involved and no migration.**
+- **"What is due" now covers every category the system can work out**, using the company's own rule (period, and the day it is counted from): the former employees past the period who still hold appraisals, probation records, feedback, improvement plans, disciplinary records, training or skills; welfare cases counted from the day they were closed; succession entries counted from the last review; audit log entries older than the period. It shows what is **past** the period, what **reaches it within 90 days**, and how many a **legal hold covers**. The employee file, raw survey answers and unsuccessful applicants still use their HR-policy setting, as they do when they run.
+- **It says plainly what it cannot measure:** the access logs (no account-closure date to count from yet) and the anonymised reports (kept indefinitely) say "Not measured" with the reason; a rule that names a day the system cannot work out for that category (for example disciplinary records "after the case is closed") is reported as not measured, never guessed.
+- **Counts only.** No name, no id of a person and no record text appears in the view or the notices.
+- **Notices (HR digest):** one line each for "N kind(s) of record have items past their retention period", "... reaching the end within 90 days" and "N legal hold(s) are due for a review" (the hold review reminder that 3a left out). Counts, no category and no name.
+- **Existing test changed (one):** in `tests/integration/retention-schedule.test.ts` the claim that six categories were "not measured yet" is now that only the access logs and the reports are; every other assertion is kept.
+- Tests (written first): `tests/unit/retention-schedule.test.ts` (month arithmetic, expiry status, measurable triggers) and `tests/integration/retention-due.test.ts` (18 tests: every category, the 90-day window, holds, the edited rule, privacy, another company, the digest). Explain-back note: `docs/plans/hr-governance-step3b1-explain-back.md`. **Not built:** the retention run (3b-2), measuring the access logs, and the 90-day window for raw survey answers and applicants (they say "not worked out").
+
+## Merged in #195 (one migration: 20261211090000_retention_schedule_and_holds)
 
 - **HR governance, step 3a: the retention schedule and legal holds** (the founder's go; plan `docs/plans/hr-governance-plan.md`, section 2.4). **I scoped this to the safe, non-destructive first slice**, because your own note says the periods need legal advice. **Nothing new is deleted by this change.** Step 3b (new deletions, expiry notices, audited runs) waits for the lawyer to see the defaults. **No money is involved. It changes access control and what three existing deletions do while a hold is in place, so please read the explain-back note.**
 - **The schedule is data.** Fifteen kinds of record, each with how long, counted from what, and what happens (delete, anonymise, review, keep). **Your proposed defaults are loaded the first time the page is opened and are marked UNVERIFIED**; the Company Administrator records the legal adviser's name and day per rule, and **changing a rule clears its verification**.

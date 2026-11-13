@@ -132,27 +132,38 @@ export default async function RetentionSchedulePage() {
             <TR>
               <TH>Kind of record</TH>
               <TH>Past its period</TH>
+              <TH>Within 90 days</TH>
               <TH>Held by a legal hold</TH>
+              <TH>Then</TH>
             </TR>
           </THead>
           <TBody>
             {due.categories.map((c) => (
               <TR key={c.category}>
                 <TD className="text-xs">{c.label}</TD>
-                {c.measured ? (
-                  <>
-                    <TD className="text-xs">{c.off ? <span className="text-muted-foreground">Switched off in the HR policy</span> : c.due}</TD>
-                    <TD className="text-xs">{c.held}</TD>
-                  </>
-                ) : (
-                  <TD colSpan={2} className="text-xs text-muted-foreground">
-                    Not measured yet
+                {!c.measured ? (
+                  <TD colSpan={4} className="max-w-[28rem] whitespace-normal text-xs text-muted-foreground">
+                    Not measured: {c.reason}
                   </TD>
+                ) : c.off ? (
+                  <TD colSpan={4} className="text-xs text-muted-foreground">
+                    Switched off, or kept: nothing becomes due
+                  </TD>
+                ) : (
+                  <>
+                    <TD className="text-xs">
+                      {c.due} <span className="text-muted-foreground">{c.unit === "people" ? (c.due === 1 ? "person" : "people") : c.due === 1 ? "record" : "records"}</span>
+                    </TD>
+                    <TD className="text-xs">{c.soon === null ? <span className="text-muted-foreground">Not worked out</span> : c.soon}</TD>
+                    <TD className="text-xs">{c.held}</TD>
+                    <TD className="text-xs">{c.actionLabel}</TD>
+                  </>
                 )}
               </TR>
             ))}
           </TBody>
         </Table>
+        <p className="px-4 py-2 text-xs text-muted-foreground">Counts only. People means former employees who still hold a record of that kind; records means the records themselves. Nothing here deletes anything: Review means HR looks at it, not that it is removed.</p>
       </Section>
 
       <Section title="The schedule" flush>
