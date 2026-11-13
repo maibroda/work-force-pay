@@ -71,6 +71,10 @@ export async function sensitiveAccessLog(ctx: Ctx, f: { days?: number; userId?: 
   const caseIds = [...new Set(rows.filter((r) => r.entity === "RelationsCase" && r.entityId).map((r) => r.entityId!))];
   const cases = caseIds.length ? await db.relationsCase.findMany({ where: { id: { in: caseIds }, organizationId: ctx.orgId }, select: { id: true, caseNumber: true } }) : [];
   const caseNumbers = new Map(cases.map((c) => [c.id, c.caseNumber]));
+  // a data export is shown by its request number, never by the employee it is about
+  const requestIds = [...new Set(rows.filter((r) => r.entity === "DataAccessRequest" && r.entityId).map((r) => r.entityId!))];
+  const requests = requestIds.length ? await db.dataAccessRequest.findMany({ where: { id: { in: requestIds }, organizationId: ctx.orgId }, select: { id: true, requestNumber: true } }) : [];
+  const requestNumbers = new Map(requests.map((q) => [q.id, q.requestNumber]));
   const entries = rows.map((r) => {
     const v = (r.newValue ?? {}) as { kind?: AccessKind; count?: number; external?: boolean };
     const bureau = (r.metadata as { bureau?: string } | null)?.bureau ?? null;
@@ -83,9 +87,16 @@ export async function sensitiveAccessLog(ctx: Ctx, f: { days?: number; userId?: 
       employeeId: r.entity === "Employee" ? r.entityId : null,
       employee: r.entity === "Employee" && r.entityId ? names.get(r.entityId) ?? "Removed employee" : null,
       ref: r.entity === "SensitiveList" ? r.entityId : null,
-      // the record itself: its case number, or a short plan reference
-      reference: r.entity === "RelationsCase" && r.entityId ? (caseNumbers.get(r.entityId) ?? "Removed case") : r.entity === "PerformanceImprovementPlan" && r.entityId ? `Plan ${r.entityId.slice(-6)}` : null,
-      recordId: r.entity === "RelationsCase" || r.entity === "PerformanceImprovementPlan" ? r.entityId : null,
+      // the record itself: its case number, a short plan reference, or a data request's number
+      reference:
+        r.entity === "RelationsCase" && r.entityId
+          ? (caseNumbers.get(r.entityId) ?? "Removed case")
+          : r.entity === "PerformanceImprovementPlan" && r.entityId
+            ? `Plan ${r.entityId.slice(-6)}`
+            : r.entity === "DataAccessRequest" && r.entityId
+              ? (requestNumbers.get(r.entityId) ?? "Removed request")
+              : null,
+      recordId: r.entity === "RelationsCase" || r.entity === "PerformanceImprovementPlan" || r.entity === "DataAccessRequest" ? r.entityId : null,
       count: v.count ?? null,
       external: !!v.external,
       fromBureau: !!bureau,

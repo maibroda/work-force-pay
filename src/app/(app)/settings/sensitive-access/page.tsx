@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/input";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 
 /** What a count is a count of, for a list of records. The log shows a record by its own reference (a case number), never by the employee it is about. */
-const COUNT_NOUN: Partial<Record<AccessKind, string>> = { WELFARE_CASE: "welfare cases", CONFIDENTIAL_CASE: "confidential cases", DISCIPLINARY_CASE: "disciplinary cases", SUCCESSION: "successors", IMPROVEMENT_PLAN: "plans" };
+const COUNT_NOUN: Partial<Record<AccessKind, string>> = { WELFARE_CASE: "welfare cases", CONFIDENTIAL_CASE: "confidential cases", DISCIPLINARY_CASE: "disciplinary cases", SUCCESSION: "successors", SANCTION: "sanction(s)", IMPROVEMENT_PLAN: "plans" };
 
 const when = (d: Date) => `${fmtDate(d)} ${d.toISOString().slice(11, 16)} UTC`;
 
@@ -24,7 +24,7 @@ export default async function SensitiveAccessPage({ searchParams }: { searchPara
     <>
       <PageHeader
         title="Who looked at sensitive details"
-        description="Every time someone opens people's bank, tax or pension details, guarantors and next of kin, a payslip or a payment file, it is recorded here under their own name; so is opening a welfare, confidential or disciplinary case, the succession list or an improvement plan, shown by the case number or plan reference and never by the employee it is about. Looking at your own record, and opening the same thing again within ten minutes, is not recorded again."
+        description="Every time someone opens people's bank, tax or pension details, guarantors and next of kin, a payslip or a payment file, it is recorded here under their own name; so is opening a welfare, confidential or disciplinary case, the succession list, an improvement plan, the sanctions register, or a data export for a data access request, shown by the case number, plan reference or request number (a list by its count) and never by the employee it is about. Looking at your own record, and opening the same thing again within ten minutes, is not recorded again."
         actions={
           <Link className="text-sm text-primary underline" href="/reports/audit">
             Full audit log →

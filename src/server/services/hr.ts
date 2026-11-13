@@ -6,6 +6,7 @@ import { secondPerson } from "@/lib/second-person";
 import { otherHolders } from "./second-person";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
+import { recordSensitiveAccess } from "./sensitive-access";
 import {
   DEFAULT_EXIT_TEMPLATE,
   DEFAULT_ONBOARDING_TEMPLATE,
@@ -229,12 +230,16 @@ export async function raiseDisciplinary(ctx: Ctx, raw: z.input<typeof disciplina
 /** Sanctions (not commendations) for the Disciplinary page: those still waiting for sign-off by default. */
 export async function listSanctions(ctx: Ctx, f: { status?: "PENDING" | "APPROVED" | "REJECTED" } = {}) {
   assertCan(ctx, "discipline.view");
-  return db.disciplinaryRecord.findMany({
+  const rows = await db.disciplinaryRecord.findMany({
     where: { organizationId: ctx.orgId, type: { not: "COMMENDATION" }, ...(f.status ? { status: f.status } : {}) },
     include: { employee: true },
     orderBy: { createdAt: "asc" },
     take: 200,
   });
+  // governance step 5: the register shows sanctions with the people they are about, so opening it is recorded (a list and a count, never who or what); no entry when it shows nothing, and if
+  // the entry cannot be written the read fails
+  if (rows.length) await recordSensitiveAccess(ctx, { kind: "SANCTION", ref: "sanction-list", count: rows.length });
+  return rows;
 }
 
 /** The rights an approver of a sanction needs: to approve, and the disciplinary right. */

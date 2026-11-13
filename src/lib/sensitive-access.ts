@@ -4,10 +4,11 @@
  */
 
 /**
- * Governance step 2a: a read of one of these five records is logged BY THE RECORD (its own reference), never by the employee: the log names who read what, so it cannot reveal that
- * a named person has a welfare case or is on a succession list.
+ * Governance step 2a: a read of one of the first five of these is logged BY THE RECORD (its own reference), never by the employee: the log names who read what, so it cannot reveal that
+ * a named person has a welfare case or is on a succession list. Governance step 5 added the sanctions register (read as a list, counted) and a data export for a data access request
+ * (logged by the request, shown as its request number), on the same rule.
  */
-export const RECORD_KINDS = ["WELFARE_CASE", "CONFIDENTIAL_CASE", "DISCIPLINARY_CASE", "SUCCESSION", "IMPROVEMENT_PLAN"] as const;
+export const RECORD_KINDS = ["WELFARE_CASE", "CONFIDENTIAL_CASE", "DISCIPLINARY_CASE", "SUCCESSION", "IMPROVEMENT_PLAN", "SANCTION", "DATA_EXPORT"] as const;
 export type RecordKind = (typeof RECORD_KINDS)[number];
 
 export const ACCESS_KINDS = ["IDENTIFIERS", "BANK", "PENSION", "TAX", "PERSONAL_RECORDS", "PAYSLIP", "PAYMENTS", "REPORT", ...RECORD_KINDS] as const;
@@ -29,6 +30,8 @@ export const ACCESS_KIND_LABELS: Record<AccessKind, string> = {
   DISCIPLINARY_CASE: "A disciplinary case",
   SUCCESSION: "The succession list",
   IMPROVEMENT_PLAN: "A performance improvement plan",
+  SANCTION: "The sanctions register (disciplinary sanctions and who they are about)",
+  DATA_EXPORT: "A data export for a data access request",
 };
 
 /** Opening the same thing again within this many minutes is one entry, so refreshing a page doesn't flood the record. */

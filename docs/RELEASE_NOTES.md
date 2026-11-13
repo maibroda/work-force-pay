@@ -9,7 +9,18 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `governance-step4`, no migration)
+
+## Not yet merged (branch `governance-step5`, no migration)
+
+- **HR governance, step 5: two more reads in the access log** (the founder chose this from my list of open items). **It changes the audit log. No money, no migration, no new permission.**
+- **The sanctions register** (the Disciplinary page's list of sanctions with the people they are about) and **a data export for a data access request** (a person's whole file) are now recorded, on the same rule as step 2a: **by the record, never by the employee**, never the content. The register is recorded as a list with a count ("3 sanction(s)"); an export by its request id, which the auditor's screen shows as the **request number**.
+- **Not recording is not an option:** if the entry cannot be written, the register does not open and the export is not made (the request is not marked exported). Opening the same thing again within ten minutes is one entry. A person's own copy of their data, and an HR person handling their own request, are not recorded. An empty register records nothing. The existing `DSAR_EXPORT` entry in the main audit log is unchanged.
+- **The auditor's screen** lists both kinds with plain labels and counts them among the records a reader opened, so a day of unusually many is flagged as it is for cases.
+- **One existing test changed:** `sensitive-access-records.test.ts` pinned the record kinds at exactly five; it now lists seven. Every other assertion is kept.
+- **Finding, not changed:** the HR history of one employee also shows that person's approved sanctions, and that read is not recorded (2a covered the cases in it, not the sanctions). Say if you want it covered.
+- Tests (written first; ten failed before the change): `tests/integration/record-read-log-exports.test.ts` (13 tests), `tests/unit/sensitive-access-records.test.ts`. Explain-back note: `docs/plans/hr-governance-step5-explain-back.md`.
+
+## Merged in #198 (no migration)
 
 - **HR governance, step 4: the probation bypass is closed** (the founder chose this when asked what "step 4" meant: the governance plan had only three steps, so I asked). **It changes an approval rule: who can make a probationer permanent. No money, no migration, no new permission.**
 - **The gap:** renewing a contract needed only `hr.manage`, so with the probation workflow **off** (the default) an HR administrator could renew an **undecided** probationary contract as **permanent** with no decision record and no approval. With the workflow on this was already refused.
