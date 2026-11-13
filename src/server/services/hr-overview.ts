@@ -9,7 +9,8 @@ import { contractAlerts } from "./contracts";
 import { outstandingKitValue } from "./inventory";
 import { employeeLoanBalances } from "./loans";
 import { todayUtc } from "./hr-policy";
-import { caseStats } from "./relations";
+import { caseAccessKind, caseStats } from "./relations";
+import { recordSensitiveAccess } from "./sensitive-access";
 import { TASK_DOCUMENT_INCLUDE } from "./documents";
 import { recruitmentSummary } from "./recruitment";
 
@@ -196,7 +197,10 @@ export async function employeeTimeline(ctx: Ctx, employeeId: string): Promise<Ti
       tone: x.type === "COMMENDATION" ? "green" : "amber",
     });
   if (seeCases)
-    for (const c of cases.filter((k) => (k.type !== "MISCONDUCT" || seeDiscipline) && (k.type !== "WELFARE" || seeWelfare)))
+    for (const c of cases.filter((k) => (k.type !== "MISCONDUCT" || seeDiscipline) && (k.type !== "WELFARE" || seeWelfare))) {
+      // this history shows the case's number, type and status (and the summary unless confidential): a read of a welfare, confidential or disciplinary case, recorded by the case's own id (governance step 2a)
+      const kind = caseAccessKind(c);
+      if (kind) await recordSensitiveAccess(ctx, { kind, entity: "RelationsCase", ref: c.id, subjectEmployeeId: employeeId });
       ev.push({
         date: c.openedAt,
         kind: "Relations",
@@ -204,6 +208,7 @@ export async function employeeTimeline(ctx: Ctx, employeeId: string): Promise<Ti
         detail: c.confidential ? "Confidential" : c.summary,
         tone: c.severity === "HIGH" ? "red" : "amber",
       });
+    }
   for (const l of leave)
     ev.push({
       date: l.startDate,

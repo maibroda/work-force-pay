@@ -3,7 +3,18 @@
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
 
-## Merged in #191, with a follow-up fix not yet merged (branch `global-back-owner`, no migration)
+
+## Not yet merged (branch `governance-step2a`, no migration)
+
+- **HR governance, step 2a: read-logging for the most sensitive records** (the founder's go; plan `docs/plans/hr-governance-step2-plan.md`, #188). **Built on my recommended answers** to the plan's questions (listed in the explain-back note). **No money is involved, and nothing is changed or blocked: it only records who looked.**
+- **Five new kinds in the existing "Who looked at sensitive details" log** (Settings > Audit & security): reading a **welfare case**, a **confidential case** (harassment, whistleblowing or marked confidential), a **disciplinary case**, the **succession list** or an **improvement plan**. A plain grievance is not logged.
+- **Logged by the record, never by the employee.** An entry carries the case's or plan's own id, so the auditor's screen shows **the case number** (for example ER-00007) or a short plan reference, **never the employee and never any text**. The log cannot reveal that a named person has a welfare case. A list records **how many** ("3 welfare cases"), not who.
+- **Recorded where the record is read** (the service, not each page), so a new page cannot forget: opening a case, listing cases, **the HR history on an employee's profile** (it shows each case's number, type and status), the succession list, opening or listing plans. **If the entry cannot be written, the read fails and shows nothing.** Reading **your own** record, and a view that shows nothing (the auditor sees that a confidential case exists but not its content), are not recorded; the same record again within ten minutes is one entry.
+- **Outsourced readers are marked and listed first.** A new flag, **10 or more different records in a day**, joins the existing 25-employees flag; reading the same case thirty times counts once.
+- **Unchanged:** who can read the log (`audit.view`: the auditor and the administrators), no new permission, no migration, no new dependency. Explain-back note: `docs/plans/hr-governance-step2a-explain-back.md`.
+- Tests (written first): `tests/unit/sensitive-access-records.test.ts`, `tests/integration/record-read-log.test.ts` (14 tests: each kind and entry point, no name or text in the log, a failed write fails the read, own record and hidden views not recorded, outsourced marking and order, tenant isolation). **Not built (findings):** the employee's data-access export and the sanctions register are not logged; **step 2b (the second-person rules) needs its own migration go.**
+
+## Merged in #191 and #192 (no migration)
 
 - **A Back button on every page** (the founder's brief of 2026-11-13). **A navigation change only: it changes no record and no permission.** One arrow at the **top left of the shared page header**, drawn once by the layout (never per module), with the tooltip "Go Back", icon-only on a phone and "Back" beside it from tablet width up.
 - **What it does.** It returns to **the page the person was just on, inside the app**: from a record to the list it was opened from, from a payroll record to Payroll, and again one step at a time through a longer path. **With nothing earlier in the app** (a direct address, a bookmark, a new tab) it goes **up** instead: a record to its list, a list to its module's front page, a module to the person's home, and **never outside the app**. It is **hidden on a landing page with nothing before it**.

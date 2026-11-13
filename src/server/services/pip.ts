@@ -30,6 +30,7 @@ import {
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
 import { getHrPolicy } from "./hr-policy";
+import { recordSensitiveAccess } from "./sensitive-access";
 
 const text = (min: number, max: number, what: string) => z.string().trim().min(min, `${what} is needed`).max(max);
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date like 2026-11-30");
@@ -364,6 +365,8 @@ function actionsFor(ctx: Ctx, p: Loaded) {
 export async function getPlan(ctx: Ctx, id: string) {
   assertCan(ctx, "pip.view");
   const p = await load(ctx, id);
+  // reading a plan is recorded by the plan's own id (never the employee, never the concerns); reading your own plan is not (governance step 2a)
+  await recordSensitiveAccess(ctx, { kind: "IMPROVEMENT_PLAN", entity: "PerformanceImprovementPlan", ref: p.id, subjectEmployeeId: p.employeeId });
   return { ...p, objectives: withResults(p), reviewState: reviewState({ status: p.status as PipStatus, nextReviewDue: p.nextReviewDue ? iso(p.nextReviewDue) : null }, todayIso()), actions: actionsFor(ctx, p) };
 }
 
@@ -375,6 +378,7 @@ export async function listPlans(ctx: Ctx, f: { status?: PipStatus; employeeId?: 
     orderBy: [{ createdAt: "desc" }],
     take: 500,
   });
+  if (rows.length) await recordSensitiveAccess(ctx, { kind: "IMPROVEMENT_PLAN", ref: "plan-list", count: rows.length });
   const today = todayIso();
   return rows.map((p) => ({ ...p, reviewState: reviewState({ status: p.status as PipStatus, nextReviewDue: p.nextReviewDue ? iso(p.nextReviewDue) : null }, today) }));
 }
