@@ -27,6 +27,7 @@ function assertSurveyReader(ctx: Ctx) {
 }
 import { logAudit } from "./audit";
 import { getHrPolicy, todayUtc } from "./hr-policy";
+import { categoryHeld } from "./retention-holds";
 
 const todayIso = () => iso(todayUtc());
 const NOT_FOUND = "Survey not found.";
@@ -448,6 +449,7 @@ export async function purgeExpired(ctx: Ctx, today = todayIso()) {
   assertCan(ctx, "survey.manage");
   const months = (await getHrPolicy(ctx.orgId)).surveyRetentionMonths;
   if (months === 0) return { surveys: 0, responses: 0 };
+  if (await categoryHeld(ctx.orgId, "RAW_SURVEYS")) return { surveys: 0, responses: 0, held: true }; // a legal hold: nothing is purged until it is released
   const candidates = await db.survey.findMany({ where: { organizationId: ctx.orgId, rawDeletedAt: null, status: { in: ["OPEN", "CLOSED"] } }, select: { id: true, status: true, opensOn: true, closesOn: true, closedAt: true, invitedCount: true } });
   let surveys = 0;
   let responses = 0;
@@ -471,6 +473,13 @@ export async function purgeExpired(ctx: Ctx, today = todayIso()) {
     await logAudit(ctx, { action: "SURVEY_RETENTION_RUN", entity: "Survey", entityId: s.id, newValue: { responses: count } });
   }
   return { surveys, responses };
+}
+
+/** How many surveys have raw answers past the retention period (read-only: the same test purgeExpired applies, without deleting anything). Counts only. */
+export async function expiredSurveyCount(orgId: string, months: number, today = todayIso()): Promise<number> {
+  if (months <= 0) return 0;
+  const rows = await db.survey.findMany({ where: { organizationId: orgId, rawDeletedAt: null, status: { in: ["OPEN", "CLOSED"] } }, select: { status: true, opensOn: true, closesOn: true, closedAt: true } });
+  return rows.filter((s) => surveyState(s.status, iso(s.opensOn), iso(s.closesOn), today) === "CLOSED" && retentionDue(iso(s.closedAt ?? s.closesOn), today, months)).length;
 }
 
 /** Surveys currently open, for the HR digest: the title and the counts, never a name. */

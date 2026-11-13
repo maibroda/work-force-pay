@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-255 tables and 190 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+257 tables and 194 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -59,6 +59,8 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | userFunctionGrants | → UserFunctionGrant[] |  |  |
 | probationReviews | → ProbationReview[] |  |  |
 | probationDeciders | → ProbationDecider[] |  |  |
+| retentionRules | → RetentionRule[] |  |  |
+| retentionHolds | → RetentionHold[] |  |  |
 | recognitionAwardTypes | → RecognitionAwardType[] |  |  |
 | recognitionAwards | → RecognitionAward[] |  |  |
 | careerPaths | → CareerPath[] |  |  |
@@ -1272,6 +1274,7 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | feedbackReceived | → PerformanceFeedback[] |  |  |
 | probationDecisions | → ProbationDecision[] |  |  |
 | probationReviews | → ProbationReview[] |  |  |
+| retentionHolds | → RetentionHold[] |  |  |
 | trainingEnrolments | → TrainingEnrolment[] |  |  |
 | trainingNeeds | → TrainingNeed[] |  |  |
 | trainingRequests | → TrainingRequest[] |  |  |
@@ -6376,6 +6379,50 @@ One of four fixed HR functions granted to a Delegated HR Officer by the Company 
 | revokedBy | String |  |  |
 | revokeReason | String |  |  |
 
+### RetentionRule
+
+How long one category of record is kept, counted from what, and what happens then. The founder’s proposed defaults are loaded UNVERIFIED (verifiedOn null) until the legal adviser has seen them; changing a rule clears its verification. A company has at most one rule per category.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| category | RetentionCategory | yes |  |
+| periodMonths | Int | yes |  |
+| trigger | RetentionTrigger | yes |  |
+| action | RetentionAction | yes |  |
+| note | String |  | Why this is the rule, in a line (for the legal adviser). |
+| verifiedOn | DateTime |  | "Legal adviser verified on and by": the day, and the adviser’s name as given (not a user of the system). |
+| verifiedBy | String |  |  |
+| verifiedNote | String |  |  |
+| updatedByUserId | String |  | The user who recorded the verification, or last changed the rule. |
+| updatedBy | String |  |  |
+| updatedAt | DateTime |  |  |
+
+### RetentionHold
+
+A legal hold: deletion is suspended for one person, one category of record, or the whole company, with a reason and a day to review it. Any HR administrator may place one; only the Company Administrator may release it. The deletions that exist check for a live hold before they run.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| scope | RetentionHoldScope | yes |  |
+| employeeId | String |  |  |
+| employee | → Employee |  |  |
+| category | RetentionCategory |  |  |
+| reason | String | yes |  |
+| reviewOn | DateTime | yes |  |
+| placedByUserId | String | yes |  |
+| placedBy | String | yes |  |
+| placedAt | DateTime |  |  |
+| releasedAt | DateTime |  |  |
+| releasedByUserId | String |  |  |
+| releasedBy | String |  |  |
+| releaseReason | String |  |  |
+
 ## Fixed sets of values
 
 ### Role
@@ -7163,4 +7210,20 @@ Whether an outbound message is a service message (about an active contract) or m
 ### HrFunction
 
 `WELFARE`, `SURVEYS`, `SURVEY_ASSIST`, `SUCCESSION`
+
+### RetentionCategory
+
+`EMPLOYEE_FILE`, `APPRAISALS`, `PROBATION`, `FEEDBACK`, `IMPROVEMENT_PLANS`, `DISCIPLINARY`, `TRAINING`, `SKILLS`, `WELFARE_CASES`, `SUCCESSION`, `RAW_SURVEYS`, `SURVEY_REPORTS`, `AUDIT_LOGS`, `UNSUCCESSFUL_APPLICANTS`, `ACCESS_LOGS`
+
+### RetentionTrigger
+
+`AFTER_EXIT`, `AFTER_CLOSURE`, `AFTER_RECORD_DATE`, `AFTER_SURVEY_CLOSE`, `AFTER_RECRUITMENT_CLOSE`, `AFTER_ACCOUNT_CLOSURE`
+
+### RetentionAction
+
+`DELETE`, `ANONYMISE`, `REVIEW`, `KEEP`
+
+### RetentionHoldScope
+
+`EMPLOYEE`, `CATEGORY`, `COMPANY`
 

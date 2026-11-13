@@ -16,6 +16,7 @@ import { assertCan, db } from "./_base";
 import { logAudit } from "./audit";
 import { entitledOrgs } from "./entitlement-switch";
 import { getHrPolicy } from "./hr-policy";
+import { categoryHeld } from "./retention-holds";
 
 const REMOVED = "[removed]";
 
@@ -44,6 +45,7 @@ export async function anonymizeStaleCandidates(orgId: string, now = new Date()):
   const org = await db.organization.findUniqueOrThrow({ where: { id: orgId }, select: { name: true } });
   const policy = await getHrPolicy(orgId);
   if (policy.candidateRetentionMonths <= 0) return { organization: org.name, anonymized: 0, skipped: "Retention is switched off (0 months)." };
+  if (await categoryHeld(orgId, "UNSUCCESSFUL_APPLICANTS")) return { organization: org.name, anonymized: 0, skipped: "A legal hold is in place on unsuccessful applicants: nothing was anonymised." };
   const ids = (await eligibleCandidates(orgId, policy.candidateRetentionMonths, now)).map((c) => c.id);
   if (!ids.length) return { organization: org.name, anonymized: 0, skipped: "No candidate has passed the retention period." };
 

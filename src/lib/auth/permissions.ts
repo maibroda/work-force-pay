@@ -81,6 +81,7 @@ export const PERMISSIONS = [
   "career.propose", // propose that an employee moves to another role (category): HR about anyone, a manager about their own direct reports; a record of a decision only
   "training.request", // ask for a course for an employee and evaluate a course they attended: HR about anyone, a manager about their own direct reports
   "skills.assess", // assess an employee's skill level: HR about anyone, a manager about their own direct reports; a record, never a score that changes pay or an appraisal
+  "retention.manage", // edit the retention schedule, record the legal adviser’s verification, and release a legal hold: the Company Administrator (and platform staff) ONLY, never the HR administrator
   "probation.view", // open My Workspace > Probation: waiting decisions for a designated decider, and the employee's own probation feedback and response; held by every staff role, so a decider can be designated from any of them
   "probation.recommend", // recommend confirm, extend or not confirm for an employee's probation: a manager about their own direct reports, HR where there is no reporting manager
   "probation.designate", // designate (and revoke) the people who make the final probation decision: the Company Administrator (and platform staff) ONLY, never the HR administrator
