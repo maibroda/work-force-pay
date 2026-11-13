@@ -197,6 +197,25 @@ export const probationDecisionSchema = z.object({
  */
 export async function decideProbation(ctx: Ctx, id: string, raw: z.input<typeof probationDecisionSchema>) {
   assertCan(ctx, "hr.approve");
+  // with the probation workflow on, the decision goes through recommendation, HR review and an independent decider (src/server/services/probation-workflow.ts), never directly
+  if ((await getHrPolicy(ctx.orgId)).probationWorkflow) throw new BusinessError("This company decides probation through a recommendation, an HR review and an independent decision: open the probation review instead.");
+  return applyProbationDecision(ctx, id, raw);
+}
+
+/** The review a decision completes, when the probation workflow is on (set by the workflow service only). */
+export interface ProbationReviewLink {
+  reviewId: string;
+  /** The statement the employee receives, if any. */
+  feedback: string | null;
+  /** The decision was not the one the manager recommended. */
+  against: boolean;
+}
+
+/**
+ * The decision itself, shared by the direct path (above, workflow off) and the workflow (workflow on): the only place a contract's probation outcome changes. The caller has
+ * already checked who may decide. With a review link, the review is completed in the same transaction as the contract change.
+ */
+export async function applyProbationDecision(ctx: Ctx, id: string, raw: z.input<typeof probationDecisionSchema>, link?: ProbationReviewLink) {
   const v = probationDecisionSchema.parse(raw);
   const c = await db.employmentContract.findFirst({ where: { id, organizationId: ctx.orgId } });
   if (!c) throw new BusinessError("Contract not found.");
@@ -230,7 +249,16 @@ export async function decideProbation(ctx: Ctx, id: string, raw: z.input<typeof 
     appraisalScore: released?.overallScore != null ? Math.round(num(released.overallScore) * 100) : null,
     appraisalRecommendation: released?.recommendation ?? null,
     againstRecommendation: against,
+    reviewId: link?.reviewId ?? null,
   });
+  // completes the review in the same transaction as the contract change (workflow on)
+  const complete = (tx: Tx) =>
+    link
+      ? tx.probationReview.update({
+          where: { id: link.reviewId },
+          data: { status: "DECIDED", decidedAt: new Date(), decidedAgainstRecommendation: link.against, feedbackText: link.feedback, feedbackByUserId: link.feedback ? ctx.userId : null, feedbackAt: link.feedback ? new Date() : null },
+        })
+      : null;
 
   if (v.decision === "EXTENDED") {
     const policy = await getHrPolicy(ctx.orgId);
@@ -251,6 +279,7 @@ export async function decideProbation(ctx: Ctx, id: string, raw: z.input<typeof 
         },
       });
       await tx.probationDecision.create({ data: record(newEnd, v.extensionMonths) });
+      await complete(tx);
       await logAudit(ctx, { action: "PROBATION_EXTEND", entity: "Employee", entityId: c.employeeId, oldValue: c, newValue: updated, reason: v.note }, tx);
       return { contract: updated, next: null };
     });
@@ -263,6 +292,7 @@ export async function decideProbation(ctx: Ctx, id: string, raw: z.input<typeof 
         data: { probationOutcome: "FAILED", notes: [c.notes, `Probation failed: ${v.note}`].filter(Boolean).join("\n") },
       });
       await tx.probationDecision.create({ data: record(null) });
+      await complete(tx);
       await logAudit(ctx, { action: "PROBATION_FAIL", entity: "Employee", entityId: c.employeeId, oldValue: c, newValue: updated, reason: v.note }, tx);
       return { contract: updated, next: null };
     });
@@ -298,6 +328,7 @@ export async function decideProbation(ctx: Ctx, id: string, raw: z.input<typeof 
       );
     }
     await tx.probationDecision.create({ data: record(permanentFrom) });
+    await complete(tx);
     await logAudit(ctx, { action: "PROBATION_CONFIRM", entity: "Employee", entityId: c.employeeId, oldValue: c, newValue: next ?? confirmed, reason: v.note }, tx);
     return { contract: confirmed, next };
   });

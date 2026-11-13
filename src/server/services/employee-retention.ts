@@ -95,6 +95,8 @@ export async function anonymizeEmployee(tx: Tx, orgId: string, employeeId: strin
   // probation decisions: the reasons go (on each decision, and the same words written into the contract's notes); what stays is the shape (the decision, its dates and who decided)
   counts.probationDecisions = (await tx.probationDecision.updateMany({ where, data: { note: REMOVED } })).count;
   await tx.employmentContract.updateMany({ where, data: { notes: null } });
+  // the probation workflow: the words go (the manager's reasons, HR's note, the feedback and the response); what stays is the shape (the step, the recommendation, who and when, whether they agreed)
+  counts.probationReviews = (await tx.probationReview.updateMany({ where, data: { recommendationNote: REMOVED, reviewNote: null, feedbackText: null, responseText: null } })).count;
   // training: the words go (why someone did not attend, a need's note and the reason it was dropped); what stays is the shape (that they were enrolled, the result, the course and the dates)
   counts.trainingEnrolments = (await tx.trainingEnrolment.updateMany({ where, data: { absenceReason: null } })).count;
   counts.trainingNeeds = (await tx.trainingNeed.updateMany({ where, data: { note: null, droppedReason: null } })).count;

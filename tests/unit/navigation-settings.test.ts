@@ -15,6 +15,7 @@ const OLD_SETTINGS: Record<string, Permission> = {
   "/settings/users": "users.manage",
   "/settings/roles": "dashboard.view",
   "/settings/hr-officers": "hr.officer.manage", // added with the Delegated HR Officer (governance step 1)
+  "/settings/probation-deciders": "probation.designate", // added with the probation workflow
   "/settings/subscription": "subscription.view",
   "/settings/entitlements": "subscription.manage",
   "/settings/price-book": "pricebook.manage",
@@ -51,6 +52,8 @@ const OLD_MY: Record<string, Permission> = {
   "/me/recognition": "self.view",
   "/me/career": "self.view",
   "/me/skills": "self.view",
+  "/me/probation": "self.view", // added with the probation workflow
+  "/me/team-probation": "probation.recommend", // added with the probation workflow
   "/me/surveys": "self.view",
   "/me/team-skills": "skills.assess",
   "/me/team-training": "training.request",

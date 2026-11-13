@@ -2,6 +2,8 @@ import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { contractAlerts, listContracts } from "@/server/services/contracts";
+import { reviewQueue } from "@/server/services/probation-workflow";
+import { RECOMMENDATION_LABELS, type Recommendation } from "@/lib/probation-workflow";
 import { options, enumOptions } from "@/server/options";
 import { fmtDate } from "@/lib/dates";
 import { fullName } from "@/lib/utils";
@@ -22,6 +24,8 @@ export default async function ContractsPage({ searchParams }: { searchParams: Pr
   const sp = await searchParams;
   const tab = sp.tab === "alerts" ? "alerts" : "all";
   const manage = can(ctx.role, "hr.manage");
+  // probation recommendations waiting for HR to review (only when the probation workflow is on, so otherwise empty)
+  const awaitingReview = manage ? await reviewQueue(ctx) : [];
   const [o, rows, alerts] = await Promise.all([
     options(ctx),
     tab === "all" ? listContracts(ctx, { status: sp.status, type: sp.type, q: sp.q }) : Promise.resolve([]),
@@ -41,6 +45,23 @@ export default async function ContractsPage({ searchParams }: { searchParams: Pr
           { key: "alerts", label: "Alerts & gaps" },
         ]}
       />
+
+      {awaitingReview.length > 0 && (
+        <Section title="Probation recommendations waiting for HR review" description="A manager has recommended. A different HR person reviews it, then it goes to the independent decider.">
+          <ul className="space-y-1 text-sm">
+            {awaitingReview.map((r) => (
+              <li key={r.id}>
+                <Link className="text-primary underline" href={`/hr/contracts/${r.contractId}`}>
+                  {r.employeeNumber} — {r.name}
+                </Link>{" "}
+                <span className="text-muted-foreground">
+                  recommended: {RECOMMENDATION_LABELS[r.recommendation as Recommendation]}, {fmtDate(r.recommendedAt)}{r.recordedByHr ? " (recorded by HR)" : ""}{r.mine ? " — you recorded it, so a different HR person reviews it" : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
 
       {manage && (
         <FormPanel title="Record a contract for an employee">

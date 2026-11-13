@@ -81,6 +81,8 @@ export const PERMISSIONS = [
   "career.propose", // propose that an employee moves to another role (category): HR about anyone, a manager about their own direct reports; a record of a decision only
   "training.request", // ask for a course for an employee and evaluate a course they attended: HR about anyone, a manager about their own direct reports
   "skills.assess", // assess an employee's skill level: HR about anyone, a manager about their own direct reports; a record, never a score that changes pay or an appraisal
+  "probation.recommend", // recommend confirm, extend or not confirm for an employee's probation: a manager about their own direct reports, HR where there is no reporting manager
+  "probation.designate", // designate (and revoke) the people who make the final probation decision: the Company Administrator (and platform staff) ONLY, never the HR administrator
   "hr.officer.manage", // appoint a Delegated HR Officer and grant or revoke their functions: the Company Administrator (and platform staff) ONLY, never the HR administrator
   "survey.manage", // create, open and close an engagement survey, hide a comment, write the follow-up note: the HR administrator ONLY (withheld from the administrators below)
   "survey.assist", // run an assisted survey session for employees without a login: the HR administrator ONLY, never a supervisor
@@ -197,6 +199,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "survey.assist",
     "training.request",
     "skills.assess",
+    "probation.recommend",
     "pip.view",
     "pip.manage",
     "client.view",
@@ -222,6 +225,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "career.propose", // about their own direct reports
     "training.request", // about their own direct reports
     "skills.assess", // about their own direct reports
+    "probation.recommend",
     "sales.view",
     "sales.view.all", // read-only: they see the sales records but change nothing
     "sales.handover.accept", // and, once designated, accept the handover of an accepted quote
@@ -315,6 +319,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "career.propose",
     "training.request",
     "skills.assess",
+    "probation.recommend",
   ],
   EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise"],
   // nothing in HR until a function is granted (see canCtx in src/lib/hr-functions.ts)
