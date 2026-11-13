@@ -2,7 +2,7 @@
  * The retention schedule and legal holds (governance step 3a, docs/plans/hr-governance-plan.md section 2.4).
  *
  * The schedule is data: one rule per category of record (how long, counted from what, and what happens), loaded from the founder's defaults the first time it is read, UNVERIFIED until
- * the Company Administrator records that the legal adviser has seen it. Changing a rule clears its verification. Nothing here deletes anything: the three deletions that exist keep using
+ * the Company Administrator records that the legal adviser has seen it. Changing a rule clears its verification. Nothing here deletes anything (a confirmed run, retention-run.ts, does): the three deletions that exist keep using
  * their own HR-policy settings (the schedule shows those next to the rule so the two never disagree silently) and each checks for a live hold before it runs.
  *
  * A legal hold suspends deletion for one person, one category of record, or the whole company. Any HR administrator may place one (waiting for the Company Administrator could let a deletion
@@ -109,7 +109,7 @@ export async function getSchedule(ctx: Ctx) {
 export async function updateRule(ctx: Ctx, category: string, input: { periodMonths: number; trigger: string; action: string; note?: string | null }) {
   assertCan(ctx, "retention.manage");
   assertCategory(category);
-  const bad = checkRule(input);
+  const bad = checkRule(input, category);
   if (bad) throw new BusinessError(bad);
   await ensureRules(ctx.orgId);
   const before = await db.retentionRule.findUniqueOrThrow({ where: { organizationId_category: { organizationId: ctx.orgId, category } } });

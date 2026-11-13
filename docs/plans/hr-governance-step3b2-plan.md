@@ -1,6 +1,6 @@
 # Plan: governance step 3b-2, the retention run (the destructive half)
 
-Written 2026-11-13. **A proposal only: nothing in this plan is built and no migration is written until the founder answers the questions in section 5 and says "go".** It is the second half of step 3b of `hr-governance-plan.md` section 2.4. The first half (3b-1) only measures and tells HR; it is built and changes nothing.
+Written 2026-11-13. **Status: built on 2026-11-13 (branch `governance-step3b2`) on the RECOMMENDED answers to every question in section 5, because the founder said "go with governance step 3b-2" without answering them.** The explain-back note `hr-governance-step3b2-explain-back.md` lists the seven answers it was built on. Original wording: a proposal only, nothing built until the founder answers section 5 and says "go". It is the second half of step 3b of `hr-governance-plan.md` section 2.4. The first half (3b-1) only measures and tells HR; it is built and changes nothing.
 
 ## 1. Where things stand
 

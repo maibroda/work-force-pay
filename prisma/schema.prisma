@@ -614,6 +614,8 @@ model Organization {
   probationDeciders         ProbationDecider[]
   retentionRules            RetentionRule[]
   retentionHolds            RetentionHold[]
+  retentionRuns             RetentionRun[]
+  retentionRunItems         RetentionRunItem[]
   recognitionAwardTypes     RecognitionAwardType[]
   recognitionAwards         RecognitionAward[]
   careerPaths               CareerPath[]
@@ -8580,4 +8582,67 @@ model RetentionHold {
   releaseReason   String?
 
   @@index([organizationId, releasedAt])
+}
+
+// ─────────────────────────── RETENTION RUNS (governance step 3b-2) ───────────────────────────
+
+enum RetentionRunStatus {
+  PROPOSED
+  EXECUTED
+  REJECTED
+}
+
+/// One retention run for one kind of record: HR proposes it, a different person (the Company Administrator) confirms it, and confirming clears the WORDS of the records past their period and keeps the shape.
+/// It records the rule as it stood, who proposed and who confirmed, the written acceptance where the rule was unverified, and what was done. Counts and ids only: no name and no record text.
+model RetentionRun {
+  id                 String             @id @default(cuid())
+  organizationId     String
+  organization       Organization       @relation(fields: [organizationId], references: [id])
+  category           RetentionCategory
+  status             RetentionRunStatus @default(PROPOSED)
+  /// The rule as it stood when proposed: confirming checks it has not changed since.
+  periodMonths       Int
+  trigger            RetentionTrigger
+  action             RetentionAction
+  ruleVerified       Boolean            @default(false)
+  /// What the proposal covered, and what it left out (held by a legal hold, or someone with a case or a data request still open).
+  itemCount          Int
+  skippedHeld        Int                @default(0)
+  skippedOpen        Int                @default(0)
+  proposedAt         DateTime           @default(now())
+  proposedByUserId   String
+  proposedBy         String
+  decidedAt          DateTime?
+  decidedByUserId    String?
+  decidedBy          String?
+  /// The confirmer's note, or the reason a run was turned down. Where the rule was unverified or the confirmer was the only holder it is the written acceptance or reason (at least 20 characters).
+  decisionNote       String?
+  acceptedUnverified Boolean            @default(false)
+  singleHolder       Boolean            @default(false)
+  /// What confirming did: how many items were cleared, how many were left out because a hold or an open case appeared since the proposal, and the records touched by kind.
+  clearedItems       Int?
+  skippedAtConfirm   Int?
+  summary            Json?
+  items              RetentionRunItem[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, category])
+}
+
+/// What one run covered, one row per person (or per record): the ledger that stops a second run redoing the same items and keeps them out of the "what is due" count once cleared.
+model RetentionRunItem {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  runId          String
+  run            RetentionRun      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  category       RetentionCategory
+  /// The person (employee id) or, for a welfare case or a succession entry counted per record, the record id.
+  subjectId      String
+  employeeId     String?
+  clearedAt      DateTime?
+  skippedReason  String?
+
+  @@unique([runId, subjectId])
+  @@index([organizationId, category, clearedAt])
 }

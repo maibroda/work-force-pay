@@ -101,6 +101,9 @@ export const APPLIED_FROM_POLICY: Partial<Record<RetentionCategory, "employeeRet
 
 export const MAX_PERIOD_MONTHS = 1200;
 
+/** The only kinds of record the application can DELETE (the rest are anonymised, reviewed or kept): a rule cannot ask for more than the system can do. */
+export const DELETE_SUPPORTED: readonly RetentionCategory[] = ["RAW_SURVEYS"];
+
 /**
  * The triggers the system can work out today for each category. A rule may name another trigger (the schedule is a record for the lawyer); the due view then says it is not measured
  * rather than guessing. ACCESS_LOGS has no account-closure date to count from, and the anonymised survey reports are kept indefinitely.
@@ -148,10 +151,11 @@ export function expiryStatus(base: string, months: number, today: string, soonDa
 }
 
 /** A rule must make sense: deleting or anonymising needs a period of at least a month; keeping has no period; a period is whole months up to a hundred years. */
-export function checkRule(r: { periodMonths: number; trigger: string; action: string }): string | null {
+export function checkRule(r: { periodMonths: number; trigger: string; action: string }, category?: string): string | null {
   if (!Number.isInteger(r.periodMonths) || r.periodMonths < 0 || r.periodMonths > MAX_PERIOD_MONTHS) return `The period is a whole number of months, from 0 to ${MAX_PERIOD_MONTHS}.`;
   if (!(RETENTION_TRIGGERS as readonly string[]).includes(r.trigger)) return "Choose what the period is counted from.";
   if (!(RETENTION_ACTIONS as readonly string[]).includes(r.action)) return "Choose what happens at the end.";
+  if (r.action === "DELETE" && category !== undefined && !(DELETE_SUPPORTED as readonly string[]).includes(category)) return "Only raw survey answers can be deleted by the application. Choose Anonymise (or Review) for this kind of record.";
   if ((r.action === "DELETE" || r.action === "ANONYMISE") && r.periodMonths < 1) return "Deleting or anonymising needs a period of at least one month. To keep it, choose Keep.";
   if (r.action === "KEEP" && r.periodMonths !== 0) return "Keeping has no period: set it to 0, or choose Review.";
   return null;
