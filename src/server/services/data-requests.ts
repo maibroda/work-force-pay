@@ -21,6 +21,7 @@ import { logAudit } from "./audit";
 import { getHrPolicy, todayUtc } from "./hr-policy";
 import { outstandingKitValue } from "./inventory";
 import { nextNumber } from "./numbering";
+import { recordSensitiveAccess } from "./sensitive-access";
 
 const opt = z
   .string()
@@ -394,6 +395,9 @@ export async function exportForRequest(ctx: Ctx, id: string) {
   assertCan(ctx, "employee.sensitive"); // the export includes bank, tax and pension details
   const r = await loadOpen(ctx, id);
   if (!r.identityVerified) throw new BusinessError("Check and record the person's identity before generating their data.");
+  // governance step 5: a person's whole file is read here, so it is recorded BY THE REQUEST (its own id, shown as the request number), never by the employee, before anything is generated. If the
+  // entry cannot be written, nothing is exported and the request is not marked exported. A person handling their own request is not recorded (reading your own is not).
+  await recordSensitiveAccess(ctx, { kind: "DATA_EXPORT", entity: "DataAccessRequest", ref: r.id, subjectEmployeeId: r.employeeId });
   const data = await compileEmployeeData(ctx.orgId, r.employeeId);
   const pkg = packageExport(data);
   await db.dataAccessRequest.update({ where: { id }, data: { exportedAt: new Date(), exportChecksum: pkg.checksum, exportSections: pkg.sections } });

@@ -8,8 +8,8 @@ const at = (day: string, h = 9) => new Date(`${day}T${String(h).padStart(2, "0")
 const row = (over: Partial<AccessRow> = {}): AccessRow => ({ userId: "u1", userName: "Ngozi", employeeId: null, kind: "WELFARE_CASE", at: at("2026-11-12"), ref: "case-1", ...over });
 
 describe("the new kinds", () => {
-  it("are the five records the founder named, each with a plain label, and are told apart from the payroll kinds", () => {
-    expect([...RECORD_KINDS]).toEqual(["WELFARE_CASE", "CONFIDENTIAL_CASE", "DISCIPLINARY_CASE", "SUCCESSION", "IMPROVEMENT_PLAN"]);
+  it("are the five records the founder named, then the sanctions register and a data export (governance step 5), each with a plain label, and are told apart from the payroll kinds", () => {
+    expect([...RECORD_KINDS]).toEqual(["WELFARE_CASE", "CONFIDENTIAL_CASE", "DISCIPLINARY_CASE", "SUCCESSION", "IMPROVEMENT_PLAN", "SANCTION", "DATA_EXPORT"]);
     for (const k of RECORD_KINDS) {
       expect(ACCESS_KINDS).toContain(k);
       expect(ACCESS_KIND_LABELS[k].length).toBeGreaterThan(5);
