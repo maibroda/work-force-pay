@@ -133,7 +133,9 @@ describe("the welfare function without any wider HR access", () => {
     await setCaseStatus(ctx, c.id, "INVESTIGATING");
     await addCaseNote(ctx, c.id, { kind: "NOTE", note: "Five days' compassionate leave agreed" });
     expect((await resolveCase(ctx, c.id, { outcome: "RESOLVED_INFORMALLY", resolution: "Leave agreed and support offered" })).status).toBe("RESOLVED");
-    expect((await closeCase(ctx, c.id)).status).toBe("CLOSED");
+    // the officer resolved it, so a different holder of the welfare function closes it (governance step 2b): the HR administrator could, so the officer is refused
+    await expect(closeCase(ctx, c.id)).rejects.toThrow(/different person/i);
+    expect((await closeCase(w.hr, c.id)).status).toBe("CLOSED");
     await expect(addCaseNote(ctx, grievance.id, { kind: "NOTE", note: "Not mine to work" })).rejects.toThrow(/not found/i);
   });
   it("does not let the Company Administrator, the auditor, an officer without the function or another company read or work it", async () => {

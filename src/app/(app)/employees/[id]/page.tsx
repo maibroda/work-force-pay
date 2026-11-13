@@ -5,6 +5,7 @@ import { can } from "@/lib/auth/permissions";
 import { getEmployee } from "@/server/services/employees";
 import { listContacts, listGuarantors } from "@/server/services/personal-records";
 import { recordSensitiveAccess } from "@/server/services/sensitive-access";
+import { otherHolders } from "@/server/services/second-person";
 import { employeeLocationHistory } from "@/server/services/operations";
 import { employeeTimeline } from "@/server/services/hr-overview";
 import { listItems, listPacks, outstandingKit } from "@/server/services/inventory";
@@ -87,6 +88,8 @@ export default async function EmployeePage({
   const hrManage = can(ctx.role, "hr.manage");
   const hrApprove = can(ctx.role, "hr.approve");
   const discManage = can(ctx.role, "discipline.manage"); // sanctions need this too; a commendation needs only HR access
+  // governance step 2b: the person who raised a sanction does not also approve it, unless nobody else could (then they give a reason)
+  const approveOthers = hrApprove && discManage ? await otherHolders(ctx, ["hr.approve", "discipline.manage"]) : 1;
   const today = new Date();
   const year = Number(sp.year ?? today.getUTCFullYear());
   const month = Number(sp.month ?? today.getUTCMonth() + 1);
@@ -815,9 +818,13 @@ export default async function EmployeePage({
                     <TD>
                       {hrApprove && (discManage || r.type === "COMMENDATION") && r.status === "PENDING" && (
                         <div className="flex gap-1">
-                          <ActionButton action={approveDisciplinaryAction.bind(null, r.id)} variant="success">
-                            Approve
-                          </ActionButton>
+{r.type !== "COMMENDATION" && r.issuedByUserId === ctx.userId && approveOthers > 0 ? (
+                            <span className="text-xs text-muted-foreground">You raised this: a different person approves it.</span>
+                          ) : (
+                            <ActionButton action={approveDisciplinaryAction.bind(null, r.id)} reason={r.type !== "COMMENDATION" && r.issuedByUserId === ctx.userId} reasonPlaceholder="You raised this and you are the only person who can approve it: why? (at least 20 characters)" variant="success">
+                              Approve
+                            </ActionButton>
+                          )}
                           <ActionButton
                             action={rejectDisciplinaryAction.bind(null, r.id)}
                             reason

@@ -14,12 +14,15 @@ import { Input, Select } from "@/components/ui/input";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { raiseCaseAction } from "@/app/actions/hr-lifecycle";
+import { otherHolders } from "@/server/services/second-person";
 
 const STATUSES = ["OPEN", "INVESTIGATING", "HEARING", "RESOLVED", "CLOSED"];
 
 export default async function DisciplinePage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const ctx = await requirePage("discipline.view");
   const sp = await searchParams;
+  // governance step 2b: the person who raised a sanction does not also approve it, unless nobody else could (then they give a reason)
+  const approveOthers = can(ctx.role, "hr.approve") && can(ctx.role, "discipline.manage") ? await otherHolders(ctx, ["hr.approve", "discipline.manage"]) : 1;
   const [rows, stats, o, sanctions] = await Promise.all([
     listCases(ctx, { status: sp.status, type: sp.type, q: sp.q, overdue: sp.overdue === "1", scope: "discipline" }),
     caseStats(ctx, "discipline"),
@@ -149,9 +152,13 @@ export default async function DisciplinePage({ searchParams }: { searchParams: P
                 <TD>
                   {can(ctx.role, "hr.approve") && can(ctx.role, "discipline.manage") && (
                     <div className="flex gap-1">
-                      <ActionButton action={approveDisciplinaryAction.bind(null, r.id)} variant="success">
-                        Approve
-                      </ActionButton>
+{r.type !== "COMMENDATION" && r.issuedByUserId === ctx.userId && approveOthers > 0 ? (
+                        <span className="text-xs text-muted-foreground">You raised this: a different person approves it.</span>
+                      ) : (
+                        <ActionButton action={approveDisciplinaryAction.bind(null, r.id)} reason={r.type !== "COMMENDATION" && r.issuedByUserId === ctx.userId} reasonPlaceholder="You raised this and you are the only person who can approve it: why? (at least 20 characters)" variant="success">
+                      Approve
+                        </ActionButton>
+                      )}
                       <ActionButton action={rejectDisciplinaryAction.bind(null, r.id)} reason reasonPlaceholder="Reason for rejecting" variant="outline">
                         Reject
                       </ActionButton>

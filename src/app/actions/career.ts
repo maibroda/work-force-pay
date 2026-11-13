@@ -87,8 +87,23 @@ export async function setSuccessorAction(roleId: string, v: V) {
     if (!number) throw new BusinessError("Enter the employee number.");
     const emp = await db.employee.findFirst({ where: { organizationId: ctx.orgId, employeeNumber: { equals: number, mode: "insensitive" } }, select: { id: true } });
     if (!emp) throw new BusinessError("Employee not found.");
-    await suc.setSuccessor(ctx, { roleId, employeeId: emp.id, readiness: (str(v.readiness) ?? "") as never, reason: str(v.reason) });
-    return { message: "Successor recorded." };
+    await suc.setSuccessor(ctx, { roleId, employeeId: emp.id, readiness: (str(v.readiness) ?? "") as never, reason: str(v.reason), singleHolderReason: str(v.singleHolderReason) });
+    return { message: "Recorded. A new nomination counts once a different holder of this function approves it." };
+  }, PAGES);
+}
+
+/** A different holder of the succession function approves a proposed nomination; the proposer only with a reason, and only if they are the only holder. */
+export async function approveSuccessorAction(id: string, reason?: string) {
+  return act("succession.manage", async (ctx) => {
+    await suc.approveSuccessor(ctx, id, { reason });
+    return { message: "Nomination approved: it now counts." };
+  }, PAGES);
+}
+
+export async function rejectSuccessorAction(id: string) {
+  return act("succession.manage", async (ctx) => {
+    await suc.rejectSuccessor(ctx, id);
+    return { message: "Nomination rejected." };
   }, PAGES);
 }
 

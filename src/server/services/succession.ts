@@ -7,6 +7,8 @@
 import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { addDays } from "@/lib/dates";
+import { checkSingleHolderReason, secondPerson } from "@/lib/second-person";
+import { otherHolders } from "./second-person";
 import { MAX_SUCCESSORS, READINESS_LEVELS, readyNow } from "@/lib/career";
 import { assertCan, BusinessError, db } from "./_base";
 import { recordSensitiveAccess } from "./sensitive-access";
@@ -46,9 +48,15 @@ export const successorSchema = z.object({
     .max(300)
     .optional()
     .transform((v) => (v ? v : undefined)),
+  /** Only where the person keeping the list is the only holder of the succession function: why they add a successor without a second person (at least 20 characters). */
+  singleHolderReason: z.string().optional(),
 });
 
-/** Names someone as a successor, or changes how ready they are (one entry per person per role). At most five per role; never someone already in the role. */
+/**
+ * Names someone as a successor, or changes how ready they are (one entry per person per role). At most five per role; never someone already in the role.
+ * Governance step 2b: a NEW nomination is only PROPOSED until a different holder of the succession function approves it, and counts only once approved. Where the person is the
+ * only holder they may add it straight away, with a written reason of at least 20 characters, and it is flagged. Changing the readiness of an existing successor stays immediate.
+ */
 export async function setSuccessor(ctx: Ctx, raw: z.input<typeof successorSchema>) {
   assertCan(ctx, "succession.manage");
   const v = successorSchema.parse(raw);
@@ -60,11 +68,51 @@ export async function setSuccessor(ctx: Ctx, raw: z.input<typeof successorSchema
   if (emp.categoryId === role.categoryId) throw new BusinessError("This person is already in this role.");
   const existing = role.candidates.find((c) => c.employeeId === emp.id);
   if (!existing && role.candidates.length >= MAX_SUCCESSORS) throw new BusinessError(`A role can have at most ${MAX_SUCCESSORS} successors.`);
-  const c = existing
-    ? await db.successionCandidate.update({ where: { id: existing.id }, data: { readiness: v.readiness, reason: v.reason ?? null } })
-    : await db.successionCandidate.create({ data: { organizationId: ctx.orgId, roleId: role.id, employeeId: emp.id, readiness: v.readiness, reason: v.reason ?? null, createdBy: ctx.name } });
-  await logAudit(ctx, { action: "SUCCESSION_SUCCESSOR_SET", entity: "SuccessionCandidate", entityId: c.id, newValue: { roleId: role.id, employeeId: emp.id, readiness: v.readiness } });
+  if (existing) {
+    const c = await db.successionCandidate.update({ where: { id: existing.id }, data: { readiness: v.readiness, reason: v.reason ?? null } });
+    await logAudit(ctx, { action: "SUCCESSION_SUCCESSOR_SET", entity: "SuccessionCandidate", entityId: c.id, newValue: { roleId: role.id, employeeId: emp.id, readiness: v.readiness } });
+    return c;
+  }
+  const base = { organizationId: ctx.orgId, roleId: role.id, employeeId: emp.id, readiness: v.readiness, reason: v.reason ?? null, createdBy: ctx.name, proposedByUserId: ctx.userId };
+  if ((await otherHolders(ctx, "succession.manage")) > 0) {
+    // someone else could approve it: it is proposed, and does not count until they do
+    const c = await db.successionCandidate.create({ data: { ...base, status: "PROPOSED" } });
+    await logAudit(ctx, { action: "SUCCESSION_SUCCESSOR_PROPOSE", entity: "SuccessionCandidate", entityId: c.id, newValue: { roleId: role.id, employeeId: emp.id, readiness: v.readiness } });
+    return c;
+  }
+  const bad = checkSingleHolderReason(v.singleHolderReason);
+  if (bad) throw new BusinessError(`You are the only person who can keep this list, so a second person cannot approve a nomination: ${bad.charAt(0).toLowerCase()}${bad.slice(1)}`);
+  const c = await db.successionCandidate.create({ data: { ...base, status: "APPROVED", decidedByUserId: ctx.userId, decidedAt: new Date(), singleHolder: true, singleReason: (v.singleHolderReason ?? "").trim() } });
+  await logAudit(ctx, { action: "SUCCESSION_SUCCESSOR_SET", entity: "SuccessionCandidate", entityId: c.id, newValue: { roleId: role.id, employeeId: emp.id, readiness: v.readiness, singleHolder: true } });
   return c;
+}
+
+/** A holder of the succession function other than the proposer approves a proposed nomination. Where the proposer is the only holder they may approve with a written reason. */
+export async function approveSuccessor(ctx: Ctx, id: string, opts: { reason?: string } = {}) {
+  assertCan(ctx, "succession.manage");
+  const c = await db.successionCandidate.findFirst({ where: { id, organizationId: ctx.orgId } });
+  if (!c) throw new BusinessError("Successor not found.");
+  if (c.status !== "PROPOSED") throw new BusinessError("This nomination is already approved.");
+  let singleHolder = false;
+  if (c.proposedByUserId && c.proposedByUserId === ctx.userId) {
+    const verdict = secondPerson({ samePerson: true, otherHolders: await otherHolders(ctx, "succession.manage"), reason: opts.reason, did: "proposed this nomination", does: "approves it" });
+    if (!verdict.ok) throw new BusinessError(verdict.error);
+    singleHolder = verdict.singleHolder;
+  }
+  const u = await db.successionCandidate.update({ where: { id }, data: { status: "APPROVED", decidedByUserId: ctx.userId, decidedAt: new Date(), singleHolder, singleReason: singleHolder ? (opts.reason ?? "").trim() : null } });
+  await logAudit(ctx, { action: "SUCCESSION_SUCCESSOR_APPROVE", entity: "SuccessionCandidate", entityId: id, newValue: { roleId: c.roleId, employeeId: c.employeeId, singleHolder } });
+  return u;
+}
+
+/** A proposed nomination is rejected by any holder, or withdrawn by the person who proposed it; it is then gone. */
+export async function rejectSuccessor(ctx: Ctx, id: string) {
+  assertCan(ctx, "succession.manage");
+  const c = await db.successionCandidate.findFirst({ where: { id, organizationId: ctx.orgId } });
+  if (!c) throw new BusinessError("Successor not found.");
+  if (c.status !== "PROPOSED") throw new BusinessError("Only a proposed nomination can be rejected: remove an approved successor instead.");
+  await db.successionCandidate.delete({ where: { id } });
+  await logAudit(ctx, { action: "SUCCESSION_SUCCESSOR_REJECT", entity: "SuccessionCandidate", entityId: id, newValue: { roleId: c.roleId, employeeId: c.employeeId } });
+  return { id };
 }
 
 export async function removeSuccessor(ctx: Ctx, id: string) {
@@ -103,8 +151,9 @@ export async function successionOverview(ctx: Ctx) {
       role: r.category.name,
       holders: holders.length,
       leavingSoon: leaving,
-      covered: readyNow(r.candidates),
-      candidates: r.candidates.map((c) => ({ id: c.id, employee: c.employee, readiness: c.readiness, reason: c.reason })),
+      // only an approved successor counts as cover: a proposed one is waiting for a second person
+      covered: readyNow(r.candidates.filter((c) => c.status === "APPROVED")),
+      candidates: r.candidates.map((c) => ({ id: c.id, employee: c.employee, readiness: c.readiness, reason: c.reason, status: c.status, proposedByUserId: c.proposedByUserId })),
     });
   }
   // opening the list shows the named successors: recorded with how many, never who (governance step 2a)

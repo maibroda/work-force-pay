@@ -4,7 +4,20 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `governance-step2a`, no migration)
+
+## Not yet merged (branch `governance-step2b`, one migration: 20261210090000_second_person_rules)
+
+- **HR governance, step 2b: the second-person rules** (the founder's go; plan `docs/plans/hr-governance-step2-plan.md`, #188). **Built on my recommended answers** to the plan's questions (listed in the explain-back note). **No money is involved. It changes who may sign off sensitive decisions, so please read the explain-back note.**
+- **The rule: the person who did the work does not also sign it off.** (1) **A case is not closed by the person who resolved it**, for **every kind of case** (a welfare case included). (2) **A sanction is not approved by the person who raised it** (this fixes a gap: a Company Administrator could raise and approve their own sanction alone); **a commendation is unchanged**. (3) **A new succession nomination is proposed and approved by a different holder of the succession function**; a proposed successor **does not count as cover** until approved; changing readiness and removing a successor stay immediate; every successor from before stays approved.
+- **A small company is not stuck.** The **only holder** of the right needed may sign off their own work **with a written reason of at least 20 characters**, and the record is **flagged "single holder"**. **It is never available while another holder exists.** Another holder is another **active** user of this company whose role holds the right, or a Delegated HR Officer with a **live** grant; switched-off users, an outsourced officer past their end date, revoked grants and other companies' people do not count.
+- **A record from before this change** has no recorded resolver or raiser, so **the rule does not apply to it**. Re-opening a case clears who resolved it.
+- **Screens:** the Close, Approve and nomination buttons say "a different person does this" for the person who did the work and ask for the reason only for the only holder; the succession page shows proposed successors "awaiting approval" with Approve and Reject (or Withdraw).
+- **Audit** carries ids, the step and the flag, **never the reason**. The reasons are in the employee's copy of their data (cases and sanctions) and are **removed on erasure**.
+- **Migration (reversible):** one new enum (succession status) and columns on three existing tables (who resolved, raised, approved, proposed, decided; the single-holder flags and reasons). **Existing rows keep their data**; the down script drops only what was added. Round-tripped (up, down, up) on a copy of the seeded database: row counts unchanged and the schema identical (the seeded copy had no successors, so the "existing successors stay approved" default is tested on its own). **No new permission.**
+- **Existing tests changed (eleven, only where the same person did both steps):** I changed who does the second step, or gave the reason a lone holder now needs; every original assertion is kept (one, that the approver equals the raiser, became "equals the second person", which is the rule). Listed in the explain-back note.
+- Tests (written first): `tests/unit/second-person.test.ts`, `tests/integration/second-person.test.ts` (23 tests). Explain-back note: `docs/plans/hr-governance-step2b-explain-back.md`. **Not built:** a second person for exits and other approvals; letting the Company Administrator close a welfare case.
+
+## Merged in #193 (no migration)
 
 - **HR governance, step 2a: read-logging for the most sensitive records** (the founder's go; plan `docs/plans/hr-governance-step2-plan.md`, #188). **Built on my recommended answers** to the plan's questions (listed in the explain-back note). **No money is involved, and nothing is changed or blocked: it only records who looked.**
 - **Five new kinds in the existing "Who looked at sensitive details" log** (Settings > Audit & security): reading a **welfare case**, a **confidential case** (harassment, whistleblowing or marked confidential), a **disciplinary case**, the **succession list** or an **improvement plan**. A plain grievance is not logged.

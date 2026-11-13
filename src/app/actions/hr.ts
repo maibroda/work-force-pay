@@ -56,11 +56,12 @@ export async function raiseDisciplinaryAction(v: V) {
     PATHS,
   );
 }
-export async function approveDisciplinaryAction(id: string, remarks?: string) {
+/** `reason` is only needed (and only asked for) when the person approving raised the sanction and is the only one who could approve it. */
+export async function approveDisciplinaryAction(id: string, reason?: string) {
   return act(
     "hr.approve",
     async (ctx) => {
-      await hr.approveDisciplinary(ctx, id, remarks);
+      await hr.approveDisciplinary(ctx, id, undefined, { reason });
       return { message: "Disciplinary record approved." };
     },
     PATHS,

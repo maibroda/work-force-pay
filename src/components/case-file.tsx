@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Ctx } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { canCtx } from "@/lib/hr-functions";
-import type { getCase } from "@/server/services/relations";
+import { closeAdvice, type getCase } from "@/server/services/relations";
 import { db } from "@/lib/db";
 import { enumOptions } from "@/server/options";
 import { fmtDate } from "@/lib/dates";
@@ -40,6 +40,8 @@ export async function CaseFile({ ctx, c, welfare = false }: { ctx: Ctx; c: Await
     ? { note: addWelfareNoteAction, assign: assignWelfareAction, status: setWelfareStatusAction, resolve: resolveWelfareAction, close: closeWelfareAction }
     : { note: addCaseNoteAction, assign: assignCaseAction, status: setCaseStatusAction, resolve: resolveCaseAction, close: closeCaseAction };
   const isOpen = OPEN.includes(c.status);
+  // governance step 2b: the person who resolved a case does not also close it, unless nobody else could (then they give a reason)
+  const advice = approve && c.status === "RESOLVED" ? await closeAdvice(ctx, c.id) : { blocked: false, needsReason: false };
   const staff = manage
     ? await db.user.findMany({
         where: { organizationId: ctx.orgId, active: true, role: { in: ["HR_ADMIN", "HR_OFFICER", "COMPANY_ADMIN", "SUPER_ADMIN"] } },
@@ -78,8 +80,9 @@ export async function CaseFile({ ctx, c, welfare = false }: { ctx: Ctx; c: Await
                 Back to investigation
               </ActionButton>
             )}
-            {approve && c.status === "RESOLVED" && (
-              <ActionButton action={A.close.bind(null, c.id)} variant="success">
+            {approve && c.status === "RESOLVED" && advice.blocked && <span className="self-center text-xs text-muted-foreground">You resolved this case, so a different person closes it.</span>}
+            {approve && c.status === "RESOLVED" && !advice.blocked && (
+              <ActionButton action={A.close.bind(null, c.id)} reason={advice.needsReason} reasonPlaceholder="You resolved this case and you are the only person who can close it: why? (at least 20 characters)" variant="success">
                 Sign off & close
               </ActionButton>
             )}

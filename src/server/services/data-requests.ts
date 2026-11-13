@@ -184,8 +184,8 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
     conduct: {
       title: "Disciplinary records and employee-relations cases",
       records: [
-        ...discipline.map((r) => ({ kind: "disciplinary record", type: words(r.type), incidentDate: dt(r.incidentDate), description: r.description, actionTaken: r.actionTaken, remarks: r.remarks })),
-        ...cases.filter((c) => !c.confidential).map((c) => ({ kind: "case", caseNumber: c.caseNumber, type: words(c.type), opened: dt(c.openedAt), summary: c.summary, status: words(c.status), outcome: words(c.outcome), resolution: c.resolution })),
+        ...discipline.map((r) => ({ kind: "disciplinary record", type: words(r.type), incidentDate: dt(r.incidentDate), description: r.description, actionTaken: r.actionTaken, remarks: r.remarks, approvedBySoleHolderBecause: r.approvedSingleReason })),
+        ...cases.filter((c) => !c.confidential).map((c) => ({ kind: "case", caseNumber: c.caseNumber, type: words(c.type), opened: dt(c.openedAt), summary: c.summary, status: words(c.status), outcome: words(c.outcome), resolution: c.resolution, closedBySoleHolderBecause: c.closedSingleReason })),
         ...(confidential ? [{ kind: "confidential case", note: `${confidential} confidential case(s) are held and withheld from this copy.` }] : []),
       ],
     },
