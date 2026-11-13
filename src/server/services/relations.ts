@@ -20,6 +20,8 @@ import { addDays, iso } from "@/lib/dates";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { getHrPolicy, todayUtc } from "./hr-policy";
+import { recordSensitiveAccess } from "./sensitive-access";
+import type { RecordKind } from "@/lib/sensitive-access";
 import { raiseDisciplinary } from "./hr";
 import { nextNumber } from "./numbering";
 import { WELFARE_KINDS } from "@/lib/welfare";
@@ -45,6 +47,12 @@ function assertHr(ctx: Ctx, permission: Permission) {
   if (inWelfareLane(ctx)) return;
   assertCan(ctx, permission);
 }
+
+/**
+ * Which kind of read-log entry a case belongs to (governance step 2a): a welfare case, a disciplinary (misconduct) case, or any other confidential case (harassment, whistleblowing,
+ * or one marked confidential). A plain grievance is none of them and is not logged.
+ */
+export const caseAccessKind = (c: { type: string; confidential: boolean }): RecordKind | null => (isWelfare(c) ? "WELFARE_CASE" : isMisconduct(c) ? "DISCIPLINARY_CASE" : c.confidential ? "CONFIDENTIAL_CASE" : null);
 
 /** The "which kinds of case" part of a query. With no scope, a caller sees every kind they are allowed to. */
 function scopeWhere(ctx: Ctx, scope?: CaseScope) {
@@ -173,6 +181,13 @@ export async function listCases(ctx: Ctx, f: { status?: string; type?: string; q
     orderBy: [{ status: "asc" }, { openedAt: "desc" }],
     take: 300,
   });
+  // opening the list shows the summaries of the cases the reader may read: how many of each kind is recorded, never whom they are about
+  const shown: Partial<Record<RecordKind, number>> = {};
+  for (const c of rows) {
+    const kind = canSeeContent(ctx, c) ? caseAccessKind(c) : null;
+    if (kind) shown[kind] = (shown[kind] ?? 0) + 1;
+  }
+  for (const [kind, count] of Object.entries(shown)) await recordSensitiveAccess(ctx, { kind: kind as RecordKind, ref: "case-list", count });
   return rows.map((c) => ({
     ...c,
     summary: canSeeContent(ctx, c) ? c.summary : "Confidential case",
@@ -182,7 +197,12 @@ export async function listCases(ctx: Ctx, f: { status?: string; type?: string; q
 
 export async function getCase(ctx: Ctx, id: string) {
   assertHr(ctx, "hr.view");
-  return redact(ctx, await loadCase(ctx, id));
+  const c = await loadCase(ctx, id);
+  const shown = redact(ctx, c);
+  // reading a welfare, confidential or disciplinary case is recorded by the case's own id (never the employee, never the text); a view that shows nothing is not a read
+  const kind = shown.redacted ? null : caseAccessKind(c);
+  if (kind) await recordSensitiveAccess(ctx, { kind, entity: "RelationsCase", ref: c.id, subjectEmployeeId: c.employeeId });
+  return shown;
 }
 
 /** An employee's own cases — status and outcome only, never the investigators' notes. */

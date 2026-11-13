@@ -9,6 +9,7 @@ import type { Ctx } from "@/lib/auth/context";
 import { addDays } from "@/lib/dates";
 import { MAX_SUCCESSORS, READINESS_LEVELS, readyNow } from "@/lib/career";
 import { assertCan, BusinessError, db } from "./_base";
+import { recordSensitiveAccess } from "./sensitive-access";
 import { logAudit } from "./audit";
 import { todayUtc } from "./hr-policy";
 
@@ -106,5 +107,7 @@ export async function successionOverview(ctx: Ctx) {
       candidates: r.candidates.map((c) => ({ id: c.id, employee: c.employee, readiness: c.readiness, reason: c.reason })),
     });
   }
+  // opening the list shows the named successors: recorded with how many, never who (governance step 2a)
+  await recordSensitiveAccess(ctx, { kind: "SUCCESSION", ref: "succession-list", count: out.reduce((n, r) => n + r.candidates.length, 0) });
   return out;
 }
