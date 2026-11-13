@@ -143,10 +143,16 @@ export async function renewContract(ctx: Ctx, id: string, raw: z.input<typeof re
   const old = await db.employmentContract.findFirst({ where: { id, organizationId: ctx.orgId } });
   if (!old) throw new BusinessError("Contract not found.");
   if (old.status !== "ACTIVE") throw new BusinessError("Only the active contract can be renewed.");
-  // with the probation workflow on, a probation that is still undecided is decided only through the review (recommendation, HR review, independent decider): renewing it, or converting it to
-  // permanent here, would bypass that decision
-  if ((old.probationOutcome === "PENDING" || old.probationOutcome === "EXTENDED") && (await getHrPolicy(ctx.orgId)).probationWorkflow)
-    throw new BusinessError("This probation is still waiting for a decision. Decide it through the probation review (recommendation, HR review, independent decision) instead of renewing the contract.");
+  // a probation that is still undecided is decided only through a probation decision, never by renewing the contract: renewing it, or converting it to permanent here, would skip the decision
+  // record and the approval it needs (hr.approve, and with the workflow on the recommendation, the HR review and the independent decider). Governance step 4 closed the gap that remained
+  // with the workflow off, where renewing needed only hr.manage.
+  if (old.probationOutcome === "PENDING" || old.probationOutcome === "EXTENDED") {
+    throw new BusinessError(
+      (await getHrPolicy(ctx.orgId)).probationWorkflow
+        ? "This probation is still waiting for a decision. Decide it through the probation review (recommendation, HR review, independent decision) instead of renewing the contract."
+        : "This probation is still waiting for a decision. Confirm, extend or fail it first (on this contract's page), then renew if you still need to: renewing now would skip the decision record.",
+    );
+  }
   const startStr = r.startDate ?? (old.endDate ? iso(addDays(old.endDate, 1)) : undefined);
   if (!startStr) throw new BusinessError("Give the start date of the renewed contract.");
   const startDate = d(startStr);

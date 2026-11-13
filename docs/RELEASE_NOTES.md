@@ -8,7 +8,17 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `governance-step3b2`, one migration: 20261212090000_retention_runs)
+
+## Not yet merged (branch `governance-step4`, no migration)
+
+- **HR governance, step 4: the probation bypass is closed** (the founder chose this when asked what "step 4" meant: the governance plan had only three steps, so I asked). **It changes an approval rule: who can make a probationer permanent. No money, no migration, no new permission.**
+- **The gap:** renewing a contract needed only `hr.manage`, so with the probation workflow **off** (the default) an HR administrator could renew an **undecided** probationary contract as **permanent** with no decision record and no approval. With the workflow on this was already refused.
+- **Now:** a contract whose probation is still undecided (waiting, or extended and not finally decided) **cannot be renewed or converted**, with or without the workflow. The message says to confirm, extend or fail the probation first. **Deciding the probation still works** (it records who decided and why, and creates the permanent contract itself); after a decision, a normal renewal works as before. The contract page hides the renewal form while the probation is undecided and says why.
+- **One existing test changed, on purpose:** "with the workflow off, renewal works as it always did" (`probation-workflow.test.ts`) asserted the gap; it is replaced by four tests. Every other assertion is kept. **A company that used renewal to "extend probation" must now use the Extend decision**, which records the reason.
+- **Finding, not changed:** a probation recorded as **failed** can still be followed by a renewal of that contract. Say if you want it closed too.
+- Tests (written first, four failed before the fix): `probation-workflow.test.ts`, `hr-lifecycle.test.ts`. Explain-back note: `docs/plans/hr-governance-step4-explain-back.md`.
+
+## Merged in #197 (one migration: 20261212090000_retention_runs)
 
 - **HR governance, step 3b-2: the retention run** (the founder's "go with governance step 3b-2"). **Built on my recommended answers to the plan's seven questions: you said "go" without answering them, so please read the explain-back note and tell me if any is wrong.** **This is the first change that removes the words of records on a schedule. It cannot be undone once confirmed. It changes who approves what and adds a migration. No money is involved.**
 - **How a run works:** HR **proposes** a run for **one kind of record** (appraisals, probation, feedback, improvement plans, disciplinary, training, skills, welfare cases, succession). It covers the people or records past their period under the company's own rule, **minus** anyone a **legal hold** covers and anyone with a **data request** (or, for the kinds counted from leaving, a **case**) still open. A **different person, the Company Administrator, confirms** it, **no sooner than a minute later**, with a note. Confirming **checks everything again**, then **clears the words in one transaction** and keeps the shape (that a record existed, its kind, dates and outcome).
