@@ -36,6 +36,8 @@ export interface ErasureFacts {
   dataRequestsOpen: number;
   /** Another erasure request for the same person is already waiting. */
   alreadyPending: boolean;
+  /** A legal hold covers this person (src/lib/retention-schedule.ts): nothing is erased while it lasts. */
+  onHold?: boolean;
 }
 
 const day = (d: Date) => d.toISOString().slice(0, 10);
@@ -56,5 +58,6 @@ export function erasureBlockers(f: ErasureFacts): string[] {
   if (f.casesOpen > 0) out.push("An employee-relations case is still open.");
   if (f.dataRequestsOpen > 0) out.push("A data access request for them is still open.");
   if (f.alreadyPending) out.push("An erasure request for them is already waiting for approval.");
+  if (f.onHold) out.push("A legal hold is in place: nothing can be erased until it is released.");
   return out;
 }

@@ -20,6 +20,7 @@ import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
 import { getHrPolicy, todayUtc } from "./hr-policy";
 import { employeeLoanBalances } from "./loans";
+import { employeeHeld } from "./retention-holds";
 
 const REMOVED = "[removed]";
 
@@ -27,12 +28,13 @@ const REMOVED = "[removed]";
 async function factsFor(orgId: string, employeeId: string, years: number, today: Date, ignoreErasureId?: string): Promise<ErasureFacts & { employee: { id: string; employeeNumber: string; firstName: string; middleName: string | null; lastName: string; status: string; exitDate: Date | null } }> {
   const e = await db.employee.findFirst({ where: { id: employeeId, organizationId: orgId }, select: { id: true, employeeNumber: true, firstName: true, middleName: true, lastName: true, status: true, exitDate: true, anonymizedAt: true } });
   if (!e) throw new BusinessError("Employee not found.");
-  const [loans, settlementsOpen, casesOpen, dataRequestsOpen, pending] = await Promise.all([
+  const [loans, settlementsOpen, casesOpen, dataRequestsOpen, pending, onHold] = await Promise.all([
     employeeLoanBalances(orgId, employeeId),
     db.exitSettlement.count({ where: { organizationId: orgId, employeeId, status: { in: ["DRAFT", "PENDING_APPROVAL", "APPROVED"] } } }),
     db.relationsCase.count({ where: { organizationId: orgId, employeeId, status: { not: "CLOSED" } } }),
     db.dataAccessRequest.count({ where: { organizationId: orgId, employeeId, status: "OPEN" } }),
     db.employeeErasure.count({ where: { organizationId: orgId, employeeId, status: "PENDING", ...(ignoreErasureId ? { id: { not: ignoreErasureId } } : {}) } }),
+    employeeHeld(orgId, employeeId),
   ]);
   return {
     years,
@@ -45,6 +47,7 @@ async function factsFor(orgId: string, employeeId: string, years: number, today:
     casesOpen,
     dataRequestsOpen,
     alreadyPending: pending > 0,
+    onHold,
     employee: e,
   };
 }
@@ -133,6 +136,8 @@ export async function anonymizeEmployee(tx: Tx, orgId: string, employeeId: strin
     where: { id: employeeId },
     data: { firstName: "Former", middleName: null, lastName: "Employee", gender: null, dateOfBirth: null, phone: null, email: null, address: null, stateOfResidence: null, bankName: null, accountNumber: null, accountName: null, taxId: null, pensionPin: null, pfa: null, annualRent: null, anonymizedAt: now },
   });
+  // legal holds about them: the words of the reason go (a hold cannot be live here, erasure is refused while one is); the record that a hold existed stays
+  counts.retentionHolds = (await tx.retentionHold.updateMany({ where: { organizationId: orgId, employeeId }, data: { reason: REMOVED, releaseReason: null } })).count;
   counts.employee = 1;
   return counts;
 }
@@ -195,7 +200,7 @@ export async function retentionOverview(ctx: Ctx) {
   const due = [];
   for (const e of pastPeriod) {
     const f = await factsFor(ctx.orgId, e.id, years, today);
-    due.push({ ...e, eraseFrom: eraseFrom(e.exitDate!, years), blockers: erasureBlockers(f) });
+    due.push({ ...e, eraseFrom: eraseFrom(e.exitDate!, years), blockers: erasureBlockers(f), onHold: f.onHold === true });
   }
   return { years, due, waiting: left.length - pastPeriod.length, requests };
 }

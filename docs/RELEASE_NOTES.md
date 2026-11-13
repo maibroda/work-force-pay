@@ -5,7 +5,20 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `governance-step2b`, one migration: 20261210090000_second_person_rules)
+
+## Not yet merged (branch `governance-step3`, one migration: 20261211090000_retention_schedule_and_holds)
+
+- **HR governance, step 3a: the retention schedule and legal holds** (the founder's go; plan `docs/plans/hr-governance-plan.md`, section 2.4). **I scoped this to the safe, non-destructive first slice**, because your own note says the periods need legal advice. **Nothing new is deleted by this change.** Step 3b (new deletions, expiry notices, audited runs) waits for the lawyer to see the defaults. **No money is involved. It changes access control and what three existing deletions do while a hold is in place, so please read the explain-back note.**
+- **The schedule is data.** Fifteen kinds of record, each with how long, counted from what, and what happens (delete, anonymise, review, keep). **Your proposed defaults are loaded the first time the page is opened and are marked UNVERIFIED**; the Company Administrator records the legal adviser's name and day per rule, and **changing a rule clears its verification**.
+- **The schedule does not drive the deletions yet.** The three that exist (erase a former employee, anonymise old applicants, purge old survey answers) keep using their HR-policy settings; the page shows that setting next to each rule ("applied by the system today") so the two cannot silently disagree.
+- **Legal holds** suspend deletion for **one person, one kind of record, or the whole company**, with a reason and a review day. **Any HR administrator may place one; only the Company Administrator may release one** (new permission `retention.manage`: Company Administrator and platform staff only). **The three deletions check for a live hold**: erasure is refused (when asked and again when approved) and the applicant and survey runs do nothing, saying a hold is in place without giving the reason.
+- **Who sees a hold's reason:** only the roles that may see misconduct records. Finance can read the schedule but sees only that a hold exists. A person's hold reason is cleared if they are later erased.
+- **A "what is due" view:** counts only, no names, for the three categories that can be measured today; the others say "Not measured yet".
+- **Audit** carries ids, categories and field names, **never a reason or a note**.
+- **Migration (reversible):** two new tables and four enums; no existing table changes. Round-tripped (up, down, up) on a copy of the seeded database: row counts unchanged and no schema difference.
+- Tests (written first): `tests/unit/retention-schedule.test.ts`, `tests/integration/retention-schedule.test.ts` (23 tests). Explain-back note: `docs/plans/hr-governance-step3a-explain-back.md`. **Not built:** new deletions for the other categories, expiry notices, an audited run, holds in the HR digest. **For the lawyer:** whether a hold's reason belongs in a person's copy of their data (I left it out).
+
+## Merged in #194 (one migration: 20261210090000_second_person_rules)
 
 - **HR governance, step 2b: the second-person rules** (the founder's go; plan `docs/plans/hr-governance-step2-plan.md`, #188). **Built on my recommended answers** to the plan's questions (listed in the explain-back note). **No money is involved. It changes who may sign off sensitive decisions, so please read the explain-back note.**
 - **The rule: the person who did the work does not also sign it off.** (1) **A case is not closed by the person who resolved it**, for **every kind of case** (a welfare case included). (2) **A sanction is not approved by the person who raised it** (this fixes a gap: a Company Administrator could raise and approve their own sanction alone); **a commendation is unchanged**. (3) **A new succession nomination is proposed and approved by a different holder of the succession function**; a proposed successor **does not count as cover** until approved; changing readiness and removing a successor stay immediate; every successor from before stays approved.

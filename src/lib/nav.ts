@@ -417,6 +417,7 @@ export const HR_AREA: Area = {
     { group: "Privacy & records", href: "/hr/data-requests", label: "Data access requests", perm: "hr.view" },
     { group: "Privacy & records", href: "/hr/breaches", label: "Data breaches", perm: "hr.view" },
     { group: "Privacy & records", href: "/hr/retention", label: "Records retention", perm: "hr.view" },
+    { group: "Privacy & records", href: "/hr/retention-schedule", label: "Retention schedule & legal holds", perm: "hr.view" },
     { group: "HR setup", href: "/settings/hr-policy", label: "HR & lifecycle policy", perm: "hr.configure" },
     { group: "HR setup", href: "/settings/document-types", label: "Document types", perm: "document.configure" },
     { group: "HR setup", href: "/settings/checklists", label: "Onboarding & exit checklists", perm: "hr.configure" },

@@ -612,6 +612,8 @@ model Organization {
   userFunctionGrants        UserFunctionGrant[]
   probationReviews          ProbationReview[]
   probationDeciders         ProbationDecider[]
+  retentionRules            RetentionRule[]
+  retentionHolds            RetentionHold[]
   recognitionAwardTypes     RecognitionAwardType[]
   recognitionAwards         RecognitionAward[]
   careerPaths               CareerPath[]
@@ -2053,6 +2055,7 @@ model Employee {
   feedbackReceived        PerformanceFeedback[]
   probationDecisions      ProbationDecision[]
   probationReviews        ProbationReview[]
+  retentionHolds          RetentionHold[]
   trainingEnrolments      TrainingEnrolment[]
   trainingNeeds           TrainingNeed[]
   trainingRequests        TrainingRequest[]
@@ -8488,4 +8491,93 @@ model UserFunctionGrant {
 
   @@index([userId, function])
   @@index([organizationId])
+}
+
+// ─────────────────────────── RETENTION SCHEDULE AND LEGAL HOLDS ───────────────────────────
+
+enum RetentionCategory {
+  EMPLOYEE_FILE
+  APPRAISALS
+  PROBATION
+  FEEDBACK
+  IMPROVEMENT_PLANS
+  DISCIPLINARY
+  TRAINING
+  SKILLS
+  WELFARE_CASES
+  SUCCESSION
+  RAW_SURVEYS
+  SURVEY_REPORTS
+  AUDIT_LOGS
+  UNSUCCESSFUL_APPLICANTS
+  ACCESS_LOGS
+}
+
+enum RetentionTrigger {
+  AFTER_EXIT
+  AFTER_CLOSURE
+  AFTER_RECORD_DATE
+  AFTER_SURVEY_CLOSE
+  AFTER_RECRUITMENT_CLOSE
+  AFTER_ACCOUNT_CLOSURE
+}
+
+enum RetentionAction {
+  DELETE
+  ANONYMISE
+  REVIEW
+  KEEP
+}
+
+enum RetentionHoldScope {
+  EMPLOYEE
+  CATEGORY
+  COMPANY
+}
+
+/// How long one category of record is kept, counted from what, and what happens then. The founder’s proposed defaults are loaded UNVERIFIED (verifiedOn null) until the legal adviser has seen them;
+/// changing a rule clears its verification. A company has at most one rule per category.
+model RetentionRule {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  category       RetentionCategory
+  periodMonths   Int
+  trigger        RetentionTrigger
+  action         RetentionAction
+  /// Why this is the rule, in a line (for the legal adviser).
+  note           String?
+  /// "Legal adviser verified on and by": the day, and the adviser’s name as given (not a user of the system).
+  verifiedOn     DateTime?         @db.Date
+  verifiedBy     String?
+  verifiedNote   String?
+  /// The user who recorded the verification, or last changed the rule.
+  updatedByUserId String?
+  updatedBy       String?
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([organizationId, category])
+}
+
+/// A legal hold: deletion is suspended for one person, one category of record, or the whole company, with a reason and a day to review it. Any HR administrator may place one; only the
+/// Company Administrator may release it. The deletions that exist check for a live hold before they run.
+model RetentionHold {
+  id              String             @id @default(cuid())
+  organizationId  String
+  organization    Organization       @relation(fields: [organizationId], references: [id])
+  scope           RetentionHoldScope
+  employeeId      String?
+  employee        Employee?          @relation(fields: [employeeId], references: [id])
+  category        RetentionCategory?
+  reason          String
+  reviewOn        DateTime           @db.Date
+  placedByUserId  String
+  placedBy        String
+  placedAt        DateTime           @default(now())
+  releasedAt      DateTime?
+  releasedByUserId String?
+  releasedBy      String?
+  releaseReason   String?
+
+  @@index([organizationId, releasedAt])
 }

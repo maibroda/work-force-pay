@@ -27,6 +27,7 @@ const OLD: Array<[string, Permission]> = [
   ["/hr/data-requests", "hr.view"],
   ["/hr/breaches", "hr.view"],
   ["/hr/retention", "hr.view"],
+  ["/hr/retention-schedule", "hr.view"],
   ["/hr/appraisals", "appraisal.view"],
   ["/hr/feedback", "feedback.manage"],
   ["/hr/improvement-plans", "pip.view"],
