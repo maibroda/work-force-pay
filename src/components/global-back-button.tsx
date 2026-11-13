@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { afterBack, backDestination, type BackDestination } from "@/lib/global-back";
+import { afterBack, backDestination, forUser, type BackDestination } from "@/lib/global-back";
 import { markRestore, profileIdFromPath } from "@/lib/profile-nav";
 import { loadNav, saveNav } from "@/lib/nav-storage";
 
@@ -13,7 +13,7 @@ import { loadNav, saveNav } from "@/lib/nav-storage";
  * the app (a direct address, a refresh in a new tab) it goes to the parent module or the person's home, and it is hidden on a landing page with nothing before it. An employee's
  * profile keeps its own arrow (which also remembers the directory's search and filters), so it is not drawn there. The rules are in src/lib/global-back.ts.
  */
-export function GlobalBackButton({ home }: { home: string }) {
+export function GlobalBackButton({ home, who }: { home: string; who: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const search = useSearchParams().toString();
@@ -22,8 +22,8 @@ export function GlobalBackButton({ home }: { home: string }) {
 
   // worked out after the page has loaded: the trail lives in the browser's session storage
   useEffect(() => {
-    setDest(profileIdFromPath(url) ? null : backDestination(loadNav(), url, home));
-  }, [url, home]);
+    setDest(profileIdFromPath(url) ? null : backDestination(forUser(loadNav(), who), url, home));
+  }, [url, home, who]);
 
   if (!dest) return <span className="h-9 w-9" aria-hidden="true" />;
   const label = dest.kind === "previous" ? "Go back to the previous page" : "Go back";
@@ -37,7 +37,7 @@ export function GlobalBackButton({ home }: { home: string }) {
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; // let the browser open it in a new tab as usual
         e.preventDefault();
         // worked out again now, from the latest trail, so a stale arrow can never send the person somewhere they did not come from
-        const state = loadNav();
+        const state = forUser(loadNav(), who);
         const target = backDestination(state, url, home);
         if (!target) return;
         saveNav(markRestore(afterBack(state, target.href, target.kind), target.href));
