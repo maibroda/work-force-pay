@@ -153,6 +153,16 @@ describe("employment contracts", () => {
     await expect(createContract(hr, { ...base, type: "PERMANENT" })).rejects.toThrow(/already has an active contract/);
   });
 
+  it("does not renew a probationary contract whose probation is still undecided, with the company's default settings (governance step 4)", async () => {
+    const t = await isolatedOrg();
+    const hr = t.ctx("HR_ADMIN");
+    const e = await hire(t, "NoBypass");
+    const first = await createContract(hr, { employeeId: e.id, type: "PROBATION", jobTitle: "Guard", startDate: "2026-01-01", probationMonths: 3 });
+    expect(first.probationOutcome).toBe("PENDING");
+    await expect(renewContract(hr, first.id, { type: "PERMANENT", startDate: "2026-04-02" })).rejects.toThrow(/still waiting for a decision/i);
+    expect((await db.employmentContract.findUniqueOrThrow({ where: { id: first.id } })).status).toBe("ACTIVE");
+  });
+
   it("renews into a chain, closing the old contract the day before", async () => {
     const t = await isolatedOrg();
     const hr = t.ctx("HR_ADMIN");

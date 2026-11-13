@@ -108,9 +108,36 @@ describe("no way around the independent decision", () => {
     expect(c).toMatchObject({ status: "ACTIVE", probationOutcome: "PENDING" });
     expect(await db.employmentContract.count({ where: { employeeId: w.emp.id, type: "PERMANENT" } })).toBe(0);
   });
-  it("with the workflow off, renewal works as it always did", async () => {
+  // governance step 4: the same rule with the workflow OFF. Before it, renewing needed only hr.manage and turned an undecided probation into a permanent contract with no decision
+  // record and no hr.approve (this test used to assert that renewal "works as it always did": that was the gap).
+  it("with the workflow off too, an undecided probation cannot be renewed or converted to permanent: it is decided first", async () => {
     const w = await world(false);
-    const next = await renewContract(w.hr1, w.contract.id, { type: "PERMANENT", startDate: iso(addDays(todayUtc(), 11)) });
+    const before = await db.auditLog.count({ where: { organizationId: w.t.org.id, action: "EMPLOYMENT_CONTRACT_RENEW" } });
+    await expect(renewContract(w.hr1, w.contract.id, { type: "PERMANENT", startDate: iso(addDays(todayUtc(), 11)) })).rejects.toThrow(/still waiting for a decision/i);
+    await expect(renewContract(w.boss, w.contract.id, { type: "PERMANENT", startDate: iso(addDays(todayUtc(), 11)) })).rejects.toThrow(/still waiting for a decision/i);
+    const c = await db.employmentContract.findUniqueOrThrow({ where: { id: w.contract.id } });
+    expect(c).toMatchObject({ status: "ACTIVE", probationOutcome: "PENDING" });
+    expect(await db.employmentContract.count({ where: { employeeId: w.emp.id, type: "PERMANENT" } })).toBe(0);
+    expect(await db.probationDecision.count({ where: { employeeId: w.emp.id } })).toBe(0);
+    expect(await db.auditLog.count({ where: { organizationId: w.t.org.id, action: "EMPLOYMENT_CONTRACT_RENEW" } })).toBe(before);
+  });
+  it("with the workflow off, a probation that was extended is still undecided, so it cannot be renewed either", async () => {
+    const w = await world(false);
+    await db.employmentContract.update({ where: { id: w.contract.id }, data: { probationOutcome: "EXTENDED" } });
+    await expect(renewContract(w.hr1, w.contract.id, { endDate: iso(addDays(todayUtc(), 400)) })).rejects.toThrow(/still waiting for a decision/i);
+    expect((await db.employmentContract.findUniqueOrThrow({ where: { id: w.contract.id } })).status).toBe("ACTIVE");
+  });
+  it("tells the person to decide the probation first, and the decision itself still works: it records who decided and creates the permanent contract", async () => {
+    const w = await world(false);
+    await expect(renewContract(w.hr1, w.contract.id, {})).rejects.toThrow(/confirm, extend or fail/i);
+    const decided = await decideProbation(w.boss, w.contract.id, { decision: "CONFIRMED", effectiveDate: iso(addDays(todayUtc(), 11)) });
+    expect(decided.next).toMatchObject({ type: "PERMANENT" });
+    expect(await db.probationDecision.count({ where: { employeeId: w.emp.id, decision: "CONFIRMED" } })).toBe(1);
+  });
+  it("once the probation is decided, a renewal of that contract is allowed as before", async () => {
+    const w = await world(false);
+    await db.employmentContract.update({ where: { id: w.contract.id }, data: { probationOutcome: "CONFIRMED", type: "FIXED_TERM", endDate: addDays(todayUtc(), 30) } });
+    const next = await renewContract(w.hr1, w.contract.id, { endDate: iso(addDays(todayUtc(), 400)) });
     expect(next).toBeTruthy();
   });
 });

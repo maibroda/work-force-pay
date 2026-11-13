@@ -219,7 +219,13 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
         </div>
       )}
 
-      {manage && active && (
+      {manage && reviewing && (
+        <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <b>This probation is still waiting for a decision.</b> A contract in probation is renewed, extended or made permanent only through the probation decision (confirm, extend or fail), which records who decided and why. Decide it first; the renewal form appears
+          once it is decided.
+        </p>
+      )}
+      {manage && active && !reviewing && (
         <FormPanel title="Renew, extend or convert this contract">
           <p className="mb-3 text-xs text-muted-foreground">
             Creates the next contract in the chain and supersedes this one. Leave the start date blank to start the day after this contract ends.
