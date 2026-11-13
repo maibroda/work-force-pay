@@ -14,7 +14,8 @@ describe("the four functions an officer can be given", () => {
 
 describe("what a Delegated HR Officer can do on their own", () => {
   it("is what any signed-in person can do and nothing in HR", () => {
-    expect([...ROLE_PERMISSIONS.HR_OFFICER].sort()).toEqual(["self.security", "self.view"]);
+    // probation.view (added with the probation workflow) opens My Workspace > Probation: the officer's own probation feedback, and decisions waiting only if they are designated; it is a self-service page, not an HR right
+    expect([...ROLE_PERMISSIONS.HR_OFFICER].sort()).toEqual(["probation.view", "self.security", "self.view"]);
     for (const p of ["hr.view", "hr.manage", "hr.approve", "hr.configure", "welfare.manage", "survey.manage", "succession.manage"] as Permission[]) expect(can("HR_OFFICER", p), p).toBe(false);
   });
 });

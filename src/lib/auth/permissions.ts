@@ -81,6 +81,7 @@ export const PERMISSIONS = [
   "career.propose", // propose that an employee moves to another role (category): HR about anyone, a manager about their own direct reports; a record of a decision only
   "training.request", // ask for a course for an employee and evaluate a course they attended: HR about anyone, a manager about their own direct reports
   "skills.assess", // assess an employee's skill level: HR about anyone, a manager about their own direct reports; a record, never a score that changes pay or an appraisal
+  "probation.view", // open My Workspace > Probation: waiting decisions for a designated decider, and the employee's own probation feedback and response; held by every staff role, so a decider can be designated from any of them
   "probation.recommend", // recommend confirm, extend or not confirm for an employee's probation: a manager about their own direct reports, HR where there is no reporting manager
   "probation.designate", // designate (and revoke) the people who make the final probation decision: the Company Administrator (and platform staff) ONLY, never the HR administrator
   "hr.officer.manage", // appoint a Delegated HR Officer and grant or revoke their functions: the Company Administrator (and platform staff) ONLY, never the HR administrator
@@ -165,6 +166,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   // a company's administrator holds everything EXCEPT changing its own subscription (otherwise any company could give itself every module) and the welfare right
   COMPANY_ADMIN: ALL.filter((p) => p !== "subscription.manage" && p !== "pricebook.manage" && p !== "welfare.manage" && p !== "succession.manage" && p !== "survey.manage" && p !== "survey.assist"),
   HR_ADMIN: [
+    "probation.view",
     "dashboard.view",
     "employee.view",
     "employee.manage",
@@ -220,6 +222,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "query.respond",
   ],
   OPERATIONS: [
+    "probation.view",
     "feedback.give", // about their own direct reports
     "recognition.nominate", // about their own direct reports
     "career.propose", // about their own direct reports
@@ -247,6 +250,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "self.security",
   ],
   PAYROLL_ADMIN: [
+    "probation.view",
     "payrate.approve",
     "healthcheck.view",
     "healthcheck.manage",
@@ -278,6 +282,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "query.respond",
   ],
   FINANCE: [
+    "probation.view",
     "sales.view",
     "sales.view.all", // read-only: they see the sales records but change nothing
     ...READ_ALL,
@@ -302,8 +307,9 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "payslip.distribute",
     "query.respond",
   ],
-  AUDITOR: [...READ_ALL, "discipline.view", "document.view", "pip.view"], // audit needs the whole file, misconduct included
+  AUDITOR: [...READ_ALL, "discipline.view", "document.view", "pip.view", "probation.view"], // audit needs the whole file, misconduct included
   SUPERVISOR: [
+    "probation.view",
     "dashboard.view",
     "operations.view",
     "attendance.record",
@@ -321,9 +327,9 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "skills.assess",
     "probation.recommend",
   ],
-  EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise"],
+  EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise", "probation.view"],
   // nothing in HR until a function is granted (see canCtx in src/lib/hr-functions.ts)
-  HR_OFFICER: ["self.view", "self.security"],
+  HR_OFFICER: ["self.view", "self.security", "probation.view"],
   // the bureau's sales person sees the CRM and nothing else: no payroll, employee, client or finance data
   BUSINESS_DEV: ["blueprint.manage", "crm.view", "crm.manage", "sales.view", "sales.manage", "sales.case.manage", "healthcheck.view", "self.security"],
   // a company's own sales people see the sales module and nothing else: no bureau pipeline, payroll, employee, client or finance data. They differ only in WHICH records they see:

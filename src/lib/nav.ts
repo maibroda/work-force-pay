@@ -566,7 +566,7 @@ export const MY_AREA: Area = {
     { group: "My HR", href: "/me/surveys", label: "My surveys", perm: "self.view" },
     { group: "My HR", href: "/me/skills", label: "My skills", perm: "self.view" },
     { group: "My HR", href: "/me/team-skills", label: "My team's skills", perm: "skills.assess" },
-    { group: "My HR", href: "/me/probation", label: "Probation", perm: "self.view" },
+    { group: "My HR", href: "/me/probation", label: "Probation", perm: "probation.view" },
     { group: "My HR", href: "/me/team-probation", label: "My team's probation", perm: "probation.recommend" },
     { group: "My HR", href: "/me/career", label: "My career", perm: "self.view" },
     { group: "My HR", href: "/me/team-promotions", label: "My team's promotions", perm: "career.propose" },

@@ -17,7 +17,7 @@ const check = (v: boolean | null) => (v === null ? "not asked by the policy" : v
  * reviewed or am the subject of); responses I have not marked as read; and MY OWN probation (the decision HR has told me about, the feedback written for me and my one response).
  */
 export default async function MyProbationPage() {
-  const ctx = await requirePage("self.view");
+  const ctx = await requirePage("probation.view");
   const [policy, queue, mine] = await Promise.all([getHrPolicy(ctx.orgId), decisionQueue(ctx), myProbationReviews(ctx)]);
   return (
     <>

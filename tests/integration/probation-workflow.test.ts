@@ -336,6 +336,15 @@ describe("who sees what in the queues", () => {
 });
 
 describe("designating deciders", () => {
+  it("only someone whose role can open the decision screen can be designated", async () => {
+    const w = await world();
+    for (const role of ["OPERATIONS", "SUPERVISOR", "EMPLOYEE", "HR_ADMIN", "FINANCE"] as const) {
+      const u = await user(w.t, role);
+      expect(await designateDecider(w.boss, { userId: u.id, reason: "Department head" }), role).toBeTruthy();
+    }
+    const client = await user(w.t, "CLIENT_APPROVER");
+    await expect(designateDecider(w.boss, { userId: client.id, reason: "Not an employee of ours" })).rejects.toThrow(/role|cannot open/i);
+  });
   it("only the Company Administrator may, never the HR administrator; the person must belong to this company; every change is audited by ids", async () => {
     const w = await world();
     const head = await user(w.t, "SUPERVISOR");

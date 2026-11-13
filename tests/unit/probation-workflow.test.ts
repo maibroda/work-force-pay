@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { can, ROLE_PERMISSIONS, type Role } from "@/lib/auth/permissions";
 import {
   FEEDBACK_MAX,
   NOTE_MIN,
@@ -99,5 +100,17 @@ describe("the employee's response", () => {
     expect(responseOpen("2026-11-10", "2026-11-17", 7)).toBe(true);
     expect(responseOpen("2026-11-10", "2026-11-18", 7)).toBe(false);
     expect(responseOpen("2026-11-10", "2027-05-01", 0)).toBe(true);
+  });
+});
+
+describe("who can open the probation pages", () => {
+  const roles = Object.keys(ROLE_PERMISSIONS) as Role[];
+  it("every staff role can open the Probation page (a decider may hold any of them); client and sales roles cannot", () => {
+    const staff: Role[] = ["SUPER_ADMIN", "COMPANY_ADMIN", "HR_ADMIN", "HR_OFFICER", "OPERATIONS", "PAYROLL_ADMIN", "FINANCE", "AUDITOR", "SUPERVISOR", "EMPLOYEE"];
+    for (const r of staff) expect(can(r, "probation.view"), r).toBe(true);
+    for (const r of roles.filter((x) => !staff.includes(x))) expect(can(r, "probation.view"), r).toBe(false);
+  });
+  it("designating deciders stays with the Company Administrator and platform staff, never the HR administrator", () => {
+    expect(roles.filter((r) => can(r, "probation.designate")).sort()).toEqual(["COMPANY_ADMIN", "SUPER_ADMIN"]);
   });
 });

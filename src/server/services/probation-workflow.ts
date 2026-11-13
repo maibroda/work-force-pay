@@ -230,8 +230,10 @@ const designateSchema = z.object({ userId: z.string().min(1), departmentId: z.st
 export async function designateDecider(ctx: Ctx, raw: z.input<typeof designateSchema>) {
   assertCan(ctx, "probation.designate");
   const v = designateSchema.parse(raw);
-  const u = await db.user.findFirst({ where: { id: v.userId, organizationId: ctx.orgId, active: true }, select: { id: true } });
+  const u = await db.user.findFirst({ where: { id: v.userId, organizationId: ctx.orgId, active: true }, select: { id: true, role: true } });
   if (!u) throw new BusinessError("User not found.");
+  // a decider must be able to open the decision screen (My Workspace > Probation): not a client or sales login
+  if (!can(u.role as never, "probation.view")) throw new BusinessError("This person's role cannot open the decision screen, so they cannot be designated.");
   if (v.departmentId && !(await db.department.findFirst({ where: { id: v.departmentId, organizationId: ctx.orgId }, select: { id: true } }))) throw new BusinessError("Department not found.");
   const dup = await db.probationDecider.findFirst({ where: { organizationId: ctx.orgId, userId: u.id, departmentId: v.departmentId ?? null, revokedAt: null }, select: { id: true } });
   if (dup) throw new BusinessError("This person is already designated for that scope.");
