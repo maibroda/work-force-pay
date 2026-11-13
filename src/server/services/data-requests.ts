@@ -55,6 +55,8 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
   });
   if (!e) throw new BusinessError("Employee not found.");
   const where = { organizationId: orgId, employeeId };
+  // the probation workflow: the manager's recommendation and reasons, HR's review note, the feedback written for the employee and their response
+  const probationReviews = await db.probationReview.findMany({ where, orderBy: [{ round: "asc" }, { id: "asc" }] });
 
   const [contracts, exits, settlements, onboarding, deployments, movements, attendance, payslips, loans, leave, training, documents, discipline, cases, contacts, guarantors, appraisals, acks, letters, changes, candidate, kit, plans, probationDecisions, feedback, trainingEnrolments, trainingNeeds, recognition, trainingEvaluations, trainingRequests, skillAssessments, surveyParticipation, promotions] =
     await Promise.all([
@@ -233,6 +235,10 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
     probationDecisions: {
       title: "Decisions about your probation",
       records: probationDecisions.map((x) => ({ decision: words(x.decision), decidedOn: dt(x.decidedAt), reason: x.note, extendedByMonths: x.extensionMonths, effectiveFrom: dt(x.effectiveDate), toldToYouOn: dt(x.informedAt) })),
+    },
+    probationReviews: {
+      title: "The review of your probation: your manager's recommendation, HR's review, the feedback written for you and your response",
+      records: probationReviews.map((x) => ({ round: x.round, recommendation: words(x.recommendation), recommendedOn: dt(x.recommendedAt), managersReasons: x.recommendationNote, hrReviewedOn: dt(x.reviewedAt), hrNote: x.reviewNote, stage: words(x.status), feedbackForYou: x.feedbackText, yourResponse: x.responseText, youAgreed: x.responseAgreed, respondedOn: dt(x.respondedAt) })),
     },
     trainingEvaluations: {
       title: "Your answers about courses, and your manager's evaluations of your training",

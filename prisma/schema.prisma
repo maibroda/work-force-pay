@@ -610,6 +610,8 @@ model Organization {
   surveyKioskSessions       SurveyKioskSession[]
   surveyAggregates          SurveyAggregate[]
   userFunctionGrants        UserFunctionGrant[]
+  probationReviews          ProbationReview[]
+  probationDeciders         ProbationDecider[]
   recognitionAwardTypes     RecognitionAwardType[]
   recognitionAwards         RecognitionAward[]
   careerPaths               CareerPath[]
@@ -1821,6 +1823,7 @@ model User {
   /// The last day this person can sign in (required for an external user). Null = no end.
   accessEndsOn  DateTime? @db.Date
   functionGrants UserFunctionGrant[]
+  probationDeciderRows ProbationDecider[]
 
   // TOTP two-factor authentication (optional; not yet enforced by role).
   totpSecret     String?
@@ -1876,6 +1879,7 @@ model Department {
   code           String
   name           String
   employees      Employee[]
+  probationDeciders ProbationDecider[]
   costCenterId   String?
   costCenter     CostCenter?      @relation(fields: [costCenterId], references: [id])
   requisitions   JobRequisition[]
@@ -2048,6 +2052,7 @@ model Employee {
   directReports           Employee[]               @relation("ReportingLine")
   feedbackReceived        PerformanceFeedback[]
   probationDecisions      ProbationDecision[]
+  probationReviews        ProbationReview[]
   trainingEnrolments      TrainingEnrolment[]
   trainingNeeds           TrainingNeed[]
   trainingRequests        TrainingRequest[]
@@ -2379,6 +2384,10 @@ model HrPolicy {
   probationAlertDays     Int @default(30)
   /// An undecided probation moves to the approvals list once it has been past its end date for this many days (0 = never).
   probationEscalationDays Int @default(7)
+  /// The recommend, HR review, independent decision and employee response flow for probation (docs/plans/probation-workflow-plan.md). OFF: the HR approver decides as before.
+  probationWorkflow Boolean @default(false)
+  /// Days after HR tells the employee that they may respond (that day counts); 0 = no time limit.
+  probationResponseDays Int @default(7)
   /// The anniversaries (in whole years) HR is prompted about for long-service recognition. A prompt only: never an award.
   longServiceYears        Int[] @default([5, 10, 15, 20])
   /// An approved promotion not yet applied for this many days is flagged in the HR digest (0 = never).
@@ -2576,6 +2585,7 @@ model EmploymentContract {
   previousContract    EmploymentContract?      @relation("ContractChain", fields: [previousContractId], references: [id])
   renewals            EmploymentContract[]     @relation("ContractChain")
   decisions           ProbationDecision[]
+  probationReviews    ProbationReview[]
   terminatedAt        DateTime?                @db.Date
   terminationReason   String?
   notes               String?
@@ -7761,9 +7771,106 @@ model ProbationDecision {
   /// When HR told the employee: only then does the employee see a line about it.
   informedAt                DateTime?
   informedBy                String?
+  /// The review (recommendation, HR review) this decision completed, when the workflow is on.
+  reviewId                  String?                  @unique
+  review                    ProbationReview?         @relation(fields: [reviewId], references: [id])
 
   @@index([organizationId, employeeId])
   @@index([contractId, decidedAt])
+}
+
+enum ProbationRecommendation {
+  CONFIRM
+  EXTEND
+  NOT_CONFIRM
+}
+
+enum ProbationReviewStatus {
+  /// The reporting manager has recommended; HR has not reviewed it yet.
+  RECOMMENDED
+  /// HR returned it to the manager; a new round starts with a new recommendation.
+  RETURNED
+  /// HR forwarded it to the independent decider.
+  FORWARDED
+  /// The decider decided (the contract changed through the existing decision).
+  DECIDED
+}
+
+/// One round of the probation workflow: the manager's recommendation, HR's review, the decision, the feedback the employee receives and their one response. Each step fills its own
+/// fields once and is never overwritten; a returned recommendation stays as it was and a new round is a new row.
+model ProbationReview {
+  id             String                  @id @default(cuid())
+  organizationId String
+  organization   Organization            @relation(fields: [organizationId], references: [id])
+  employeeId     String
+  employee       Employee                @relation(fields: [employeeId], references: [id])
+  contractId     String
+  contract       EmploymentContract      @relation(fields: [contractId], references: [id])
+  round          Int
+  status         ProbationReviewStatus   @default(RECOMMENDED)
+
+  recommendation      ProbationRecommendation
+  /// For Extend: the months proposed.
+  recommendedMonths   Int?
+  recommendationNote  String
+  recommendedByUserId String
+  recommendedBy       String
+  recommendedAt       DateTime                @default(now())
+  /// HR recorded it because the employee has no reporting manager.
+  recordedByHr        Boolean                 @default(false)
+
+  reviewNote       String?
+  reviewedByUserId String?
+  reviewedBy       String?
+  reviewedAt       DateTime?
+  /// What the policy checks showed when HR reviewed it (null = not applicable or not reviewed yet).
+  appraisalSignedOff Boolean?
+  minScoreMet        Boolean?
+  withinMaxMonths    Boolean?
+
+  decision                     ProbationDecision?
+  decidedAt                    DateTime?
+  /// The decision was not the one the manager recommended (and so carried the fuller reason).
+  decidedAgainstRecommendation Boolean            @default(false)
+
+  /// The statement the employee receives (separate from the internal reason).
+  feedbackText     String?
+  feedbackByUserId String?
+  feedbackAt       DateTime?
+
+  responseAgreed Boolean?
+  responseText   String?
+  respondedAt    DateTime?
+  /// The decider recorded that they read the response.
+  responseReadByUserId String?
+  responseReadBy       String?
+  responseReadAt       DateTime?
+
+  @@unique([contractId, round])
+  @@index([organizationId, status])
+  @@index([organizationId, employeeId])
+}
+
+/// A user the Company Administrator designated to make final probation decisions (for example a department head), optionally for one department. The Company Administrator and platform staff
+/// may always decide. Live until revoked.
+model ProbationDecider {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  userId          String
+  user            User         @relation(fields: [userId], references: [id])
+  departmentId    String?
+  department      Department?  @relation(fields: [departmentId], references: [id])
+  reason          String
+  grantedByUserId String
+  grantedBy       String
+  grantedAt       DateTime     @default(now())
+  revokedAt       DateTime?
+  revokedByUserId String?
+  revokedBy       String?
+  revokeReason    String?
+
+  @@index([organizationId, userId])
 }
 
 // ─────────────────────────── TRAINING NEEDS AND CALENDAR ───────────────────────────

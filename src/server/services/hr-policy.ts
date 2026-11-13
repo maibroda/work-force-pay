@@ -278,6 +278,8 @@ export const hrPolicySchema = z
     contractAlertDays: day,
     probationAlertDays: day,
     probationEscalationDays: z.coerce.number().int().min(0).max(90),
+    probationWorkflow: z.boolean(),
+    probationResponseDays: z.coerce.number().int().min(0).max(90),
     longServiceYears: z.array(z.coerce.number().int().min(1).max(60)).max(10),
     promotionApplyAlertDays: z.coerce.number().int().min(0).max(90),
     trainingEvaluationDays: z.coerce.number().int().min(0).max(365),

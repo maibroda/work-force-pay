@@ -15,6 +15,7 @@ import { fmtDate } from "@/lib/dates";
 import { fullName } from "@/lib/utils";
 import { FormPanel, KV, PageHeader, Section } from "@/components/page";
 import { SmartForm } from "@/components/smart-form";
+import { ProbationReviews } from "@/components/probation-reviews";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { decideProbationAction, markProbationInformedAction, renewContractAction } from "@/app/actions/hr-lifecycle";
 import { generateLetterAction } from "@/app/actions/letters";
@@ -35,6 +36,8 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
   const paOpen = pa && (pa.status === "DRAFT" || pa.status === "SUBMITTED");
   // the decisions made about this probation, what the signed-off appraisal recommends, and whether a failed probation has had an exit started
   const history = await probationHistory(ctx, c.id);
+  // with the probation workflow on, the decision goes through recommendation, HR review and an independent decider (the review panel below), never the direct forms
+  const workflowOn = (await getHrPolicy(ctx.orgId)).probationWorkflow;
   const recommendation = pa && (pa.status === "APPROVED" || pa.status === "ACKNOWLEDGED") && pa.recommendation !== "NONE" ? pa.recommendation : null;
   const exitStarted = c.probationOutcome === "FAILED" ? (await db.exitRecord.count({ where: { organizationId: ctx.orgId, employeeId: c.employeeId, status: { in: ["PENDING", "APPROVED", "PROCESSED"] } } })) > 0 : true;
   return (
@@ -164,12 +167,14 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
         </Section>
       )}
 
-      {approve && reviewing && recommendation && (
+      {workflowOn && c.probationOutcome && <ProbationReviews ctx={ctx} contractId={c.id} />}
+
+      {approve && reviewing && !workflowOn && recommendation && (
         <p className="mb-3 rounded-md border bg-muted/40 px-3 py-2 text-sm">
           The signed-off probation appraisal recommends: <b>{RECOMMENDATION_LABELS[recommendation]}</b>. You may decide otherwise, but a decision against it needs a fuller reason (at least {AGAINST_REASON_MIN} characters) and is marked on the record. Whoever reviewed or signed off that appraisal cannot make the decision.
         </p>
       )}
-      {approve && reviewing && (
+      {approve && reviewing && !workflowOn && (
         <div className="grid gap-5 lg:grid-cols-3">
           <FormPanel title="Confirm probation" open>
             <SmartForm

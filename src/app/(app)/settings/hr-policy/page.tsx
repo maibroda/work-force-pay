@@ -132,6 +132,8 @@ export default async function HrPolicyPage() {
           fields={[
             { name: "appraisalSelfAssessment", label: "Employees rate themselves first", type: "checkbox", defaultValue: p.appraisalSelfAssessment },
             { name: "probationRequiresAppraisal", label: "Probation can be confirmed only after a signed-off probation appraisal", type: "checkbox", defaultValue: p.probationRequiresAppraisal, span: 2 },
+            { name: "probationWorkflow", label: "Probation is decided through a manager's recommendation, an HR review and an independent decision (designate deciders under Settings first)", type: "checkbox", defaultValue: p.probationWorkflow, span: 3 },
+            { name: "probationResponseDays", label: "Days an employee has to respond to a probation decision, from the day HR tells them (0 = no time limit)", type: "number", min: 0, max: 90, defaultValue: p.probationResponseDays, span: 2 },
             { name: "probationMinScore", label: "…scoring at least (1–5)", type: "number", min: 0, max: 5, defaultValue: num(p.probationMinScore), help: "0 = any score. Extending or failing probation is never blocked." },
             { name: "appraisalMinServiceDays", label: "Minimum service to be included in a cycle (days)", type: "number", min: 0, max: 1825, defaultValue: p.appraisalMinServiceDays, help: "Counted at the period end. Specific employees picked for a cycle are always included." },
             { name: "appraisalCommentAtOrBelow", label: "A comment is required for a rating at or below", type: "number", min: 0, max: 5, defaultValue: p.appraisalCommentAtOrBelow, help: "0 = never." },
