@@ -104,7 +104,7 @@ export default async function SuccessionPage() {
                   { name: "readiness", label: "Readiness", type: "select", required: true, options: READINESS_LEVELS.map((l) => ({ value: l, label: READINESS_LABELS[l] })) },
                   { name: "reason", label: "One line on why (optional)" },
                   ...(others === 0
-                    ? [{ name: "singleHolderReason", label: "You are the only person who keeps this list, so a second person cannot approve a new nomination: why are you adding one without? (at least 20 characters; needed only for a new successor)", span: 3 }]
+                    ? [{ name: "singleHolderReason", label: "You are the only person who keeps this list, so a second person cannot approve a new nomination: why are you adding one without? (at least 20 characters; needed only for a new successor)", span: 3 as const }]
                     : []),
                 ]}
               />
