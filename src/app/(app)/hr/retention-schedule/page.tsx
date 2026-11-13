@@ -2,6 +2,8 @@ import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { dueView, getSchedule } from "@/server/services/retention-schedule";
+import { listRuns } from "@/server/services/retention-run";
+import { isRunnable } from "@/lib/retention-run";
 import {
   RETENTION_ACTIONS,
   RETENTION_ACTION_LABELS,
@@ -18,22 +20,26 @@ import { SmartForm } from "@/components/smart-form";
 import { Badge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { placeHoldAction, releaseHoldAction, updateRuleAction, verifyRuleAction } from "@/app/actions/retention-schedule";
+import { confirmRunAction, proposeRunAction, rejectRunAction } from "@/app/actions/retention-run";
 
 const categoryOptions = RETENTION_CATEGORIES.map((c) => ({ value: c, label: RETENTION_CATEGORY_LABELS[c] }));
 
-/** The retention schedule, the legal holds and what is due. The schedule is a record for the legal adviser; nothing on this page deletes anything. */
+/** The retention schedule, the legal holds, what is due and the retention runs. The schedule is a record for the legal adviser; the only thing here that removes anything is a confirmed run. */
 export default async function RetentionSchedulePage() {
   const ctx = await requirePage("hr.view");
   const manageRules = can(ctx.role, "retention.manage");
   const placeHolds = can(ctx.role, "hr.manage");
-  const [schedule, due] = await Promise.all([getSchedule(ctx), dueView(ctx)]);
+  const [schedule, due, { runs }] = await Promise.all([getSchedule(ctx), dueView(ctx), listRuns(ctx)]);
+  const confirmRuns = can(ctx.role, "retention.manage");
+  // a run can be proposed for a kind of record a run is offered for, whose rule says anonymise, that has something past its period and no proposal already waiting
+  const proposable = due.categories.filter((c) => isRunnable(c.category) && c.measured && !c.off && c.action === "ANONYMISE" && c.due - c.held > 0 && !runs.some((r) => r.category === c.category && r.status === "PROPOSED"));
   const live = schedule.holds.filter((h) => !h.released);
   const people = placeHolds ? await db.employee.findMany({ where: { organizationId: ctx.orgId }, orderBy: { employeeNumber: "asc" }, select: { id: true, employeeNumber: true, firstName: true, lastName: true, status: true } }) : [];
   return (
     <>
       <PageHeader
         title="Retention schedule and legal holds"
-        description="How long each kind of record is kept, counted from what, and what happens then. The periods are the founder's proposals and are NOT legal advice: each is marked unverified until the company's legal adviser has seen it. This page records and reminds; it never deletes anything itself. The deletions that exist (erasing a former employee, anonymising old applicants, purging old survey answers) are shown below with the setting they use today, and each stops while a legal hold covers what it would delete."
+        description="How long each kind of record is kept, counted from what, and what happens then. The periods are the founder's proposals and are NOT legal advice: each is marked unverified until the company's legal adviser has seen it. Changing the schedule removes nothing. What removes the words of a record is a retention run (below): HR proposes it and a different person confirms it. The other deletions that exist (erasing a former employee, anonymising old applicants, purging old survey answers) run from their own HR-policy settings, shown below, and every one of them stops while a legal hold covers what it would remove."
       />
       <StatGrid cols={3}>
         <Stat label="Rules the adviser has not verified" value={`${schedule.unverified} of ${schedule.rules.length}`} tone={schedule.unverified ? "amber" : "green"} />
@@ -163,7 +169,112 @@ export default async function RetentionSchedulePage() {
             ))}
           </TBody>
         </Table>
-        <p className="px-4 py-2 text-xs text-muted-foreground">Counts only. People means former employees who still hold a record of that kind; records means the records themselves. Nothing here deletes anything: Review means HR looks at it, not that it is removed.</p>
+        <p className="px-4 py-2 text-xs text-muted-foreground">Counts only. People means former employees who still hold a record of that kind; records means the records themselves. Nothing in this table removes anything: Review means HR looks at it, and Anonymise is carried out only by a confirmed run.</p>
+      </Section>
+
+      <Section title="Retention runs" flush>
+        <p className="px-4 pt-3 text-xs text-muted-foreground">
+          A run clears the <strong>words</strong> of one kind of record for the people (or records) whose period has ended, and keeps the shape: that a record existed, its kind, dates and outcome. HR proposes a run; a different person, the Company
+          Administrator, confirms it, no sooner than a minute later. <strong>It cannot be undone: back up the database before the first run.</strong> A rule the legal adviser has not verified runs only if the person confirming writes down why they
+          accept it. A legal hold, an open case or an open data request always keeps a person out of a run.
+        </p>
+        {placeHolds && (
+          <div className="px-4 py-3">
+            {proposable.length ? (
+              <SmartForm
+                columns={2}
+                submitLabel="Propose a run"
+                action={proposeRunAction}
+                fields={[
+                  {
+                    name: "category",
+                    label: "Kind of record",
+                    type: "select",
+                    required: true,
+                    options: proposable.map((c) => ({ value: c.category, label: `${c.label} — ${c.due - c.held} ${c.unit === "people" ? (c.due - c.held === 1 ? "person" : "people") : c.due - c.held === 1 ? "record" : "records"} past the period` })),
+                    help: "Only kinds of record that are set to anonymise and have something past their period are listed.",
+                  },
+                ]}
+              />
+            ) : (
+              <p className="text-xs text-muted-foreground">Nothing can be proposed now: no kind of record that is set to anonymise has something past its period that a hold or an open case does not cover, or a proposal is already waiting.</p>
+            )}
+          </div>
+        )}
+        {runs.length === 0 ? (
+          <Empty>No run has been proposed.</Empty>
+        ) : (
+          <Table>
+            <THead>
+              <TR>
+                <TH>Kind of record</TH>
+                <TH>Covers</TH>
+                <TH>Rule</TH>
+                <TH>Proposed by</TH>
+                <TH>Status</TH>
+                <TH />
+              </TR>
+            </THead>
+            <TBody>
+              {runs.map((r) => (
+                <TR key={r.id}>
+                  <TD className="text-xs">{r.label}</TD>
+                  <TD className="max-w-[14rem] whitespace-normal text-xs">
+                    {r.itemCount} item(s)
+                    {(r.skippedHeld > 0 || r.skippedOpen > 0) && (
+                      <div className="text-muted-foreground">
+                        left out at the proposal: {r.skippedHeld} held, {r.skippedOpen} with something open
+                      </div>
+                    )}
+                  </TD>
+                  <TD className="text-xs">
+                    {r.periodMonths} months <Badge tone={r.ruleVerified ? "green" : "amber"}>{r.ruleVerified ? "Verified" : "Unverified"}</Badge>
+                  </TD>
+                  <TD className="text-xs">
+                    {r.proposedBy}
+                    <div className="text-muted-foreground">{fmtDate(r.proposedAt)}</div>
+                  </TD>
+                  <TD className="max-w-[18rem] whitespace-normal text-xs">
+                    {r.status === "PROPOSED" && <Badge tone="amber">Waiting for confirmation</Badge>}
+                    {r.status === "EXECUTED" && <Badge tone="green">Done</Badge>}
+                    {r.status === "REJECTED" && <Badge tone="gray">Turned down</Badge>}
+                    {r.decidedBy && (
+                      <div className="mt-1 text-muted-foreground">
+                        {r.decidedBy}, {fmtDate(r.decidedAt)}
+                        {r.decisionNote ? ` — ${r.decisionNote}` : ""}
+                      </div>
+                    )}
+                    {r.status === "EXECUTED" && (
+                      <div className="mt-1 text-muted-foreground">
+                        {r.clearedItems} cleared, {r.skippedAtConfirm} left out
+                        {r.acceptedUnverified ? "; rule was unverified, accepted in writing" : ""}
+                        {r.singleHolder ? "; confirmed by the person who proposed it, as the only holder" : ""}
+                      </div>
+                    )}
+                  </TD>
+                  <TD className="space-x-1 whitespace-nowrap text-right">
+                    {r.status === "PROPOSED" && confirmRuns && (
+                      <ActionButton
+                        action={confirmRunAction.bind(null, r.id)}
+                        reason
+                        reasonPlaceholder={r.ruleVerified ? "Why you are confirming (10+ characters). This clears the words for good." : "The rule is unverified: write why you accept it (20+ characters). This clears the words for good."}
+                        variant="success"
+                      >
+                        {r.waitSeconds > 0 ? "Confirm (wait a minute)" : "Confirm and clear"}
+                      </ActionButton>
+                    )}
+                    {r.status === "PROPOSED" && (confirmRuns || r.mine) && (
+                      <ActionButton action={rejectRunAction.bind(null, r.id)} reason reasonPlaceholder="Why it is being turned down" variant="outline">
+                        Turn down
+                      </ActionButton>
+                    )}
+                    {r.status === "PROPOSED" && r.mine && confirmRuns && <div className="text-xs text-muted-foreground">You proposed this: 20+ characters if you are the only person who can confirm</div>}
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        )}
       </Section>
 
       <Section title="The schedule" flush>

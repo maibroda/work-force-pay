@@ -327,6 +327,7 @@ export const ACTION_MODULES: Record<string, EntryModule> = {
   "dimensions.ts": "accounting",
   "employee-import.ts": "hr",
   "employee-retention.ts": "hr",
+  "retention-run.ts": "hr",
   "retention-schedule.ts": "hr",
   "entitlements.ts": "core",
   "price-book.ts": "core",

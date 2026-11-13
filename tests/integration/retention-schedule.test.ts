@@ -126,7 +126,7 @@ describe("the schedule", () => {
     const b = await world();
     await getSchedule(a.hr);
     await getSchedule(b.hr);
-    await updateRule(a.boss, "SKILLS", { periodMonths: 36, trigger: "AFTER_EXIT", action: "DELETE" });
+    await updateRule(a.boss, "SKILLS", { periodMonths: 36, trigger: "AFTER_EXIT", action: "ANONYMISE" });
     expect((await getSchedule(b.boss)).rules.find((r) => r.category === "SKILLS")!.periodMonths).toBe(72);
   });
 });

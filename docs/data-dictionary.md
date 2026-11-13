@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-257 tables and 194 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+259 tables and 195 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -61,6 +61,8 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | probationDeciders | → ProbationDecider[] |  |  |
 | retentionRules | → RetentionRule[] |  |  |
 | retentionHolds | → RetentionHold[] |  |  |
+| retentionRuns | → RetentionRun[] |  |  |
+| retentionRunItems | → RetentionRunItem[] |  |  |
 | recognitionAwardTypes | → RecognitionAwardType[] |  |  |
 | recognitionAwards | → RecognitionAward[] |  |  |
 | careerPaths | → CareerPath[] |  |  |
@@ -6423,6 +6425,55 @@ A legal hold: deletion is suspended for one person, one category of record, or t
 | releasedBy | String |  |  |
 | releaseReason | String |  |  |
 
+### RetentionRun
+
+One retention run for one kind of record: HR proposes it, a different person (the Company Administrator) confirms it, and confirming clears the WORDS of the records past their period and keeps the shape. It records the rule as it stood, who proposed and who confirmed, the written acceptance where the rule was unverified, and what was done. Counts and ids only: no name and no record text.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| category | RetentionCategory | yes |  |
+| status | RetentionRunStatus |  |  |
+| periodMonths | Int | yes | The rule as it stood when proposed: confirming checks it has not changed since. |
+| trigger | RetentionTrigger | yes |  |
+| action | RetentionAction | yes |  |
+| ruleVerified | Boolean |  |  |
+| itemCount | Int | yes | What the proposal covered, and what it left out (held by a legal hold, or someone with a case or a data request still open). |
+| skippedHeld | Int |  |  |
+| skippedOpen | Int |  |  |
+| proposedAt | DateTime |  |  |
+| proposedByUserId | String | yes |  |
+| proposedBy | String | yes |  |
+| decidedAt | DateTime |  |  |
+| decidedByUserId | String |  |  |
+| decidedBy | String |  |  |
+| decisionNote | String |  | The confirmer's note, or the reason a run was turned down. Where the rule was unverified or the confirmer was the only holder it is the written acceptance or reason (at least 20 characters). |
+| acceptedUnverified | Boolean |  |  |
+| singleHolder | Boolean |  |  |
+| clearedItems | Int |  | What confirming did: how many items were cleared, how many were left out because a hold or an open case appeared since the proposal, and the records touched by kind. |
+| skippedAtConfirm | Int |  |  |
+| summary | Json |  |  |
+| items | → RetentionRunItem[] |  |  |
+
+### RetentionRunItem
+
+What one run covered, one row per person (or per record): the ledger that stops a second run redoing the same items and keeps them out of the "what is due" count once cleared.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| runId | String | yes |  |
+| run | → RetentionRun |  |  |
+| category | RetentionCategory | yes |  |
+| subjectId | String | yes | The person (employee id) or, for a welfare case or a succession entry counted per record, the record id. |
+| employeeId | String |  |  |
+| clearedAt | DateTime |  |  |
+| skippedReason | String |  |  |
+
 ## Fixed sets of values
 
 ### Role
@@ -7226,4 +7277,8 @@ Whether an outbound message is a service message (about an active contract) or m
 ### RetentionHoldScope
 
 `EMPLOYEE`, `CATEGORY`, `COMPANY`
+
+### RetentionRunStatus
+
+`PROPOSED`, `EXECUTED`, `REJECTED`
 

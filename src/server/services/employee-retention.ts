@@ -21,6 +21,7 @@ import { logAudit } from "./audit";
 import { getHrPolicy, todayUtc } from "./hr-policy";
 import { employeeLoanBalances } from "./loans";
 import { employeeHeld } from "./retention-holds";
+import { ANONYMISERS } from "./retention-anonymise";
 
 const REMOVED = "[removed]";
 
@@ -59,7 +60,6 @@ export async function anonymizeEmployee(tx: Tx, orgId: string, employeeId: strin
 
   const cases = await tx.relationsCase.findMany({ where, select: { id: true } });
   const caseIds = cases.map((c) => c.id);
-  const appraisals = await tx.appraisal.findMany({ where, select: { id: true } });
   const candidates = await tx.candidate.findMany({ where, select: { id: true } });
   const candidateIds = candidates.map((c) => c.id);
 
@@ -70,49 +70,20 @@ export async function anonymizeEmployee(tx: Tx, orgId: string, employeeId: strin
   // the stored files themselves (encrypted bytes) go with the person; only their count and a placeholder name remain
   counts.documentFiles = (await tx.employeeDocumentBlob.deleteMany({ where: { organizationId: orgId, version: { document: { employeeId } } } })).count;
   await tx.employeeDocumentVersion.updateMany({ where: { organizationId: orgId, document: { employeeId } }, data: { fileName: REMOVED } });
-  counts.disciplinary = (await tx.disciplinaryRecord.updateMany({ where, data: { description: REMOVED, actionTaken: null, remarks: null, approvedSingleReason: null } })).count;
   counts.cases = (await tx.relationsCase.updateMany({ where, data: { summary: REMOVED, description: REMOVED, resolution: null, closedSingleReason: null } })).count;
   counts.caseNotes = caseIds.length ? (await tx.relationsCaseNote.updateMany({ where: { caseId: { in: caseIds } }, data: { note: REMOVED } })).count : 0;
   counts.letters = (await tx.generatedLetter.updateMany({ where, data: { recipientName: REMOVED, subject: REMOVED, body: REMOVED } })).count;
   counts.exits = (await tx.exitRecord.updateMany({ where, data: { reason: REMOVED, remarks: null, exitInterviewNotes: null } })).count;
-  counts.appraisals = (
-    await tx.appraisal.updateMany({ where, data: { employeeSelfComment: null, strengths: null, improvements: null, goals: null, reviewerComment: null, returnNote: null, approvalNote: null, employeeResponse: null } })
-  ).count;
-  if (appraisals.length) await tx.appraisalRating.updateMany({ where: { appraisalId: { in: appraisals.map((a) => a.id) } }, data: { selfComment: null, comment: null } });
-  // feedback about them: the words go (the note, their reply and the reason an entry was voided); what stays is the shape (that an entry existed, its kind and date)
-  counts.feedback = (await tx.performanceFeedback.updateMany({ where, data: { body: REMOVED, employeeReply: null, voidReason: null } })).count;
-  // performance improvement plans: the words go (concerns, objectives, review summaries, notes, the employee's own response and comments); what stays is the shape (that a plan existed, its dates and how it ended)
-  const plans = await tx.performanceImprovementPlan.findMany({ where, select: { id: true } });
-  const planIds = plans.map((p) => p.id);
-  counts.improvementPlans = (
-    await tx.performanceImprovementPlan.updateMany({
-      where,
-      data: { concerns: REMOVED, activationNote: null, returnNote: null, proposedNote: null, outcomeNote: null, withdrawReason: null, employeeResponse: null },
-    })
-  ).count;
-  if (planIds.length) {
-    await tx.pipObjective.updateMany({ where: { planId: { in: planIds } }, data: { gap: REMOVED, target: REMOVED, support: null } });
-    await tx.pipReview.updateMany({ where: { planId: { in: planIds } }, data: { summary: REMOVED, employeeComment: null } });
-    await tx.pipReviewAssessment.updateMany({ where: { review: { planId: { in: planIds } } }, data: { note: null } });
+  // the kinds of record that also have a retention run (src/server/services/retention-anonymise.ts): the same field lists, so an erasure and a run can never disagree about what "the words" are
+  for (const category of ["APPRAISALS", "PROBATION", "FEEDBACK", "IMPROVEMENT_PLANS", "DISCIPLINARY", "TRAINING", "SKILLS", "SUCCESSION"] as const) {
+    Object.assign(counts, await ANONYMISERS[category](tx, orgId, { employeeIds: [employeeId] }));
   }
-  // probation decisions: the reasons go (on each decision, and the same words written into the contract's notes); what stays is the shape (the decision, its dates and who decided)
-  counts.probationDecisions = (await tx.probationDecision.updateMany({ where, data: { note: REMOVED } })).count;
+  // the whole person goes, so every note on a contract goes too (a probation run clears only the lines the probation steps wrote)
   await tx.employmentContract.updateMany({ where, data: { notes: null } });
-  // the probation workflow: the words go (the manager's reasons, HR's note, the feedback and the response); what stays is the shape (the step, the recommendation, who and when, whether they agreed)
-  counts.probationReviews = (await tx.probationReview.updateMany({ where, data: { recommendationNote: REMOVED, reviewNote: null, feedbackText: null, responseText: null } })).count;
-  // training: the words go (why someone did not attend, a need's note and the reason it was dropped); what stays is the shape (that they were enrolled, the result, the course and the dates)
-  counts.trainingEnrolments = (await tx.trainingEnrolment.updateMany({ where, data: { absenceReason: null } })).count;
-  counts.trainingNeeds = (await tx.trainingNeed.updateMany({ where, data: { note: null, droppedReason: null } })).count;
   // recognition awards: the words go (the citation, a rejection's reason and a withdrawal's reason); what stays is the shape (that an award existed, its kind, status and dates)
   counts.recognitionAwards = (await tx.recognitionAward.updateMany({ where, data: { citation: REMOVED, decisionNote: null, withdrawReason: null } })).count;
   // promotions: the words go (the reason, a decision note and a withdrawal reason); what stays is the shape. Succession: the one-line reason goes, the entry stays.
   counts.promotionProposals = (await tx.promotionProposal.updateMany({ where, data: { reason: REMOVED, decisionNote: null, withdrawReason: null } })).count;
-  counts.successionEntries = (await tx.successionCandidate.updateMany({ where, data: { reason: null, singleReason: null } })).count;
-  // training evaluations (about their courses) and requests: the words go; the ratings, the kinds and the statuses stay
-  counts.trainingEvaluations = (await tx.trainingEvaluation.updateMany({ where: { organizationId: orgId, enrolment: { employeeId } }, data: { comment: null } })).count;
-  counts.trainingRequests = (await tx.trainingRequest.updateMany({ where, data: { reason: REMOVED, decisionNote: null, withdrawReason: null } })).count;
-  // skill assessments: the comments go; the skill, the level, who assessed and when stay (the shape)
-  counts.skillAssessments = (await tx.skillAssessment.updateMany({ where, data: { comment: null } })).count;
   counts.dataRequests = (await tx.dataAccessRequest.updateMany({ where, data: { requesterName: REMOVED, identityNote: null, completionNote: null, refusalReason: null } })).count;
   if (candidateIds.length) {
     await tx.candidate.updateMany({ where: { id: { in: candidateIds } }, data: { firstName: "Anonymised", lastName: "Candidate", phone: null, email: null, resumeReference: null, notes: null, rejectionReason: REMOVED, anonymizedAt: now } });

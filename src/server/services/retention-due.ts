@@ -1,14 +1,16 @@
 /**
- * Measuring what is past, or near, the end of its retention period (governance step 3b, the non-destructive half). READ ONLY: nothing here deletes, anonymises or changes anything.
+ * Measuring what is past, or near, the end of its retention period (governance step 3b). READ ONLY: nothing here deletes, anonymises or changes anything.
  *
  * For every category of the schedule the system can work out, it counts what has reached the end of its period (and what will within 90 days), using the company's own rule (period and
  * the day the period is counted from). The three categories the system already applies from the HR policy (the employee file, raw survey answers, unsuccessful applicants) use that
- * setting, as they do when they run. Counts only: no name, no id of a person and no record text leaves this module.
+ * setting, as they do when they run. What a retention run (retention-run.ts) has already cleared is in the ledger and is not counted again. Counts only: no name, no id of a person and no
+ * record text leaves this module through the screen; the run uses `pastSubjects` for the ids it needs.
  *
  * Runs without a signed-in user so the HR digest can use it; the screen wraps it with the permission check (retention-schedule.ts).
  */
 import { iso } from "@/lib/dates";
 import { eraseFrom, LEFT_STATUSES } from "@/lib/employee-retention";
+import { subjectKind } from "@/lib/retention-run";
 import {
   DEFAULT_RULES,
   RETENTION_ACTION_LABELS,
@@ -53,6 +55,21 @@ export interface DueCategory {
   held: number;
 }
 
+interface Rule {
+  periodMonths: number;
+  trigger: RetentionTrigger;
+  action: RetentionAction;
+}
+/** One thing a run would clear: a person (subjectId is their employee id) or one record (subjectId is the record's id). */
+export interface Subject {
+  subjectId: string;
+  employeeId: string;
+}
+interface Leaver {
+  id: string;
+  exitDate: Date | null;
+}
+
 const DAY_MS = 86_400_000;
 const dayOf = (d: Date) => iso(d);
 const nextDay = (day: string) => new Date(Date.parse(`${day}T00:00:00Z`) + DAY_MS);
@@ -95,31 +112,73 @@ async function peopleWith(category: RetentionCategory, orgId: string, ids: strin
 }
 
 /** Individual records with the day their period is counted from, for the categories counted per record rather than per person. */
-async function recordsFor(category: RetentionCategory, orgId: string): Promise<Array<{ employeeId: string; base: string }> | null> {
+async function recordsFor(category: RetentionCategory, orgId: string): Promise<Array<{ id: string; employeeId: string; base: string }>> {
   if (category === "WELFARE_CASES") {
-    const rows = await db.relationsCase.findMany({ where: { organizationId: orgId, type: "WELFARE", status: "CLOSED", closedAt: { not: null } }, select: { employeeId: true, closedAt: true } });
-    return rows.map((r) => ({ employeeId: r.employeeId, base: dayOf(r.closedAt!) }));
+    const rows = await db.relationsCase.findMany({ where: { organizationId: orgId, type: "WELFARE", status: "CLOSED", closedAt: { not: null } }, select: { id: true, employeeId: true, closedAt: true } });
+    return rows.map((r) => ({ id: r.id, employeeId: r.employeeId, base: dayOf(r.closedAt!) }));
   }
   if (category === "SUCCESSION") {
-    const rows = await db.successionCandidate.findMany({ where: { organizationId: orgId }, select: { employeeId: true, updatedAt: true } });
-    return rows.map((r) => ({ employeeId: r.employeeId, base: dayOf(r.updatedAt) }));
+    const rows = await db.successionCandidate.findMany({ where: { organizationId: orgId }, select: { id: true, employeeId: true, updatedAt: true } });
+    return rows.map((r) => ({ id: r.id, employeeId: r.employeeId, base: dayOf(r.updatedAt) }));
   }
-  return null;
+  return [];
+}
+
+/** What a retention run has already cleared for this kind of record (the ledger): a person's id or a record's id. */
+async function clearedSubjects(orgId: string, category: RetentionCategory): Promise<Set<string>> {
+  const rows = await db.retentionRunItem.findMany({ where: { organizationId: orgId, category, clearedAt: { not: null } }, select: { subjectId: true } });
+  return new Set(rows.map((r) => r.subjectId));
+}
+
+/** The people (or records) of a category whose period under this rule has ended, and how many more will within 90 days. Anything already cleared by a run is left out. */
+async function scan(orgId: string, category: RetentionCategory, rule: Rule, todayDay: string, leavers: Leaver[], cleared: Set<string>): Promise<{ past: Subject[]; soon: number }> {
+  if (subjectKind(category, rule.trigger) === "PERSON") {
+    // former employees whose period has ended or will within 90 days, then those of them who hold a record of the kind
+    const status = new Map<string, "PAST" | "SOON">();
+    for (const e of leavers) {
+      if (cleared.has(e.id)) continue;
+      const s = expiryStatus(dayOf(e.exitDate!), rule.periodMonths, todayDay);
+      if (s === "PAST" || s === "SOON") status.set(e.id, s);
+    }
+    const holders = await peopleWith(category, orgId, [...status.keys()]);
+    const past = holders.filter((id) => status.get(id) === "PAST").map((id) => ({ subjectId: id, employeeId: id }));
+    return { past, soon: holders.length - past.length };
+  }
+  // counted per record (a welfare case from the day it was closed, a succession entry from the day it was last reviewed)
+  const past: Subject[] = [];
+  let soon = 0;
+  for (const r of await recordsFor(category, orgId)) {
+    if (cleared.has(r.id)) continue;
+    const s = expiryStatus(r.base, rule.periodMonths, todayDay);
+    if (s === "PAST") past.push({ subjectId: r.id, employeeId: r.employeeId });
+    else if (s === "SOON") soon++;
+  }
+  return { past, soon };
+}
+
+const leaversOf = (orgId: string) =>
+  db.employee.findMany({ where: { organizationId: orgId, status: { in: [...LEFT_STATUSES] }, anonymizedAt: null, exitDate: { not: null } }, select: { id: true, exitDate: true } });
+
+/** The company's rule for a category where it has one, otherwise the founder's default (reading never writes). */
+export async function ruleFor(orgId: string, category: RetentionCategory): Promise<Rule> {
+  const row = await db.retentionRule.findUnique({ where: { organizationId_category: { organizationId: orgId, category } } });
+  if (row) return { periodMonths: row.periodMonths, trigger: row.trigger as RetentionTrigger, action: row.action as RetentionAction };
+  const d = DEFAULT_RULES.find((r) => r.category === category)!;
+  return { periodMonths: d.periodMonths, trigger: d.trigger, action: d.action };
+}
+
+/** What a run for this category would cover today: the rule as it stands and the people or records past their period, minus what an earlier run already cleared. Ids stay inside the server. */
+export async function pastSubjects(orgId: string, category: RetentionCategory, today: Date = todayUtc()) {
+  const [rule, leavers, cleared] = await Promise.all([ruleFor(orgId, category), leaversOf(orgId), clearedSubjects(orgId, category)]);
+  const { past } = await scan(orgId, category, rule, dayOf(today), leavers, cleared);
+  return { rule, kind: subjectKind(category, rule.trigger), past };
 }
 
 /** Everything the schedule can measure, for one company, as of `today`. Read only. */
 export async function measureCategories(orgId: string, today: Date = todayUtc()): Promise<DueCategory[]> {
   const todayDay = dayOf(today);
-  const [ruleRows, policy, holds, leavers] = await Promise.all([
-    db.retentionRule.findMany({ where: { organizationId: orgId } }),
-    getHrPolicy(orgId),
-    liveHolds(orgId),
-    db.employee.findMany({ where: { organizationId: orgId, status: { in: [...LEFT_STATUSES] }, anonymizedAt: null, exitDate: { not: null } }, select: { id: true, exitDate: true } }),
-  ]);
-  // the company's rule where it has one, otherwise the founder's default (reading never writes)
-  const rules = new Map<RetentionCategory, { periodMonths: number; trigger: RetentionTrigger; action: RetentionAction }>(
-    DEFAULT_RULES.map((r) => [r.category, { periodMonths: r.periodMonths, trigger: r.trigger, action: r.action }]),
-  );
+  const [ruleRows, policy, holds, leavers] = await Promise.all([db.retentionRule.findMany({ where: { organizationId: orgId } }), getHrPolicy(orgId), liveHolds(orgId), leaversOf(orgId)]);
+  const rules = new Map<RetentionCategory, Rule>(DEFAULT_RULES.map((r) => [r.category, { periodMonths: r.periodMonths, trigger: r.trigger, action: r.action }]));
   for (const r of ruleRows) rules.set(r.category as RetentionCategory, { periodMonths: r.periodMonths, trigger: r.trigger as RetentionTrigger, action: r.action as RetentionAction });
 
   const out: DueCategory[] = [];
@@ -213,40 +272,9 @@ export async function measureCategories(orgId: string, today: Date = todayUtc())
       continue;
     }
 
-    if (rule.trigger === "AFTER_EXIT") {
-      // former employees whose period has ended or will within 90 days, then those of them who hold a record of the kind
-      const status = new Map<string, "PAST" | "SOON">();
-      for (const e of leavers) {
-        const s = expiryStatus(dayOf(e.exitDate!), rule.periodMonths, todayDay);
-        if (s === "PAST" || s === "SOON") status.set(e.id, s);
-      }
-      const holders = await peopleWith(category, orgId, [...status.keys()]);
-      let due = 0;
-      let soon = 0;
-      let held = 0;
-      for (const id of holders) {
-        if (status.get(id) === "PAST") {
-          due++;
-          if (holdBlocks(holds, { category, employeeId: id })) held++;
-        } else soon++;
-      }
-      out.push({ ...base, due, soon, held });
-      continue;
-    }
-
-    // counted per record (a welfare case from the day it was closed, a succession entry from the day it was last reviewed)
-    const records = (await recordsFor(category, orgId)) ?? [];
-    let due = 0;
-    let soon = 0;
-    let held = 0;
-    for (const r of records) {
-      const s = expiryStatus(r.base, rule.periodMonths, todayDay);
-      if (s === "PAST") {
-        due++;
-        if (holdBlocks(holds, { category, employeeId: r.employeeId })) held++;
-      } else if (s === "SOON") soon++;
-    }
-    out.push({ ...base, unit: "records", due, soon, held });
+    const { past, soon } = await scan(orgId, category, rule, todayDay, leavers, await clearedSubjects(orgId, category));
+    const held = past.filter((s) => holdBlocks(holds, { category, employeeId: s.employeeId })).length;
+    out.push({ ...base, unit: subjectKind(category, rule.trigger) === "PERSON" ? "people" : "records", due: past.length, soon, held });
   }
   return out;
 }
