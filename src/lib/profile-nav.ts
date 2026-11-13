@@ -32,6 +32,9 @@ export interface NavState {
   origin?: { id: string; url: string };
   scroll?: Record<string, number>;
   restore?: string;
+  /** The global Back button (src/lib/global-back.ts): the in-app addresses visited, oldest first, and an address Back just sent the person to with nothing earlier. */
+  trail?: string[];
+  fresh?: string;
 }
 
 const MAX_REMEMBERED_SCROLLS = 20;

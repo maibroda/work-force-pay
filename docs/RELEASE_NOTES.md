@@ -2,7 +2,17 @@
 
 What changed, in the order it was merged, in plain words. Each entry names the pull request and the database migration (if any). **Nothing has been deployed yet**: no host has been chosen, so "released" here means merged into `main`. The most recent work is at the top.
 
-## Not yet merged (branch `workforce-overview`, no migration)
+
+## Not yet merged (branch `global-back-nav`, no migration)
+
+- **A Back button on every page** (the founder's brief of 2026-11-13). **A navigation change only: it changes no record and no permission.** One arrow at the **top left of the shared page header**, drawn once by the layout (never per module), with the tooltip "Go Back", icon-only on a phone and "Back" beside it from tablet width up.
+- **What it does.** It returns to **the page the person was just on, inside the app**: from a record to the list it was opened from, from a payroll record to Payroll, and again one step at a time through a longer path. **With nothing earlier in the app** (a direct address, a bookmark, a new tab) it goes **up** instead: a record to its list, a list to its module's front page, a module to the person's home, and **never outside the app**. It is **hidden on a landing page with nothing before it**.
+- **No loops.** The trail of visited pages (kept in the browser's session storage, 30 pages) drops the page that was left whenever the person arrives at the one before it, whether by this button, the browser's back or a link; a refresh changes nothing; and when the button has to go up, the trail starts again at the parent, so Back from there goes further up and never back down.
+- **Built on what exists.** It extends the employee profile's arrow (its tracker and session record) instead of adding a second system. **An employee's profile keeps its own arrow** (which also remembers the directory's search, filters and scroll position), so the new button is not drawn there. Plain clicks use the app's router; a modified click (new tab) still works as a link.
+- **Role-aware home.** The dashboard needs `dashboard.view`, which an employee does not hold, so for them the fallback is **My Workspace**, never a page they would be refused.
+- **No migration, no new permission, no new dependency.** The module front pages are a small table that a test compares with the sidebar and tab rows, so it cannot drift. Tests (written first): `tests/unit/global-back.test.ts` (the brief's scenarios A to D, loop-freedom, module homes). **Not built:** a trail across several browser tabs or after the session ends; a label naming the page it returns to.
+
+## Merged in #189 (no migration)
 
 - **Workforce overview** (Analytics > **Workforce overview**, the first tab), adapted from a sample workforce dashboard the founder supplied. **Read-only: it changes no record, and no money moves.** It opens to the same people who open Workforce cost (`analytics.view`).
 - **What it shows**, for active and on-leave employees: **total headcount**; **average monthly gross pay**; **average length of service**; **people managers** (the share who have direct reports); **headcount by deployment site** and **by role**; **length of service** in bands (under 1, 1 to 3, 3 to 5, 5 to 10, 10 and over years); **average monthly gross by role**; **contract type**; and a table of **pay and length of service by deployment site against the company average**. Four **filters**: deployment site, role, department and contract type; every figure follows them.

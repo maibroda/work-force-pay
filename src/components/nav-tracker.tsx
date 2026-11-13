@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { onNavigate, rememberScroll, takeRestore } from "@/lib/profile-nav";
 import { loadNav, saveNav } from "@/lib/nav-storage";
+import { advanceTrail } from "@/lib/global-back";
 
 /**
  * Remembers, for the back arrow on an employee profile, where each page was reached from and how far it was scrolled,
@@ -30,7 +31,7 @@ export function NavTracker() {
 
   useEffect(() => {
     let state = loadNav();
-    state = onNavigate(state, previous.current, url);
+    state = advanceTrail(onNavigate(state, previous.current, url), previous.current, url); // the profile arrow's memory, and the trail the global Back button uses
     previous.current = url;
     const restored = takeRestore(state, url);
     saveNav(restored.state);
