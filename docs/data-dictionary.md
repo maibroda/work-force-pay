@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-253 tables and 187 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+255 tables and 189 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -57,6 +57,8 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | surveyKioskSessions | → SurveyKioskSession[] |  |  |
 | surveyAggregates | → SurveyAggregate[] |  |  |
 | userFunctionGrants | → UserFunctionGrant[] |  |  |
+| probationReviews | → ProbationReview[] |  |  |
+| probationDeciders | → ProbationDecider[] |  |  |
 | recognitionAwardTypes | → RecognitionAwardType[] |  |  |
 | recognitionAwards | → RecognitionAward[] |  |  |
 | careerPaths | → CareerPath[] |  |  |
@@ -1055,6 +1057,7 @@ Which bureau staff may work in which client organization. Whoever manages the bu
 | external | Boolean |  | An outsourced HR officer or administrator (not an employee of the company): requires two-factor sign-in and an end date. |
 | accessEndsOn | DateTime |  | The last day this person can sign in (required for an external user). Null = no end. |
 | functionGrants | → UserFunctionGrant[] |  |  |
+| probationDeciderRows | → ProbationDecider[] |  |  |
 | totpSecret | String |  |  |
 | totpEnabled | Boolean |  |  |
 | totpVerifiedAt | DateTime |  |  |
@@ -1104,6 +1107,7 @@ Single-use, short-lived password reset tokens — only the bcrypt hash is stored
 | code | String | yes |  |
 | name | String | yes |  |
 | employees | → Employee[] |  |  |
+| probationDeciders | → ProbationDecider[] |  |  |
 | costCenterId | String |  |  |
 | costCenter | → CostCenter |  |  |
 | requisitions | → JobRequisition[] |  |  |
@@ -1267,6 +1271,7 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | directReports | → Employee[] |  |  |
 | feedbackReceived | → PerformanceFeedback[] |  |  |
 | probationDecisions | → ProbationDecision[] |  |  |
+| probationReviews | → ProbationReview[] |  |  |
 | trainingEnrolments | → TrainingEnrolment[] |  |  |
 | trainingNeeds | → TrainingNeed[] |  |  |
 | trainingRequests | → TrainingRequest[] |  |  |
@@ -1563,6 +1568,8 @@ One per organization — every number a buyer might want to change without a cod
 | contractAlertDays | Int |  |  |
 | probationAlertDays | Int |  |  |
 | probationEscalationDays | Int |  | An undecided probation moves to the approvals list once it has been past its end date for this many days (0 = never). |
+| probationWorkflow | Boolean |  | The recommend, HR review, independent decision and employee response flow for probation (docs/plans/probation-workflow-plan.md). OFF: the HR approver decides as before. |
+| probationResponseDays | Int |  | Days after HR tells the employee that they may respond (that day counts); 0 = no time limit. |
 | longServiceYears | Int[] |  | The anniversaries (in whole years) HR is prompted about for long-service recognition. A prompt only: never an award. |
 | promotionApplyAlertDays | Int |  | An approved promotion not yet applied for this many days is flagged in the HR digest (0 = never). |
 | offerValidityDays | Int |  |  |
@@ -1686,6 +1693,7 @@ The employee's own terms of employment (distinct from `Contract`, which is a CLI
 | previousContract | → EmploymentContract |  |  |
 | renewals | → EmploymentContract[] |  |  |
 | decisions | → ProbationDecision[] |  |  |
+| probationReviews | → ProbationReview[] |  |  |
 | terminatedAt | DateTime |  |  |
 | terminationReason | String |  |  |
 | notes | String |  |  |
@@ -5826,6 +5834,72 @@ One probation decision (confirm, extend or fail), append-only: who, when, why, a
 | againstRecommendation | Boolean |  | The decision went against that recommendation (and so carried the fuller reason). |
 | informedAt | DateTime |  | When HR told the employee: only then does the employee see a line about it. |
 | informedBy | String |  |  |
+| reviewId | String |  | The review (recommendation, HR review) this decision completed, when the workflow is on. (unique) |
+| review | → ProbationReview |  |  |
+
+### ProbationReview
+
+One round of the probation workflow: the manager's recommendation, HR's review, the decision, the feedback the employee receives and their one response. Each step fills its own fields once and is never overwritten; a returned recommendation stays as it was and a new round is a new row.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| employeeId | String | yes |  |
+| employee | → Employee |  |  |
+| contractId | String | yes |  |
+| contract | → EmploymentContract |  |  |
+| round | Int | yes |  |
+| status | ProbationReviewStatus |  |  |
+| recommendation | ProbationRecommendation | yes |  |
+| recommendedMonths | Int |  | For Extend: the months proposed. |
+| recommendationNote | String | yes |  |
+| recommendedByUserId | String | yes |  |
+| recommendedBy | String | yes |  |
+| recommendedAt | DateTime |  |  |
+| recordedByHr | Boolean |  | HR recorded it because the employee has no reporting manager. |
+| reviewNote | String |  |  |
+| reviewedByUserId | String |  |  |
+| reviewedBy | String |  |  |
+| reviewedAt | DateTime |  |  |
+| appraisalSignedOff | Boolean |  | What the policy checks showed when HR reviewed it (null = not applicable or not reviewed yet). |
+| minScoreMet | Boolean |  |  |
+| withinMaxMonths | Boolean |  |  |
+| decision | → ProbationDecision |  |  |
+| decidedAt | DateTime |  |  |
+| decidedAgainstRecommendation | Boolean |  | The decision was not the one the manager recommended (and so carried the fuller reason). |
+| feedbackText | String |  | The statement the employee receives (separate from the internal reason). |
+| feedbackByUserId | String |  |  |
+| feedbackAt | DateTime |  |  |
+| responseAgreed | Boolean |  |  |
+| responseText | String |  |  |
+| respondedAt | DateTime |  |  |
+| responseReadByUserId | String |  | The decider recorded that they read the response. |
+| responseReadBy | String |  |  |
+| responseReadAt | DateTime |  |  |
+
+### ProbationDecider
+
+A user the Company Administrator designated to make final probation decisions (for example a department head), optionally for one department. The Company Administrator and platform staff may always decide. Live until revoked.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| userId | String | yes |  |
+| user | → User |  |  |
+| departmentId | String |  |  |
+| department | → Department |  |  |
+| reason | String | yes |  |
+| grantedByUserId | String | yes |  |
+| grantedBy | String | yes |  |
+| grantedAt | DateTime |  |  |
+| revokedAt | DateTime |  |  |
+| revokedByUserId | String |  |  |
+| revokedBy | String |  |  |
+| revokeReason | String |  |  |
 
 ### TrainingProgramme
 
@@ -7004,6 +7078,14 @@ Whether an outbound message is a service message (about an active contract) or m
 ### PipObjectiveResult
 
 `OPEN`, `MET`, `PARTLY_MET`, `NOT_MET`
+
+### ProbationRecommendation
+
+`CONFIRM`, `EXTEND`, `NOT_CONFIRM`
+
+### ProbationReviewStatus
+
+`RECOMMENDED`, `RETURNED`, `FORWARDED`, `DECIDED`
 
 ### TrainingSessionStatus
 
