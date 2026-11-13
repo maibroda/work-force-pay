@@ -14,6 +14,8 @@ import { Sidebar } from "@/components/sidebar";
 import { AreaTabs } from "@/components/area-tabs";
 import { GoTo } from "@/components/go-to";
 import { NavTracker } from "@/components/nav-tracker";
+import { GlobalBackButton } from "@/components/global-back-button";
+import { homeFor } from "@/lib/global-back";
 import { logoutAction } from "@/app/actions/auth";
 import { returnToBureauAction } from "@/app/actions/bureau";
 
@@ -70,7 +72,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <NavTracker />
       </Suspense>
       <div className="lg:pl-60">
-        <header className="no-print flex items-center justify-end gap-3 border-b bg-card px-4 py-2 text-sm">
+        <header className="no-print flex flex-wrap items-center justify-between gap-2 border-b bg-card px-4 py-2 text-sm">
+          {/* the Back button: one component for every page, top left (src/lib/global-back.ts) */}
+          <Suspense fallback={<span className="h-9 w-9" aria-hidden="true" />}>
+            <GlobalBackButton home={homeFor(canCtx(ctx, "dashboard.view"))} />
+          </Suspense>
+          <div className="ml-auto flex items-center gap-3">
           <GoTo pages={jump} />
           <span className="hidden text-muted-foreground sm:inline">{org?.name}</span>
           <span className="font-medium">{ctx.name}</span>
@@ -85,6 +92,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <LogOut className="h-4 w-4" /> <span className="hidden sm:inline">Sign out</span>
             </button>
           </form>
+          </div>
         </header>
         {ctx.homeOrgId && (
           <div className="no-print flex flex-wrap items-center gap-2 border-b border-blue-300 bg-blue-50 px-4 py-2 text-sm text-blue-900">
