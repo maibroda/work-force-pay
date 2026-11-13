@@ -35,6 +35,8 @@ export interface NavState {
   /** The global Back button (src/lib/global-back.ts): the in-app addresses visited, oldest first, and an address Back just sent the person to with nothing earlier. */
   trail?: string[];
   fresh?: string;
+  /** Whose record this is (the signed-in user's id): another person signing in in the same tab starts with nothing (src/lib/global-back.ts, `forUser`). */
+  owner?: string;
 }
 
 const MAX_REMEMBERED_SCROLLS = 20;

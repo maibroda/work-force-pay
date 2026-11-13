@@ -4,13 +4,13 @@ import { useEffect, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { onNavigate, rememberScroll, takeRestore } from "@/lib/profile-nav";
 import { loadNav, saveNav } from "@/lib/nav-storage";
-import { advanceTrail } from "@/lib/global-back";
+import { advanceTrail, forUser } from "@/lib/global-back";
 
 /**
  * Remembers, for the back arrow on an employee profile, where each page was reached from and how far it was scrolled,
  * and puts the scroll position back when the arrow returns to it. It draws nothing. The rules are in src/lib/profile-nav.ts.
  */
-export function NavTracker() {
+export function NavTracker({ who }: { who: string }) {
   const pathname = usePathname();
   const search = useSearchParams().toString();
   const url = pathname + (search ? `?${search}` : "");
@@ -30,7 +30,7 @@ export function NavTracker() {
   }, []);
 
   useEffect(() => {
-    let state = loadNav();
+    let state = forUser(loadNav(), who); // another person signing in in this tab starts with nothing
     state = advanceTrail(onNavigate(state, previous.current, url), previous.current, url); // the profile arrow's memory, and the trail the global Back button uses
     previous.current = url;
     const restored = takeRestore(state, url);
@@ -40,7 +40,7 @@ export function NavTracker() {
       // the page can still be filling in: try a few times
       for (const delay of [0, 120, 400, 900]) window.setTimeout(() => window.scrollTo({ top: y }), delay);
     }
-  }, [url]);
+  }, [url, who]);
 
   return null;
 }

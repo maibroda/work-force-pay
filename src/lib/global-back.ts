@@ -65,6 +65,14 @@ export function fallbackFor(url: string, home: string): string {
 /** The dashboard for anyone who can open it; otherwise My Workspace (an employee would be refused the dashboard). */
 export const homeFor = (canOpenDashboard: boolean): string => (canOpenDashboard ? "/" : "/me");
 
+/**
+ * The saved record belongs to one person. For anyone else (a different person signing in in the same browser tab, or a record saved before this rule) it starts empty, so nobody
+ * inherits another person's pages: they could be pages they may not open (an employee sent to the dashboard), and they are not theirs to see.
+ */
+export function forUser(state: Trail, userId: string): Trail {
+  return state.owner === userId ? state : { owner: userId };
+}
+
 const sanitise = (trail: unknown): string[] => (Array.isArray(trail) ? trail.filter((u): u is string => typeof u === "string" && safeInternal(u) !== null) : []);
 
 /** Called on every move from one address to another (from is null on the first page of a visit, and after a refresh). */

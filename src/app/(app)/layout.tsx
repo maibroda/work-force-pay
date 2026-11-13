@@ -69,13 +69,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <Sidebar groups={groups} org={org?.name ?? ""} />
       </Suspense>
       <Suspense>
-        <NavTracker />
+        <NavTracker who={ctx.userId} />
       </Suspense>
       <div className="lg:pl-60">
         <header className="no-print flex flex-wrap items-center justify-between gap-2 border-b bg-card px-4 py-2 text-sm">
           {/* the Back button: one component for every page, top left (src/lib/global-back.ts) */}
           <Suspense fallback={<span className="h-9 w-9" aria-hidden="true" />}>
-            <GlobalBackButton home={homeFor(canCtx(ctx, "dashboard.view"))} />
+            <GlobalBackButton home={homeFor(canCtx(ctx, "dashboard.view"))} who={ctx.userId} />
           </Suspense>
           <div className="ml-auto flex items-center gap-3">
           <GoTo pages={jump} />

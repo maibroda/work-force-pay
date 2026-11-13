@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AREAS, NAV, SELF_NAV } from "@/lib/nav";
-import { advanceTrail, afterBack, backDestination, fallbackFor, homeFor, MAX_TRAIL, SECTION_HOMES, type Trail } from "@/lib/global-back";
+import { advanceTrail, afterBack, backDestination, fallbackFor, forUser, homeFor, MAX_TRAIL, SECTION_HOMES, type Trail } from "@/lib/global-back";
 
 // The global Back button (the founder's brief of 2026-11-13): it returns to the page the person was just on, inside the app; when there is none (a direct address, a bookmark, a new
 // tab) it goes to the parent module or the person's home page, never outside the app, and never in a loop. Pure rules: the state lives in sessionStorage (src/lib/nav-storage.ts)
@@ -133,5 +133,21 @@ describe("a record's list", () => {
     expect(fallbackFor("/hr/contracts", "/")).toBe("/hr");
     expect(fallbackFor("/hr/welfare-cases", "/")).toBe("/hr");
     expect(fallbackFor("/unknown-module/page", "/")).toBe("/");
+  });
+});
+
+describe("the trail belongs to one person", () => {
+  it("is kept for the same person, and thrown away (with everything else remembered) for anyone else, so a new sign-in in the same tab never inherits another person's pages", () => {
+    const mine: Trail = { ...visit(["/", "/hr", "/hr/contracts"]), owner: "user-1", scroll: { "/hr": 120 }, origin: { id: "e1", url: "/employees" } };
+    expect(forUser(mine, "user-1")).toEqual(mine);
+    expect(forUser(mine, "user-2")).toEqual({ owner: "user-2" });
+    // a record saved before this rule existed has no owner: it is not trusted either
+    expect(forUser(visit(["/", "/hr"]), "user-1")).toEqual({ owner: "user-1" });
+  });
+  it("an employee who signs in after an administrator is not sent to the dashboard they cannot open", () => {
+    const admin: Trail = { ...visit(["/"]), owner: "admin-1" };
+    const employee = advanceTrail(forUser(admin, "emp-1"), null, "/me"); // what the tracker does on the first page after signing in
+    expect(employee.trail).toEqual(["/me"]);
+    expect(backDestination(employee, "/me", "/me")).toBeNull();
   });
 });
