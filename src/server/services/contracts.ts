@@ -143,6 +143,10 @@ export async function renewContract(ctx: Ctx, id: string, raw: z.input<typeof re
   const old = await db.employmentContract.findFirst({ where: { id, organizationId: ctx.orgId } });
   if (!old) throw new BusinessError("Contract not found.");
   if (old.status !== "ACTIVE") throw new BusinessError("Only the active contract can be renewed.");
+  // with the probation workflow on, a probation that is still undecided is decided only through the review (recommendation, HR review, independent decider): renewing it, or converting it to
+  // permanent here, would bypass that decision
+  if ((old.probationOutcome === "PENDING" || old.probationOutcome === "EXTENDED") && (await getHrPolicy(ctx.orgId)).probationWorkflow)
+    throw new BusinessError("This probation is still waiting for a decision. Decide it through the probation review (recommendation, HR review, independent decision) instead of renewing the contract.");
   const startStr = r.startDate ?? (old.endDate ? iso(addDays(old.endDate, 1)) : undefined);
   if (!startStr) throw new BusinessError("Give the start date of the renewed contract.");
   const startDate = d(startStr);

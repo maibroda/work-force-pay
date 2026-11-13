@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { addDays, iso } from "@/lib/dates";
 import type { Ctx } from "@/lib/auth/context";
 import { createEmployee } from "@/server/services/employees";
-import { decideProbation, markProbationInformed } from "@/server/services/contracts";
+import { decideProbation, markProbationInformed, renewContract } from "@/server/services/contracts";
 import { getHrPolicy, todayUtc } from "@/server/services/hr-policy";
 import { compileEmployeeData } from "@/server/services/data-requests";
 import { anonymizeEmployee } from "@/server/services/employee-retention";
@@ -97,6 +97,21 @@ describe("the policy switch", () => {
     const w = await world();
     await expect(decideProbation(w.boss, w.contract.id, { decision: "CONFIRMED" })).rejects.toThrow(/review|recommend/i);
     expect((await db.employmentContract.findUniqueOrThrow({ where: { id: w.contract.id } })).probationOutcome).toBe("PENDING");
+  });
+});
+
+describe("no way around the independent decision", () => {
+  it("with the workflow on, a probationary contract cannot be renewed or converted to permanent: the decision goes through the review", async () => {
+    const w = await world();
+    await expect(renewContract(w.hr1, w.contract.id, { type: "PERMANENT", startDate: iso(addDays(todayUtc(), 11)) })).rejects.toThrow(/probation review|recommendation/i);
+    const c = await db.employmentContract.findUniqueOrThrow({ where: { id: w.contract.id } });
+    expect(c).toMatchObject({ status: "ACTIVE", probationOutcome: "PENDING" });
+    expect(await db.employmentContract.count({ where: { employeeId: w.emp.id, type: "PERMANENT" } })).toBe(0);
+  });
+  it("with the workflow off, renewal works as it always did", async () => {
+    const w = await world(false);
+    const next = await renewContract(w.hr1, w.contract.id, { type: "PERMANENT", startDate: iso(addDays(todayUtc(), 11)) });
+    expect(next).toBeTruthy();
   });
 });
 
