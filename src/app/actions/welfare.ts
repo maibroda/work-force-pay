@@ -35,9 +35,9 @@ export async function resolveWelfareAction(caseId: string, v: V) {
     return { message: "Case resolved. It still needs to be closed." };
   }, PAGES);
 }
-export async function closeWelfareAction(caseId: string) {
+export async function closeWelfareAction(caseId: string, reason?: string) {
   return act("welfare.manage", async (ctx) => {
-    await rel.closeCase(ctx, caseId);
+    await rel.closeCase(ctx, caseId, { reason });
     return { message: "Case closed." };
   }, PAGES);
 }

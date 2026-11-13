@@ -126,7 +126,7 @@ describe("the succession list and improvement plans", () => {
   it("opening the succession list records one entry with how many successors were shown", async () => {
     const w = await world();
     const role = await addSuccessionRole(w.hr, w.t.guardId);
-    await setSuccessor(w.hr, { roleId: role.id, employeeId: w.successor.id, readiness: "READY_NOW" } as never);
+    await setSuccessor(w.hr, { roleId: role.id, employeeId: w.successor.id, readiness: "READY_NOW", singleHolderReason: "The only holder of the succession function here." } as never);
     await successionOverview(w.hr);
     const rows = await w.entries();
     expect(rows).toHaveLength(1);

@@ -99,14 +99,14 @@ describe("generating letters", () => {
   });
 
   it("makes a warning letter only from a signed-off warning, with the facts but never re-expanding text from the record", async () => {
-    const { hr, emp } = await setup();
+    const { t, hr, emp } = await setup();
     const praise = await raiseDisciplinary(hr, { employeeId: emp.id, type: "COMMENDATION", incidentDate: "2026-02-01", description: "Excellent work on the audit" });
     await approveDisciplinary(hr, praise.id);
     await expect(generateLetter(hr, { type: "WARNING", disciplinaryId: praise.id })).rejects.toThrow(/isn't a warning/);
 
     const w = await raiseDisciplinary(hr, { employeeId: emp.id, type: "WRITTEN_WARNING", incidentDate: "2026-03-05", description: "Left the post early. {{today}} <b>twice</b>", actionTaken: "Written warning issued" });
     await expect(generateLetter(hr, { type: "WARNING", disciplinaryId: w.id })).rejects.toThrow(/signed-off/);
-    await approveDisciplinary(hr, w.id);
+    await approveDisciplinary(t.ctx("COMPANY_ADMIN"), w.id); // a second person signs off a sanction (governance step 2b)
     const l = await generateLetter(hr, { type: "WARNING", disciplinaryId: w.id });
     expect(l.body).toContain("05 Mar 2026");
     expect(l.body).toContain("written warning");

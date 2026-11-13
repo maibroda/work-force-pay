@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-255 tables and 189 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+255 tables and 190 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -1463,8 +1463,12 @@ Disciplinary actions and commendations — maker/checker: raised PENDING, then a
 | description | String | yes |  |
 | actionTaken | String |  |  |
 | issuedBy | String | yes |  |
+| issuedByUserId | String |  | Who raised it, so the person who raises a sanction does not also approve it (governance step 2b). Null before this rule: it does not apply. |
 | status | ApprovalStatus |  |  |
 | approvedBy | String |  |  |
+| approvedByUserId | String |  |  |
+| approvedSingleHolder | Boolean |  | The approver was also the raiser, being the only holder of the right needed (flagged, with the reason kept). |
+| approvedSingleReason | String |  |  |
 | remarks | String |  |  |
 | caseId | String |  | The employee-relations case (investigation / hearing) this sanction came out of, if any. |
 | relationsCase | → RelationsCase |  |  |
@@ -1861,6 +1865,9 @@ Pre-employment vetting step (references, ID, police clearance, guarantor, medica
 | resolvedAt | DateTime |  |  |
 | closedAt | DateTime |  |  |
 | closedBy | String |  |  |
+| resolvedByUserId | String |  | Who resolved it (the person who resolves does not also close it: governance step 2b). Null on a case resolved before this rule: it does not apply to it. |
+| closedSingleHolder | Boolean |  | The closer was also the resolver, being the only holder of the right needed (flagged, with the reason kept). |
+| closedSingleReason | String |  |  |
 | createdAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |
 | notes | → RelationsCaseNote[] |  |  |
@@ -6123,6 +6130,12 @@ One named successor for a critical role, with how ready they are. Kept by a pers
 | createdBy | String | yes |  |
 | createdAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |
+| status | SuccessionStatus |  | A new nomination is PROPOSED until a different holder of the succession function approves it, and counts only once APPROVED. Every row before this rule is APPROVED. |
+| proposedByUserId | String |  |  |
+| decidedByUserId | String |  |  |
+| decidedAt | DateTime |  |  |
+| singleHolder | Boolean |  | Approved by the person who proposed it, being the only holder (flagged, with the reason kept). |
+| singleReason | String |  |  |
 
 ### TrainingRequest
 
@@ -7122,6 +7135,10 @@ Whether an outbound message is a service message (about an active contract) or m
 ### SuccessionReadiness
 
 `READY_NOW`, `READY_1_2_YEARS`, `READY_3_PLUS`
+
+### SuccessionStatus
+
+`PROPOSED`, `APPROVED`
 
 ### TrainingRequestStatus
 

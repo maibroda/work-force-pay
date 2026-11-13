@@ -338,9 +338,10 @@ export async function resolveCaseAction(caseId: string, v: V) {
     return { message: "Case resolved — awaiting sign-off to close." };
   }, HR);
 }
-export async function closeCaseAction(caseId: string) {
+/** `reason` is only needed (and only asked for) when the person closing resolved the case and is the only one who could close it. */
+export async function closeCaseAction(caseId: string, reason?: string) {
   return act("hr.approve", async (ctx) => {
-    await rel.closeCase(ctx, caseId);
+    await rel.closeCase(ctx, caseId, { reason });
     return { message: "Case closed." };
   }, HR);
 }

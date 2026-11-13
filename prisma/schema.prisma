@@ -2263,8 +2263,14 @@ model DisciplinaryRecord {
   description    String
   actionTaken    String?
   issuedBy       String
+  /// Who raised it, so the person who raises a sanction does not also approve it (governance step 2b). Null before this rule: it does not apply.
+  issuedByUserId String?
   status         ApprovalStatus   @default(PENDING)
   approvedBy     String?
+  approvedByUserId String?
+  /// The approver was also the raiser, being the only holder of the right needed (flagged, with the reason kept).
+  approvedSingleHolder Boolean @default(false)
+  approvedSingleReason String?
   remarks        String?
   /// The employee-relations case (investigation / hearing) this sanction came out of, if any.
   caseId         String?
@@ -2775,6 +2781,11 @@ model RelationsCase {
   resolvedAt     DateTime?
   closedAt       DateTime?
   closedBy       String?
+  /// Who resolved it (the person who resolves does not also close it: governance step 2b). Null on a case resolved before this rule: it does not apply to it.
+  resolvedByUserId String?
+  /// The closer was also the resolver, being the only holder of the right needed (flagged, with the reason kept).
+  closedSingleHolder Boolean @default(false)
+  closedSingleReason String?
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 
@@ -8085,6 +8096,11 @@ enum SuccessionReadiness {
   READY_3_PLUS
 }
 
+enum SuccessionStatus {
+  PROPOSED
+  APPROVED
+}
+
 /// A move the company says one role (employee category) can lead to, with what it asks first. Guidance only: it warns, it never blocks a proposal.
 model CareerPath {
   id              String           @id @default(cuid())
@@ -8172,6 +8188,14 @@ model SuccessionCandidate {
   createdBy      String
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
+  /// A new nomination is PROPOSED until a different holder of the succession function approves it, and counts only once APPROVED. Every row before this rule is APPROVED.
+  status         SuccessionStatus    @default(APPROVED)
+  proposedByUserId String?
+  decidedByUserId  String?
+  decidedAt        DateTime?
+  /// Approved by the person who proposed it, being the only holder (flagged, with the reason kept).
+  singleHolder     Boolean             @default(false)
+  singleReason     String?
 
   @@unique([roleId, employeeId])
   @@index([organizationId, employeeId])

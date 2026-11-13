@@ -1,6 +1,9 @@
 import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
+import type { Permission } from "@/lib/auth/permissions";
 import { d } from "@/lib/dates";
+import { secondPerson } from "@/lib/second-person";
+import { otherHolders } from "./second-person";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
 import {
@@ -210,6 +213,7 @@ export async function raiseDisciplinary(ctx: Ctx, raw: z.input<typeof disciplina
       description: v.description,
       actionTaken: v.actionTaken ?? null,
       issuedBy: ctx.name,
+      issuedByUserId: ctx.userId,
       caseId: v.caseId ?? null,
     },
   });
@@ -233,21 +237,47 @@ export async function listSanctions(ctx: Ctx, f: { status?: "PENDING" | "APPROVE
   });
 }
 
-export async function approveDisciplinary(ctx: Ctx, id: string, remarks?: string) {
+/** The rights an approver of a sanction needs: to approve, and the disciplinary right. */
+const APPROVER_RIGHTS: Permission[] = ["hr.approve", "discipline.manage"];
+
+/** What the approve button needs to know for this person: blocked (they raised it and someone else could approve), or needs a written reason (they are the only holder). */
+export async function approvalAdvice(ctx: Ctx, id: string) {
+  assertCan(ctx, "hr.approve");
+  const rec = await db.disciplinaryRecord.findFirst({ where: { id, organizationId: ctx.orgId }, select: { type: true, issuedByUserId: true } });
+  if (!rec) throw new BusinessError("Disciplinary record not found.");
+  if (rec.type === "COMMENDATION" || !rec.issuedByUserId || rec.issuedByUserId !== ctx.userId) return { blocked: false, needsReason: false };
+  const others = await otherHolders(ctx, APPROVER_RIGHTS);
+  return { blocked: others > 0, needsReason: others === 0 };
+}
+
+/**
+ * Signs off a sanction. Governance step 2b: the person who raised a sanction does not also approve it; where they are the only holder of the rights needed they may, with a written
+ * reason of at least 20 characters, and the record is flagged. A commendation (praise) is unchanged, and a record raised before the rule has no recorded raiser, so it does not apply.
+ */
+export async function approveDisciplinary(ctx: Ctx, id: string, remarks?: string, opts: { reason?: string } = {}) {
   assertCan(ctx, "hr.approve");
   const rec = await db.disciplinaryRecord.findFirst({ where: { id, organizationId: ctx.orgId } });
   if (!rec) throw new BusinessError("Disciplinary record not found.");
   if (rec.type !== "COMMENDATION") assertCan(ctx, "discipline.manage");
   if (rec.status !== "PENDING") throw new BusinessError("Already decided.");
+  let singleHolder = false;
+  if (rec.type !== "COMMENDATION" && rec.issuedByUserId && rec.issuedByUserId === ctx.userId) {
+    const verdict = secondPerson({ samePerson: true, otherHolders: await otherHolders(ctx, APPROVER_RIGHTS), reason: opts.reason, did: "raised this sanction", does: "approves it" });
+    if (!verdict.ok) throw new BusinessError(verdict.error);
+    singleHolder = verdict.singleHolder;
+  }
   const updated = await db.disciplinaryRecord.update({
     where: { id },
-    data: { status: "APPROVED", approvedBy: ctx.name, remarks: remarks ?? null },
+    data: { status: "APPROVED", approvedBy: ctx.name, approvedByUserId: ctx.userId, remarks: remarks ?? null, approvedSingleHolder: singleHolder, approvedSingleReason: singleHolder ? (opts.reason ?? "").trim() : null },
   });
+  // the audit entry carries ids, the flag and the step, never the reason
+  const { approvedSingleReason: _reason, ...safe } = updated;
+  void _reason;
   await logAudit(ctx, {
     action: "DISCIPLINARY_RECORD_APPROVE",
     entity: "Employee",
     entityId: rec.employeeId,
-    newValue: updated,
+    newValue: safe,
   });
   return updated;
 }

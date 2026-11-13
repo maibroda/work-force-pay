@@ -2,17 +2,18 @@ import { requirePage } from "@/lib/auth/session";
 import { MAX_SUCCESSORS, READINESS_LABELS, READINESS_LEVELS, type Readiness } from "@/lib/career";
 import { listRoles } from "@/server/services/career";
 import { successionOverview } from "@/server/services/succession";
+import { otherHolders } from "@/server/services/second-person";
 import { fullName } from "@/lib/utils";
 import { Empty, FormPanel, PageHeader, Section } from "@/components/page";
 import { ActionButton } from "@/components/action-button";
 import { SmartForm } from "@/components/smart-form";
 import { Badge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { addSuccessionRoleAction, removeSuccessorAction, setSuccessionRoleActiveAction, setSuccessorAction } from "@/app/actions/career";
+import { addSuccessionRoleAction, approveSuccessorAction, rejectSuccessorAction, removeSuccessorAction, setSuccessionRoleActiveAction, setSuccessorAction } from "@/app/actions/career";
 
 export default async function SuccessionPage() {
   const ctx = await requirePage("succession.manage");
-  const [roles, all] = await Promise.all([successionOverview(ctx), listRoles(ctx)]);
+  const [roles, all, others] = await Promise.all([successionOverview(ctx), listRoles(ctx), otherHolders(ctx, "succession.manage")]);
   const taken = new Set(roles.map((r) => r.categoryId));
   const free = all.filter((r) => !taken.has(r.id));
   return (
@@ -62,12 +63,30 @@ export default async function SuccessionPage() {
                       {fullName(c.employee)}
                       <div className="text-xs text-muted-foreground">{c.employee.employeeNumber}</div>
                     </TD>
-                    <TD>{READINESS_LABELS[c.readiness as Readiness]}</TD>
+                    <TD>
+                      {READINESS_LABELS[c.readiness as Readiness]}
+                      {c.status === "PROPOSED" && <Badge tone="amber">awaiting approval</Badge>}
+                    </TD>
                     <TD className="max-w-md whitespace-normal text-sm">{c.reason ?? "—"}</TD>
                     <TD>
-                      <ActionButton action={removeSuccessorAction.bind(null, c.id)} confirm="Remove this successor?" variant="outline">
-                        Remove
-                      </ActionButton>
+                      {c.status === "PROPOSED" ? (
+                        <div className="flex flex-wrap gap-1">
+                          {c.proposedByUserId === ctx.userId && others > 0 ? (
+                            <span className="self-center text-xs text-muted-foreground">You proposed this: a different person approves it.</span>
+                          ) : (
+                            <ActionButton action={approveSuccessorAction.bind(null, c.id)} reason={c.proposedByUserId === ctx.userId} reasonPlaceholder="You proposed this and you are the only person who can approve it: why? (at least 20 characters)" variant="success">
+                              Approve
+                            </ActionButton>
+                          )}
+                          <ActionButton action={rejectSuccessorAction.bind(null, c.id)} confirm="Reject (or withdraw) this nomination?" variant="outline">
+                            {c.proposedByUserId === ctx.userId ? "Withdraw" : "Reject"}
+                          </ActionButton>
+                        </div>
+                      ) : (
+                        <ActionButton action={removeSuccessorAction.bind(null, c.id)} confirm="Remove this successor?" variant="outline">
+                          Remove
+                        </ActionButton>
+                      )}
                     </TD>
                   </TR>
                 ))}
@@ -84,6 +103,9 @@ export default async function SuccessionPage() {
                   { name: "employeeNumber", label: "Employee number", required: true, placeholder: "e.g. EMP-000012" },
                   { name: "readiness", label: "Readiness", type: "select", required: true, options: READINESS_LEVELS.map((l) => ({ value: l, label: READINESS_LABELS[l] })) },
                   { name: "reason", label: "One line on why (optional)" },
+                  ...(others === 0
+                    ? [{ name: "singleHolderReason", label: "You are the only person who keeps this list, so a second person cannot approve a new nomination: why are you adding one without? (at least 20 characters; needed only for a new successor)", span: 3 as const }]
+                    : []),
                 ]}
               />
             </div>

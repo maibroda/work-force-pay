@@ -7,8 +7,12 @@ import { compileEmployeeData } from "@/server/services/data-requests";
 import { anonymizeEmployee } from "@/server/services/employee-retention";
 import { employeeTimeline } from "@/server/services/hr-overview";
 import { todayUtc } from "@/server/services/hr-policy";
-import { addSuccessionRole, removeSuccessor, setSuccessionRoleActive, setSuccessor, successionOverview } from "@/server/services/succession";
+import { addSuccessionRole, removeSuccessor, setSuccessionRoleActive, setSuccessor as nominate, successionOverview } from "@/server/services/succession";
 import { isolatedOrg, uid } from "../helpers";
+
+// Governance step 2b: a new nomination by the only holder of the succession function in a company needs a written reason (tests/integration/second-person.test.ts covers the rule). These
+// tests are about the list itself, in test companies that have one holder, so every nomination here gives one; permission and isolation failures happen before it matters.
+const setSuccessor = (ctx: Ctx, raw: Parameters<typeof nominate>[1]) => nominate(ctx, { singleHolderReason: "The only holder of the succession function in this test company.", ...raw });
 
 // Career and succession, step 1: the succession list (the founder's go of 2026-11-10; plan docs/plans/career-succession-plan.md).
 // The most sensitive of the three: read and kept only by the HR administrator (the founder's decision of 2026-11-10, as for welfare). Nothing is scored or suggested.

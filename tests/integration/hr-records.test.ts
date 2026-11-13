@@ -132,11 +132,14 @@ describe("disciplinary records — maker/checker", () => {
 
     await expect(approveDisciplinary(ops, rec.id)).rejects.toThrow();
 
-    const approved = await approveDisciplinary(hr, rec.id, "Confirmed with supervisor");
+    // governance step 2b: the person who raised a sanction does not also approve it (others in this company could), so a second person signs it off
+    await expect(approveDisciplinary(hr, rec.id, "Confirmed with supervisor")).rejects.toThrow(/different person/i);
+    const checker = await ctxFor("COMPANY_ADMIN");
+    const approved = await approveDisciplinary(checker, rec.id, "Confirmed with supervisor");
     expect(approved.status).toBe("APPROVED");
-    expect(approved.approvedBy).toBe(hr.name);
+    expect(approved.approvedBy).toBe(checker.name);
 
-    await expect(approveDisciplinary(hr, rec.id)).rejects.toThrow(/Already decided/);
+    await expect(approveDisciplinary(checker, rec.id)).rejects.toThrow(/Already decided/);
   });
 });
 

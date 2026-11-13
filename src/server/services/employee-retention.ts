@@ -67,8 +67,8 @@ export async function anonymizeEmployee(tx: Tx, orgId: string, employeeId: strin
   // the stored files themselves (encrypted bytes) go with the person; only their count and a placeholder name remain
   counts.documentFiles = (await tx.employeeDocumentBlob.deleteMany({ where: { organizationId: orgId, version: { document: { employeeId } } } })).count;
   await tx.employeeDocumentVersion.updateMany({ where: { organizationId: orgId, document: { employeeId } }, data: { fileName: REMOVED } });
-  counts.disciplinary = (await tx.disciplinaryRecord.updateMany({ where, data: { description: REMOVED, actionTaken: null, remarks: null } })).count;
-  counts.cases = (await tx.relationsCase.updateMany({ where, data: { summary: REMOVED, description: REMOVED, resolution: null } })).count;
+  counts.disciplinary = (await tx.disciplinaryRecord.updateMany({ where, data: { description: REMOVED, actionTaken: null, remarks: null, approvedSingleReason: null } })).count;
+  counts.cases = (await tx.relationsCase.updateMany({ where, data: { summary: REMOVED, description: REMOVED, resolution: null, closedSingleReason: null } })).count;
   counts.caseNotes = caseIds.length ? (await tx.relationsCaseNote.updateMany({ where: { caseId: { in: caseIds } }, data: { note: REMOVED } })).count : 0;
   counts.letters = (await tx.generatedLetter.updateMany({ where, data: { recipientName: REMOVED, subject: REMOVED, body: REMOVED } })).count;
   counts.exits = (await tx.exitRecord.updateMany({ where, data: { reason: REMOVED, remarks: null, exitInterviewNotes: null } })).count;
@@ -104,7 +104,7 @@ export async function anonymizeEmployee(tx: Tx, orgId: string, employeeId: strin
   counts.recognitionAwards = (await tx.recognitionAward.updateMany({ where, data: { citation: REMOVED, decisionNote: null, withdrawReason: null } })).count;
   // promotions: the words go (the reason, a decision note and a withdrawal reason); what stays is the shape. Succession: the one-line reason goes, the entry stays.
   counts.promotionProposals = (await tx.promotionProposal.updateMany({ where, data: { reason: REMOVED, decisionNote: null, withdrawReason: null } })).count;
-  counts.successionEntries = (await tx.successionCandidate.updateMany({ where, data: { reason: null } })).count;
+  counts.successionEntries = (await tx.successionCandidate.updateMany({ where, data: { reason: null, singleReason: null } })).count;
   // training evaluations (about their courses) and requests: the words go; the ratings, the kinds and the statuses stay
   counts.trainingEvaluations = (await tx.trainingEvaluation.updateMany({ where: { organizationId: orgId, enrolment: { employeeId } }, data: { comment: null } })).count;
   counts.trainingRequests = (await tx.trainingRequest.updateMany({ where, data: { reason: REMOVED, decisionNote: null, withdrawReason: null } })).count;

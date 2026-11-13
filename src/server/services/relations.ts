@@ -21,6 +21,8 @@ import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { getHrPolicy, todayUtc } from "./hr-policy";
 import { recordSensitiveAccess } from "./sensitive-access";
+import { otherHolders } from "./second-person";
+import { secondPerson } from "@/lib/second-person";
 import type { RecordKind } from "@/lib/sensitive-access";
 import { raiseDisciplinary } from "./hr";
 import { nextNumber } from "./numbering";
@@ -303,7 +305,7 @@ export async function resolveCase(ctx: Ctx, caseId: string, raw: z.input<typeof 
   return db.$transaction(async (tx) => {
     const u = await tx.relationsCase.update({
       where: { id: caseId },
-      data: { status: "RESOLVED", outcome: v.outcome, resolution: v.resolution, resolvedAt: new Date() },
+      data: { status: "RESOLVED", outcome: v.outcome, resolution: v.resolution, resolvedAt: new Date(), resolvedByUserId: ctx.userId, closedSingleHolder: false, closedSingleReason: null },
     });
     await appendNote(ctx, tx, caseId, "DECISION", `Resolved — ${v.outcome.replace(/_/g, " ").toLowerCase()}. ${v.resolution}`);
     await logAudit(ctx, { action: "RELATIONS_CASE_RESOLVE", entity: "RelationsCase", entityId: caseId, newValue: u }, tx);
@@ -311,16 +313,45 @@ export async function resolveCase(ctx: Ctx, caseId: string, raw: z.input<typeof 
   });
 }
 
-/** Sign-off that a resolved case is complete. A second pair of eyes, hence hr.approve. */
-export async function closeCase(ctx: Ctx, caseId: string) {
+/** The right a closer needs: a welfare case is closed by a holder of the welfare function, any other case by someone who may approve. */
+const closerRight = (c: { type: string }) => (isWelfare(c) ? "welfare.manage" : "hr.approve") as Permission;
+
+/**
+ * Governance step 2b: the person who resolved a case does not also close it. Where they are the only holder of the right needed they may, with a written reason of at least 20
+ * characters, and the case is flagged. A case resolved before the rule has no recorded resolver, so it does not apply.
+ */
+async function closureVerdict(ctx: Ctx, c: { type: string; resolvedByUserId: string | null }, reason: string | undefined) {
+  if (!c.resolvedByUserId || c.resolvedByUserId !== ctx.userId) return { ok: true as const, singleHolder: false };
+  return secondPerson({ samePerson: true, otherHolders: await otherHolders(ctx, closerRight(c)), reason, did: "resolved this case", does: "closes it" });
+}
+
+/** What the close button needs to know for this person: blocked (they resolved it and someone else could close it), or needs a written reason (they are the only holder). */
+export async function closeAdvice(ctx: Ctx, caseId: string) {
+  assertHr(ctx, "hr.approve");
+  const c = await loadCase(ctx, caseId);
+  if (!c.resolvedByUserId || c.resolvedByUserId !== ctx.userId) return { blocked: false, needsReason: false };
+  const others = await otherHolders(ctx, closerRight(c));
+  return { blocked: others > 0, needsReason: others === 0 };
+}
+
+/** Sign-off that a resolved case is complete. A second pair of eyes, hence hr.approve, and not the person who resolved it (see above). */
+export async function closeCase(ctx: Ctx, caseId: string, opts: { reason?: string } = {}) {
   assertHr(ctx, "hr.approve");
   const c = await loadCase(ctx, caseId);
   assertDisciplinary(ctx, c);
   if (c.status !== "RESOLVED") throw new BusinessError("Resolve the case before closing it.");
+  const verdict = await closureVerdict(ctx, c, opts.reason);
+  if (!verdict.ok) throw new BusinessError(verdict.error);
   return db.$transaction(async (tx) => {
-    const u = await tx.relationsCase.update({ where: { id: caseId }, data: { status: "CLOSED", closedAt: new Date(), closedBy: ctx.name } });
-    await appendNote(ctx, tx, caseId, "NOTE", "Case closed.");
-    await logAudit(ctx, { action: "RELATIONS_CASE_CLOSE", entity: "RelationsCase", entityId: caseId, newValue: u }, tx);
+    const u = await tx.relationsCase.update({
+      where: { id: caseId },
+      data: { status: "CLOSED", closedAt: new Date(), closedBy: ctx.name, closedSingleHolder: verdict.singleHolder, closedSingleReason: verdict.singleHolder ? (opts.reason ?? "").trim() : null },
+    });
+    await appendNote(ctx, tx, caseId, "NOTE", verdict.singleHolder ? "Case closed by the person who resolved it, being the only person who could (flagged)." : "Case closed.");
+    // the audit entry carries ids, the flag and the step, never the reason
+    const { closedSingleReason: _reason, ...safe } = u;
+    void _reason;
+    await logAudit(ctx, { action: "RELATIONS_CASE_CLOSE", entity: "RelationsCase", entityId: caseId, newValue: safe }, tx);
     return u;
   });
 }
@@ -341,6 +372,9 @@ export async function reopenCase(ctx: Ctx, caseId: string, reason: string) {
         outcome: null,
         resolution: null,
         resolvedAt: null,
+        resolvedByUserId: null,
+        closedSingleHolder: false,
+        closedSingleReason: null,
         closedAt: null,
         closedBy: null,
         dueDate: addDays(todayUtc(), policy.relationsCaseSlaDays),
