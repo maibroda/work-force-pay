@@ -10,7 +10,18 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `governance-step5`, no migration)
+
+## Not yet merged (branch `governance-step6`, no migration)
+
+- **HR governance, step 6: sanctions in an employee's HR history are recorded** (the founder chose this from my list; it was the finding left by step 5). **It changes the audit log. No money, no migration, no new permission.**
+- An employee's **HR history** (the timeline on their HR page) shows each **approved sanction with its description**. Each one shown is now recorded in the access log by the **sanction's own id**: who, when, the kind; **never the employee and never the words**. The auditor's screen shows a short reference ("Sanction a1b2c3") and counts it among the records the reader opened.
+- **Not recorded:** praise (a commendation is not a sanction), a sanction still waiting for sign-off (the history does not show it), reading your own history, and a reader who may not see sanctions (the history shows them none). Ten-minute de-duplication. **If the entry cannot be written, the history does not open.**
+- **No existing test changed.** The label of the "sanction" kind was reworded.
+- **Finding, not changed:** the employee's own profile page has a **"Disciplinary" tab** that lists their sanctions, and that read is **not recorded**; it is rendered by the page, so it is a separate change. Say if you want it covered.
+- **Finding, not changed:** generating a warning letter from a sanction reads its description to fill the letter; that is an act that is already audited, so I added no read entry. Say if you want one.
+- Tests (written first; four failed before the change): the last describe of `tests/integration/record-read-log-exports.test.ts` (7 tests). Explain-back note: `docs/plans/hr-governance-step6-explain-back.md`.
+
+## Merged in #199 (no migration)
 
 - **HR governance, step 5: two more reads in the access log** (the founder chose this from my list of open items). **It changes the audit log. No money, no migration, no new permission.**
 - **The sanctions register** (the Disciplinary page's list of sanctions with the people they are about) and **a data export for a data access request** (a person's whole file) are now recorded, on the same rule as step 2a: **by the record, never by the employee**, never the content. The register is recorded as a list with a count ("3 sanction(s)"); an export by its request id, which the auditor's screen shows as the **request number**.
