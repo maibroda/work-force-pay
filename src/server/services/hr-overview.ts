@@ -188,7 +188,9 @@ export async function employeeTimeline(ctx: Ctx, employeeId: string): Promise<Ti
     });
   for (const r of rates)
     ev.push({ date: r.effectiveFrom, kind: "Pay", title: `Pay rate set to ${Number(r.monthlyGross).toLocaleString("en-NG")} / month`, detail: r.reason, tone: "slate" });
-  for (const x of discipline.filter((r) => r.type === "COMMENDATION" || seeDiscipline))
+  for (const x of discipline.filter((r) => r.type === "COMMENDATION" || seeDiscipline)) {
+    // this history shows each sanction's description, so a read of one is recorded by the sanction's own id (governance step 6); praise is not a sanction and is not recorded
+    if (x.type !== "COMMENDATION") await recordSensitiveAccess(ctx, { kind: "SANCTION", entity: "DisciplinaryRecord", ref: x.id, subjectEmployeeId: employeeId });
     ev.push({
       date: x.incidentDate,
       kind: x.type === "COMMENDATION" ? "Commendation" : "Disciplinary",
@@ -196,6 +198,7 @@ export async function employeeTimeline(ctx: Ctx, employeeId: string): Promise<Ti
       detail: x.description,
       tone: x.type === "COMMENDATION" ? "green" : "amber",
     });
+  }
   if (seeCases)
     for (const c of cases.filter((k) => (k.type !== "MISCONDUCT" || seeDiscipline) && (k.type !== "WELFARE" || seeWelfare))) {
       // this history shows the case's number, type and status (and the summary unless confidential): a read of a welfare, confidential or disciplinary case, recorded by the case's own id (governance step 2a)

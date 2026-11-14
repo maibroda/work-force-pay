@@ -87,7 +87,7 @@ export async function sensitiveAccessLog(ctx: Ctx, f: { days?: number; userId?: 
       employeeId: r.entity === "Employee" ? r.entityId : null,
       employee: r.entity === "Employee" && r.entityId ? names.get(r.entityId) ?? "Removed employee" : null,
       ref: r.entity === "SensitiveList" ? r.entityId : null,
-      // the record itself: its case number, a short plan reference, or a data request's number
+      // the record itself: its case number, a short plan or sanction reference, or a data request's number
       reference:
         r.entity === "RelationsCase" && r.entityId
           ? (caseNumbers.get(r.entityId) ?? "Removed case")
@@ -95,8 +95,10 @@ export async function sensitiveAccessLog(ctx: Ctx, f: { days?: number; userId?: 
             ? `Plan ${r.entityId.slice(-6)}`
             : r.entity === "DataAccessRequest" && r.entityId
               ? (requestNumbers.get(r.entityId) ?? "Removed request")
-              : null,
-      recordId: r.entity === "RelationsCase" || r.entity === "PerformanceImprovementPlan" || r.entity === "DataAccessRequest" ? r.entityId : null,
+              : r.entity === "DisciplinaryRecord" && r.entityId
+                ? `Sanction ${r.entityId.slice(-6)}`
+                : null,
+      recordId: r.entity === "RelationsCase" || r.entity === "PerformanceImprovementPlan" || r.entity === "DataAccessRequest" || r.entity === "DisciplinaryRecord" ? r.entityId : null,
       count: v.count ?? null,
       external: !!v.external,
       fromBureau: !!bureau,

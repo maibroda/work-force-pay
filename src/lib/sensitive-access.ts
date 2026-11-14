@@ -30,7 +30,7 @@ export const ACCESS_KIND_LABELS: Record<AccessKind, string> = {
   DISCIPLINARY_CASE: "A disciplinary case",
   SUCCESSION: "The succession list",
   IMPROVEMENT_PLAN: "A performance improvement plan",
-  SANCTION: "The sanctions register (disciplinary sanctions and who they are about)",
+  SANCTION: "A disciplinary sanction, or the sanctions register",
   DATA_EXPORT: "A data export for a data access request",
 };
 

@@ -6,11 +6,12 @@ import { createEmployee } from "@/server/services/employees";
 import { todayUtc } from "@/server/services/hr-policy";
 import { exportForRequest, exportMyData, openRequest, verifyIdentity } from "@/server/services/data-requests";
 import { raiseDisciplinary } from "@/server/services/hr";
-import { listSanctions } from "@/server/services/hr";
+import { approveDisciplinary, listSanctions } from "@/server/services/hr";
+import { employeeTimeline } from "@/server/services/hr-overview";
 import { SENSITIVE_VIEW, sensitiveAccessLog } from "@/server/services/sensitive-access";
 import { isolatedOrg, uid } from "../helpers";
 
-// Governance step 5: two reads the audit log did not record. (1) The sanctions register (the Disciplinary page's list of sanctions with the people they are about) and (2) a data export for
+// Governance step 6 (the last describe): the sanctions shown in an employee's HR history are recorded by the sanction's own id. Governance step 5: two reads the audit log did not record. (1) The sanctions register (the Disciplinary page's list of sanctions with the people they are about) and (2) a data export for
 // a data access request (a person's whole file). Same rule as step 2a: logged BY THE RECORD (the register as a list with a count; the export by its request id, shown as the request number),
 // never the employee and never the content; looking at your own is not recorded; and not recording is not an option: if the entry cannot be written, the read fails.
 
@@ -167,5 +168,81 @@ describe("what the auditor sees in the access log", () => {
     const other = await world();
     const theirs = await sensitiveAccessLog(other.auditor, {});
     expect(theirs.entries).toEqual([]);
+  });
+});
+
+// ───────────────────────────── Governance step 6: the sanctions in an employee's HR history ─────────────────────────────
+
+describe("an employee's HR history shows their approved sanctions", () => {
+  /** An approved sanction (raised by HR, signed off by a different person), and a commendation and a pending sanction that the history must not record. */
+  async function history() {
+    const w = await world();
+    const raise = (type: string) => raiseDisciplinary(w.hr, { employeeId: w.emp.id, type, incidentDate: iso(todayUtc()), description: `${SECRET} ${type}` } as never);
+    const a = await raise("WRITTEN_WARNING");
+    const b = await raise("SUSPENSION");
+    const pending = await raise("QUERY");
+    const praise = await raise("COMMENDATION");
+    for (const r of [a, b, praise]) await approveDisciplinary(w.boss, r.id);
+    return { ...w, a, b, pending, praise };
+  }
+
+  it("records each sanction it showed by the sanction's own id: who, the kind and the id; never the employee or the words, and not praise or a sanction still waiting", async () => {
+    const h = await history();
+    const events = await employeeTimeline(h.hr, h.emp.id);
+    expect(events.filter((e) => e.kind === "Disciplinary")).toHaveLength(2);
+    const rows = (await h.entries()).filter((r) => r.entity === "DisciplinaryRecord");
+    expect(rows.map((r) => r.entityId).sort()).toEqual([h.a.id, h.b.id].sort());
+    for (const r of rows) {
+      expect(r).toMatchObject({ userId: h.hr.userId });
+      expect(r.newValue).toMatchObject({ kind: "SANCTION" });
+    }
+    expect(JSON.stringify(rows)).not.toMatch(new RegExp(`Zainab|Hiddenname|SECRET|left his post|${h.emp.id}`));
+    expect(rows.map((r) => r.entityId)).not.toContain(h.pending.id);
+    expect(rows.map((r) => r.entityId)).not.toContain(h.praise.id);
+  });
+  it("opening the history again within ten minutes is one entry for each sanction", async () => {
+    const h = await history();
+    await employeeTimeline(h.hr, h.emp.id);
+    await employeeTimeline(h.hr, h.emp.id);
+    expect((await h.entries()).filter((r) => r.entity === "DisciplinaryRecord")).toHaveLength(2);
+  });
+  it("a reader who may not see sanctions is shown none, so records none (praise is still shown)", async () => {
+    const h = await history();
+    const finance = ctxOf(await realUser(h.t, "FINANCE"));
+    const events = await employeeTimeline(finance, h.emp.id);
+    expect(events.filter((e) => e.kind === "Disciplinary")).toHaveLength(0);
+    expect(events.filter((e) => e.kind === "Commendation")).toHaveLength(1);
+    expect((await h.entries()).filter((r) => r.entity === "DisciplinaryRecord")).toHaveLength(0);
+  });
+  it("looking at your own history is not recorded", async () => {
+    const h = await history();
+    await employeeTimeline({ ...h.hr, employeeId: h.emp.id }, h.emp.id);
+    expect(await h.entries()).toHaveLength(0);
+  });
+  it("if the entry cannot be written, the history fails and shows nothing", async () => {
+    const h = await history();
+    (logAudit as Mock).mockRejectedValueOnce(new Error("disk full"));
+    await expect(employeeTimeline(h.hr, h.emp.id)).rejects.toThrow(/disk full/);
+    expect(await h.entries()).toHaveLength(0);
+  });
+  it("is shown to the auditor by a short sanction reference, never the employee, and counts among the records that reader opened", async () => {
+    const h = await history();
+    await employeeTimeline(h.hr, h.emp.id);
+    const log = await sensitiveAccessLog(h.auditor, {});
+    const sanctions = log.entries.filter((e) => e.kind === "SANCTION");
+    expect(sanctions).toHaveLength(2);
+    for (const e of sanctions) {
+      expect(e).toMatchObject({ employee: null, employeeId: null });
+      expect(e.reference).toMatch(/^Sanction [a-z0-9]{6}$/);
+      expect([h.a.id, h.b.id]).toContain(e.recordId);
+    }
+    expect(JSON.stringify(log)).not.toMatch(/Zainab|Hiddenname|SECRET/);
+    expect(log.summary.find((s) => s.userId === h.hr.userId)).toMatchObject({ records: 2 });
+  });
+  it("another company's auditor sees none of it", async () => {
+    const h = await history();
+    await employeeTimeline(h.hr, h.emp.id);
+    const other = await world();
+    expect((await sensitiveAccessLog(other.auditor, {})).entries).toEqual([]);
   });
 });
