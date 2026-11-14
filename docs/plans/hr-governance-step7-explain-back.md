@@ -1,6 +1,6 @@
 # Explain-back note: governance step 7, the sanctions on the employee's own profile page
 
-For the founder. Plain language. **This changes the audit log (a critical module). No migration, no new permission, no money.** It builds on step 6 (#200) and closes the bigger gap I reported there.
+For the founder. Plain language. **This changes the audit log (a critical module). No migration, no new permission, no money.** It follows step 6 (#200, merged) and closes the bigger gap I reported there.
 
 ## What it is
 
@@ -38,4 +38,3 @@ Obi (HR) opens Ada's profile on the **Overview** tab: no sanction is read, nothi
 - **Behaviour change to know:** the profile now returns sanctions **only** to a page that asks for them. The only caller is the profile page, which asks on the two tabs that show them.
 - **The Letters tab is recorded as a sanction read** even though it shows only the type and date, because that still tells the reader a sanction exists. Say if you would rather it did not.
 - **Findings, not changed:** generating a warning letter reads a sanction's description (an act that is already audited); the HR digest and reminders read pending sanctions as the system, not a person; a probation recorded as failed can still be followed by a renewal; the retention leftovers.
-- **Stacked on step 6:** this branch is built on #200. If #200 merges first this PR shows only its own change.
