@@ -31,6 +31,14 @@ export async function setProgrammeActiveAction(id: string, active: boolean) {
   }, PAGES);
 }
 
+/** HR marks a programme worth asking the manager about effectiveness (stage 3 of the training evaluation), or stops asking. */
+export async function setProgrammeEffectivenessAction(id: string, on: boolean) {
+  return act("hr.manage", async (ctx) => {
+    await tp.updateProgramme(ctx, id, { evaluateEffectiveness: on });
+    return { message: on ? "Managers will be asked whether this training improved performance." : "Managers will no longer be asked about this programme's effectiveness." };
+  }, PAGES);
+}
+
 export async function scheduleSessionAction(v: V) {
   return act("hr.manage", async (ctx) => {
     const s = await tp.scheduleSession(ctx, { programmeId: str(v.programmeId) ?? "", sessionDate: str(v.sessionDate) ?? "", startTime: str(v.startTime), venue: str(v.venue), trainer: str(v.trainer), seats: str(v.seats) as never });

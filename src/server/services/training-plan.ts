@@ -50,7 +50,7 @@ export async function listProgrammes(ctx: Ctx) {
 }
 
 /** A programme's name is the course name a certificate carries, so it is never renamed. */
-export async function updateProgramme(ctx: Ctx, id: string, raw: { provider?: string; validityMonths?: number | null; active?: boolean }) {
+export async function updateProgramme(ctx: Ctx, id: string, raw: { provider?: string; validityMonths?: number | null; active?: boolean; evaluateEffectiveness?: boolean }) {
   assertCan(ctx, "hr.manage");
   const p = await db.trainingProgramme.findFirst({ where: { id, organizationId: ctx.orgId } });
   if (!p) throw new BusinessError("Programme not found.");
@@ -58,6 +58,8 @@ export async function updateProgramme(ctx: Ctx, id: string, raw: { provider?: st
   if (raw.provider !== undefined) data.provider = raw.provider.trim() || null;
   if (raw.validityMonths !== undefined) data.validityMonths = raw.validityMonths === null ? null : z.coerce.number().int().min(1).max(120).parse(raw.validityMonths);
   if (raw.active !== undefined) data.active = raw.active;
+  // stage 3 of the training evaluation: HR marks the programmes worth asking the manager about effectiveness (default off)
+  if (raw.evaluateEffectiveness !== undefined) data.evaluateEffectiveness = raw.evaluateEffectiveness === true;
   const u = await db.trainingProgramme.update({ where: { id }, data });
   await logAudit(ctx, { action: "TRAINING_PROGRAMME_UPDATE", entity: "TrainingProgramme", entityId: id, newValue: { fields: Object.keys(data) } });
   return u;

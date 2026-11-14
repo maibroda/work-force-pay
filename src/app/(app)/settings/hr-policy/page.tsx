@@ -272,6 +272,7 @@ export default async function HrPolicyPage() {
           fields={[
             { name: "trainingAlertDays", label: "Flag a certificate this many days before it expires", type: "number", min: 0, max: 365, defaultValue: p.trainingAlertDays, help: "0 = only flag once expired." },
             { name: "trainingEvaluationDays", label: "Ask a manager whether a course was applied this many days after it (0 = never)", type: "number", min: 0, max: 365, defaultValue: p.trainingEvaluationDays },
+            { name: "trainingEffectivenessDays", label: "Ask a manager whether the training improved performance, this many days after it, for programmes HR has marked (0 = never)", type: "number", min: 0, max: 365, defaultValue: p.trainingEffectivenessDays },
             { name: "skillReassessDays", label: "Show a skill assessment as stale after this many days (0 = never)", type: "number", min: 0, max: 1825, defaultValue: p.skillReassessDays },
           ]}
         />

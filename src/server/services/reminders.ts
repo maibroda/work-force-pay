@@ -285,6 +285,21 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
     });
     add(section("training-evaluations-due", "Training evaluations the manager has not given", due.map((x) => ({ text: `${name(x.employee)} — ${x.session.programme.name}`, path: "/hr/training-evaluations" }))));
   }
+  // stage 3 of the training evaluation: effectiveness evaluations the manager has not given, for programmes HR has marked, once the company's days have passed (0 = never asked)
+  if (policy.trainingEffectivenessDays > 0) {
+    const due = await db.trainingEnrolment.findMany({
+      where: {
+        organizationId: orgId,
+        status: "ATTENDED",
+        session: { sessionDate: { lte: addDays(today, -policy.trainingEffectivenessDays) }, programme: { evaluateEffectiveness: true } },
+        effectiveness: { is: null },
+      },
+      select: { employee: { select: { id: true, employeeNumber: true, firstName: true, lastName: true } }, session: { select: { programme: { select: { name: true } } } } },
+      orderBy: { session: { sessionDate: "asc" } },
+      take: 200,
+    });
+    add(section("effectiveness-due", "Effectiveness evaluations the manager has not given", due.map((x) => ({ text: `${name(x.employee)} — ${x.session.programme.name}`, path: "/hr/training-evaluations" }))));
+  }
   // a survey that is open: its title and the counts (never who took part)
   {
     const surveys = await openSurveysFor(orgId, today);

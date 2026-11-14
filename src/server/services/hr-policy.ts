@@ -261,8 +261,16 @@ export async function deleteTemplateItem(ctx: Ctx, id: string) {
 
 // ─────────────────────────────── Policy ───────────────────────────────
 
+/**
+ * The company's HR policy, created with the defaults the first time it is read. Two callers reading it for the first time at the same moment must both succeed and share one row: an
+ * upsert is a read and then an insert, so the second insert failed with a unique-constraint error (found in a browser check: the evaluations page read it twice at once and returned a 500).
+ * "Insert, and do nothing if it is already there" is safe against that race, and inside a transaction too (a caught error would leave the transaction unusable).
+ */
 export async function getHrPolicy(orgId: string, tx: Tx = db) {
-  return tx.hrPolicy.upsert({ where: { organizationId: orgId }, create: { organizationId: orgId }, update: {} });
+  const existing = await tx.hrPolicy.findUnique({ where: { organizationId: orgId } });
+  if (existing) return existing;
+  await tx.hrPolicy.createMany({ data: [{ organizationId: orgId }], skipDuplicates: true });
+  return tx.hrPolicy.findUniqueOrThrow({ where: { organizationId: orgId } });
 }
 
 const EXIT_TYPES = ["RESIGNATION", "TERMINATION", "END_OF_CONTRACT", "RETIREMENT", "ABSCONDMENT", "DECEASED"] as const;
@@ -283,6 +291,7 @@ export const hrPolicySchema = z
     longServiceYears: z.array(z.coerce.number().int().min(1).max(60)).max(10),
     promotionApplyAlertDays: z.coerce.number().int().min(0).max(90),
     trainingEvaluationDays: z.coerce.number().int().min(0).max(365),
+    trainingEffectivenessDays: z.coerce.number().int().min(0).max(365),
     skillReassessDays: z.coerce.number().int().min(0).max(1825),
     surveyRetentionMonths: z.coerce.number().int().min(0).max(120),
     offerValidityDays: z.coerce.number().int().min(1).max(180),
