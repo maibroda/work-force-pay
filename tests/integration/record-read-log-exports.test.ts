@@ -2,7 +2,7 @@ import { describe, expect, it, vi, type Mock } from "vitest";
 import { db } from "@/lib/db";
 import type { Ctx } from "@/lib/auth/context";
 import { iso } from "@/lib/dates";
-import { createEmployee } from "@/server/services/employees";
+import { createEmployee, getEmployee } from "@/server/services/employees";
 import { todayUtc } from "@/server/services/hr-policy";
 import { exportForRequest, exportMyData, openRequest, verifyIdentity } from "@/server/services/data-requests";
 import { raiseDisciplinary } from "@/server/services/hr";
@@ -244,5 +244,80 @@ describe("an employee's HR history shows their approved sanctions", () => {
     await employeeTimeline(h.hr, h.emp.id);
     const other = await world();
     expect((await sensitiveAccessLog(other.auditor, {})).entries).toEqual([]);
+  });
+});
+
+// ───────────────────────────── Governance step 7: the sanctions on the employee's own profile page ─────────────────────────────
+
+describe("the employee's profile shows their sanctions on the Disciplinary and Letters tabs", () => {
+  /** One approved sanction, one still waiting for sign-off, and an approved commendation. */
+  async function profile() {
+    const w = await world();
+    const raise = (type: string) => raiseDisciplinary(w.hr, { employeeId: w.emp.id, type, incidentDate: iso(todayUtc()), description: `${SECRET} ${type}` } as never);
+    const approved = await raise("WRITTEN_WARNING");
+    const pending = await raise("QUERY");
+    const praise = await raise("COMMENDATION");
+    for (const r of [approved, praise]) await approveDisciplinary(w.boss, r.id);
+    return { ...w, approved, pending, praise };
+  }
+  const sanctionRows = async (p: Awaited<ReturnType<typeof profile>>) => (await p.entries()).filter((r) => r.entity === "DisciplinaryRecord");
+
+  it("records each sanction it returns by the sanction's own id, the approved one and the one still waiting (the tab shows both); never the employee or the words; not praise", async () => {
+    const p = await profile();
+    const e = await getEmployee(p.hr, p.emp.id);
+    expect(e!.disciplinaryRecords).toHaveLength(3);
+    const rows = await sanctionRows(p);
+    expect(rows.map((r) => r.entityId).sort()).toEqual([p.approved.id, p.pending.id].sort());
+    for (const r of rows) {
+      expect(r).toMatchObject({ userId: p.hr.userId });
+      expect(r.newValue).toMatchObject({ kind: "SANCTION" });
+    }
+    expect(JSON.stringify(rows)).not.toMatch(new RegExp(`Zainab|Hiddenname|SECRET|left his post|${p.emp.id}`));
+    expect(rows.map((r) => r.entityId)).not.toContain(p.praise.id);
+  });
+  it("a page that is not showing sanctions asks for none and gets none, and records nothing (the praise is still returned)", async () => {
+    const p = await profile();
+    const e = await getEmployee(p.hr, p.emp.id, { sanctions: false });
+    expect(e!.disciplinaryRecords.map((r) => r.type)).toEqual(["COMMENDATION"]);
+    expect(await sanctionRows(p)).toHaveLength(0);
+  });
+  it("is one entry per sanction when the page is opened again within ten minutes", async () => {
+    const p = await profile();
+    await getEmployee(p.hr, p.emp.id);
+    await getEmployee(p.hr, p.emp.id);
+    expect(await sanctionRows(p)).toHaveLength(2);
+  });
+  it("a reader who may not see sanctions is returned none, so records none", async () => {
+    const p = await profile();
+    const finance = ctxOf(await realUser(p.t, "FINANCE"));
+    const e = await getEmployee(finance, p.emp.id);
+    expect(e!.disciplinaryRecords.map((r) => r.type)).toEqual(["COMMENDATION"]);
+    expect(await sanctionRows(p)).toHaveLength(0);
+  });
+  it("looking at your own profile is not recorded", async () => {
+    const p = await profile();
+    await getEmployee({ ...p.hr, employeeId: p.emp.id }, p.emp.id);
+    expect(await p.entries()).toHaveLength(0);
+  });
+  it("another company's employee is not found and records nothing", async () => {
+    const p = await profile();
+    const other = await world();
+    expect(await getEmployee(other.hr, p.emp.id)).toBeNull();
+    expect(await other.entries()).toHaveLength(0);
+  });
+  it("if the entry cannot be written, the profile fails and shows nothing", async () => {
+    const p = await profile();
+    (logAudit as Mock).mockRejectedValueOnce(new Error("disk full"));
+    await expect(getEmployee(p.hr, p.emp.id)).rejects.toThrow(/disk full/);
+    expect(await p.entries()).toHaveLength(0);
+  });
+  it("is shown to the auditor by a short sanction reference, never the employee", async () => {
+    const p = await profile();
+    await getEmployee(p.hr, p.emp.id);
+    const log = await sensitiveAccessLog(p.auditor, {});
+    const rows = log.entries.filter((e) => e.kind === "SANCTION");
+    expect(rows).toHaveLength(2);
+    for (const e of rows) expect(e).toMatchObject({ employee: null, employeeId: null, reference: expect.stringMatching(/^Sanction [a-z0-9]{6}$/) });
+    expect(JSON.stringify(log)).not.toMatch(/Zainab|Hiddenname|SECRET/);
   });
 });
