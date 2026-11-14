@@ -89,6 +89,8 @@ export const ANONYMISERS: Record<RunnableCategory, Anonymiser> = {
     counts.trainingEnrolments = (await tx.trainingEnrolment.updateMany({ where, data: { absenceReason: null } })).count;
     counts.trainingNeeds = (await tx.trainingNeed.updateMany({ where, data: { note: null, droppedReason: null } })).count;
     counts.trainingEvaluations = (await tx.trainingEvaluation.updateMany({ where: { organizationId: orgId, enrolment: { employeeId: { in: t.employeeIds ?? [] } } }, data: { comment: null } })).count;
+    // the manager's effectiveness comment goes; the outcome and the shape stay
+    counts.trainingEffectiveness = (await tx.trainingEffectiveness.updateMany({ where: { organizationId: orgId, enrolment: { employeeId: { in: t.employeeIds ?? [] } } }, data: { comment: null } })).count;
     counts.trainingRequests = (await tx.trainingRequest.updateMany({ where, data: { reason: REMOVED, decisionNote: null, withdrawReason: null } })).count;
     return counts;
   },

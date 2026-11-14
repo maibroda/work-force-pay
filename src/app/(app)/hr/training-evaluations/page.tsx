@@ -1,5 +1,6 @@
 import { requirePage } from "@/lib/auth/session";
-import { listManagerEvaluations, evaluationsDue, programmeResults } from "@/server/services/training-evaluation";
+import { effectivenessDueList, listManagerEvaluations, evaluationsDue, programmeResults } from "@/server/services/training-evaluation";
+import { EFFECTIVENESS_LABELS, EFFECTIVENESS_OUTCOMES } from "@/lib/training-evaluation";
 import { MIN_GROUP } from "@/lib/welfare";
 import { fmtDate } from "@/lib/dates";
 import { fullName } from "@/lib/utils";
@@ -8,7 +9,7 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 
 export default async function TrainingEvaluationsPage() {
   const ctx = await requirePage("hr.view");
-  const [results, managerRows, due] = await Promise.all([programmeResults(ctx), listManagerEvaluations(ctx), evaluationsDue(ctx)]);
+  const [results, managerRows, due, effDue] = await Promise.all([programmeResults(ctx), listManagerEvaluations(ctx), evaluationsDue(ctx), effectivenessDueList(ctx)]);
   const shownCount = (c: number | null) => (c === null ? `fewer than ${MIN_GROUP}` : c);
   return (
     <>
@@ -25,9 +26,13 @@ export default async function TrainingEvaluationsPage() {
               <TR>
                 <TH>Course</TH>
                 <TH>Participants who answered</TH>
-                <TH>Average (1 to 5)</TH>
+                <TH>Useful for work (1 to 5)</TH>
+                <TH>Content</TH>
+                <TH>Facilitator</TH>
+                <TH>Delivery</TH>
                 <TH>Managers who answered</TH>
-                <TH>Average (1 to 5)</TH>
+                <TH>Applied (1 to 5)</TH>
+                <TH>Did performance improve?</TH>
               </TR>
             </THead>
             <TBody>
@@ -36,8 +41,29 @@ export default async function TrainingEvaluationsPage() {
                   <TD className="font-medium">{r.name}</TD>
                   <TD>{shownCount(r.participant.count)}</TD>
                   <TD>{r.participant.average ?? "—"}</TD>
+                  <TD>{r.content.average ?? "—"}</TD>
+                  <TD>{r.facilitator.average ?? "—"}</TD>
+                  <TD>{r.delivery.average ?? "—"}</TD>
                   <TD>{shownCount(r.manager.count)}</TD>
                   <TD>{r.manager.average ?? "—"}</TD>
+                  <TD className="max-w-xs whitespace-normal text-xs">
+                    {!r.evaluateEffectiveness && !r.effectiveness.count ? (
+                      <span className="text-muted-foreground">Not followed up</span>
+                    ) : r.effectiveness.shown && r.effectiveness.counts ? (
+                      <>
+                        {EFFECTIVENESS_OUTCOMES.filter((o) => o !== "NOT_YET_VISIBLE").map((o) => (
+                          <div key={o}>
+                            {EFFECTIVENESS_LABELS[o]}: {r.effectiveness.counts![o]}
+                          </div>
+                        ))}
+                        <div className="text-muted-foreground">
+                          {EFFECTIVENESS_LABELS.NOT_YET_VISIBLE}: {r.effectiveness.counts.NOT_YET_VISIBLE} (counted apart)
+                        </div>
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">fewer than {MIN_GROUP}</span>
+                    )}
+                  </TD>
                 </TR>
               ))}
             </TBody>
@@ -69,6 +95,33 @@ export default async function TrainingEvaluationsPage() {
             </THead>
             <TBody>
               {due.map((d) => (
+                <TR key={d.enrolmentId}>
+                  <TD>
+                    {fullName(d.employee)}
+                    <div className="text-xs text-muted-foreground">{d.employee.employeeNumber}</div>
+                  </TD>
+                  <TD>{d.programmeName}</TD>
+                  <TD className="text-xs">{fmtDate(d.sessionDate)}</TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        )}
+      </Section>
+      <Section title="Effectiveness evaluations a manager has not yet given" description="Courses HR has marked for follow-up, attended long enough ago that the manager has been asked whether performance improved. The answers themselves are shown above as a spread per course, never by person." flush>
+        {effDue.length === 0 ? (
+          <Empty>None are waiting.</Empty>
+        ) : (
+          <Table>
+            <THead>
+              <TR>
+                <TH>Employee</TH>
+                <TH>Course</TH>
+                <TH>Attended</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {effDue.map((d) => (
                 <TR key={d.enrolmentId}>
                   <TD>
                     {fullName(d.employee)}

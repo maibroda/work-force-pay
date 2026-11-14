@@ -9,7 +9,7 @@ import { ActionButton } from "@/components/action-button";
 import { SmartForm } from "@/components/smart-form";
 import { Badge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { addProgrammeAction, scheduleSessionAction, setProgrammeActiveAction } from "@/app/actions/training-plan";
+import { addProgrammeAction, scheduleSessionAction, setProgrammeActiveAction, setProgrammeEffectivenessAction } from "@/app/actions/training-plan";
 
 const TONE: Record<SessionStatus, "blue" | "green" | "gray"> = { SCHEDULED: "blue", COMPLETED: "green", CANCELLED: "gray" };
 
@@ -132,6 +132,7 @@ export default async function TrainingCalendarPage({ searchParams }: { searchPar
                 <TH>Provider</TH>
                 <TH>Certificate valid for</TH>
                 <TH>In use</TH>
+                <TH>Ask managers about effectiveness</TH>
               </TR>
             </THead>
             <TBody>
@@ -146,6 +147,17 @@ export default async function TrainingCalendarPage({ searchParams }: { searchPar
                         {p.active ? "Switch off" : "Switch on"}
                       </ActionButton>
                     ) : p.active ? (
+                      "Yes"
+                    ) : (
+                      "No"
+                    )}
+                  </TD>
+                  <TD>
+                    {manage ? (
+                      <ActionButton action={setProgrammeEffectivenessAction.bind(null, p.id, !p.evaluateEffectiveness)} variant="outline">
+                        {p.evaluateEffectiveness ? "Yes: stop asking" : "No: start asking"}
+                      </ActionButton>
+                    ) : p.evaluateEffectiveness ? (
                       "Yes"
                     ) : (
                       "No"

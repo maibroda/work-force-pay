@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-259 tables and 195 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+260 tables and 196 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -48,6 +48,7 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | trainingNeeds | → TrainingNeed[] |  |  |
 | trainingRequests | → TrainingRequest[] |  |  |
 | trainingEvaluations | → TrainingEvaluation[] |  |  |
+| trainingEffectiveness | → TrainingEffectiveness[] |  |  |
 | skills | → Skill[] |  |  |
 | roleSkills | → RoleSkill[] |  |  |
 | skillAssessments | → SkillAssessment[] |  |  |
@@ -1621,6 +1622,7 @@ One per organization — every number a buyer might want to change without a cod
 | guarantorSeparateVerifier | Boolean |  | Someone other than whoever recorded a guarantor must verify them. |
 | trainingAlertDays | Int |  | Flag a certificate this many days before it expires. |
 | trainingEvaluationDays | Int |  | The manager is asked whether a course was applied on the job this many days after the session (0 = never asked). |
+| trainingEffectivenessDays | Int |  | The manager is asked whether the training improved performance on the work it targets this many days after the session, for programmes HR has marked (0 = never asked). Stage 3 of the training evaluation. |
 | skillReassessDays | Int |  | A skill assessment older than this many days is listed as stale for HR (0 = never). |
 | surveyRetentionMonths | Int |  | Raw survey answers are deleted this many months after a survey closes (0 = never deleted automatically); the anonymised results are kept. |
 | sensitiveChangeApproval | Boolean |  | A change needs a second person's approval (otherwise anyone who can edit an employee can change it). |
@@ -5926,6 +5928,7 @@ A course the company runs or buys. Its name is the course name a certificate car
 | provider | String |  |  |
 | validityMonths | Int |  | How long the certificate stays valid, in months (null = it does not expire). |
 | active | Boolean |  |  |
+| evaluateEffectiveness | Boolean |  | HR marks the programmes worth asking the manager about effectiveness (stage 3 of the training evaluation); off by default so a short briefing does not burden managers. |
 | createdBy | String | yes |  |
 | createdAt | DateTime |  |  |
 | sessions | → TrainingSession[] |  |  |
@@ -5975,6 +5978,7 @@ One person in one session, and whether they attended. Marking Attended creates t
 | createdAt | DateTime |  |  |
 | certificate | → EmployeeTraining |  |  |
 | evaluations | → TrainingEvaluation[] |  |  |
+| effectiveness | → TrainingEffectiveness |  |  |
 
 ### TrainingNeed
 
@@ -6142,6 +6146,23 @@ One named successor for a critical role, with how ready they are. Kept by a pers
 | singleHolder | Boolean |  | Approved by the person who proposed it, being the only holder (flagged, with the reason kept). |
 | singleReason | String |  |  |
 
+### TrainingEffectiveness
+
+The manager's effectiveness answer for one attended enrolment, a company-set number of days after the session, only for a programme HR has marked. It is about the outcome of the training, never a score on the person: it changes no pay, skill, appraisal or promotion. HR sees only the spread per programme from five answers; the employee reads their own.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| enrolmentId | String | yes | (unique) |
+| enrolment | → TrainingEnrolment |  |  |
+| outcome | TrainingEffectivenessOutcome | yes |  |
+| comment | String |  |  |
+| byUserId | String | yes |  |
+| byName | String | yes |  |
+| createdAt | DateTime |  |  |
+
 ### TrainingRequest
 
 A manager's request for a course for one of their direct reports (HR for anyone). HR decides; accepting only adds a training need.
@@ -6180,6 +6201,9 @@ One answer about a course that was attended: the participant's (was it useful?) 
 | enrolment | → TrainingEnrolment |  |  |
 | kind | TrainingEvaluationKind | yes |  |
 | rating | Int | yes |  |
+| contentRating | Int |  | Stage 1 of the training evaluation: the participant's other three ratings (1 to 5), null on an answer given before they were asked. The existing `rating` is the relevance question and keeps its meaning. |
+| facilitatorRating | Int |  |  |
+| deliveryRating | Int |  |  |
 | comment | String |  |  |
 | byUserId | String | yes |  |
 | byName | String | yes |  |
@@ -7245,6 +7269,12 @@ Whether an outbound message is a service message (about an active contract) or m
 ### TrainingEvaluationKind
 
 `PARTICIPANT`, `MANAGER`
+
+### TrainingEffectivenessOutcome
+
+Stage 3 of the training evaluation: did the person's performance on the work the training targets improve? "Not yet visible" is a choice so a manager is never forced to judge.
+
+`CLEARLY_IMPROVED`, `SOMEWHAT_IMPROVED`, `NO_VISIBLE_CHANGE`, `NOT_YET_VISIBLE`
 
 ### SurveyStatus
 

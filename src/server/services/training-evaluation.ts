@@ -14,7 +14,21 @@ import type { Ctx } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { addDays, iso } from "@/lib/dates";
 import { mayGiveFeedback } from "@/lib/feedback";
-import { checkRating, COMMENT_MAX, managerEvaluationDue, requestStatusAfter, requesterConflict, summariseRatings, type TrainingRequestStatus } from "@/lib/training-evaluation";
+import {
+  checkOptionalRating,
+  checkRating,
+  COMMENT_MAX,
+  EFFECTIVENESS_OUTCOMES,
+  effectivenessRefusal,
+  managerEvaluationDue,
+  requestStatusAfter,
+  requesterConflict,
+  skillEvidence,
+  summariseEffectiveness,
+  summariseRatings,
+  type EffectivenessOutcome,
+  type TrainingRequestStatus,
+} from "@/lib/training-evaluation";
 import { sameCourse } from "@/lib/training-plan";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
@@ -148,16 +162,26 @@ function parseAnswer(raw: { rating: number; comment?: string }) {
   return v;
 }
 
-/** The participant answers once about a course they attended: was it useful for their work? */
-export async function evaluateAsParticipant(ctx: Ctx, enrolmentId: string, raw: { rating: number; comment?: string }) {
-  const v = parseAnswer(raw);
+const participantSchema = z.object({
+  rating: z.coerce.number(),
+  content: z.coerce.number().optional(),
+  facilitator: z.coerce.number().optional(),
+  delivery: z.coerce.number().optional(),
+  comment: answerSchema.shape.comment,
+});
+
+/** Stage 1: the participant answers once about a course they attended: relevance (was it useful for their work: the existing question), content, facilitator and delivery, with one comment. */
+export async function evaluateAsParticipant(ctx: Ctx, enrolmentId: string, raw: { rating: number; content?: number; facilitator?: number; delivery?: number; comment?: string }) {
+  const p = participantSchema.parse(raw);
+  for (const bad of [checkRating(p.rating), checkOptionalRating(p.content), checkOptionalRating(p.facilitator), checkOptionalRating(p.delivery)]) if (bad) throw new BusinessError(bad);
+  const v = { rating: p.rating, comment: p.comment };
   const e = ctx.employeeId
     ? await db.trainingEnrolment.findFirst({ where: { id: enrolmentId, organizationId: ctx.orgId, employeeId: ctx.employeeId }, select: { id: true, status: true, evaluations: { where: { kind: "PARTICIPANT" }, select: { id: true } } } })
     : null;
   if (!e) throw new BusinessError(ENROLMENT_NOT_FOUND);
   if (e.status !== "ATTENDED") throw new BusinessError("You can evaluate only a course you attended.");
   if (e.evaluations.length) throw new BusinessError("You have already answered for this course.");
-  const row = await db.trainingEvaluation.create({ data: { organizationId: ctx.orgId, enrolmentId: e.id, kind: "PARTICIPANT", rating: v.rating, comment: v.comment ?? null, byUserId: ctx.userId, byName: ctx.name } });
+  const row = await db.trainingEvaluation.create({ data: { organizationId: ctx.orgId, enrolmentId: e.id, kind: "PARTICIPANT", rating: v.rating, contentRating: p.content ?? null, facilitatorRating: p.facilitator ?? null, deliveryRating: p.delivery ?? null, comment: v.comment ?? null, byUserId: ctx.userId, byName: ctx.name } });
   await logAudit(ctx, { action: "TRAINING_EVALUATE", entity: "TrainingEvaluation", entityId: row.id, newValue: { enrolmentId: e.id, kind: "PARTICIPANT" } });
   return row;
 }
@@ -217,19 +241,39 @@ export async function evaluationsDue(ctx: Ctx) {
   return rows.map((r) => ({ enrolmentId: r.id, employee: r.employee, programmeName: r.session.programme.name, sessionDate: r.session.sessionDate }));
 }
 
-/** Results per programme without picking a person out: below five answers no count, no average and no comment; the participant's comments never carry a name. */
+/**
+ * Results per programme without picking a person out (never per session, never per trainer, never per person). From five answers: the average of each of the four participant ratings (each
+ * on its own answers) and the spread of effectiveness answers; below five nothing, not even a count. The participant's comments never carry a name and are listed in alphabetical order.
+ * Every query selects only the fields it returns, so a participant's id and name are never fetched.
+ */
 export async function programmeResults(ctx: Ctx) {
   assertCan(ctx, "hr.view");
-  const [programmes, rows] = await Promise.all([
-    db.trainingProgramme.findMany({ where: { organizationId: ctx.orgId }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    db.trainingEvaluation.findMany({ where: { organizationId: ctx.orgId }, select: { kind: true, rating: true, comment: true, enrolment: { select: { session: { select: { programmeId: true } } } } } }),
+  const [programmes, rows, effects] = await Promise.all([
+    db.trainingProgramme.findMany({ where: { organizationId: ctx.orgId }, select: { id: true, name: true, evaluateEffectiveness: true }, orderBy: { name: "asc" } }),
+    db.trainingEvaluation.findMany({
+      where: { organizationId: ctx.orgId },
+      select: { kind: true, rating: true, contentRating: true, facilitatorRating: true, deliveryRating: true, comment: true, enrolment: { select: { session: { select: { programmeId: true } } } } },
+    }),
+    db.trainingEffectiveness.findMany({ where: { organizationId: ctx.orgId }, select: { outcome: true, enrolment: { select: { session: { select: { programmeId: true } } } } } }),
   ]);
+  const nums = (xs: Array<number | null>) => xs.filter((x): x is number => x !== null);
   return programmes.map((p) => {
     const mine = rows.filter((r) => r.enrolment.session.programmeId === p.id);
     const participant = mine.filter((r) => r.kind === "PARTICIPANT");
     const participantSummary = summariseRatings(participant.map((r) => r.rating));
     const comments = participantSummary.shown ? participant.map((r) => r.comment).filter((c): c is string => !!c).sort((a, b) => a.localeCompare(b)) : null;
-    return { programmeId: p.id, name: p.name, participant: participantSummary, comments, manager: summariseRatings(mine.filter((r) => r.kind === "MANAGER").map((r) => r.rating)) };
+    return {
+      programmeId: p.id,
+      name: p.name,
+      evaluateEffectiveness: p.evaluateEffectiveness,
+      participant: participantSummary,
+      content: summariseRatings(nums(participant.map((r) => r.contentRating))),
+      facilitator: summariseRatings(nums(participant.map((r) => r.facilitatorRating))),
+      delivery: summariseRatings(nums(participant.map((r) => r.deliveryRating))),
+      comments,
+      manager: summariseRatings(mine.filter((r) => r.kind === "MANAGER").map((r) => r.rating)),
+      effectiveness: summariseEffectiveness(effects.filter((x) => x.enrolment.session.programmeId === p.id).map((x) => x.outcome as EffectivenessOutcome)),
+    };
   });
 }
 
@@ -254,4 +298,105 @@ export async function myTrainingEvaluations(ctx: Ctx) {
     orderBy: { createdAt: "desc" },
   });
   return rows.map((r) => ({ programmeName: r.enrolment.session.programme.name, rating: r.rating, comment: r.comment, byName: r.byName, createdAt: r.createdAt }));
+}
+
+// ───────────────────────────── Stage 3: effectiveness ─────────────────────────────
+
+const effectivenessSchema = z.object({ outcome: z.enum(EFFECTIVENESS_OUTCOMES), comment: answerSchema.shape.comment });
+
+/**
+ * The manager says whether the person's performance on the work the training targets improved, the company's number of days after the session (120 by default), only for a programme HR has
+ * marked, once, about a direct report who attended (HR may act for anyone, as for the application evaluation). "Not yet visible" is a choice, so a manager is never forced to judge.
+ * It changes no pay, skill, appraisal or promotion. The audit log carries the ids and the outcome, never the comment.
+ */
+export async function evaluateEffectiveness(ctx: Ctx, enrolmentId: string, raw: { outcome: EffectivenessOutcome; comment?: string }) {
+  assertCan(ctx, "training.request");
+  const v = effectivenessSchema.parse(raw);
+  const e = await db.trainingEnrolment.findFirst({
+    where: { id: enrolmentId, organizationId: ctx.orgId },
+    select: {
+      id: true,
+      status: true,
+      session: { select: { sessionDate: true, programme: { select: { evaluateEffectiveness: true } } } },
+      employee: { select: { id: true, reportingManagerId: true } },
+      effectiveness: { select: { id: true } },
+    },
+  });
+  if (!e) throw new BusinessError(ENROLMENT_NOT_FOUND);
+  const verdict = mayGiveFeedback({ giverEmployeeId: ctx.employeeId ?? null, isHr: can(ctx.role, "hr.manage") }, { employeeId: e.employee.id, reportingManagerId: e.employee.reportingManagerId });
+  if (verdict === "SELF") throw new BusinessError("You can't evaluate your own training.");
+  if (verdict === "NOT_FOUND") throw new BusinessError(ENROLMENT_NOT_FOUND);
+  const refusal = effectivenessRefusal({
+    attended: e.status === "ATTENDED",
+    flagged: e.session.programme.evaluateEffectiveness,
+    days: (await getHrPolicy(ctx.orgId)).trainingEffectivenessDays,
+    sessionDay: iso(e.session.sessionDate),
+    today: todayIso(),
+    alreadyAnswered: !!e.effectiveness,
+  });
+  if (refusal) throw new BusinessError(refusal);
+  const row = await db.trainingEffectiveness.create({ data: { organizationId: ctx.orgId, enrolmentId: e.id, outcome: v.outcome, comment: v.comment ?? null, byUserId: ctx.userId, byName: ctx.name } });
+  await logAudit(ctx, { action: "TRAINING_EFFECTIVENESS", entity: "TrainingEffectiveness", entityId: row.id, newValue: { enrolmentId: e.id, outcome: v.outcome } });
+  return row;
+}
+
+/** Effectiveness evaluations a manager has been asked for and not yet given: their direct reports' (HR reads everyone's), for marked programmes only, once the company's days have passed. */
+export async function effectivenessDueList(ctx: Ctx) {
+  const all = can(ctx.role, "hr.view");
+  if (!all) assertCan(ctx, "training.request");
+  const days = (await getHrPolicy(ctx.orgId)).trainingEffectivenessDays;
+  if (days === 0 || (!all && !ctx.employeeId)) return [];
+  const rows = await db.trainingEnrolment.findMany({
+    where: {
+      organizationId: ctx.orgId,
+      status: "ATTENDED",
+      session: { sessionDate: { lte: addDays(todayUtc(), -days) }, programme: { evaluateEffectiveness: true } },
+      effectiveness: { is: null },
+      ...(all ? {} : { employee: { reportingManagerId: ctx.employeeId } }),
+    },
+    select: { id: true, employee: { select: EMPLOYEE_SELECT }, session: { select: { sessionDate: true, programme: { select: { name: true } } } } },
+    orderBy: { session: { sessionDate: "asc" } },
+    take: 200,
+  });
+  return rows.map((r) => ({ enrolmentId: r.id, employee: r.employee, programmeName: r.session.programme.name, sessionDate: r.session.sessionDate }));
+}
+
+/**
+ * The evidence shown beside the effectiveness question, read-only and never a score: for each skill the course builds (a skill whose list of courses names this programme), the latest assessment
+ * on or before the session and the latest after it, with "not assessed" as nothing. Nothing is ever changed. Shown only to someone who may give the answer.
+ */
+export async function effectivenessEvidence(ctx: Ctx, enrolmentId: string) {
+  assertCan(ctx, "training.request");
+  const e = await db.trainingEnrolment.findFirst({
+    where: { id: enrolmentId, organizationId: ctx.orgId },
+    select: { id: true, employee: { select: { id: true, reportingManagerId: true } }, session: { select: { sessionDate: true, programme: { select: { name: true } } } } },
+  });
+  if (!e) throw new BusinessError(ENROLMENT_NOT_FOUND);
+  const verdict = mayGiveFeedback({ giverEmployeeId: ctx.employeeId ?? null, isHr: can(ctx.role, "hr.manage") }, { employeeId: e.employee.id, reportingManagerId: e.employee.reportingManagerId });
+  if (verdict !== null) throw new BusinessError(ENROLMENT_NOT_FOUND);
+  const programmeName = e.session.programme.name;
+  const skills = (await db.skill.findMany({ where: { organizationId: ctx.orgId }, select: { id: true, name: true, courses: true } })).filter((s) => s.courses.some((c) => sameCourse(c, programmeName)));
+  const assessments = skills.length
+    ? await db.skillAssessment.findMany({ where: { organizationId: ctx.orgId, employeeId: e.employee.id, skillId: { in: skills.map((s) => s.id) } }, select: { skillId: true, level: true, assessedOn: true, skill: { select: { name: true } } } })
+    : [];
+  return {
+    programmeName,
+    sessionDate: e.session.sessionDate,
+    skills: skillEvidence(
+      assessments.map((a) => ({ skillId: a.skillId, skillName: a.skill.name, level: a.level, assessedOn: iso(a.assessedOn) })),
+      skills.map((s) => ({ id: s.id, name: s.name })),
+      iso(e.session.sessionDate),
+    ),
+  };
+}
+
+/** The manager's effectiveness answers about the signed-in employee, as they read the application evaluation. Never anyone else's. */
+export async function myEffectivenessEvaluations(ctx: Ctx) {
+  if (!ctx.employeeId) return [];
+  const rows = await db.trainingEffectiveness.findMany({
+    where: { organizationId: ctx.orgId, enrolment: { employeeId: ctx.employeeId } },
+    select: { outcome: true, comment: true, byName: true, createdAt: true, enrolment: { select: { session: { select: { programme: { select: { name: true } } } } } } },
+    orderBy: { createdAt: "desc" },
+  });
+  return rows.map((r) => ({ programmeName: r.enrolment.session.programme.name, outcome: r.outcome as EffectivenessOutcome, comment: r.comment, byName: r.byName, createdAt: r.createdAt }));
 }

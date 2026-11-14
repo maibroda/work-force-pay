@@ -45,8 +45,17 @@ export async function withdrawRequestAction(id: string, reason?: string) {
 // The participant answers about their own attended course: a login is enough, and the service decides whether it is theirs.
 export async function evaluateParticipantAction(enrolmentId: string, v: V) {
   return act(undefined, async (ctx) => {
-    await ev.evaluateAsParticipant(ctx, enrolmentId, { rating: Number(v.rating), comment: str(v.comment) });
+    const n = (x: unknown) => (x === undefined || x === null || x === "" ? undefined : Number(x));
+    await ev.evaluateAsParticipant(ctx, enrolmentId, { rating: Number(v.rating), content: n(v.content), facilitator: n(v.facilitator), delivery: n(v.delivery), comment: str(v.comment) });
     return { message: "Thank you. Your answer is confidential: HR sees only results from five answers or more, without names." };
+  }, PAGES);
+}
+
+// Stage 3: the manager says whether performance on the work the training targets improved.
+export async function evaluateEffectivenessAction(enrolmentId: string, v: V) {
+  return act("training.request", async (ctx) => {
+    await ev.evaluateEffectiveness(ctx, enrolmentId, { outcome: String(v.outcome ?? "") as never, comment: str(v.comment) });
+    return { message: "Evaluation recorded. The employee can read it." };
   }, PAGES);
 }
 
