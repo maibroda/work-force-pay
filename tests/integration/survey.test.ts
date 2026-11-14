@@ -6,7 +6,7 @@ import { createEmployee } from "@/server/services/employees";
 import { compileEmployeeData } from "@/server/services/data-requests";
 import { getHrPolicy, todayUtc, updateHrPolicy } from "@/server/services/hr-policy";
 import { buildHrDigest } from "@/server/services/reminders";
-import { surveyCodeLimiter } from "@/lib/rate-limit";
+import { surveyCodeLimiter, surveyCodeSurveyLimiter } from "@/lib/rate-limit";
 import {
   addQuestion,
   closeSurvey,
@@ -203,6 +203,47 @@ describe("taking a survey with an access code (a phone, a shared device or an as
     } finally {
       surveyCodeLimiter.limit = 30;
       surveyCodeLimiter.reset();
+    }
+  });
+  it("has a ceiling for one survey across every address, so many addresses cannot overload the page; another survey is not affected", async () => {
+    const w = await world(1);
+    const qs = await w.draft();
+    await open(w, qs.s.id);
+    const other = await w.draft();
+    await open(w, other.s.id);
+    surveyCodeLimiter.reset();
+    surveyCodeSurveyLimiter.reset();
+    surveyCodeSurveyLimiter.limit = 4;
+    try {
+      for (const ip of ["a", "b", "c", "d"]) expect((await submitWithCode(qs.s.id, "AAAA-BBBB-CCCC", w.answersOf(qs, 3, 3), `ip-${ip}`)).status).toBe("invalid");
+      // a fifth address is refused although it has made no attempt of its own
+      expect((await submitWithCode(qs.s.id, "AAAA-BBBB-CCCC", w.answersOf(qs, 3, 3), "ip-e")).status).toBe("slow");
+      // the ceiling is per survey
+      expect((await submitWithCode(other.s.id, "AAAA-BBBB-CCCC", w.answersOf(other, 3, 3), "ip-e")).status).toBe("invalid");
+    } finally {
+      surveyCodeSurveyLimiter.limit = 600;
+      surveyCodeSurveyLimiter.reset();
+      surveyCodeLimiter.reset();
+    }
+  });
+  it("counts an address refused for guessing too much against its own allowance only, not against the survey's ceiling", async () => {
+    const w = await world(1);
+    const qs = await w.draft();
+    await open(w, qs.s.id);
+    surveyCodeLimiter.reset();
+    surveyCodeSurveyLimiter.reset();
+    surveyCodeLimiter.limit = 2;
+    surveyCodeSurveyLimiter.limit = 3;
+    try {
+      for (let i = 0; i < 2; i++) await submitWithCode(qs.s.id, "AAAA-BBBB-CCCC", w.answersOf(qs, 3, 3), "ip-noisy");
+      // refused by its own allowance: these must not use up the survey's three
+      for (let i = 0; i < 5; i++) expect((await submitWithCode(qs.s.id, "AAAA-BBBB-CCCC", w.answersOf(qs, 3, 3), "ip-noisy")).status).toBe("slow");
+      expect((await submitWithCode(qs.s.id, "AAAA-BBBB-CCCC", w.answersOf(qs, 3, 3), "ip-quiet")).status).toBe("invalid");
+    } finally {
+      surveyCodeLimiter.limit = 30;
+      surveyCodeSurveyLimiter.limit = 600;
+      surveyCodeLimiter.reset();
+      surveyCodeSurveyLimiter.reset();
     }
   });
   it("is not offered for a survey that is not open", async () => {

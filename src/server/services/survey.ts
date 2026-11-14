@@ -16,7 +16,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import type { Ctx } from "@/lib/auth/context";
 import { d, iso } from "@/lib/dates";
-import { surveyCodeLimiter } from "@/lib/rate-limit";
+import { surveyCodeLimiter, surveyCodeSurveyLimiter } from "@/lib/rate-limit";
 import { MAX_QUESTIONS, COMMENT_MAX, QUESTION_TEXT_MAX, MIN_RESPONSES, breakdown, generateCode, hashCode, normaliseCode, retentionDue, summarise, surveyState, type GroupCount, type ScaleSummary } from "@/lib/survey";
 import { canCtx } from "@/lib/hr-functions";
 import { assertCan, BusinessError, db } from "./_base";
@@ -412,7 +412,9 @@ export async function publicSurvey(surveyId: string) {
  * slowed down (by the address passed in as `throttleKey`). The code is single-use and is separated from the answer at the moment it is used.
  */
 export async function submitWithCode(surveyId: string, rawCode: string, raw: Answer[], throttleKey: string): Promise<{ status: "ok" | "invalid" | "slow" }> {
+  // one address is slowed first (a refusal here does not use up the survey's ceiling), then the survey as a whole across every address
   if (!surveyCodeLimiter.check(`${surveyId}:${throttleKey}`).ok) return { status: "slow" };
+  if (!surveyCodeSurveyLimiter.check(surveyId).ok) return { status: "slow" };
   const s = await db.survey.findFirst({ where: { id: surveyId }, select: { id: true, status: true, opensOn: true, closesOn: true } });
   if (!s || !isOpen(s)) return { status: "invalid" };
   const code = await db.surveyAccessCode.findFirst({ where: { surveyId, codeHash: hashCode(normaliseCode(rawCode ?? "")), status: "ACTIVE" }, select: { id: true, categoryId: true, departmentId: true } });
