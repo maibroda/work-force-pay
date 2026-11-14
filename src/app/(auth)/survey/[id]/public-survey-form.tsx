@@ -1,6 +1,6 @@
 "use client";
 import { useState, useTransition } from "react";
-import { SCALE_LABELS } from "@/lib/survey-scale";
+import { COMMENT_GUIDANCE, SCALE_LABELS } from "@/lib/survey-scale";
 import { submitPublicSurveyAction } from "./submit";
 
 interface Q {
@@ -77,7 +77,10 @@ export function PublicSurveyForm({ surveyId, title, intro, questions }: { survey
               ))}
             </select>
           ) : (
-            <textarea id={`q_${q.id}`} value={values[q.id] ?? ""} onChange={(e) => setValues((v) => ({ ...v, [q.id]: e.target.value }))} className="mt-1 w-full rounded border p-2 text-base" rows={3} maxLength={500} />
+            <>
+              <p className="mt-0.5 text-xs text-slate-600">{COMMENT_GUIDANCE}</p>
+              <textarea id={`q_${q.id}`} value={values[q.id] ?? ""} onChange={(e) => setValues((v) => ({ ...v, [q.id]: e.target.value }))} className="mt-1 w-full rounded border p-2 text-base" rows={3} maxLength={500} />
+            </>
           )}
         </div>
       ))}

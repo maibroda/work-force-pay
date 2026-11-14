@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { ROLE_PERMISSIONS, type Role } from "@/lib/auth/permissions";
+import { COMMENT_GUIDANCE } from "@/lib/survey-scale";
 import { CODE_LENGTH, MAX_QUESTIONS, MIN_INVITED_FOR_GROUP, MIN_RESPONSES, breakdown, distribution, generateCode, hashCode, normaliseCode, retentionDue, summarise, surveyState } from "@/lib/survey";
+
+describe("the guidance beside a comment box", () => {
+  it("tells the writer not to name a person, a site or a shift, and says who reads the comment and when", () => {
+    expect(COMMENT_GUIDANCE).toMatch(/do not write names/i);
+    expect(COMMENT_GUIDANCE).toMatch(/site/i);
+    expect(COMMENT_GUIDANCE).toMatch(/shift/i);
+    expect(COMMENT_GUIDANCE).toMatch(/at least five/i);
+  });
+});
 
 describe("an access code", () => {
   it("is long, random, made of unambiguous characters and shown in groups of four", () => {

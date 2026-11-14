@@ -1,4 +1,4 @@
-import { SCALE_LABELS } from "@/lib/survey-scale";
+import { COMMENT_GUIDANCE, SCALE_LABELS } from "@/lib/survey-scale";
 import { SmartForm } from "@/components/smart-form";
 import type { ActionResult } from "@/lib/action-result";
 
@@ -18,7 +18,7 @@ export function SurveyForm({ questions, action, submitLabel = "Send my answers" 
       fields={questions.map((q) =>
         q.kind === "SCALE"
           ? { name: `q_${q.id}`, label: q.text, type: "select" as const, options: [5, 4, 3, 2, 1].map((n) => ({ value: String(n), label: `${n}: ${SCALE_LABELS[n]}` })) }
-          : { name: `q_${q.id}`, label: `${q.text} (optional)`, type: "textarea" as const },
+          : { name: `q_${q.id}`, label: `${q.text} (optional)`, type: "textarea" as const, help: COMMENT_GUIDANCE },
       )}
     />
   );
