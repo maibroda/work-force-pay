@@ -9,6 +9,7 @@ import { normaliseState } from "@/lib/nigeria-states";
 import { fullName } from "@/lib/utils";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
+import { recordSensitiveAccess } from "./sensitive-access";
 import { nextNumber } from "./numbering";
 import { seedOnboardingTasks } from "./hr";
 import { resolvePfa } from "./pfas";
@@ -293,7 +294,11 @@ export async function listEmployees(
 }
 
 /** Tenancy-safe single fetch: returns null for another organization's employee. */
-export async function getEmployee(ctx: Ctx, id: string) {
+/**
+ * The employee's file. `sanctions` says whether the page is going to SHOW their sanctions (default yes: a caller that does not say is treated as showing them, so a read is never missed). When it
+ * is, each sanction returned is recorded by its own id (governance step 7), never the employee or the words; when it is not, none is returned and nothing is recorded.
+ */
+export async function getEmployee(ctx: Ctx, id: string, opts: { sanctions?: boolean } = {}) {
   const e = await db.employee.findFirst({
     where: { id, organizationId: ctx.orgId },
     include: {
@@ -327,9 +332,12 @@ export async function getEmployee(ctx: Ctx, id: string) {
   if (!e) return null;
   // the electronic documents are in the document register; what is left here is the older reference-only records, and identification and medical kinds are for those who may see them
   const documents = e.documents.filter((x) => !x.typeId && (can(ctx.role, "document.sensitive") || !LEGACY_TYPES[x.documentType]?.sensitive));
-  // sanctions are disciplinary: only someone with disciplinary access sees them on the employee's file (praise is shown to all who may see HR records)
-  if (can(ctx.role, "discipline.view")) return { ...e, documents };
-  return { ...e, documents, disciplinaryRecords: e.disciplinaryRecords.filter((r) => r.type === "COMMENDATION") };
+  // sanctions are disciplinary: only someone with disciplinary access sees them on the employee's file (praise is shown to all who may see HR records), and only on a page that asks for them
+  const showSanctions = can(ctx.role, "discipline.view") && opts.sanctions !== false;
+  const disciplinaryRecords = e.disciplinaryRecords.filter((r) => r.type === "COMMENDATION" || showSanctions);
+  // governance step 7: a sanction returned is a sanction read (the Disciplinary tab shows its description, the Letters tab its type and date), recorded by the sanction's own id; reading your own is not
+  if (showSanctions) for (const r of disciplinaryRecords.filter((x) => x.type !== "COMMENDATION")) await recordSensitiveAccess(ctx, { kind: "SANCTION", entity: "DisciplinaryRecord", ref: r.id, subjectEmployeeId: e.id });
+  return { ...e, documents, disciplinaryRecords };
 }
 
 export async function getEmployeeByNumber(ctx: Ctx, employeeNumber: string) {

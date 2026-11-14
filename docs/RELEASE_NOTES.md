@@ -11,6 +11,16 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
+
+## Not yet merged (branch `governance-step7`, stacked on step 6 (#200), no migration)
+
+- **HR governance, step 7: the sanctions on the employee's own profile page are recorded** (the founder chose this from my list; it was the bigger gap reported with step 6). **It changes the audit log. No money, no migration, no new permission.**
+- The profile's **Disciplinary tab** (sanctions with their descriptions, including one still waiting for sign-off) and its **Letters tab** (the warning-letter buttons: each approved sanction's type and date) now record each sanction shown, by the **sanction's own id** and never the employee or the words; the auditor's screen shows "Sanction a1b2c3".
+- The profile service now returns sanctions **only to a page that asks for them** (the profile page asks on those two tabs); every other tab returns none and records nothing. A caller that does not say is treated as showing them, so a read is never missed. Not recorded: praise, a reader who may not see sanctions, and your own profile. Ten-minute de-duplication. **If the entry cannot be written, the profile does not open.**
+- **No existing test changed.**
+- **Finding, not changed:** generating a warning letter reads a sanction's description (an act that is already audited).
+- Tests (written first; five failed before the change): the last describe of `tests/integration/record-read-log-exports.test.ts` (8 tests). Explain-back note: `docs/plans/hr-governance-step7-explain-back.md`.
+
 ## Not yet merged (branch `governance-step6`, no migration)
 
 - **HR governance, step 6: sanctions in an employee's HR history are recorded** (the founder chose this from my list; it was the finding left by step 5). **It changes the audit log. No money, no migration, no new permission.**

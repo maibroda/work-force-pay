@@ -70,9 +70,10 @@ export default async function EmployeePage({
   const ctx = await requirePage("employee.view");
   const { id } = await params;
   const sp = await searchParams;
-  const e = await getEmployee(ctx, id);
-  if (!e) notFound();
   const tab = sp.tab ?? "overview";
+  // the sanctions are shown (and so recorded) only on the Disciplinary tab and the Letters tab (the warning-letter buttons)
+  const e = await getEmployee(ctx, id, { sanctions: tab === "conduct" || tab === "letters" });
+  if (!e) notFound();
   // proposed personal monthly grosses for this employee (shown on the Salary tab to people who may propose or approve them)
   const mayPropose = can(ctx.role, "override.manage") || can(ctx.role, "employee.manage");
   const proposals = tab === "salary" && mayPropose ? await listPayRateProposals(ctx, { employeeId: id }) : [];
