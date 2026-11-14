@@ -85,8 +85,32 @@ export function limitKey(ip: string, token: string): string {
 
 /** The public unsubscribe address: 30 a minute from one address. */
 export const unsubscribeLimiter = createLimiter({ limit: 30, windowMs: 60_000 });
-/** Someone typing survey access codes with no login (a QR code or a shared device): 30 tries a minute for one survey from one address. */
-export const surveyCodeLimiter = createLimiter({ limit: 30, windowMs: 60_000 });
+/**
+ * A setting read from the environment: a whole number inside [min, max], otherwise the default. A value that is missing, not a plain whole number, zero, or out of bounds falls back to
+ * the default, so a mistake in the host's settings can never switch a limit off.
+ */
+export function envInt(name: string, fallback: number, min: number, max: number, env: Record<string, string | undefined> = process.env): number {
+  const raw = (env[name] ?? "").trim();
+  if (!/^[0-9]{1,6}$/.test(raw)) return fallback;
+  const n = Number(raw);
+  return n >= min && n <= max ? n : fallback;
+}
+
+/**
+ * The survey code page's two limits, a minute each: tries from ONE address for one survey (SURVEY_CODE_LIMIT_PER_MINUTE, default 30, 5 to 120) and a ceiling for ONE survey across every
+ * address (SURVEY_CODE_LIMIT_PER_SURVEY_PER_MINUTE, default 600, 60 to 6,000), so many addresses cannot overload the page. The survey's ceiling is never lower than one address's allowance.
+ * A code is 12 random characters (60 bits), so guessing is not feasible at either setting; the limits stop a program hammering the page and bound the database work.
+ */
+export function surveyCodeLimits(env: Record<string, string | undefined> = process.env): { perAddress: number; perSurvey: number } {
+  const perAddress = envInt("SURVEY_CODE_LIMIT_PER_MINUTE", 30, 5, 120, env);
+  const perSurvey = Math.max(envInt("SURVEY_CODE_LIMIT_PER_SURVEY_PER_MINUTE", 600, 60, 6000, env), perAddress);
+  return { perAddress, perSurvey };
+}
+const codeLimits = surveyCodeLimits();
+/** Someone typing survey access codes with no login (a QR code or a shared device): 30 tries a minute (configurable) for one survey from one address. */
+export const surveyCodeLimiter = createLimiter({ limit: codeLimits.perAddress, windowMs: 60_000 });
+/** One survey's code page across every address: 600 tries a minute (configurable). */
+export const surveyCodeSurveyLimiter = createLimiter({ limit: codeLimits.perSurvey, windowMs: 60_000 });
 /** A person downloading data (CSV exports, reports, data-request files): 10 in five minutes. */
 export const exportLimiter = createLimiter({ limit: 10, windowMs: 5 * 60_000 });
 /** A person sending email to contacts from the sales module: 60 an hour. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clientIp, createLimiter, limitKey } from "@/lib/rate-limit";
+import { clientIp, createLimiter, envInt, limitKey, surveyCodeLimits } from "@/lib/rate-limit";
 
 describe("the rate limiter", () => {
   it("lets the first `limit` calls in a window through, refuses the next, and says how long to wait", () => {
@@ -105,5 +105,46 @@ describe("the key a visitor is counted under", () => {
     expect(a.startsWith("unknown:")).toBe(true);
     expect(limitKey("unknown", "payloadAAAAAAAAAAAAAAAA.sigA")).toBe(a); // the same link is the same key
     expect(limitKey("unknown", "x".repeat(5000)).length).toBeLessThan(60); // a hostile link cannot make a huge key
+  });
+});
+
+// The survey code page's limits are settings (the founder asked for a configurable limit): a whole number inside safe bounds, otherwise the default. A bad value can never switch the limit off.
+describe("a limit read from the environment", () => {
+  it("is a whole number inside its bounds, otherwise the default", () => {
+    const get = (v: string | undefined) => envInt("X", 30, 5, 120, { X: v });
+    expect(get(undefined)).toBe(30);
+    expect(get("")).toBe(30);
+    expect(get("   ")).toBe(30);
+    expect(get("abc")).toBe(30);
+    expect(get("12.5")).toBe(30);
+    expect(get("-3")).toBe(30);
+    expect(get("0")).toBe(30); // zero would switch the limit off: never
+    expect(get("4")).toBe(30); // below the bounds
+    expect(get("121")).toBe(30); // above the bounds
+    expect(get("1e3")).toBe(30);
+    expect(get("5")).toBe(5);
+    expect(get("120")).toBe(120);
+    expect(get(" 60 ")).toBe(60);
+  });
+});
+
+describe("the survey code page's limits", () => {
+  it("default to 30 a minute for one address and 600 a minute for one survey", () => {
+    expect(surveyCodeLimits({})).toEqual({ perAddress: 30, perSurvey: 600 });
+  });
+  it("can be set within bounds: 5 to 120 for an address, 60 to 6,000 for a survey", () => {
+    expect(surveyCodeLimits({ SURVEY_CODE_LIMIT_PER_MINUTE: "10", SURVEY_CODE_LIMIT_PER_SURVEY_PER_MINUTE: "1200" })).toEqual({ perAddress: 10, perSurvey: 1200 });
+    expect(surveyCodeLimits({ SURVEY_CODE_LIMIT_PER_MINUTE: "5", SURVEY_CODE_LIMIT_PER_SURVEY_PER_MINUTE: "60" })).toEqual({ perAddress: 5, perSurvey: 60 });
+    expect(surveyCodeLimits({ SURVEY_CODE_LIMIT_PER_MINUTE: "120", SURVEY_CODE_LIMIT_PER_SURVEY_PER_MINUTE: "6000" })).toEqual({ perAddress: 120, perSurvey: 6000 });
+  });
+  it("fall back to the defaults for a value that is out of bounds or not a number, and never switch a limit off", () => {
+    expect(surveyCodeLimits({ SURVEY_CODE_LIMIT_PER_MINUTE: "0", SURVEY_CODE_LIMIT_PER_SURVEY_PER_MINUTE: "0" })).toEqual({ perAddress: 30, perSurvey: 600 });
+    expect(surveyCodeLimits({ SURVEY_CODE_LIMIT_PER_MINUTE: "100000", SURVEY_CODE_LIMIT_PER_SURVEY_PER_MINUTE: "lots" })).toEqual({ perAddress: 30, perSurvey: 600 });
+    expect(surveyCodeLimits({ SURVEY_CODE_LIMIT_PER_MINUTE: "unlimited" })).toEqual({ perAddress: 30, perSurvey: 600 });
+  });
+  it("keeps the ceiling for a survey at least as high as one address's allowance", () => {
+    // an address allowed more than the whole survey would make the survey ceiling meaningless
+    const l = surveyCodeLimits({ SURVEY_CODE_LIMIT_PER_MINUTE: "120", SURVEY_CODE_LIMIT_PER_SURVEY_PER_MINUTE: "60" });
+    expect(l.perSurvey).toBeGreaterThanOrEqual(l.perAddress);
   });
 });
