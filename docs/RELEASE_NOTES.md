@@ -24,7 +24,15 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 - **A bug found in the browser check and fixed here:** the first read of a company's HR policy (it is created with defaults the first time) could fail when two reads happened at the same moment, which returned an error on the evaluations page for a company with no policy yet. The policy is now created in a way that is safe against that race, and inside a transaction. Three tests, which failed every time before the fix.
 - **No existing test changed.** Tests (written first; 28 integration tests failed before the code): `tests/unit/training-evaluation.test.ts` (26) and `tests/integration/training-evaluation-stages.test.ts` (32). Explain-back note: `docs/plans/training-evaluation-stages-explain-back.md`. **Not built:** costs, any effect on pay or appraisals, a per-trainer or per-session result.
 
-## Not yet merged (branch `governance-step7`, no migration)
+## Merged in #202 (no migration)
+
+- **The survey code page's rate limit is now configurable, with a ceiling for each survey** (the founder's host-configuration direction of 2026-11-14). **No money, no migration, no change to how a survey is taken or to anyone's anonymity.**
+- **Two settings,** a minute each: `SURVEY_CODE_LIMIT_PER_MINUTE` (tries from one address for one survey; **default 30**, 5 to 120) and `SURVEY_CODE_LIMIT_PER_SURVEY_PER_MINUTE` (tries for one survey across **every** address, so many addresses cannot overload the page; **default 600**, 60 to 6,000). **A value that is missing, not a plain whole number, zero or out of bounds falls back to the default, so a mistake in the host's settings can never switch a limit off.** The survey's ceiling is never lower than one address's allowance.
+- **Why it is safe:** a code is 12 random characters (60 bits, about 1.15 x 10^18 combinations), so guessing is not feasible at either setting; the limits stop a program hammering the page and bound database work. A shared kiosk stays within 30 a minute.
+- **An address refused for guessing too much does not use up the survey's ceiling.** The counts are per server process, so **the same ceilings should also be set at the host's proxy** (listed in `.env.example` and `docs/plans/host-configuration-and-demo-data.md`).
+- **No existing test changed.** Tests (written first; seven failed before the change): `tests/unit/rate-limit.test.ts` (the environment parsing and bounds, the defaults) and two in `tests/integration/survey.test.ts` (the per-survey ceiling across addresses and per survey; a refused address does not use the ceiling).
+
+## Merged in #201 (no migration)
 
 - **HR governance, step 7: the sanctions on the employee's own profile page are recorded** (the founder chose this from my list; it was the bigger gap reported with step 6). **It changes the audit log. No money, no migration, no new permission.**
 - The profile's **Disciplinary tab** (sanctions with their descriptions, including one still waiting for sign-off) and its **Letters tab** (the warning-letter buttons: each approved sanction's type and date) now record each sanction shown, by the **sanction's own id** and never the employee or the words; the auditor's screen shows "Sanction a1b2c3".
