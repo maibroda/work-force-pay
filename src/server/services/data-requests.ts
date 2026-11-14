@@ -59,7 +59,7 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
   // the probation workflow: the manager's recommendation and reasons, HR's review note, the feedback written for the employee and their response
   const probationReviews = await db.probationReview.findMany({ where, orderBy: [{ round: "asc" }, { id: "asc" }] });
 
-  const [contracts, exits, settlements, onboarding, deployments, movements, attendance, payslips, loans, leave, training, documents, discipline, cases, contacts, guarantors, appraisals, acks, letters, changes, candidate, kit, plans, probationDecisions, feedback, trainingEnrolments, trainingNeeds, recognition, trainingEvaluations, trainingRequests, skillAssessments, surveyParticipation, promotions] =
+  const [contracts, exits, settlements, onboarding, deployments, movements, attendance, payslips, loans, leave, training, documents, discipline, cases, contacts, guarantors, appraisals, acks, letters, changes, candidate, kit, plans, probationDecisions, feedback, trainingEnrolments, trainingNeeds, recognition, trainingEvaluations, trainingRequests, skillAssessments, surveyParticipation, promotions, trainingEffectiveness] =
     await Promise.all([
       db.employmentContract.findMany({ where, orderBy: { startDate: "asc" } }),
       db.exitRecord.findMany({ where, orderBy: { createdAt: "asc" } }),
@@ -100,7 +100,7 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
       // recognition awards they have received (never a nomination still being considered, which they have not been told about)
       db.recognitionAward.findMany({ where: { ...where, status: "APPROVED" }, include: { type: { select: { name: true } } }, orderBy: { awardedOn: "asc" } }),
       // training evaluations: their own answers and the manager's evaluation of them (never anyone else's answer)
-      db.trainingEvaluation.findMany({ where: { enrolment: { employeeId: where.employeeId }, organizationId: where.organizationId }, select: { kind: true, rating: true, comment: true, byName: true, createdAt: true, enrolment: { select: { session: { select: { sessionDate: true, programme: { select: { name: true } } } } } } }, orderBy: { createdAt: "asc" } }),
+      db.trainingEvaluation.findMany({ where: { enrolment: { employeeId: where.employeeId }, organizationId: where.organizationId }, select: { kind: true, rating: true, contentRating: true, facilitatorRating: true, deliveryRating: true, comment: true, byName: true, createdAt: true, enrolment: { select: { session: { select: { sessionDate: true, programme: { select: { name: true } } } } } } }, orderBy: { createdAt: "asc" } }),
       // training requests that were accepted (never one declined, withdrawn or still being considered, which they have not been told about)
       db.trainingRequest.findMany({ where: { ...where, status: "ACCEPTED" }, select: { courseName: true, reason: true, requestedAt: true }, orderBy: { requestedAt: "asc" } }),
       // their skill assessments: the employee reads all of it (the level, who assessed, when and the comment)
@@ -109,6 +109,12 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
       db.surveyAccessCode.findMany({ where: { ...where, status: "USED" }, select: { usedOn: true, survey: { select: { title: true } } }, orderBy: { usedOn: "asc" } }),
       // promotions decided for them (approved or applied); never a proposal still being considered or declined, which they have not been told about. Succession is never included.
       db.promotionProposal.findMany({ where: { ...where, status: { in: ["APPROVED", "APPLIED"] } }, include: { fromCategory: { select: { name: true } }, toCategory: { select: { name: true } } }, orderBy: { proposedAt: "asc" } }),
+      // the manager's effectiveness answers about them (stage 3 of the training evaluation), read by the employee as they read the application evaluation
+      db.trainingEffectiveness.findMany({
+        where: { organizationId: where.organizationId, enrolment: { employeeId: where.employeeId } },
+        select: { outcome: true, comment: true, byName: true, createdAt: true, enrolment: { select: { session: { select: { sessionDate: true, programme: { select: { name: true } } } } } } },
+        orderBy: { createdAt: "asc" },
+      }),
     ]);
 
   const confidential = cases.filter((c) => c.confidential).length;
@@ -243,7 +249,11 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
     },
     trainingEvaluations: {
       title: "Your answers about courses, and your manager's evaluations of your training",
-      records: trainingEvaluations.map((x) => ({ about: x.enrolment.session.programme.name, courseDate: dt(x.enrolment.session.sessionDate), givenBy: x.kind === "MANAGER" ? x.byName : "you", rating: x.rating, comment: x.comment })),
+      records: trainingEvaluations.map((x) => ({ about: x.enrolment.session.programme.name, courseDate: dt(x.enrolment.session.sessionDate), givenBy: x.kind === "MANAGER" ? x.byName : "you", rating: x.rating, content: x.contentRating, facilitator: x.facilitatorRating, delivery: x.deliveryRating, comment: x.comment })),
+    },
+    trainingEffectiveness: {
+      title: "Your manager's evaluation of whether training improved your work",
+      records: trainingEffectiveness.map((x) => ({ about: x.enrolment.session.programme.name, courseDate: dt(x.enrolment.session.sessionDate), givenBy: x.byName, outcome: words(x.outcome), comment: x.comment })),
     },
     trainingRequests: {
       title: "Training requested for you (accepted requests)",

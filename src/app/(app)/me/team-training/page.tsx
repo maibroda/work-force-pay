@@ -1,17 +1,21 @@
 import { requirePage } from "@/lib/auth/session";
-import { evaluationsDue, listRequests } from "@/server/services/training-evaluation";
+import { effectivenessDueList, effectivenessEvidence, evaluationsDue, listRequests } from "@/server/services/training-evaluation";
+import { EFFECTIVENESS_LABELS, EFFECTIVENESS_OUTCOMES } from "@/lib/training-evaluation";
 import { fmtDate } from "@/lib/dates";
 import { fullName } from "@/lib/utils";
 import { Empty, FormPanel, PageHeader, Section } from "@/components/page";
 import { RequestList } from "@/components/training-request-list";
 import { SmartForm } from "@/components/smart-form";
-import { evaluateManagerAction, requestTrainingAction } from "@/app/actions/training-evaluation";
+import { evaluateEffectivenessAction, evaluateManagerAction, requestTrainingAction } from "@/app/actions/training-evaluation";
 
 const RATINGS = [5, 4, 3, 2, 1].map((n) => ({ value: String(n), label: `${n}${n === 5 ? " (fully applied)" : n === 1 ? " (not applied)" : ""}` }));
 
 export default async function TeamTrainingPage() {
   const ctx = await requirePage("training.request");
-  const [rows, due] = await Promise.all([listRequests(ctx), evaluationsDue(ctx)]);
+  const [rows, due, effDue] = await Promise.all([listRequests(ctx), evaluationsDue(ctx), effectivenessDueList(ctx)]);
+  // for each one asked, the skill assessments before and after the course, read-only (never a score)
+  const evidence = new Map(await Promise.all(effDue.map(async (d) => [d.enrolmentId, await effectivenessEvidence(ctx, d.enrolmentId)] as const)));
+  const level = (x: { level: number; on: string } | null) => (x ? `level ${x.level} on ${fmtDate(x.on)}` : "not assessed");
   return (
     <>
       <PageHeader
@@ -42,6 +46,44 @@ export default async function TeamTrainingPage() {
                         fields={[
                           { name: "rating", label: "Applied on the job?", type: "select", required: true, options: RATINGS },
                           { name: "comment", label: "A line about it (optional)" },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Section>
+          <Section
+            title={`${effDue.length} effectiveness evaluation${effDue.length === 1 ? "" : "s"} waiting for you`}
+            description="Some months after a course HR has chosen to follow up: did the person's performance on the work this training targets improve? &quot;Not yet visible&quot; is a fair answer if you have not had the chance to see. It is about the training, not a mark against the person: it changes no pay, skill, appraisal or promotion. The person can read your answer."
+          >
+            {effDue.length === 0 ? (
+              <Empty>Nothing is waiting.</Empty>
+            ) : (
+              <div className="space-y-4">
+                {effDue.map((d) => (
+                  <div key={d.enrolmentId} className="rounded border p-3">
+                    <p className="text-sm font-medium">
+                      {fullName(d.employee)} ({d.employee.employeeNumber}): {d.programmeName}, attended {fmtDate(d.sessionDate)}
+                    </p>
+                    {evidence.get(d.enrolmentId)!.skills.length > 0 && (
+                      <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs text-muted-foreground">
+                        {evidence.get(d.enrolmentId)!.skills.map((s) => (
+                          <li key={s.skillId}>
+                            {s.skillName}: before the course {level(s.before)}; after {level(s.after)}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <div className="mt-2">
+                      <SmartForm
+                        columns={2}
+                        submitLabel="Record my evaluation"
+                        action={evaluateEffectivenessAction.bind(null, d.enrolmentId)}
+                        fields={[
+                          { name: "outcome", label: "Did their performance on this work improve?", type: "select", required: true, options: EFFECTIVENESS_OUTCOMES.map((o) => ({ value: o, label: EFFECTIVENESS_LABELS[o] })) },
+                          { name: "comment", label: "What you saw (optional, up to 300 characters)" },
                         ]}
                       />
                     </div>

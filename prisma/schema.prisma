@@ -601,6 +601,7 @@ model Organization {
   trainingNeeds             TrainingNeed[]
   trainingRequests          TrainingRequest[]
   trainingEvaluations       TrainingEvaluation[]
+  trainingEffectiveness     TrainingEffectiveness[]
   skills                    Skill[]
   roleSkills                RoleSkill[]
   skillAssessments          SkillAssessment[]
@@ -2472,6 +2473,8 @@ model HrPolicy {
   trainingAlertDays Int @default(60)
   /// The manager is asked whether a course was applied on the job this many days after the session (0 = never asked).
   trainingEvaluationDays Int @default(60)
+  /// The manager is asked whether the training improved performance on the work it targets this many days after the session, for programmes HR has marked (0 = never asked). Stage 3 of the training evaluation.
+  trainingEffectivenessDays Int @default(120)
   /// A skill assessment older than this many days is listed as stale for HR (0 = never).
   skillReassessDays Int @default(365)
   /// Raw survey answers are deleted this many months after a survey closes (0 = never deleted automatically); the anonymised results are kept.
@@ -7933,6 +7936,8 @@ model TrainingProgramme {
   /// How long the certificate stays valid, in months (null = it does not expire).
   validityMonths Int?
   active         Boolean      @default(true)
+  /// HR marks the programmes worth asking the manager about effectiveness (stage 3 of the training evaluation); off by default so a short briefing does not burden managers.
+  evaluateEffectiveness Boolean @default(false)
   createdBy      String
   createdAt      DateTime     @default(now())
 
@@ -7983,8 +7988,9 @@ model TrainingEnrolment {
   markedAt       DateTime?
   createdAt      DateTime           @default(now())
 
-  certificate EmployeeTraining?
-  evaluations TrainingEvaluation[]
+  certificate   EmployeeTraining?
+  evaluations   TrainingEvaluation[]
+  effectiveness TrainingEffectiveness?
 
   @@unique([sessionId, employeeId])
   @@index([organizationId, employeeId])
@@ -8220,6 +8226,31 @@ enum TrainingEvaluationKind {
   MANAGER
 }
 
+/// Stage 3 of the training evaluation: did the person's performance on the work the training targets improve? "Not yet visible" is a choice so a manager is never forced to judge.
+enum TrainingEffectivenessOutcome {
+  CLEARLY_IMPROVED
+  SOMEWHAT_IMPROVED
+  NO_VISIBLE_CHANGE
+  NOT_YET_VISIBLE
+}
+
+/// The manager's effectiveness answer for one attended enrolment, a company-set number of days after the session, only for a programme HR has marked. It is about the outcome of the training, never a score on
+/// the person: it changes no pay, skill, appraisal or promotion. HR sees only the spread per programme from five answers; the employee reads their own.
+model TrainingEffectiveness {
+  id             String                       @id @default(cuid())
+  organizationId String
+  organization   Organization                 @relation(fields: [organizationId], references: [id])
+  enrolmentId    String                       @unique
+  enrolment      TrainingEnrolment            @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
+  outcome        TrainingEffectivenessOutcome
+  comment        String?
+  byUserId       String
+  byName         String
+  createdAt      DateTime                     @default(now())
+
+  @@index([organizationId, outcome])
+}
+
 /// A manager's request for a course for one of their direct reports (HR for anyone). HR decides; accepting only adds a training need.
 model TrainingRequest {
   id                String                @id @default(cuid())
@@ -8256,6 +8287,10 @@ model TrainingEvaluation {
   enrolment      TrainingEnrolment      @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
   kind           TrainingEvaluationKind
   rating         Int
+  /// Stage 1 of the training evaluation: the participant's other three ratings (1 to 5), null on an answer given before they were asked. The existing `rating` is the relevance question and keeps its meaning.
+  contentRating     Int?
+  facilitatorRating Int?
+  deliveryRating    Int?
   comment        String?
   byUserId       String
   byName         String
