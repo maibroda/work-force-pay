@@ -6327,7 +6327,7 @@ One invited employee's single-use access code (stored only as a hash). It is the
 
 ### SurveyResponse
 
-One submitted survey. NO person, NO user, NO time: only the survey and the group labels used for a breakdown. The id is a random UUID.
+One submitted survey. NO person, NO user, NO time: only the survey and the group labels used for a breakdown. The id is a random UUID. A group label (role or department) is stored ONLY when that group had ten or more people invited; otherwise it is empty, so a person in a small group cannot be matched to their answer (answers stored before 2026-11-16 may still carry one).
 
 | Field | Type | Required | What it holds |
 | --- | --- | --- | --- |

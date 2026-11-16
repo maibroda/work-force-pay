@@ -136,7 +136,7 @@ export default async function SurveyPage({ params }: { params: Promise<{ id: str
                     )}
                   </>
                 ) : q.comments === null ? (
-                  <p className="mt-1 text-xs text-muted-foreground">{r.purged ? "Comments are not kept after the raw answers are deleted." : `Comments are shown from ${MIN_RESPONSES} answers.`}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{r.purged ? "Comments are not kept after the raw answers are deleted." : !r.commentsVisible ? "The words of the comments are shown to the HR administrator only." : `Comments are shown from ${MIN_RESPONSES} answers.`}</p>
                 ) : (
                   <ul className="mt-2 space-y-2 text-sm">
                     {q.comments.map((c) => (

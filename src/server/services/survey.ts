@@ -17,7 +17,7 @@ import type { Prisma } from "@prisma/client";
 import type { Ctx } from "@/lib/auth/context";
 import { d, iso } from "@/lib/dates";
 import { surveyCodeLimiter, surveyCodeSurveyLimiter } from "@/lib/rate-limit";
-import { MAX_QUESTIONS, COMMENT_MAX, QUESTION_TEXT_MAX, MIN_RESPONSES, breakdown, generateCode, hashCode, normaliseCode, retentionDue, summarise, surveyState, type GroupCount, type ScaleSummary } from "@/lib/survey";
+import { MAX_QUESTIONS, COMMENT_MAX, QUESTION_TEXT_MAX, MIN_INVITED_FOR_GROUP, MIN_RESPONSES, breakdown, generateCode, hashCode, normaliseCode, retentionDue, summarise, surveyState, type GroupCount, type ScaleSummary } from "@/lib/survey";
 import { canCtx } from "@/lib/hr-functions";
 import { assertCan, BusinessError, db } from "./_base";
 
@@ -235,9 +235,16 @@ export async function results(ctx: Ctx, id: string) {
   if (!s) throw new BusinessError(NOT_FOUND);
   const state = surveyState(s.status, iso(s.opensOn), iso(s.closesOn), todayIso());
   if (state !== "CLOSED") throw new BusinessError("Results are shown once the survey closes.");
-  if (s.aggregate) return { ...(s.aggregate.summary as unknown as Built), purged: true as const };
+  // The words of a comment are read by whoever can also hide them (the HR administrator, or a delegated officer with the Surveys function); the other roles that may read results see the figures only.
+  const words = canCtx(ctx, "survey.manage");
+  const reader = <R extends { questions: Array<{ comments: Array<{ id: string; text: string }> | null }> }>(r: R) => ({
+    ...r,
+    commentsVisible: words,
+    questions: r.questions.map((q) => (words ? q : { ...q, comments: null })) as R["questions"],
+  });
+  if (s.aggregate) return { ...reader(s.aggregate.summary as unknown as Built), purged: true as const };
   const r = await buildResults(s.id, s.organizationId, s.invitedCount);
-  return { ...r, purged: false as const };
+  return { ...reader(r), purged: false as const };
 }
 
 type Built = Awaited<ReturnType<typeof buildResults>>;
@@ -277,8 +284,17 @@ async function buildResults(surveyId: string, orgId: string, invited: number) {
       return { id: q.id, text: q.text, kind: q.kind, summary: null as ScaleSummary | null, byRole: null, byDepartment: null, comments };
     }
     const values = mine.filter((a) => a.value !== null).map((a) => a.value as number);
-    const rowsFor = (key: "categoryId" | "departmentId", inv: Map<string, Set<string>>, names: Map<string, string>) =>
-      [...inv.entries()].map(([k, set]) => ({ key: k, label: names.get(k) ?? "No group", invited: set.size, values: mine.filter((a) => (a[key] ?? "none") === k && a.value !== null).map((a) => a.value as number) }));
+    // A response carries its group only when the group had ten or more invited (see record()). A smaller group's answers (and those of people with no group) therefore cannot be told
+    // apart by group, and are counted together: the groups themselves are still counted one by one for the "exactly one hidden" rule, with all the answers on the first of them.
+    const rowsFor = (key: "categoryId" | "departmentId", inv: Map<string, Set<string>>, names: Map<string, string>) => {
+      const stored = (k: string) => k !== "none" && (inv.get(k)?.size ?? 0) >= MIN_INVITED_FOR_GROUP;
+      const valuesOf = (pick: (k: string) => boolean) => mine.filter((a) => pick(a[key] ?? "none") && a.value !== null).map((a) => a.value as number);
+      const entries = [...inv.entries()];
+      const big = entries.filter(([k]) => stored(k)).map(([k, set]) => ({ key: k, label: names.get(k) ?? "No group", invited: set.size, values: valuesOf((x) => x === k) }));
+      const smallValues = valuesOf((x) => !stored(x));
+      const small = entries.filter(([k]) => !stored(k)).map(([k, set], i) => ({ key: k, label: names.get(k) ?? "No group", invited: set.size, values: i === 0 ? smallValues : [] }));
+      return [...big, ...small];
+    };
     return {
       id: q.id,
       text: q.text,
@@ -333,7 +349,12 @@ async function record(surveyId: string, code: { id: string; categoryId: string |
   await db.$transaction(async (tx) => {
     const claimed = await tx.surveyAccessCode.updateMany({ where: { id: code.id, status: "ACTIVE" }, data: { status: "USED", usedOn: d(todayIso()) } });
     if (claimed.count !== 1) throw new BusinessError("INVALID_CODE");
-    const resp = await tx.surveyResponse.create({ data: { surveyId, categoryId: code.categoryId, departmentId: code.departmentId } });
+    // The role and the department go on the response only when ten or more people were invited in that group, so a person in a small group cannot be matched to their answer by anyone
+    // reading the tables. The access-code row keeps the group (the invited counts come from it); a smaller group's answers are counted together in the results.
+    const invitedIn = async (where: { categoryId: string } | { departmentId: string }) => (await tx.surveyAccessCode.findMany({ where: { surveyId, ...where }, select: { employeeId: true }, distinct: ["employeeId"] })).length;
+    const categoryId = code.categoryId && (await invitedIn({ categoryId: code.categoryId })) >= MIN_INVITED_FOR_GROUP ? code.categoryId : null;
+    const departmentId = code.departmentId && (await invitedIn({ departmentId: code.departmentId })) >= MIN_INVITED_FOR_GROUP ? code.departmentId : null;
+    const resp = await tx.surveyResponse.create({ data: { surveyId, categoryId, departmentId } });
     await tx.surveyAnswer.createMany({ data: answers.map((a) => ({ responseId: resp.id, questionId: a.questionId, value: a.value, comment: a.comment })) });
   });
 }
