@@ -84,16 +84,21 @@ const eligible = (invited: number, answers: number) => invited >= MIN_INVITED_FO
 
 /**
  * Which groups may be shown on their own. A group needs at least ten invited and five answers. The rest are combined into one "other" row, shown only if the combined row
- * is itself large enough. If exactly one group would be hidden, the smallest group that could be shown is hidden too, so the hidden one cannot be found by subtracting the
- * shown groups from the total.
+ * is itself large enough. The combined row is also what the whole survey has left once the shown groups are taken away, so a shown group next to a combined row that is NOT
+ * large enough would let that row be worked out by subtraction (the whole survey's figures minus the shown group's). When that would happen, the smallest group that could be
+ * shown is combined with the hidden ones too. That group is large enough by itself, so the combined row then is as well, and one such group is always enough. (Until 2026-11-16
+ * this was done only when exactly one group was hidden, which left two or more small groups exposed; the founder approved the fix that day.)
  */
 export function breakdown(groups: GroupCount[]): { shown: GroupCount[]; other: { invited: number; answers: number; shown: boolean } | null } {
   let shown = groups.filter((g) => eligible(g.invited, g.answers));
   let hidden = groups.filter((g) => !eligible(g.invited, g.answers));
-  if (hidden.length === 1 && shown.length >= 1) {
-    const smallest = shown.reduce((a, b) => (b.answers < a.answers ? b : a));
-    shown = shown.filter((g) => g !== smallest);
-    hidden = [...hidden, smallest];
+  if (hidden.length >= 1 && shown.length >= 1) {
+    const remainder = { invited: hidden.reduce((a, g) => a + g.invited, 0), answers: hidden.reduce((a, g) => a + g.answers, 0) };
+    if (!eligible(remainder.invited, remainder.answers)) {
+      const smallest = shown.reduce((a, b) => (b.answers < a.answers ? b : a));
+      shown = shown.filter((g) => g !== smallest);
+      hidden = [...hidden, smallest];
+    }
   }
   if (!hidden.length) return { shown, other: null };
   const invited = hidden.reduce((a, g) => a + g.invited, 0);
