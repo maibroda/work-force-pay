@@ -14,12 +14,19 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `build-heap`, no migration)
+## Not yet merged (branch `survey-subtraction-fix`, no migration)
+
+- **Survey results: two hidden small groups can no longer be found by subtraction** (the finding reported with #206, fix approved by the founder on 2026-11-16). Read `docs/plans/survey-subtraction-fix-explain-back.md`. **No money, pay or statutory setting is touched; no migration; nothing about how an answer is stored changes.**
+- **The rule:** the combined "other" row is the whole survey minus the groups shown on their own. Until now, when exactly one group was hidden the smallest shown group was hidden too, but with **two or more** small groups hidden and their combined row still too small, the shown group stayed on the page and the combined row's ratings were the whole survey minus it. **Now, whenever the hidden groups together are not large enough to show, the smallest shown group is combined with them** (one is always enough, because it is large enough by itself).
+- **Cost:** a survey with a large group and two or more small groups now shows less than before. **Not closed here:** comparing the role breakdown with the department breakdown (not measured).
+- **Tests (written first; five failed without the code):** the finding's own figures, only-the-smallest-is-taken, 3,000 random sets of groups, and the real results page (`tests/unit/survey.test.ts`, `tests/integration/survey-hardening.test.ts`). **One existing unit test changed its expectation** because it pinned the leaking result for exactly the data of the finding; the explain-back note says so. The existing survey and anonymity integration tests pass unchanged.
+
+## Merged in #209 (no migration)
 
 - **The production build no longer runs out of memory in CI** (the founder's approval of 2026-11-16, the second fix of the same kind after #207). On 2026-11-16 the CI step `npm run build` died with "JavaScript heap out of memory" (exit 134, 52 seconds into "Creating an optimized production build", at the 2 GB default) on #208, **after lint, the type check and the full test suite had passed**; the build had passed on earlier runs of the same kind of change, so it is variance near the limit, not a change in the code. **The `build` script now starts Next.js with a 4 GB heap** (`node --max-old-space-size=4096 ./node_modules/next/dist/bin/next build`), the same on Windows and Linux. **The workflow file, branch protection and every other CI setting are untouched; no source file changes.** `npm start`, `npm run dev` and the smoke test's own server are unchanged.
 - **Checked:** see the pull request for the local build result. The cause of CI needing more than a developer machine was **not found**; the raised limit is a margin, not a diagnosis. The type check (#207) and the build are now both given 4 GB; **if a third step ever runs out of memory, the likelier cause is that the codebase has outgrown a 2 GB default and the CI runner's own limit should be looked at.**
 
-## Not yet merged (branch `survey-hardening`, no migration)
+## Merged in #206 (no migration)
 
 - **Survey hardening, S1 and S2** (the founder's approval of 2026-11-16 of two items in the review of 2026-11-14). Read `docs/plans/survey-hardening-explain-back.md`. **No money, pay or statutory setting is touched; no migration.**
 - **S1, a small group can no longer be matched to its answer from the tables:** an answer now carries its **role** (and, separately, its **department**) only when **ten or more people were invited** in that group; otherwise nothing is stored for it. The access-code rows are unchanged (the invited counts come from them). **The results page is unchanged:** smaller groups' answers are counted together in "other". **Answers stored before this change are not rewritten** (they are counted the same way and still carry their label).

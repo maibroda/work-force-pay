@@ -193,3 +193,29 @@ describe("S2: who reads the words of a comment", () => {
     expect(JSON.stringify(r)).not.toContain("HARDENING-COMMENT");
   });
 });
+
+describe("the finding of 2026-11-16: two hidden small groups cannot be found by subtraction", () => {
+  it("combines the shown group with them when they are together still too small, through the real results", async () => {
+    const t = await isolatedOrg();
+    const hr = await login(t, "HR_ADMIN");
+    const sup = await db.employeeCategory.create({ data: { organizationId: t.org.id, code: "SUP", name: "Supervisor grade" } });
+    // twelve guards (large enough to be shown), three office staff and four supervisors (each too small, and seven together still too small)
+    const ppl = await people(t, hr, [
+      { categoryId: t.guardId, count: 12 },
+      { categoryId: t.officeId, count: 3 },
+      { categoryId: sup.id, count: 4 },
+    ]);
+    const qs = await survey(hr);
+    await openSurvey(hr, qs.s.id);
+    for (const p of ppl) await submitAsEmployee(p.ctx, qs.s.id, answer(qs, p.categoryId === t.guardId ? 5 : p.categoryId === t.officeId ? 1 : 2));
+    await closeSurvey(hr, qs.s.id);
+    const r = await results(hr, qs.s.id);
+    const q = r.questions[0];
+    // before the fix the guards were shown and the combined row of seven was "not shown", so the seven's ratings were the whole survey minus the guards
+    expect(q.byRole!.shown).toEqual([]);
+    expect(q.byRole!.other).toMatchObject({ invited: 19, answers: 19, shown: true });
+    expect(q.byRole!.other!.summary).toMatchObject({ shown: true, count: 19 });
+    expect(q.summary).toMatchObject({ shown: true, count: 19 });
+    expect(JSON.stringify(q.byRole)).not.toMatch(/Security Guard|Office Staff|Supervisor grade/);
+  });
+});

@@ -79,10 +79,49 @@ describe("a breakdown by group", () => {
     expect(b.shown.map((x) => x.key)).toEqual(["Guards"]);
     expect(b.other).toEqual({ invited: 16, answers: 9, shown: true });
   });
-  it("shows nothing for the combined row when it is still too small", () => {
-    const b = breakdown([g("Guards", 40, 20), g("Supervisors", 6, 5), g("Office", 3, 2)]);
-    expect(b.shown.map((x) => x.key)).toEqual(["Guards"]);
+  it("shows nothing for the combined row when no group is large enough to be shown and the hidden ones together are still too small", () => {
+    const b = breakdown([g("Supervisors", 6, 5), g("Office", 3, 2)]);
+    expect(b.shown).toEqual([]);
     expect(b.other).toEqual({ invited: 9, answers: 7, shown: false });
+  });
+  // The finding of 2026-11-16 (docs/plans/survey-hardening-explain-back.md). This case used to be expected to show Guards and hide the combined row ({ invited: 9, answers: 7, shown: false }).
+  // That let the combined row be worked out as the whole survey minus Guards. The founder approved the fix on 2026-11-16: a shown group goes into the combined row too.
+  it("combines the smallest shown group with the hidden ones when the hidden ones alone are still too small, so they cannot be worked out by subtraction", () => {
+    const b = breakdown([g("Guards", 40, 20), g("Supervisors", 6, 5), g("Office", 3, 2)]);
+    expect(b.shown).toEqual([]);
+    expect(b.other).toEqual({ invited: 49, answers: 27, shown: true });
+  });
+  it("does it with the figures of the finding: A 30 invited and 20 answers, B 3 and 2, C 4 and 2", () => {
+    const b = breakdown([g("A", 30, 20), g("B", 3, 2), g("C", 4, 2)]);
+    expect(b.shown).toEqual([]);
+    expect(b.other).toEqual({ invited: 37, answers: 24, shown: true });
+  });
+  it("takes only the smallest shown group, and leaves the others shown, when that is enough", () => {
+    const b = breakdown([g("A", 50, 30), g("Mid", 20, 9), g("B", 3, 2), g("C", 4, 2)]);
+    expect(b.shown.map((x) => x.key)).toEqual(["A"]);
+    expect(b.other).toEqual({ invited: 27, answers: 13, shown: true });
+  });
+  it("never leaves a hidden remainder that is too small next to a group that is shown (many random cases)", () => {
+    let seed = 12345;
+    const next = (n: number) => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed % n;
+    };
+    for (let i = 0; i < 3000; i++) {
+      const groups = Array.from({ length: 1 + next(6) }, (_, k) => {
+        const invited = 1 + next(40);
+        return g(`G${k}`, invited, next(invited + 1));
+      });
+      const b = breakdown(groups);
+      const label = JSON.stringify(groups);
+      // every group is either shown or in the combined row, and nothing is lost or counted twice
+      expect(b.shown.reduce((a, x) => a + x.invited, 0) + (b.other?.invited ?? 0), label).toBe(groups.reduce((a, x) => a + x.invited, 0));
+      expect(b.shown.reduce((a, x) => a + x.answers, 0) + (b.other?.answers ?? 0), label).toBe(groups.reduce((a, x) => a + x.answers, 0));
+      // a group shown on its own is large enough
+      for (const x of b.shown) expect(x.invited >= MIN_INVITED_FOR_GROUP && x.answers >= MIN_RESPONSES, label).toBe(true);
+      // the combined row is the whole survey minus the shown groups: next to any shown group it must itself be large enough to show
+      if (b.other && b.shown.length > 0) expect(b.other.shown, label).toBe(true);
+    }
   });
   it("shows everything when every group qualifies, and nothing is hidden for a single group", () => {
     expect(breakdown([g("Guards", 40, 20)]).shown).toHaveLength(1);
