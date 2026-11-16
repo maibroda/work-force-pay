@@ -56,6 +56,10 @@ export async function anonymizeStaleCandidates(orgId: string, now = new Date()):
     });
     await tx.interview.updateMany({ where: { candidateId: { in: ids }, feedback: { not: null } }, data: { feedback: REMOVED } });
     await tx.candidateCheck.updateMany({ where: { candidateId: { in: ids }, notes: { not: null } }, data: { notes: null } });
+    // the panel's words (scorecard and overall comments, the chair's recommendation note and the decision note); the scores, recommendations and the outcome stay
+    await tx.scorecardScore.updateMany({ where: { panelMember: { interview: { candidateId: { in: ids } } }, comment: { not: null } }, data: { comment: null } });
+    await tx.interviewPanelMember.updateMany({ where: { interview: { candidateId: { in: ids } }, comment: { not: null } }, data: { comment: null } });
+    await tx.candidateSelection.updateMany({ where: { candidateId: { in: ids } }, data: { note: REMOVED, decisionNote: null } });
     await tx.jobOffer.updateMany({ where: { candidateId: { in: ids } }, data: { declineReason: null, decisionNote: null } });
     await tx.auditLog.create({
       data: {

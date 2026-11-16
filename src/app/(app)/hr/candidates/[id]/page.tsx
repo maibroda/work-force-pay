@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { getCandidate } from "@/server/services/recruitment";
+import { eligiblePanelists, panelOverview } from "@/server/services/recruitment-panel";
 import { enumOptions } from "@/server/options";
 import { fmtDate } from "@/lib/dates";
 import { naira } from "@/lib/money";
@@ -12,6 +13,7 @@ import { SmartForm } from "@/components/smart-form";
 import { StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { generateLetterAction } from "@/app/actions/letters";
+import { approveSelectionAction, closePanelAction, declineSelectionAction, setPanelAction } from "@/app/actions/recruitment-panel";
 import {
   addCheckAction,
   addStandardChecksAction,
@@ -40,6 +42,11 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
   if (!c) notFound();
   const manage = can(ctx.role, "hr.manage");
   const approve = can(ctx.role, "hr.approve");
+  // interview panels and the selection are read and set up by HR (recruitment.assess) alone; everyone else sees that interviews took place, not what was said
+  const assess = can(ctx.role, "recruitment.assess");
+  const panels = assess ? await panelOverview(ctx, id) : null;
+  const staff = assess ? await eligiblePanelists(ctx) : [];
+  const panelled = new Set((panels?.interviews ?? []).filter((p) => p.members.length > 0).map((p) => p.interviewId));
   const open = OPEN.includes(c.stage);
   const liveOffer = c.offers.find((o) => ["PENDING_APPROVAL", "APPROVED", "SENT"].includes(o.status));
   const accepted = c.offers.find((o) => o.status === "ACCEPTED");
@@ -132,7 +139,7 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
       </Section>
       {manage &&
         c.interviews
-          .filter((i) => !i.completedAt)
+          .filter((i) => !i.completedAt && !panelled.has(i.id))
           .map((i) => (
             <FormPanel key={i.id} title={`Record feedback — round ${i.round} with ${i.interviewer}`}>
               <SmartForm
@@ -147,6 +154,82 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
               />
             </FormPanel>
           ))}
+      {panels && (
+        <Section title="Interview panels" description="A panel of two to five employees scores each interview. Scorecards stay blind until the scoring is closed. Scores are advice for the people deciding and never rank, filter or reject anyone.">
+          {panels.interviews.length === 0 && <Empty>No interviews scheduled.</Empty>}
+          {panels.interviews.map((p) => {
+            const done = p.members.filter((m) => m.submitted).length;
+            return (
+              <div key={p.interviewId} className="mb-5 text-sm">
+                <p className="font-medium">Round {p.round}</p>
+                {p.members.length > 0 ? (
+                  <>
+                    <ul className="mt-1 list-disc pl-5">
+                      {p.members.map((m) => (
+                        <li key={m.name}>
+                          {m.name}
+                          {m.isChair ? " (chair)" : ""}: {m.submitted ? "submitted" : "not yet"}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-1 text-xs text-muted-foreground">{p.closed ? "Scoring closed." : `${done} of ${p.members.length} submitted. Scorecards are read once the scoring closes.`}</p>
+                    {!p.closed && (
+                      <div className="mt-2">
+                        <ActionButton action={closePanelAction.bind(null, p.interviewId)} confirm="Close the scoring now? No scorecard can change afterwards." variant="outline">
+                          Close scoring now
+                        </ActionButton>
+                      </div>
+                    )}
+                    {p.closed && (
+                      <p className="mt-2">
+                        <Link className="text-primary underline" href={`/hr/requisitions/${c.requisitionId}/comparison`}>
+                          Compare this requisition&apos;s candidates
+                        </Link>
+                      </p>
+                    )}
+                  </>
+                ) : p.completed ? (
+                  <p className="text-xs text-muted-foreground">Scored the old way (one person&apos;s feedback); it cannot be given a panel.</p>
+                ) : (
+                  <SmartForm
+                    columns={3}
+                    submitLabel="Set the panel"
+                    action={setPanelAction.bind(null, p.interviewId)}
+                    fields={[
+                      { name: "chair", label: "Chair", type: "select", required: true, options: staff.map((s) => ({ value: s.employeeId, label: s.label })) },
+                      ...["m1", "m2", "m3", "m4"].map((n, i) => ({ name: n, label: `Member ${i + 1}${i === 0 ? "" : " (optional)"}`, type: "select" as const, required: i === 0, options: staff.map((s) => ({ value: s.employeeId, label: s.label })) })),
+                    ]}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </Section>
+      )}
+      {panels?.selection && (
+        <Section title="Selection" description="The chair recommends; a second person who holds the approval right decides. An offer for a candidate a panel interviewed needs the approved selection.">
+          <p className="text-sm">
+            <StatusBadge status={panels.selection.status} /> Recommended by {panels.selection.recommendedBy}
+          </p>
+          <p className="mt-1 max-w-xl whitespace-pre-line text-sm">{panels.selection.note}</p>
+          {panels.selection.decidedBy && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Decided by {panels.selection.decidedBy}
+              {panels.selection.decisionNote ? `: ${panels.selection.decisionNote}` : ""}
+            </p>
+          )}
+          {panels.selection.status === "PENDING" && approve && panels.selection.recommendedById !== ctx.userId && (
+            <div className="mt-3 flex gap-2">
+              <ActionButton action={approveSelectionAction.bind(null, c.id)} variant="success">
+                Approve the selection
+              </ActionButton>
+              <ActionButton action={declineSelectionAction.bind(null, c.id)} reason reasonPlaceholder="Why decline? (required)" variant="outline">
+                Decline
+              </ActionButton>
+            </div>
+          )}
+        </Section>
+      )}
       {manage && open && (
         <FormPanel title="Schedule an interview">
           <SmartForm

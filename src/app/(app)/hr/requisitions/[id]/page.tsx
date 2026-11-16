@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { getRequisition } from "@/server/services/recruitment";
+import { listCriteria } from "@/server/services/recruitment-panel";
 import { fmtDate } from "@/lib/dates";
 import { naira } from "@/lib/money";
 import { fullName } from "@/lib/utils";
@@ -18,6 +19,7 @@ import {
   holdRequisitionAction,
   rejectRequisitionAction,
 } from "@/app/actions/hr-lifecycle";
+import { setCriteriaAction } from "@/app/actions/recruitment-panel";
 
 const SOURCES = ["REFERRAL", "JOB_BOARD", "WALK_IN", "AGENCY", "INTERNAL", "SOCIAL_MEDIA", "OTHER"];
 
@@ -30,6 +32,9 @@ export default async function RequisitionPage({ params }: { params: Promise<{ id
   const approve = can(ctx.role, "hr.approve");
   const hired = r.candidates.filter((c) => c.stage === "HIRED").length;
   const ownRequest = r.requestedById === ctx.userId;
+  // the scoring criteria for interview panels are set by HR (recruitment.assess) alone
+  const assess = can(ctx.role, "recruitment.assess");
+  const criteria = assess ? await listCriteria(ctx, id) : [];
   return (
     <>
       <PageHeader
@@ -94,6 +99,26 @@ export default async function RequisitionPage({ params }: { params: Promise<{ id
           ]}
         />
       </Section>
+
+      {assess && (
+        <Section
+          title="Scoring criteria for interview panels"
+          description="Three to six things every panel member scores each candidate on (1 to 5). They can be changed until the first scorecard is submitted."
+          actions={
+            <Link className="text-sm text-primary underline" href={`/hr/requisitions/${r.id}/comparison`}>
+              Compare candidates
+            </Link>
+          }
+        >
+          <SmartForm
+            columns={3}
+            submitLabel="Save the criteria"
+            resetOnSuccess={false}
+            action={setCriteriaAction.bind(null, r.id)}
+            fields={[1, 2, 3, 4, 5, 6].map((n) => ({ name: `c${n}`, label: `Criterion ${n}${n <= 3 ? "" : " (optional)"}`, required: n <= 3, defaultValue: criteria[n - 1]?.name ?? "" }))}
+          />
+        </Section>
+      )}
 
       <Section title={`Candidates (${r.candidates.length})`} flush>
         <Table>

@@ -55,6 +55,7 @@ const OLD_MY: Record<string, Permission> = {
   "/me/probation": "probation.view", // added with the probation workflow
   "/me/team-probation": "probation.recommend", // added with the probation workflow
   "/me/surveys": "self.view",
+  "/me/interviews": "self.view",
   "/me/team-skills": "skills.assess",
   "/me/team-training": "training.request",
   "/me/team-promotions": "career.propose",

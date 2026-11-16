@@ -75,6 +75,13 @@ export async function sensitiveAccessLog(ctx: Ctx, f: { days?: number; userId?: 
   const requestIds = [...new Set(rows.filter((r) => r.entity === "DataAccessRequest" && r.entityId).map((r) => r.entityId!))];
   const requests = requestIds.length ? await db.dataAccessRequest.findMany({ where: { id: { in: requestIds }, organizationId: ctx.orgId }, select: { id: true, requestNumber: true } }) : [];
   const requestNumbers = new Map(requests.map((q) => [q.id, q.requestNumber]));
+  // an assessment read is shown by the candidate's or the requisition's number, never by a name
+  const candidateIds = [...new Set(rows.filter((r) => r.entity === "Candidate" && r.entityId).map((r) => r.entityId!))];
+  const candidatesRead = candidateIds.length ? await db.candidate.findMany({ where: { id: { in: candidateIds }, organizationId: ctx.orgId }, select: { id: true, candidateNumber: true } }) : [];
+  const candidateNumbers = new Map(candidatesRead.map((c) => [c.id, c.candidateNumber]));
+  const requisitionIds = [...new Set(rows.filter((r) => r.entity === "JobRequisition" && r.entityId).map((r) => r.entityId!))];
+  const requisitionsRead = requisitionIds.length ? await db.jobRequisition.findMany({ where: { id: { in: requisitionIds }, organizationId: ctx.orgId }, select: { id: true, requisitionNumber: true } }) : [];
+  const requisitionNumbers = new Map(requisitionsRead.map((q) => [q.id, q.requisitionNumber]));
   const entries = rows.map((r) => {
     const v = (r.newValue ?? {}) as { kind?: AccessKind; count?: number; external?: boolean };
     const bureau = (r.metadata as { bureau?: string } | null)?.bureau ?? null;
@@ -97,8 +104,12 @@ export async function sensitiveAccessLog(ctx: Ctx, f: { days?: number; userId?: 
               ? (requestNumbers.get(r.entityId) ?? "Removed request")
               : r.entity === "DisciplinaryRecord" && r.entityId
                 ? `Sanction ${r.entityId.slice(-6)}`
-                : null,
-      recordId: r.entity === "RelationsCase" || r.entity === "PerformanceImprovementPlan" || r.entity === "DataAccessRequest" || r.entity === "DisciplinaryRecord" ? r.entityId : null,
+                : r.entity === "Candidate" && r.entityId
+                  ? (candidateNumbers.get(r.entityId) ?? "Removed candidate")
+                  : r.entity === "JobRequisition" && r.entityId
+                    ? `Comparison for ${requisitionNumbers.get(r.entityId) ?? "a removed requisition"}`
+                    : null,
+      recordId: r.entity === "RelationsCase" || r.entity === "PerformanceImprovementPlan" || r.entity === "DataAccessRequest" || r.entity === "DisciplinaryRecord" || r.entity === "Candidate" || r.entity === "JobRequisition" ? r.entityId : null,
       count: v.count ?? null,
       external: !!v.external,
       fromBureau: !!bureau,

@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/input";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 
 /** What a count is a count of, for a list of records. The log shows a record by its own reference (a case number), never by the employee it is about. */
-const COUNT_NOUN: Partial<Record<AccessKind, string>> = { WELFARE_CASE: "welfare cases", CONFIDENTIAL_CASE: "confidential cases", DISCIPLINARY_CASE: "disciplinary cases", SUCCESSION: "successors", SANCTION: "sanction(s)", IMPROVEMENT_PLAN: "plans" };
+const COUNT_NOUN: Partial<Record<AccessKind, string>> = { WELFARE_CASE: "welfare cases", CONFIDENTIAL_CASE: "confidential cases", DISCIPLINARY_CASE: "disciplinary cases", SUCCESSION: "successors", SANCTION: "sanction(s)", IMPROVEMENT_PLAN: "plans", CANDIDATE_ASSESSMENT: "candidates" };
 
 const when = (d: Date) => `${fmtDate(d)} ${d.toISOString().slice(11, 16)} UTC`;
 

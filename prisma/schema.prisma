@@ -765,6 +765,10 @@ model Organization {
   interviews                Interview[]
   candidateChecks           CandidateCheck[]
   jobOffers                 JobOffer[]
+  interviewPanelMembers     InterviewPanelMember[]
+  requisitionCriteria       RequisitionCriterion[]
+  scorecardScores           ScorecardScore[]
+  candidateSelections       CandidateSelection[]
   relationsCases            RelationsCase[]
   relationsCaseNotes        RelationsCaseNote[]
   exitSettlements           ExitSettlement[]
@@ -2079,6 +2083,7 @@ model Employee {
   exitSettlements         ExitSettlement[]
   candidateRecord         Candidate?               @relation("CandidateEmployee")
   managedRequisitions     JobRequisition[]         @relation("RequisitionManager")
+  panelSeats              InterviewPanelMember[]   @relation("PanelSeat")
   stockMovements          StockMovement[]
   staffLoans              StaffLoan[]
   generatedLetters        GeneratedLetter[]
@@ -2645,6 +2650,7 @@ model JobRequisition {
   updatedAt            DateTime          @updatedAt
 
   candidates Candidate[]
+  criteria   RequisitionCriterion[]
 
   @@unique([organizationId, requisitionNumber])
   @@index([organizationId, status])
@@ -2680,6 +2686,7 @@ model Candidate {
   interviews Interview[]
   checks     CandidateCheck[]
   offers     JobOffer[]
+  selection  CandidateSelection?
 
   @@unique([organizationId, candidateNumber])
   @@index([organizationId, requisitionId, stage])
@@ -2700,10 +2707,99 @@ model Interview {
   recommendation InterviewRecommendation?
   feedback       String?
   completedAt    DateTime?
+  /// When the panel's scoring was closed (the last member submitted, or the chair or HR closed it). Until then no member sees another's scorecard. Empty for an interview with no panel.
+  panelClosedAt  DateTime?
+  panelClosedBy  String?
   createdBy      String
   createdAt      DateTime                 @default(now())
 
+  panelMembers InterviewPanelMember[]
+
   @@index([organizationId, candidateId])
+}
+
+/// One employee on an interview's panel (two to five, one chair), with their own scorecard summary. Advice only: nothing here ranks, filters or rejects a candidate.
+model InterviewPanelMember {
+  id             String                   @id @default(cuid())
+  organizationId String
+  organization   Organization             @relation(fields: [organizationId], references: [id])
+  interviewId    String
+  interview      Interview                @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       Employee                 @relation("PanelSeat", fields: [employeeId], references: [id])
+  isChair        Boolean                  @default(false)
+  /// Set when the member submits their scorecard.
+  submittedAt    DateTime?
+  recommendation InterviewRecommendation?
+  /// A free-text comment about a person who may not be an employee: cleared when an unsuccessful applicant is anonymised.
+  comment        String?
+  createdAt      DateTime                 @default(now())
+
+  scores ScorecardScore[]
+
+  @@unique([interviewId, employeeId])
+  @@index([organizationId, employeeId])
+}
+
+/// A criterion a requisition's candidates are scored on (three to six per requisition, no weighting).
+model RequisitionCriterion {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  requisitionId  String
+  requisition    JobRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+  position       Int
+  name           String
+  createdAt      DateTime       @default(now())
+
+  scores ScorecardScore[]
+
+  @@unique([requisitionId, position])
+  @@index([organizationId, requisitionId])
+}
+
+/// One panel member's score (1 to 5) on one criterion.
+model ScorecardScore {
+  id             String               @id @default(cuid())
+  organizationId String
+  organization   Organization         @relation(fields: [organizationId], references: [id])
+  panelMemberId  String
+  panelMember    InterviewPanelMember @relation(fields: [panelMemberId], references: [id], onDelete: Cascade)
+  criterionId    String
+  criterion      RequisitionCriterion @relation(fields: [criterionId], references: [id], onDelete: Cascade)
+  score          Int
+  /// Free text: cleared when an unsuccessful applicant is anonymised.
+  comment        String?
+
+  @@unique([panelMemberId, criterionId])
+  @@index([organizationId, criterionId])
+}
+
+enum SelectionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// The panel chair's recommendation to select a candidate, and the second person's decision on it. An offer for a candidate a panel interviewed needs an APPROVED selection.
+model CandidateSelection {
+  id               String          @id @default(cuid())
+  organizationId   String
+  organization     Organization    @relation(fields: [organizationId], references: [id])
+  candidateId      String          @unique
+  candidate        Candidate       @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  status           SelectionStatus @default(PENDING)
+  recommendedById  String
+  recommendedBy    String
+  recommendedAt    DateTime        @default(now())
+  /// Free text: cleared when an unsuccessful applicant is anonymised.
+  note             String
+  decidedById      String?
+  decidedBy        String?
+  decidedAt        DateTime?
+  decisionNote     String?
+
+  @@index([organizationId, status])
 }
 
 /// Pre-employment vetting step (references, ID, police clearance, guarantor, medical…). A candidate

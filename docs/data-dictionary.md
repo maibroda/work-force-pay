@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-260 tables and 196 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+264 tables and 197 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -207,6 +207,10 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | interviews | → Interview[] |  |  |
 | candidateChecks | → CandidateCheck[] |  |  |
 | jobOffers | → JobOffer[] |  |  |
+| interviewPanelMembers | → InterviewPanelMember[] |  |  |
+| requisitionCriteria | → RequisitionCriterion[] |  |  |
+| scorecardScores | → ScorecardScore[] |  |  |
+| candidateSelections | → CandidateSelection[] |  |  |
 | relationsCases | → RelationsCase[] |  |  |
 | relationsCaseNotes | → RelationsCaseNote[] |  |  |
 | exitSettlements | → ExitSettlement[] |  |  |
@@ -1298,6 +1302,7 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | exitSettlements | → ExitSettlement[] |  |  |
 | candidateRecord | → Candidate |  |  |
 | managedRequisitions | → JobRequisition[] |  |  |
+| panelSeats | → InterviewPanelMember[] |  |  |
 | stockMovements | → StockMovement[] |  |  |
 | staffLoans | → StaffLoan[] |  |  |
 | generatedLetters | → GeneratedLetter[] |  |  |
@@ -1744,6 +1749,7 @@ The employee's own terms of employment (distinct from `Contract`, which is a CLI
 | createdAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |
 | candidates | → Candidate[] |  |  |
+| criteria | → RequisitionCriterion[] |  |  |
 
 ### Candidate
 
@@ -1775,6 +1781,7 @@ The employee's own terms of employment (distinct from `Contract`, which is a CLI
 | interviews | → Interview[] |  |  |
 | checks | → CandidateCheck[] |  |  |
 | offers | → JobOffer[] |  |  |
+| selection | → CandidateSelection |  |  |
 
 ### Interview
 
@@ -1793,8 +1800,84 @@ The employee's own terms of employment (distinct from `Contract`, which is a CLI
 | recommendation | InterviewRecommendation |  |  |
 | feedback | String |  |  |
 | completedAt | DateTime |  |  |
+| panelClosedAt | DateTime |  | When the panel's scoring was closed (the last member submitted, or the chair or HR closed it). Until then no member sees another's scorecard. Empty for an interview with no panel. |
+| panelClosedBy | String |  |  |
 | createdBy | String | yes |  |
 | createdAt | DateTime |  |  |
+| panelMembers | → InterviewPanelMember[] |  |  |
+
+### InterviewPanelMember
+
+One employee on an interview's panel (two to five, one chair), with their own scorecard summary. Advice only: nothing here ranks, filters or rejects a candidate.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| interviewId | String | yes |  |
+| interview | → Interview |  |  |
+| employeeId | String | yes |  |
+| employee | → Employee |  |  |
+| isChair | Boolean |  |  |
+| submittedAt | DateTime |  | Set when the member submits their scorecard. |
+| recommendation | InterviewRecommendation |  |  |
+| comment | String |  | A free-text comment about a person who may not be an employee: cleared when an unsuccessful applicant is anonymised. |
+| createdAt | DateTime |  |  |
+| scores | → ScorecardScore[] |  |  |
+
+### RequisitionCriterion
+
+A criterion a requisition's candidates are scored on (three to six per requisition, no weighting).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| requisitionId | String | yes |  |
+| requisition | → JobRequisition |  |  |
+| position | Int | yes |  |
+| name | String | yes |  |
+| createdAt | DateTime |  |  |
+| scores | → ScorecardScore[] |  |  |
+
+### ScorecardScore
+
+One panel member's score (1 to 5) on one criterion.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| panelMemberId | String | yes |  |
+| panelMember | → InterviewPanelMember |  |  |
+| criterionId | String | yes |  |
+| criterion | → RequisitionCriterion |  |  |
+| score | Int | yes |  |
+| comment | String |  | Free text: cleared when an unsuccessful applicant is anonymised. |
+
+### CandidateSelection
+
+The panel chair's recommendation to select a candidate, and the second person's decision on it. An offer for a candidate a panel interviewed needs an APPROVED selection.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| candidateId | String | yes | (unique) |
+| candidate | → Candidate |  |  |
+| status | SelectionStatus |  |  |
+| recommendedById | String | yes |  |
+| recommendedBy | String | yes |  |
+| recommendedAt | DateTime |  |  |
+| note | String | yes | Free text: cleared when an unsuccessful applicant is anonymised. |
+| decidedById | String |  |  |
+| decidedBy | String |  |  |
+| decidedAt | DateTime |  |  |
+| decisionNote | String |  |  |
 
 ### CandidateCheck
 
@@ -6861,6 +6944,10 @@ The two sign-offs a statutory rate change needs before it reaches any client: on
 ### EngagementStatus
 
 `ONBOARDING`, `ACTIVE`, `PAUSED`, `ENDED`
+
+### SelectionStatus
+
+`PENDING`, `APPROVED`, `REJECTED`
 
 ### PayRateProposalStatus
 
