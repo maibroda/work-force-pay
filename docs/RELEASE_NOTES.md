@@ -13,6 +13,12 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
+
+## Not yet merged (branch `build-heap`, no migration)
+
+- **The production build no longer runs out of memory in CI** (the founder's approval of 2026-11-16, the second fix of the same kind after #207). On 2026-11-16 the CI step `npm run build` died with "JavaScript heap out of memory" (exit 134, 52 seconds into "Creating an optimized production build", at the 2 GB default) on #208, **after lint, the type check and the full test suite had passed**; the build had passed on earlier runs of the same kind of change, so it is variance near the limit, not a change in the code. **The `build` script now starts Next.js with a 4 GB heap** (`node --max-old-space-size=4096 ./node_modules/next/dist/bin/next build`), the same on Windows and Linux. **The workflow file, branch protection and every other CI setting are untouched; no source file changes.** `npm start`, `npm run dev` and the smoke test's own server are unchanged.
+- **Checked:** see the pull request for the local build result. The cause of CI needing more than a developer machine was **not found**; the raised limit is a margin, not a diagnosis. The type check (#207) and the build are now both given 4 GB; **if a third step ever runs out of memory, the likelier cause is that the codebase has outgrown a 2 GB default and the CI runner's own limit should be looked at.**
+
 ## Not yet merged (branch `survey-hardening`, no migration)
 
 - **Survey hardening, S1 and S2** (the founder's approval of 2026-11-16 of two items in the review of 2026-11-14). Read `docs/plans/survey-hardening-explain-back.md`. **No money, pay or statutory setting is touched; no migration.**
