@@ -37,7 +37,8 @@ npm run build && npm start
 ```
 
 > `npm run db:seed` **truncates all WorkforcePay tables** and reloads the demo data. Run it again any
-> time to reset the demo.
+> time to reset the demo. **It refuses to run in production or against a database that is not on this machine**, so it cannot erase a real
+> database by accident; to reset such a database on purpose, set `SEED_CONFIRM_RESET` to that database's exact name (see `src/lib/seed-guard.ts`).
 
 ### Demo credentials (password for every account: `Password123!`)
 

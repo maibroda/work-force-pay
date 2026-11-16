@@ -4,7 +4,8 @@
  * 110 employees, 3 payroll periods (Jul & Aug 2026 locked, Sep 2026 open), movements,
  * work register, overtime, arrears, deductions, joiners, leavers and duplicate test cases.
  *
- * WARNING: this TRUNCATES every WorkforcePay table before seeding.
+ * WARNING: this TRUNCATES every WorkforcePay table before seeding. It refuses to run in production or against a database that is not on this machine, unless
+ * SEED_CONFIRM_RESET is set to that database's exact name (src/lib/seed-guard.ts).
  */
 import "dotenv/config";
 import bcrypt from "bcryptjs";
@@ -16,6 +17,7 @@ import { leaveEligibility } from "../src/lib/leave";
 import { NTA_2025_BANDS } from "../src/lib/payroll/paye";
 import { DEFAULT_EARNINGS } from "../src/lib/payroll/structure";
 import { db } from "../src/lib/db";
+import { assertSeedTarget } from "../src/lib/seed-guard";
 import { createStructure } from "../src/server/services/structures";
 import { ensureDefaultPfas } from "../src/server/services/pfas";
 import { createMovement } from "../src/server/services/operations";
@@ -277,7 +279,9 @@ const pct = (arr: number[]) =>
   }));
 
 async function main() {
-  console.log("→ Resetting database");
+  // before anything is touched: refuse production and any database that is not on this machine, unless the database's own name was typed as a confirmation
+  const target = assertSeedTarget(process.env);
+  console.log(`→ Resetting database ${target}`);
   await truncateAll();
   const hash = await bcrypt.hash(DEMO_PASSWORD, 10);
 
