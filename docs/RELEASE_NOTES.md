@@ -24,7 +24,14 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `audit-recruitment-ids-only`, no migration)
+
+## Not yet merged (branch `audit-hire-pay`, no migration)
+
+- **A hire is recorded without the offer's pay** (the founder's decision of 2026-11-17, closing the last open item from #220). The hire entry in the audit log used to record the offer's monthly pay beside the new employee, contract and offer numbers. It now records **the three numbers only**; the pay is on the contract, and the audit log is append-only and cannot be reached when a person is erased.
+- **Entries written before this change still hold the pay** (append-only). A decision on whether to do anything about them is for the founder.
+- **Tests (written first, it failed before the fix):** a new case in `tests/integration/recruitment-audit.test.ts` (now 7) runs an offer through to a hire and checks the entry; the hiring, internal-vacancy and internal-move tests pass unchanged. No migration.
+
+## Merged in #220 (no migration)
 
 - **Recruitment no longer writes a candidate's words, contact details or pay to the audit log** (a finding reported with #219 and chosen by the founder on 2026-11-17). Several recruitment actions wrote the **whole record** to the audit log, which is read by the administrators and the auditor, is **append-only**, and cannot be reached when a person is erased. It included: a candidate's **name, phone, email and notes**; an interviewer's **name**, and an interviewer's **score, recommendation and free-text feedback** (which is meant to be read only by HR and the panel, every read logged, so this was a way round that rule); a vetting check's **notes** (what it found); and a job offer's **pay**, the approver's note and the reasons it was declined, rejected or withdrawn.
 - **Now the log carries ids, numbers, stages and statuses only:** a candidate's number, vacancy and source; an interview's id, round and day; that feedback was recorded; a check's type and status; an offer's number and status; and a change of stage without the reason. **The records themselves still hold everything**, for the people who may read them, and erasure still clears it there.

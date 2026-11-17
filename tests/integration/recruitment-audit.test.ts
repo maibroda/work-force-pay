@@ -9,6 +9,7 @@ import {
   approveRequisition,
   createOffer,
   createRequisition,
+  hireCandidate,
   markOfferSent,
   moveCandidate,
   recordInterviewFeedback,
@@ -121,6 +122,19 @@ describe("the audit log and the words and pay of a person who applied", () => {
     expect(row.newValue).toMatchObject({ stage: "REJECTED" });
     expect(row.reason).toBeNull();
     expect(JSON.stringify(row)).not.toMatch(/SECRET-REJECT-CANDIDATE|rude/);
+  });
+
+  it("a hire is recorded by the employee, contract and offer numbers, without the offer's pay (decided by the founder on 2026-11-17)", async () => {
+    const w = await setup();
+    const c = await w.candidate();
+    const o = await w.toOffer(c);
+    await approveOffer(w.hr2, o.id);
+    await markOfferSent(w.hr, o.id);
+    await recordOfferResponse(w.hr, o.id, "ACCEPTED");
+    const { employee, contract } = await hireCandidate(w.hr, { offerId: o.id });
+    const row = (await w.log()).find((r) => r.action === "CANDIDATE_HIRE")!;
+    expect(row.newValue).toMatchObject({ employee: employee.employeeNumber, contract: contract.contractNumber, offer: o.offerNumber });
+    expect(JSON.stringify(row)).not.toMatch(/monthlyGross|876543/);
   });
 
   it("the records themselves still hold the words and the pay, for the people who may read them", async () => {
