@@ -21,7 +21,18 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `hr-enquiries`, one migration: 20261220090000_hr_enquiries)
+
+## Not yet merged (branch `internal-move`, one migration: 20261221090000_internal_move)
+
+- **Internal applicants: what "selected" means** (recruitment slice B, part 2; the founder's approval of 2026-11-17 of `docs/plans/internal-selection-plan.md`: S1 to S3, S5 and S6 as recommended, S4 left with HR as today). **No pay, contract or salary structure is set or changed.** Read `docs/plans/internal-selection-explain-back.md`.
+- **What it adds:** on an internal applicant's candidate page, once they are at the offer stage, HR can **start the move**: it opens a **promotion proposal** (the existing process) to the vacancy's role, linked to the candidate, with **HR's own reason (nothing from the interviews is copied)**. **HR administrator only.** The existing rules then apply unchanged (a different HR person approves, a warning needs a reason, the employee sees it only once approved, their manager sees nothing, the system tells nobody). A panel-interviewed candidate needs the chair's recommendation and a second person's approval first, as for an offer. A move to the role already held is refused (a lateral move is recorded on the employee screens).
+- **No offer for an internal applicant** (the approved promotion replaces it), so the **earlier exception (an approver sees an internal applicant once an offer exists) is removed**: an internal applicant is read by HR and the panel only. **One existing test was changed on purpose** to say so.
+- **Positions and counting:** a live move **holds its position** against an outside hire; a declined or withdrawn one gives it back; the position is **filled when the promotion is applied**, when the candidate becomes **"Moved"** (a new stage, never "Hired"; hiring figures stay about new people) and the vacancy is marked filled once every position is. The requisition page says, for example, "1 of 1 position(s) filled (1 by internal move)". An applicant with a live proposal cannot be rejected until it is withdrawn.
+- **Fixed on the way:** erasing a former employee **now also clears their application as an internal applicant** (name, note, interview words and the applicant's own name on the record); the old code looked only for the record they were hired from.
+- **Migration (reversible, additive):** one link column on promotion proposals and one new candidate stage. Round-tripped (up, down, up) on a copy of the seeded database (the down script returns a moved candidate to the offer stage): no schema difference. The data dictionary was regenerated.
+- **Tests (written first):** `tests/integration/recruitment-internal-move.test.ts` (17); the other recruitment, panel, screening, career, hiring and erasure tests pass unchanged. **Not built:** pay, a lateral-move process, a message to anyone, and the requisition justification in the audit log (a separate small fix).
+
+## Merged in #217 (one migration: 20261220090000_hr_enquiries)
 
 - **HR enquiries** (the founder's approval of 2026-11-17: section 6 of `docs/plans/hr-phases-4-5-plan.md`, rules E1 to E6 as recommended, and the choice to start slice 5A). **No money, pay or statutory setting is touched; a pay question is only a question.** Read `docs/plans/hr-enquiries-explain-back.md`.
 - **What it adds:** an employee **asks HR a question** (a category, a title, a message), HR **replies in a thread**, and it is **answered and closed**. **My workspace > Ask HR** for the employee, **HR > Privacy & records > HR enquiries** for HR. **No automatic reply, no chatbot, no email.** The raising screen says that a grievance, harassment, whistleblowing or welfare concern goes through **My cases and support**, not here.

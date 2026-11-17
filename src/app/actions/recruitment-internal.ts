@@ -22,6 +22,14 @@ export async function unpublishVacancyAction(requisitionId: string) {
   }, PAGES);
 }
 
+// ── HR starts the move for a selected internal applicant: a promotion proposal, nothing else ──
+export async function startInternalMoveAction(candidateId: string, v: V) {
+  return act("recruitment.assess", async (ctx) => {
+    await ri.startInternalMove(ctx, candidateId, { intendedOn: str(v.intendedOn) ?? "", reason: str(v.reason) ?? "" });
+    return { message: "Promotion proposal started. A different HR person approves it; nobody is told by the system." };
+  }, [...PAGES, "/hr/promotions", "/me/career"]);
+}
+
 // ── An employee applies: any signed-in employee; the service checks the vacancy and the person ──
 export async function applyInternallyAction(requisitionId: string, v: V) {
   return act(undefined, async (ctx) => {

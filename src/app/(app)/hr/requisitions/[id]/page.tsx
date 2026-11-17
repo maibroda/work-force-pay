@@ -35,6 +35,8 @@ export default async function RequisitionPage({ params }: { params: Promise<{ id
   const manage = can(ctx.role, "hr.manage");
   const approve = can(ctx.role, "hr.approve");
   const hired = r.candidates.filter((c) => c.stage === "HIRED").length;
+  // an internal move fills a position but is not a hire (it is counted apart, so hiring figures stay about new people)
+  const moved = r.candidates.filter((c) => c.stage === "MOVED").length;
   const ownRequest = r.requestedById === ctx.userId;
   // the scoring criteria for interview panels are set by HR (recruitment.assess) alone
   const assess = can(ctx.role, "recruitment.assess");
@@ -48,7 +50,7 @@ export default async function RequisitionPage({ params }: { params: Promise<{ id
         crumbs={[{ href: "/hr/requisitions", label: "Requisitions" }]}
         description={
           <span className="flex items-center gap-2">
-            <StatusBadge status={r.status} /> {hired} of {r.headcount} position(s) filled
+            <StatusBadge status={r.status} /> {hired + moved} of {r.headcount} position(s) filled{moved ? ` (${moved} by internal move)` : ""}
           </span>
         }
         actions={

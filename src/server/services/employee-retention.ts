@@ -60,7 +60,8 @@ export async function anonymizeEmployee(tx: Tx, orgId: string, employeeId: strin
 
   const cases = await tx.relationsCase.findMany({ where, select: { id: true } });
   const caseIds = cases.map((c) => c.id);
-  const candidates = await tx.candidate.findMany({ where, select: { id: true } });
+  // their application as a candidate: the one they were hired from, AND any application they made inside the company as an employee (an internal applicant is linked by the applicant, not by a hire)
+  const candidates = await tx.candidate.findMany({ where: { organizationId: orgId, OR: [{ employeeId }, { applicantEmployeeId: employeeId }] }, select: { id: true } });
   const candidateIds = candidates.map((c) => c.id);
 
   counts.contacts = (await tx.employeeContact.deleteMany({ where })).count;
@@ -93,6 +94,8 @@ export async function anonymizeEmployee(tx: Tx, orgId: string, employeeId: strin
     await tx.interview.updateMany({ where: { candidateId: { in: candidateIds }, feedback: { not: null } }, data: { feedback: REMOVED } });
     await tx.candidateCheck.updateMany({ where: { candidateId: { in: candidateIds }, notes: { not: null } }, data: { notes: null } });
     await tx.jobOffer.updateMany({ where: { candidateId: { in: candidateIds } }, data: { declineReason: null, decisionNote: null } });
+    // an internal applicant's record was created in their own name
+    await tx.candidate.updateMany({ where: { organizationId: orgId, applicantEmployeeId: employeeId }, data: { createdBy: "Former employee" } });
   }
   counts.applications = candidateIds.length;
 

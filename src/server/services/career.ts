@@ -16,6 +16,7 @@ import { assess } from "@/lib/training-compliance";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { todayUtc } from "./hr-policy";
+import { completeInternalMove } from "./recruitment-moves";
 
 const todayIso = () => iso(todayUtc());
 const EMPLOYEE_SELECT = { id: true, employeeNumber: true, firstName: true, lastName: true } as const;
@@ -120,7 +121,8 @@ export const proposalSchema = z.object({
   intendedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Give the intended date"),
 });
 
-export async function proposePromotion(ctx: Ctx, raw: z.input<typeof proposalSchema>) {
+/** `opts.candidateId` is set only by an internal move (recruitment-internal.ts): it links the proposal to the internal applicant's candidate record. Every other promotion has none. */
+export async function proposePromotion(ctx: Ctx, raw: z.input<typeof proposalSchema>, opts: { candidateId?: string } = {}) {
   assertCan(ctx, "career.propose");
   const v = proposalSchema.parse(raw);
   const emp = await db.employee.findFirst({
@@ -162,6 +164,7 @@ export async function proposePromotion(ctx: Ctx, raw: z.input<typeof proposalSch
       warnings,
       proposedByUserId: ctx.userId,
       proposedBy: ctx.name,
+      candidateId: opts.candidateId ?? null,
     },
   });
   await logAudit(ctx, { action: "PROMOTION_PROPOSE", entity: "PromotionProposal", entityId: p.id, newValue: { employeeId: emp.id, fromCategoryId: emp.categoryId, toCategoryId: to.id, warnings } });
@@ -221,7 +224,12 @@ export async function applyPromotion(ctx: Ctx, id: string) {
   const p = await loadProposal(ctx, id);
   if (!promotionStatusAfter(p.status as PromotionStatus, "APPLY")) throw new BusinessError("Only an approved proposal can be marked applied.");
   if (p.employee.categoryId !== p.toCategoryId) throw new BusinessError("Change the employee's role (category) first, then mark this applied.");
-  const u = await db.promotionProposal.update({ where: { id }, data: { status: "APPLIED", appliedByUserId: ctx.userId, appliedBy: ctx.name, appliedAt: new Date() } });
+  // applied together with what it means for a vacancy, if it was started from an internal applicant: the candidate is MOVED (never HIRED) and the vacancy is filled once every position is
+  const u = await db.$transaction(async (tx) => {
+    const done = await tx.promotionProposal.update({ where: { id }, data: { status: "APPLIED", appliedByUserId: ctx.userId, appliedBy: ctx.name, appliedAt: new Date() } });
+    if (p.candidateId) await completeInternalMove(tx, p.candidateId);
+    return done;
+  });
   await logAudit(ctx, { action: "PROMOTION_APPLY", entity: "PromotionProposal", entityId: id, newValue: { employeeId: p.employeeId, toCategoryId: p.toCategoryId } });
   return u;
 }

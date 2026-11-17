@@ -5,6 +5,7 @@ import { can } from "@/lib/auth/permissions";
 import { getCandidate } from "@/server/services/recruitment";
 import { eligiblePanelists, panelOverview } from "@/server/services/recruitment-panel";
 import { candidateScreening } from "@/server/services/recruitment-screening";
+import { internalMove } from "@/server/services/recruitment-internal";
 import { enumOptions } from "@/server/options";
 import { fmtDate } from "@/lib/dates";
 import { naira } from "@/lib/money";
@@ -16,6 +17,7 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { generateLetterAction } from "@/app/actions/letters";
 import { decideShortlistAction, recordScreeningAction } from "@/app/actions/recruitment-screening";
 import { approveSelectionAction, closePanelAction, declineSelectionAction, setPanelAction } from "@/app/actions/recruitment-panel";
+import { startInternalMoveAction } from "@/app/actions/recruitment-internal";
 import {
   addCheckAction,
   addStandardChecksAction,
@@ -52,6 +54,8 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
   const panelled = new Set((panels?.interviews ?? []).filter((p) => p.members.length > 0).map((p) => p.interviewId));
   const open = OPEN.includes(c.stage);
   const internal = c.applicantEmployeeId;
+  const move = assess && internal ? await internalMove(ctx, id) : null;
+  const moveLive = move !== null && ["PROPOSED", "APPROVED", "APPLIED"].includes(move.status);
   const liveOffer = c.offers.find((o) => ["PENDING_APPROVAL", "APPROVED", "SENT"].includes(o.status));
   const accepted = c.offers.find((o) => o.status === "ACCEPTED");
   return (
@@ -118,8 +122,8 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
           <Link className="underline" href={`/employees/${internal}`}>
             employee record
           </Link>
-          ). HR and the interview panel only see this application; nobody else was told. Hiring is not available for an internal applicant (it would create a second employee record): the move is recorded as a
-          promotion or transfer.
+          ). HR and the interview panel only see this application; nobody else was told. An internal applicant gets no offer and is not hired (that would create a second employee record): when they are selected, start the
+          move below, which opens a promotion proposal.
         </p>
       )}
       <Section title="Interviews" description="Moving to the offer stage needs at least one completed interview." flush>
@@ -466,7 +470,35 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
           />
         </Section>
       )}
-      {manage && c.stage === "OFFER" && !liveOffer && !accepted && (
+      {internal && move && (
+        <Section title="Internal move" description="The promotion proposal started from this application. A different HR person approves it; the role and the pay are then changed on the existing screens.">
+          <p className="text-sm">
+            Promotion proposal: <StatusBadge status={move.status} /> intended for {fmtDate(move.intendedOn)}
+            {move.appliedAt ? `, applied on ${fmtDate(move.appliedAt)}` : ""}.{" "}
+            <Link className="text-primary underline" href="/hr/promotions">
+              Open promotions
+            </Link>
+          </p>
+        </Section>
+      )}
+      {assess && internal && c.stage === "OFFER" && !moveLive && (
+        <FormPanel title="Selected: start the move" open>
+          <p className="mb-3 text-xs text-muted-foreground">
+            This opens a promotion proposal to the vacancy&apos;s role ({c.requisition.title}). You write the reason: nothing from the interviews is copied. A different HR person approves it, the employee is told by HR (the system tells
+            nobody, including their manager), and the role and pay are then changed on the existing screens. This sets no pay and no contract. A move to the role they already hold is a lateral move: record it on the employee screens.
+          </p>
+          <SmartForm
+            columns={2}
+            submitLabel="Start the move"
+            action={startInternalMoveAction.bind(null, c.id)}
+            fields={[
+              { name: "intendedOn", label: "Intended date", type: "date", required: true },
+              { name: "reason", label: "Why they were selected (your own words)", type: "textarea", required: true, span: 2 },
+            ]}
+          />
+        </FormPanel>
+      )}
+      {manage && c.stage === "OFFER" && !internal && !liveOffer && !accepted && (
         <FormPanel title="Raise an offer" open>
           <SmartForm
             columns={3}

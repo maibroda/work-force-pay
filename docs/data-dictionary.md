@@ -1840,6 +1840,7 @@ The employee's own terms of employment (distinct from `Contract`, which is a CLI
 | checks | → CandidateCheck[] |  |  |
 | offers | → JobOffer[] |  |  |
 | selection | → CandidateSelection |  |  |
+| internalMoves | → PromotionProposal[] |  | The promotion proposals started from this (internal) candidate. |
 | screenings | → CandidateScreening[] |  |  |
 | shortlist | → CandidateShortlist |  |  |
 
@@ -6346,6 +6347,8 @@ A proposal that an employee moves to another role (category), and the decision o
 | appliedByUserId | String |  |  |
 | appliedBy | String |  |  |
 | appliedAt | DateTime |  |  |
+| candidateId | String |  | Set when the proposal was started from an internal applicant's candidate record (recruitment slice B, part 2); empty for every other promotion. |
+| candidate | → Candidate |  |  |
 
 ### SuccessionRole
 
@@ -6813,7 +6816,7 @@ Why an employee is leaving — drives attrition analytics and (for REDUNDANCY) s
 
 ### CandidateStage
 
-`APPLIED`, `SCREENING`, `INTERVIEW`, `ASSESSMENT`, `OFFER`, `HIRED`, `REJECTED`, `WITHDRAWN`
+`APPLIED`, `SCREENING`, `INTERVIEW`, `ASSESSMENT`, `OFFER`, `HIRED`, `REJECTED`, `WITHDRAWN`, `MOVED`
 
 ### CandidateSource
 
