@@ -15,6 +15,8 @@ import { contractSchema, createContractInTx, EMPLOYMENT_TYPES } from "./contract
 import { createEmployeeInTx, employeeSchema } from "./employees";
 import { getHrPolicy, todayUtc } from "./hr-policy";
 import { nextNumber } from "./numbering";
+import { canCtx } from "@/lib/hr-functions";
+import { recordSensitiveAccess } from "./sensitive-access";
 import { d } from "@/lib/dates";
 import { num } from "@/lib/money";
 
@@ -337,6 +339,8 @@ export async function recordInterviewFeedback(ctx: Ctx, interviewId: string, raw
   const iv = await db.interview.findFirst({ where: { id: interviewId, organizationId: ctx.orgId } });
   if (!iv) throw new BusinessError("Interview not found.");
   if (iv.completedAt) throw new BusinessError("Feedback has already been recorded for this interview.");
+  // an interview with a panel is scored by the panel (each member's scorecard), not by one person's feedback
+  if (await db.interviewPanelMember.count({ where: { interviewId } })) throw new BusinessError("This interview is scored by a panel: each member records their own scorecard.");
   const u = await db.interview.update({
     where: { id: interviewId },
     data: { score: v.score, recommendation: v.recommendation, feedback: v.feedback, completedAt: new Date() },
@@ -416,6 +420,12 @@ export async function createOffer(ctx: Ctx, raw: z.input<typeof offerSchema>) {
   const v = offerSchema.parse(raw);
   const c = await loadCandidate(ctx, v.candidateId);
   if (c.stage !== "OFFER") throw new BusinessError("Move the candidate to the offer stage before raising an offer.");
+  // a candidate a panel interviewed needs the chair's recommendation and a second person's approval first (recruitment-panel.ts); one interviewed the old way is unaffected
+  if (await db.interviewPanelMember.count({ where: { interview: { candidateId: c.id } } })) {
+    const selection = await db.candidateSelection.findUnique({ where: { candidateId: c.id } });
+    if (!selection) throw new BusinessError("A panel interviewed this candidate: the chair must recommend selecting them, and a second person must approve it, before an offer can be raised.");
+    if (selection.status !== "APPROVED") throw new BusinessError("The selection of this candidate has not been approved yet, so an offer can't be raised.");
+  }
   const live = await db.jobOffer.findFirst({ where: { candidateId: c.id, status: { in: OPEN_OFFER as never } } });
   if (live) throw new BusinessError(`There is already an open offer (${live.offerNumber}) for this candidate.`);
   const policy = await getHrPolicy(ctx.orgId);
@@ -653,7 +663,7 @@ export async function listCandidates(ctx: Ctx, f: { stage?: string; requisitionI
 
 export async function getCandidate(ctx: Ctx, id: string) {
   assertCan(ctx, "hr.view");
-  return db.candidate.findFirst({
+  const c = await db.candidate.findFirst({
     where: { id, organizationId: ctx.orgId },
     include: {
       requisition: { include: { category: true } },
@@ -663,6 +673,14 @@ export async function getCandidate(ctx: Ctx, id: string) {
       employee: true,
     },
   });
+  if (!c) return c;
+  // Interview feedback (a score, a recommendation and words about a person) is read by HR and the panel only: the administrators, finance and the auditor see that interviews took
+  // place, not what was said. Every read by someone who can see it is logged.
+  if (canCtx(ctx, "recruitment.assess")) {
+    if (c.interviews.length) await recordSensitiveAccess(ctx, { kind: "CANDIDATE_ASSESSMENT", entity: "Candidate", ref: c.id });
+    return c;
+  }
+  return { ...c, interviews: c.interviews.map((i) => ({ ...i, score: null, recommendation: null, feedback: null })) };
 }
 
 /** Funnel counts for the recruitment overview. */
