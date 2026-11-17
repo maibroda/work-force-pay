@@ -7,6 +7,7 @@
  * half-created hire can never exist.
  */
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 import type { Ctx } from "@/lib/auth/context";
 import { addDays, iso } from "@/lib/dates";
 import { assertCan, BusinessError, db } from "./_base";
@@ -27,6 +28,14 @@ const opt = z
   .transform((v) => (v ? v : undefined));
 
 const GONE = ["EXITED", "TERMINATED", "RESIGNED"];
+
+/**
+ * An internal applicant (an employee who applied to a published vacancy) is seen by HR (the right to assess candidates) and the panel only. Anyone else with HR access sees them only once an
+ * offer exists for them, so that the offer can be approved. Counts in the funnel include them; their names and details do not appear.
+ */
+export function internalApplicantFilter(ctx: Ctx): Prisma.CandidateWhereInput {
+  return canCtx(ctx, "recruitment.assess") ? {} : { OR: [{ applicantEmployeeId: null }, { offers: { some: {} } }] };
+}
 const OPEN_STAGES = ["APPLIED", "SCREENING", "INTERVIEW", "ASSESSMENT", "OFFER"] as const;
 const OPEN_OFFER = ["PENDING_APPROVAL", "APPROVED", "SENT"];
 
@@ -170,6 +179,7 @@ export async function getRequisition(ctx: Ctx, id: string) {
       costCenter: true,
       hiringManager: true,
       candidates: {
+        where: internalApplicantFilter(ctx),
         include: { interviews: true, checks: true, offers: true },
         orderBy: { createdAt: "asc" },
       },
@@ -549,6 +559,8 @@ export async function hireCandidate(ctx: Ctx, raw: z.input<typeof hireSchema>) {
   const req = c.requisition;
   if (o.status !== "ACCEPTED") throw new BusinessError("The candidate must have accepted the offer before they can be hired.");
   if (c.stage !== "OFFER" || c.employeeId) throw new BusinessError("This candidate has already been hired or has left the pipeline.");
+  // an internal applicant is already an employee: hiring creates an employee, so it would make a second record for the same person
+  if (c.applicantEmployeeId) throw new BusinessError("This candidate is already an employee (an internal applicant): hiring would create a second employee record. Record the move as a promotion or transfer instead.");
   if (!["APPROVED", "ON_HOLD"].includes(req.status) && req.status !== "FILLED")
     throw new BusinessError(`The requisition is ${req.status.replace(/_/g, " ").toLowerCase()} — it can't take a hire.`);
   const hired = await db.candidate.count({ where: { requisitionId: req.id, stage: "HIRED" } });
@@ -640,6 +652,7 @@ export async function listCandidates(ctx: Ctx, f: { stage?: string; requisitionI
   assertCan(ctx, "hr.view");
   return db.candidate.findMany({
     where: {
+      AND: [internalApplicantFilter(ctx)],
       organizationId: ctx.orgId,
       ...(f.stage ? { stage: f.stage as never } : {}),
       ...(f.requisitionId ? { requisitionId: f.requisitionId } : {}),
@@ -674,6 +687,8 @@ export async function getCandidate(ctx: Ctx, id: string) {
     },
   });
   if (!c) return c;
+  // an internal applicant is read by HR and the panel only (see internalApplicantFilter)
+  if (c.applicantEmployeeId && !canCtx(ctx, "recruitment.assess") && c.offers.length === 0) return null;
   // Interview feedback (a score, a recommendation and words about a person) is read by HR and the panel only: the administrators, finance and the auditor see that interviews took
   // place, not what was said. Every read by someone who can see it is logged.
   if (canCtx(ctx, "recruitment.assess")) {

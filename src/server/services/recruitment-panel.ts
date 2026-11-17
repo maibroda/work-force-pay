@@ -95,6 +95,17 @@ export async function setPanel(ctx: Ctx, interviewId: string, raw: z.input<typeo
   if (people.length !== ids.length) throw new BusinessError("Employee not found.");
   const logins = await db.user.findMany({ where: { organizationId: ctx.orgId, employeeId: { in: ids } }, select: { employeeId: true } });
   const withLogin = new Set(logins.map((u) => u.employeeId));
+  // an internal applicant: the applicant and their line manager never sit on the panel
+  const applicantId = iv.candidate.applicantEmployeeId;
+  if (applicantId) {
+    const applicant = await db.employee.findFirst({ where: { id: applicantId, organizationId: ctx.orgId }, select: { reportingManagerId: true } });
+    const nameOf = (id: string) => people.find((p) => p.id === id);
+    if (ids.includes(applicantId)) throw new BusinessError(`${nameOf(applicantId)?.firstName ?? "The"} ${nameOf(applicantId)?.lastName ?? "person"} is the applicant, so can't sit on the panel.`);
+    if (applicant?.reportingManagerId && ids.includes(applicant.reportingManagerId)) {
+      const m = nameOf(applicant.reportingManagerId);
+      throw new BusinessError(`${m?.firstName ?? "The"} ${m?.lastName ?? "manager"} is the applicant's line manager, so can't sit on this panel.`);
+    }
+  }
   for (const p of people) {
     if (["EXITED", "TERMINATED", "RESIGNED"].includes(p.status)) throw new BusinessError(`${p.firstName} ${p.lastName} is no longer employed here.`);
     if (!withLogin.has(p.id)) throw new BusinessError(`${p.firstName} ${p.lastName} has no login, so can't sit on a panel.`);

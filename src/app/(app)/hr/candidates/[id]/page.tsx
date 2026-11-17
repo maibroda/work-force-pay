@@ -51,6 +51,7 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
   const screen = assess ? await candidateScreening(ctx, id) : null;
   const panelled = new Set((panels?.interviews ?? []).filter((p) => p.members.length > 0).map((p) => p.interviewId));
   const open = OPEN.includes(c.stage);
+  const internal = c.applicantEmployeeId;
   const liveOffer = c.offers.find((o) => ["PENDING_APPROVAL", "APPROVED", "SENT"].includes(o.status));
   const accepted = c.offers.find((o) => o.status === "ACCEPTED");
   return (
@@ -111,6 +112,16 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
         )}
       </Section>
 
+      {internal && (
+        <p className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <b>Internal applicant:</b> a current employee (
+          <Link className="underline" href={`/employees/${internal}`}>
+            employee record
+          </Link>
+          ). HR and the interview panel only see this application; nobody else was told. Hiring is not available for an internal applicant (it would create a second employee record): the move is recorded as a
+          promotion or transfer.
+        </p>
+      )}
       <Section title="Interviews" description="Moving to the offer stage needs at least one completed interview." flush>
         <Table>
           <THead>

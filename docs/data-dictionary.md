@@ -1306,6 +1306,7 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | candidateRecord | → Candidate |  |  |
 | managedRequisitions | → JobRequisition[] |  |  |
 | panelSeats | → InterviewPanelMember[] |  |  |
+| internalApplications | → Candidate[] |  |  |
 | stockMovements | → StockMovement[] |  |  |
 | staffLoans | → StaffLoan[] |  |  |
 | generatedLetters | → GeneratedLetter[] |  |  |
@@ -1749,6 +1750,9 @@ The employee's own terms of employment (distinct from `Contract`, which is a CLI
 | approvedBy | String |  |  |
 | approvedAt | DateTime |  |  |
 | decisionNote | String |  |  |
+| publishedAt | DateTime |  | When it was published inside the company (empty = not published). An employee sees it only while it is published, approved and before the deadline. |
+| applicationDeadline | DateTime |  | The last day employees may apply (a day only). Mandatory to publish. |
+| vacancySummary | String |  | What employees are told about the vacancy, written by HR at publication. The justification, budget and hiring manager are never shown to employees. |
 | createdAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |
 | candidates | → Candidate[] |  |  |
@@ -1778,6 +1782,8 @@ The employee's own terms of employment (distinct from `Contract`, which is a CLI
 | stageChangedAt | DateTime |  |  |
 | employeeId | String |  | Set once the candidate is converted into an employee. (unique) |
 | employee | → Employee |  |  |
+| applicantEmployeeId | String |  | Set when the applicant is an existing employee who applied to a published vacancy (an internal applicant). Not the same as employeeId, which is set when someone is HIRED. |
+| applicantEmployee | → Employee |  |  |
 | anonymizedAt | DateTime |  | Set when the candidate's personal details were removed under the retention rule. |
 | createdBy | String | yes |  |
 | createdAt | DateTime |  |  |
