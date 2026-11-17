@@ -167,11 +167,14 @@ describe("who sees an internal applicant", () => {
       expect(await getCandidate(ctx, outside.id), role).not.toBeNull();
     }
   });
-  it("is visible to the approver once an offer exists, so an offer can be approved", async () => {
+  // CHANGED 2026-11-17 on purpose (docs/plans/internal-selection-plan.md, S3, approved as recommended): an internal applicant gets no offer, so the approver exception an offer once gave is gone.
+  // It used to say an approver sees an internal applicant once an offer exists; now even a recorded offer shows them to HR and the panel only.
+  it("is not visible to an approver even if an offer was somehow recorded: an internal applicant is read by HR and the panel only", async () => {
     const { w, c } = await applied();
     await db.jobOffer.create({ data: { organizationId: w.t.org.id, offerNumber: `OFR-T${uid()}`, candidateId: c.id, jobTitle: "Site Supervisor", monthlyGross: 250000, startDate: new Date(`${inDays(30)}T00:00:00Z`), validUntil: new Date(`${inDays(20)}T00:00:00Z`), createdBy: "HR", createdById: "hr" } });
-    expect(await getCandidate(w.boss, c.id)).not.toBeNull();
-    expect((await listCandidates(w.boss)).map((x) => x.id)).toContain(c.id);
+    expect(await getCandidate(w.boss, c.id)).toBeNull();
+    expect((await listCandidates(w.boss)).map((x) => x.id)).not.toContain(c.id);
+    expect(await getCandidate(w.hr, c.id)).not.toBeNull();
   });
 });
 

@@ -8,7 +8,7 @@ import { Input, Select } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 
-const STAGES = ["APPLIED", "SCREENING", "INTERVIEW", "ASSESSMENT", "OFFER", "HIRED", "REJECTED", "WITHDRAWN"];
+const STAGES = ["APPLIED", "SCREENING", "INTERVIEW", "ASSESSMENT", "OFFER", "HIRED", "MOVED", "REJECTED", "WITHDRAWN"];
 
 export default async function CandidatesPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const ctx = await requirePage("hr.view");

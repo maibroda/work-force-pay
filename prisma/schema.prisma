@@ -183,6 +183,8 @@ enum CandidateStage {
   HIRED
   REJECTED
   WITHDRAWN
+  /// An internal applicant whose promotion has been applied: moved inside the company, never counted as a hire.
+  MOVED
 }
 
 enum CandidateSource {
@@ -2774,6 +2776,8 @@ model Candidate {
   checks     CandidateCheck[]
   offers     JobOffer[]
   selection  CandidateSelection?
+  /// The promotion proposals started from this (internal) candidate.
+  internalMoves PromotionProposal[] @relation("InternalMove")
   screenings CandidateScreening[]
   shortlist  CandidateShortlist?
 
@@ -8497,9 +8501,13 @@ model PromotionProposal {
   appliedByUserId   String?
   appliedBy         String?
   appliedAt         DateTime?
+  /// Set when the proposal was started from an internal applicant's candidate record (recruitment slice B, part 2); empty for every other promotion.
+  candidateId       String?
+  candidate         Candidate?        @relation("InternalMove", fields: [candidateId], references: [id])
 
   @@index([organizationId, status])
   @@index([organizationId, employeeId])
+  @@index([candidateId])
 }
 
 /// A critical role (an employee category) the HR administrator keeps successors for. Read only by the HR administrator.

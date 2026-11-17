@@ -4,7 +4,7 @@
  * HR publishes an APPROVED requisition inside the company with a MANDATORY deadline and a summary written for employees. Any employee may apply (once) while it is open. The system
  * tells NOBODY, least of all the applicant's manager: no message, no list, no page of the manager's carries the application. An internal applicant is read by HR (the right to assess
  * candidates) and the panel only (recruitment.ts, internalApplicantFilter). An internal applicant is already an employee, so the existing hire, which creates an employee, is refused for
- * them (hireCandidate): the move itself is a promotion or transfer, which is not built here and is for the founder to decide.
+ * them (hireCandidate). Selecting an internal applicant starts a PROMOTION PROPOSAL (startInternalMove, below): see docs/plans/internal-selection-plan.md.
  *
  * What an employee sees of a vacancy is a short list of fields. The justification, the budget, the hiring manager and who raised it are never shown.
  */
@@ -15,6 +15,8 @@ import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { todayUtc } from "./hr-policy";
 import { nextNumber } from "./numbering";
+import { proposePromotion } from "./career";
+import { LIVE_MOVE, takenPositions } from "./recruitment-moves";
 
 const GONE = ["EXITED", "TERMINATED", "RESIGNED"];
 
@@ -125,4 +127,58 @@ export async function myApplications(ctx: Ctx) {
     orderBy: { createdAt: "desc" },
   });
   return rows.map((c) => ({ candidateId: c.id, title: c.requisition.title, stage: c.stage, appliedOn: c.createdAt }));
+}
+
+// ───────────────────────────── Selecting an internal applicant: the move ─────────────────────────────
+
+const moveSchema = z.object({
+  intendedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Give the intended date (year-month-day)."),
+  reason: z.string(),
+});
+
+/**
+ * Selecting an internal applicant starts a PROMOTION PROPOSAL through the existing process, and nothing else (docs/plans/internal-selection-plan.md, S1 to S6, approved 2026-11-17):
+ *  - HR administrator only (the right to assess candidates AND the right to propose promotions);
+ *  - for an internal applicant who has reached the offer stage; a candidate a panel interviewed needs the chair's recommendation and a second person's approval first, as for an offer;
+ *  - to the requisition's role; a move to the role they already hold is a lateral move, recorded on the employee screens (S2);
+ *  - HR writes the reason: nothing from the interviews is copied; the proposal is linked to the candidate;
+ *  - the existing promotion rules then apply unchanged (a different HR person approves, a warning needs a reason, the employee sees it only once approved, nobody is told by the system);
+ *  - it takes a position on the vacancy from now until it is declined or withdrawn, and fills it when the promotion is applied (recruitment-moves.ts).
+ * It sets no pay, no contract and no salary structure: those follow on the existing screens.
+ */
+export async function startInternalMove(ctx: Ctx, candidateId: string, raw: z.input<typeof moveSchema>) {
+  assertCan(ctx, "recruitment.assess");
+  assertCan(ctx, "career.propose");
+  const v = moveSchema.parse(raw);
+  const c = await db.candidate.findFirst({ where: { id: candidateId, organizationId: ctx.orgId }, include: { requisition: true } });
+  if (!c) throw new BusinessError("Candidate not found.");
+  if (!c.applicantEmployeeId) throw new BusinessError("This candidate is not an internal applicant: an outside candidate is hired, not moved.");
+  if (c.stage !== "OFFER") throw new BusinessError("Move the candidate to the offer stage before starting the move.");
+  const req = c.requisition;
+  if (!["APPROVED", "ON_HOLD"].includes(req.status)) throw new BusinessError(`The requisition is ${req.status.replace(/_/g, " ").toLowerCase()} — it can't take a move.`);
+  // a candidate a panel interviewed: the same recommendation and second-person approval an offer would need (recruitment.ts, createOffer)
+  if (await db.interviewPanelMember.count({ where: { interview: { candidateId: c.id } } })) {
+    const selection = await db.candidateSelection.findUnique({ where: { candidateId: c.id } });
+    if (!selection) throw new BusinessError("A panel interviewed this candidate: the chair must recommend selecting them, and a second person must approve it, before the move can start.");
+    if (selection.status !== "APPROVED") throw new BusinessError("The selection of this candidate has not been approved yet, so the move can't start.");
+  }
+  if (await db.promotionProposal.count({ where: { candidateId: c.id, status: { in: [...LIVE_MOVE] } } }))
+    throw new BusinessError("A promotion proposal has already been started from this application. Withdraw it first to start another.");
+  if ((await takenPositions(db, req.id)) >= req.headcount) throw new BusinessError(`All ${req.headcount} position(s) on this requisition are already filled or held by another move in progress.`);
+  const emp = await db.employee.findFirst({ where: { id: c.applicantEmployeeId, organizationId: ctx.orgId }, select: { categoryId: true } });
+  if (!emp) throw new BusinessError("Employee not found.");
+  if (emp.categoryId === req.categoryId)
+    throw new BusinessError("This employee already holds the vacancy's role, so this is a lateral move, not a promotion. Record it on the employee screens (department, site or manager) and close the application with a reason.");
+  // the existing promotion process: its own checks (the employee is active, the date is not in the past, a real reason, no other open proposal) and its own audit entry
+  const p = await proposePromotion(ctx, { employeeId: c.applicantEmployeeId, toCategoryId: req.categoryId, reason: v.reason, intendedOn: v.intendedOn }, { candidateId: c.id });
+  // ids only: not the reason, and nothing from the interviews
+  await logAudit(ctx, { action: "INTERNAL_MOVE_START", entity: "Candidate", entityId: c.id, newValue: { requisitionId: req.id, proposalId: p.id } });
+  return p;
+}
+
+/** HR's view of the move started from a candidate: the latest promotion proposal linked to it, or nothing. */
+export async function internalMove(ctx: Ctx, candidateId: string) {
+  assertCan(ctx, "recruitment.assess");
+  const p = await db.promotionProposal.findFirst({ where: { organizationId: ctx.orgId, candidateId }, orderBy: { proposedAt: "desc" }, select: { id: true, status: true, intendedOn: true, appliedAt: true } });
+  return p ? { proposalId: p.id, status: p.status, intendedOn: p.intendedOn, appliedAt: p.appliedAt } : null;
 }

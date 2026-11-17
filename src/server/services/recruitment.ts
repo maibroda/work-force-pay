@@ -20,6 +20,7 @@ import { canCtx } from "@/lib/hr-functions";
 import { recordSensitiveAccess } from "./sensitive-access";
 import { d } from "@/lib/dates";
 import { num } from "@/lib/money";
+import { filledPositions, takenPositions } from "./recruitment-moves";
 
 const opt = z
   .string()
@@ -30,11 +31,12 @@ const opt = z
 const GONE = ["EXITED", "TERMINATED", "RESIGNED"];
 
 /**
- * An internal applicant (an employee who applied to a published vacancy) is seen by HR (the right to assess candidates) and the panel only. Anyone else with HR access sees them only once an
- * offer exists for them, so that the offer can be approved. Counts in the funnel include them; their names and details do not appear.
+ * An internal applicant (an employee who applied to a published vacancy) is seen by HR (the right to assess candidates) and the panel only. Nobody else with HR access sees them, whatever stage they
+ * have reached: an internal applicant gets no offer (the approved promotion takes its place, see recruitment-internal.ts), so there is no approval that needs the exception an offer once gave.
+ * Counts in the funnel include them; their names and details do not appear.
  */
 export function internalApplicantFilter(ctx: Ctx): Prisma.CandidateWhereInput {
-  return canCtx(ctx, "recruitment.assess") ? {} : { OR: [{ applicantEmployeeId: null }, { offers: { some: {} } }] };
+  return canCtx(ctx, "recruitment.assess") ? {} : { applicantEmployeeId: null };
 }
 const OPEN_STAGES = ["APPLIED", "SCREENING", "INTERVIEW", "ASSESSMENT", "OFFER"] as const;
 const OPEN_OFFER = ["PENDING_APPROVAL", "APPROVED", "SENT"];
@@ -281,6 +283,9 @@ export async function moveCandidate(
   if (stage === "REJECTED" || stage === "WITHDRAWN") {
     const live = await db.jobOffer.count({ where: { candidateId: id, status: { in: OPEN_OFFER as never } } });
     if (live) throw new BusinessError("Withdraw this candidate's open offer first.");
+    // an internal applicant with a promotion proposal still being considered or approved: the proposal is withdrawn first, so the two records never disagree
+    if (await db.promotionProposal.count({ where: { candidateId: id, status: { in: ["PROPOSED", "APPROVED"] } } }))
+      throw new BusinessError("Withdraw this candidate's promotion proposal first.");
   }
   const u = await db.candidate.update({
     where: { id },
@@ -429,6 +434,8 @@ export async function createOffer(ctx: Ctx, raw: z.input<typeof offerSchema>) {
   assertCan(ctx, "hr.manage");
   const v = offerSchema.parse(raw);
   const c = await loadCandidate(ctx, v.candidateId);
+  // an offer is a new-hire letter with pay terms; an internal applicant is already an employee, and the approved promotion takes the offer's place
+  if (c.applicantEmployeeId) throw new BusinessError("This candidate is an internal applicant, so no offer is raised: start the move from the candidate's page, and the approved promotion takes the offer's place.");
   if (c.stage !== "OFFER") throw new BusinessError("Move the candidate to the offer stage before raising an offer.");
   // a candidate a panel interviewed needs the chair's recommendation and a second person's approval first (recruitment-panel.ts); one interviewed the old way is unaffected
   if (await db.interviewPanelMember.count({ where: { interview: { candidateId: c.id } } })) {
@@ -563,8 +570,8 @@ export async function hireCandidate(ctx: Ctx, raw: z.input<typeof hireSchema>) {
   if (c.applicantEmployeeId) throw new BusinessError("This candidate is already an employee (an internal applicant): hiring would create a second employee record. Record the move as a promotion or transfer instead.");
   if (!["APPROVED", "ON_HOLD"].includes(req.status) && req.status !== "FILLED")
     throw new BusinessError(`The requisition is ${req.status.replace(/_/g, " ").toLowerCase()} — it can't take a hire.`);
-  const hired = await db.candidate.count({ where: { requisitionId: req.id, stage: "HIRED" } });
-  if (hired >= req.headcount) throw new BusinessError(`All ${req.headcount} position(s) on this requisition are already filled.`);
+  // an internal move that is live holds its position against an outside hire (recruitment-moves.ts)
+  if ((await takenPositions(db, req.id)) >= req.headcount) throw new BusinessError(`All ${req.headcount} position(s) on this requisition are already filled or held by an internal move.`);
 
   const checks = await db.candidateCheck.findMany({ where: { candidateId: c.id } });
   const blocking = checks.filter((k) => k.status === "PENDING" || k.status === "FAILED");
@@ -630,7 +637,7 @@ export async function hireCandidate(ctx: Ctx, raw: z.input<typeof hireSchema>) {
         },
       });
     await tx.candidate.update({ where: { id: c.id }, data: { stage: "HIRED", stageChangedAt: new Date(), employeeId: emp.id } });
-    if (hired + 1 >= req.headcount && req.status !== "FILLED")
+    if (req.status !== "FILLED" && (await filledPositions(tx, req.id)) >= req.headcount)
       await tx.jobRequisition.update({ where: { id: req.id }, data: { status: "FILLED" } });
     await logAudit(
       ctx,
@@ -688,7 +695,7 @@ export async function getCandidate(ctx: Ctx, id: string) {
   });
   if (!c) return c;
   // an internal applicant is read by HR and the panel only (see internalApplicantFilter)
-  if (c.applicantEmployeeId && !canCtx(ctx, "recruitment.assess") && c.offers.length === 0) return null;
+  if (c.applicantEmployeeId && !canCtx(ctx, "recruitment.assess")) return null;
   // Interview feedback (a score, a recommendation and words about a person) is read by HR and the panel only: the administrators, finance and the auditor see that interviews took
   // place, not what was said. Every read by someone who can see it is logged.
   if (canCtx(ctx, "recruitment.assess")) {
