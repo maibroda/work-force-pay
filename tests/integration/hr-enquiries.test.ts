@@ -74,7 +74,8 @@ describe("who reads an enquiry (E3, E6)", () => {
     expect((await getEnquiry(annCtx, e.id)).id).toBe(e.id);
     expect((await getEnquiry(hr, e.id)).id).toBe(e.id);
     const others = [bobCtx, t.ctx("SUPERVISOR", null, 3), t.ctx("FINANCE"), t.ctx("PAYROLL_ADMIN"), t.ctx("AUDITOR"), t.ctx("COMPANY_ADMIN"), t.ctx("SUPER_ADMIN"), t.ctx("HR_OFFICER")];
-    for (const c of others) await expect(getEnquiry(c, e.id), c.role).rejects.toThrow(/not found|permission/i);
+    // "not found" for every one of them, never a permission error: a page open to anyone then shows "not found" and not a server error (the smoke test caught that on first CI)
+    for (const c of others) await expect(getEnquiry(c, e.id), c.role).rejects.toThrow(/^Enquiry not found\.$/);
     for (const c of others.slice(1)) await expect(listEnquiries(c), c.role).rejects.toThrow(/permission/);
   });
 

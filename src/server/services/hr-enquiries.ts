@@ -64,8 +64,8 @@ function standing(e: { createdAt: Date; firstResponseAt: Date | null; status: En
 /** The enquiry, if this person may see it: HR in this company, or the employee who asked it. Anyone else is told it does not exist, so its existence is not revealed. */
 async function loadFor(ctx: Ctx, id: string) {
   const hr = can(ctx.role, "enquiry.respond");
-  if (!hr) assertCan(ctx, "enquiry.raise");
-  if (!hr && !ctx.employeeId) throw new BusinessError("Enquiry not found.");
+  // someone with no right over enquiries is told it does not exist, as anyone else is: its existence is not revealed, and a page that opens to anyone shows "not found", not an error
+  if (!hr && (!can(ctx.role, "enquiry.raise") || !ctx.employeeId)) throw new BusinessError("Enquiry not found.");
   const e = await db.hrEnquiry.findFirst({
     where: { id, organizationId: ctx.orgId, ...(hr ? {} : { employeeId: ctx.employeeId! }) },
     include: { messages: { orderBy: { createdAt: "asc" } }, employee: { select: { employeeNumber: true, firstName: true, lastName: true } } },
