@@ -5,6 +5,7 @@ import { can } from "@/lib/auth/permissions";
 import { getRequisition } from "@/server/services/recruitment";
 import { listCriteria } from "@/server/services/recruitment-panel";
 import { listScreeningCriteria } from "@/server/services/recruitment-screening";
+import { vacancyStatus } from "@/server/services/recruitment-internal";
 import { fmtDate } from "@/lib/dates";
 import { naira } from "@/lib/money";
 import { fullName } from "@/lib/utils";
@@ -22,6 +23,7 @@ import {
 } from "@/app/actions/hr-lifecycle";
 import { setCriteriaAction } from "@/app/actions/recruitment-panel";
 import { setScreeningCriteriaAction } from "@/app/actions/recruitment-screening";
+import { publishVacancyAction, unpublishVacancyAction } from "@/app/actions/recruitment-internal";
 
 const SOURCES = ["REFERRAL", "JOB_BOARD", "WALK_IN", "AGENCY", "INTERNAL", "SOCIAL_MEDIA", "OTHER"];
 
@@ -38,6 +40,7 @@ export default async function RequisitionPage({ params }: { params: Promise<{ id
   const assess = can(ctx.role, "recruitment.assess");
   const criteria = assess ? await listCriteria(ctx, id) : [];
   const screening = assess ? await listScreeningCriteria(ctx, id) : [];
+  const vacancy = manage && r.status === "APPROVED" ? await vacancyStatus(ctx, id) : null;
   return (
     <>
       <PageHeader
@@ -123,6 +126,31 @@ export default async function RequisitionPage({ params }: { params: Promise<{ id
         </Section>
       )}
 
+      {vacancy && (
+        <Section
+          title="Vacancy inside the company"
+          description="Publish this role to employees with a deadline and a short summary written for them. Employees never see the justification, the budget or the hiring manager. An application goes to HR only; nobody else is told, including the applicant's manager."
+          actions={
+            vacancy.published && (
+              <ActionButton action={unpublishVacancyAction.bind(null, r.id)} confirm="Take the vacancy down? Applications already made stay." variant="outline">
+                Take down
+              </ActionButton>
+            )
+          }
+        >
+          <p className="mb-3 text-sm">{vacancy.published ? (vacancy.open ? `Published: open to employees until ${vacancy.deadline}.` : `Published, but closed: the deadline (${vacancy.deadline}) has passed.`) : "Not published."}</p>
+          <SmartForm
+            columns={2}
+            submitLabel={vacancy.published ? "Update the vacancy" : "Publish the vacancy"}
+            resetOnSuccess={false}
+            action={publishVacancyAction.bind(null, r.id)}
+            fields={[
+              { name: "deadline", label: "Last day to apply", type: "date", required: true, defaultValue: vacancy.deadline ?? "" },
+              { name: "summary", label: "Summary for employees (20 to 600 characters)", type: "textarea", required: true, span: 2, defaultValue: vacancy.summary ?? "" },
+            ]}
+          />
+        </Section>
+      )}
       {assess && (
         <Section
           title="Screening criteria"
