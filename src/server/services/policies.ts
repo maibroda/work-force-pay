@@ -11,7 +11,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import type { Ctx } from "@/lib/auth/context";
 import { d, iso } from "@/lib/dates";
-import { ackDueDate, ackState, appliesTo, currentVersion, scheduledVersion, type AckState } from "@/lib/policies";
+import { POLICY_KINDS, POLICY_KIND_LABELS, ackDueDate, ackStateFor, acknowledgementDefault, appliesTo, currentVersion, scheduledVersion, type AckState } from "@/lib/policies";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { todayUtc } from "./hr-policy";
@@ -32,11 +32,21 @@ const content = {
   effectiveDate: opt,
 };
 
+/** "true" or "false" from a form, a real boolean from a caller, or blank (= not said: the default for the kind). */
+const maybeBool = z.union([z.boolean(), z.enum(["true", "false"]).transform((x) => x === "true"), z.literal("").transform(() => undefined)]).optional();
+const dayText = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Give a date (year-month-day)");
+
 export const policySchema = z.object({
   title: z.string().trim().min(3, "Name the policy"),
   summary: opt,
   categoryId: opt,
   graceDays: z.coerce.number().int().min(0).max(365).default(14),
+  /** A policy (the default), the staff handbook or a standard operating procedure. Fixed when it is made. */
+  kind: z.enum(POLICY_KINDS).default("POLICY"),
+  /** Whether employees must acknowledge it. Blank = the default for the kind (a policy yes, a handbook or procedure no). */
+  acknowledgementRequired: maybeBool,
+  /** The day it is due for review (optional). */
+  reviewDueOn: z.union([dayText, z.literal("").transform(() => undefined)]).optional(),
   ...content,
 });
 
@@ -70,20 +80,26 @@ export async function createPolicy(ctx: Ctx, raw: z.input<typeof policySchema>) 
         summary: v.summary ?? null,
         categoryId: v.categoryId ?? null,
         graceDays: v.graceDays,
+        kind: v.kind,
+        acknowledgementRequired: v.acknowledgementRequired ?? acknowledgementDefault(v.kind),
+        reviewDueOn: v.reviewDueOn ? d(v.reviewDueOn) : null,
         createdBy: ctx.name,
         versions: { create: { organizationId: ctx.orgId, version: 1, effectiveDate: effective, body: v.body ?? null, documentReference: v.documentReference ?? null, publishedBy: ctx.name } },
       },
     });
-    await logAudit(ctx, { action: "POLICY_CREATE", entity: "CompanyPolicy", entityId: p.id, newValue: { title: p.title, effective: iso(effective) } }, tx);
+    await logAudit(ctx, { action: "POLICY_CREATE", entity: "CompanyPolicy", entityId: p.id, newValue: { title: p.title, kind: p.kind, acknowledgementRequired: p.acknowledgementRequired, effective: iso(effective) } }, tx);
     return p;
   });
 }
 
-export async function updatePolicy(ctx: Ctx, id: string, raw: Partial<Pick<z.input<typeof policySchema>, "title" | "summary" | "categoryId" | "graceDays">>) {
+export async function updatePolicy(ctx: Ctx, id: string, raw: Partial<Pick<z.input<typeof policySchema>, "title" | "summary" | "categoryId" | "graceDays" | "acknowledgementRequired">> & { reviewDueOn?: string | null }) {
   assertCan(ctx, "hr.configure");
   const old = await db.companyPolicy.findFirst({ where: { id, organizationId: ctx.orgId } });
   if (!old) throw new BusinessError("Policy not found.");
-  const v = policySchema.pick({ title: true, summary: true, categoryId: true, graceDays: true }).partial().parse(raw);
+  // the kind is fixed when an item is made, so it is not read here; the acknowledgement switch and the review date can change
+  const v = policySchema.pick({ title: true, summary: true, categoryId: true, graceDays: true, acknowledgementRequired: true }).partial().parse(raw);
+  const reviewGiven = "reviewDueOn" in raw;
+  const reviewDueOn = reviewGiven && raw.reviewDueOn ? dayText.parse(raw.reviewDueOn) : null;
   await checkCategory(ctx, v.categoryId);
   if (v.title && v.title.toLowerCase() !== old.title.toLowerCase() && (await db.companyPolicy.findFirst({ where: { organizationId: ctx.orgId, id: { not: id }, title: { equals: v.title, mode: "insensitive" } } })))
     throw new BusinessError(`There is already a policy called "${v.title}".`);
@@ -94,6 +110,8 @@ export async function updatePolicy(ctx: Ctx, id: string, raw: Partial<Pick<z.inp
       ...("summary" in raw ? { summary: v.summary ?? null } : {}),
       ...("categoryId" in raw ? { categoryId: v.categoryId ?? null } : {}),
       ...(v.graceDays !== undefined ? { graceDays: v.graceDays } : {}),
+      ...(v.acknowledgementRequired !== undefined ? { acknowledgementRequired: v.acknowledgementRequired } : {}),
+      ...(reviewGiven ? { reviewDueOn: reviewDueOn ? d(reviewDueOn) : null } : {}),
     },
   });
   await logAudit(ctx, { action: "POLICY_UPDATE", entity: "CompanyPolicy", entityId: id, oldValue: old, newValue: u });
@@ -159,7 +177,7 @@ export async function policyCompliance(orgId: string, today = todayUtc(), policy
           .map((e) => {
             const a = acks.find((x) => x.versionId === current.id && x.employeeId === e.id);
             const due = ackDueDate(current.effectiveDate, e.employmentDate, p.graceDays);
-            return { employee: e, state: ackState(Boolean(a), due, today), due, acknowledgedAt: a?.acknowledgedAt ?? null, method: a?.method ?? null, note: a?.note ?? null };
+            return { employee: e, state: ackStateFor(p.acknowledgementRequired, Boolean(a), due, today), due, acknowledgedAt: a?.acknowledgedAt ?? null, method: a?.method ?? null, note: a?.note ?? null };
           })
       : [];
     const count = (s: AckState) => rows.filter((r) => r.state === s).length;
@@ -192,6 +210,7 @@ async function applicable(ctx: Ctx, policyId: string, employeeId: string) {
   if (!p) throw new BusinessError("Policy not found.");
   if (!e) throw new BusinessError("Employee not found.");
   if (p.status === "ARCHIVED") throw new BusinessError("This policy is archived.");
+  if (!p.acknowledgementRequired) throw new BusinessError("This document doesn't need to be acknowledged: it is there to be read, under My policies.");
   if ((GONE as readonly string[]).includes(e.status)) throw new BusinessError("This employee has left.");
   if (!appliesTo(p, e.categoryId)) throw new BusinessError("This policy doesn't apply to this employee's category.");
   const current = currentVersion(p.versions, todayUtc());
@@ -245,6 +264,24 @@ export async function myPolicies(ctx: Ctx) {
 export async function employeePolicies(ctx: Ctx, employeeId: string) {
   assertCan(ctx, "hr.view");
   return policiesFor(ctx.orgId, employeeId);
+}
+
+/** Marks an item reviewed and sets the date of the next review (or clears it). The review itself is audited by ids and dates; what changed is a new version of the item. */
+export async function markPolicyReviewed(ctx: Ctx, id: string, nextReviewOn: string | null) {
+  assertCan(ctx, "hr.configure");
+  const p = await db.companyPolicy.findFirst({ where: { id, organizationId: ctx.orgId } });
+  if (!p) throw new BusinessError("Policy not found.");
+  const next = nextReviewOn ? dayText.parse(nextReviewOn) : null;
+  if (next && next < iso(todayUtc())) throw new BusinessError("The next review date can't be in the past.");
+  const u = await db.companyPolicy.update({ where: { id }, data: { reviewDueOn: next ? d(next) : null } });
+  await logAudit(ctx, { action: "POLICY_REVIEWED", entity: "CompanyPolicy", entityId: id, newValue: { reviewedOn: iso(todayUtc()), nextReviewOn: next } });
+  return u;
+}
+
+/** Active items whose review day has passed, for the HR digest. No permission check: the digest runs as the system. */
+export async function policyReviewsDue(orgId: string, today: Date) {
+  const rows = await db.companyPolicy.findMany({ where: { organizationId: orgId, status: "ACTIVE", reviewDueOn: { not: null, lt: today } }, orderBy: { reviewDueOn: "asc" } });
+  return rows.map((policy) => ({ policy, kindLabel: POLICY_KIND_LABELS[policy.kind], dueOn: policy.reviewDueOn! }));
 }
 
 /** Overdue acknowledgements per policy, for the HR digest. */

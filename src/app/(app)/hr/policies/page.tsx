@@ -3,7 +3,8 @@ import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { listPolicies } from "@/server/services/policies";
 import { options } from "@/server/options";
-import { fmtDate } from "@/lib/dates";
+import { fmtDate, iso } from "@/lib/dates";
+import { POLICY_KIND_LABELS } from "@/lib/policies";
 import { FormPanel, PageHeader, Section, Stat, StatGrid, Empty } from "@/components/page";
 import { SmartForm } from "@/components/smart-form";
 import { Badge } from "@/components/ui/badge";
@@ -19,24 +20,27 @@ export default async function PoliciesPage() {
   return (
     <>
       <PageHeader
-        title="Policies & acknowledgements"
+        title="Policies, handbook & procedures"
         description="Publish a policy to everyone or one category. Employees read and acknowledge the current version themselves (under My Policies), or HR records a paper sign-off. A new version means everyone is asked again."
       />
       <StatGrid cols={3}>
-        <Stat label="Active policies" value={active.length} />
+        <Stat label="Active documents" value={active.length} />
         <Stat label="Acknowledgements outstanding" value={owed} tone={owed ? "amber" : "green"} />
         <Stat label="Overdue" value={overdue} tone={overdue ? "red" : "green"} />
       </StatGrid>
 
       {configure && (
-        <FormPanel title="Publish a policy" open={!active.length}>
+        <FormPanel title="Publish a policy, the handbook or a procedure" open={!active.length}>
           <SmartForm
             columns={2}
             submitLabel="Publish"
             resetOnSuccess={false}
             action={createPolicyAction}
             fields={[
-              { name: "title", label: "Policy name", required: true, placeholder: "Code of Conduct" },
+              { name: "title", label: "Name", required: true, placeholder: "Code of Conduct" },
+              { name: "kind", label: "What it is", type: "select", required: true, defaultValue: "POLICY", options: [{ value: "POLICY", label: "Policy" }, { value: "HANDBOOK", label: "Handbook" }, { value: "SOP", label: "Procedure (SOP)" }], help: "Fixed once made." },
+              { name: "acknowledgementRequired", label: "Employees must acknowledge it", type: "select", options: [{ value: "true", label: "Yes" }, { value: "false", label: "No, it is there to be read" }], help: "Blank = yes for a policy, no for a handbook or procedure." },
+              { name: "reviewDueOn", label: "Review due on (optional)", type: "date", help: "Once this day has passed it appears in the HR digest until it is marked reviewed." },
               { name: "categoryId", label: "Applies to", type: "select", options: o.categories, help: "Leave blank for every employee." },
               { name: "summary", label: "One-line summary", span: 2 },
               { name: "body", label: "The policy text employees will read", type: "textarea", span: 2, help: "Or give a document reference below, or both." },
@@ -52,7 +56,7 @@ export default async function PoliciesPage() {
         <Table>
           <THead>
             <TR>
-              <TH>Policy</TH>
+              <TH>Document</TH>
               <TH>Applies to</TH>
               <TH>Current version</TH>
               <TH>Acknowledged</TH>
@@ -66,16 +70,20 @@ export default async function PoliciesPage() {
                   <Link className="text-primary hover:underline" href={`/hr/policies/${c.policy.id}`}>
                     {c.policy.title}
                   </Link>
+                  <span className="ml-2 text-[10px] uppercase text-muted-foreground">{POLICY_KIND_LABELS[c.policy.kind]}</span>
                   {c.policy.summary && <div className="text-xs text-muted-foreground">{c.policy.summary}</div>}
+                  {c.policy.reviewDueOn && (
+                    <div className={`text-xs ${iso(c.policy.reviewDueOn) < iso(new Date()) ? "text-red-700" : "text-muted-foreground"}`}>
+                      {iso(c.policy.reviewDueOn) < iso(new Date()) ? "Review overdue since" : "Review due"} {fmtDate(c.policy.reviewDueOn)}
+                    </div>
+                  )}
                 </TD>
                 <TD className="text-xs">{c.policy.category?.name ?? "Everyone"}</TD>
                 <TD className="text-xs">
                   {c.current ? `v${c.current.version} · ${fmtDate(c.current.effectiveDate)}` : <Badge tone="amber">not yet in effect</Badge>}
                   {c.scheduled && <div className="text-muted-foreground">v{c.scheduled.version} starts {fmtDate(c.scheduled.effectiveDate)}</div>}
                 </TD>
-                <TD className="text-xs">
-                  {c.totals.acknowledged}/{c.totals.applicable}
-                </TD>
+                <TD className="text-xs">{c.policy.acknowledgementRequired ? `${c.totals.acknowledged}/${c.totals.applicable}` : "not required"}</TD>
                 <TD>{c.totals.overdue ? <Badge tone="red">{c.totals.overdue}</Badge> : 0}</TD>
               </TR>
             ))}

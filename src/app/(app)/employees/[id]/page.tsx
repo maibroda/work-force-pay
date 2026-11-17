@@ -1286,9 +1286,9 @@ async function PolicyAcknowledgements({ ctx, employeeId }: { ctx: Awaited<Return
               </TD>
               <TD className="text-xs">v{i.version.version}</TD>
               <TD>
-                <Badge tone={i.state === "ACKNOWLEDGED" ? "green" : i.state === "OVERDUE" ? "red" : "amber"}>{ACK_LABELS[i.state]}</Badge>
+                <Badge tone={i.state === "ACKNOWLEDGED" ? "green" : i.state === "OVERDUE" ? "red" : i.state === "NOT_REQUIRED" ? "gray" : "amber"}>{ACK_LABELS[i.state]}</Badge>
               </TD>
-              <TD className="text-xs">{i.acknowledgedAt ? `${fmtDate(i.acknowledgedAt)}${i.method === "RECORDED" ? " (paper, recorded by HR)" : ""}` : `due ${fmtDate(i.due)}`}</TD>
+              <TD className="text-xs">{i.state === "NOT_REQUIRED" ? "to be read" : i.acknowledgedAt ? `${fmtDate(i.acknowledgedAt)}${i.method === "RECORDED" ? " (paper, recorded by HR)" : ""}` : `due ${fmtDate(i.due)}`}</TD>
             </TR>
           ))}
         </TBody>

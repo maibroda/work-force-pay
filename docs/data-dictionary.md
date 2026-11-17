@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-269 tables and 203 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+269 tables and 204 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -4044,8 +4044,6 @@ A requested change to an employee's bank, tax or pension details. It takes effec
 
 ### CompanyPolicy
 
-A company policy (code of conduct, data protection, safety…) that employees must read and acknowledge — everyone, or one category. The wording lives in its versions, which are never edited once published.
-
 | Field | Type | Required | What it holds |
 | --- | --- | --- | --- |
 | id | String |  | (key) |
@@ -4056,6 +4054,9 @@ A company policy (code of conduct, data protection, safety…) that employees mu
 | categoryId | String |  | Null = every employee; otherwise only this category. |
 | category | → EmployeeCategory |  |  |
 | graceDays | Int |  | Days an employee has to acknowledge, from the version taking effect or from joining (whichever is later). |
+| kind | PolicyKind |  | A policy (the default, so every existing row is unchanged), the handbook, or a procedure. Fixed when it is made. |
+| acknowledgementRequired | Boolean |  | Whether employees must acknowledge it. On for every existing policy; off by default for a handbook or a procedure; HR can switch it either way. |
+| reviewDueOn | DateTime |  | The day it is due for review (optional). Once it has passed, the item is in the HR digest until it is marked reviewed. |
 | status | PolicyStatus |  |  |
 | createdBy | String | yes |  |
 | createdAt | DateTime |  |  |
@@ -7181,6 +7182,12 @@ How an instalment is settled: by a payroll deduction, by a deduction on the end-
 ### AckMethod
 
 `SELF`, `RECORDED`
+
+### PolicyKind
+
+A company policy (code of conduct, data protection, safety…) that employees must read and acknowledge — everyone, or one category. The wording lives in its versions, which are never edited once published. What a company document is: a policy, the staff handbook, or a standard operating procedure. They share versions, effective dates and the audience; they differ in whether employees must acknowledge them.
+
+`POLICY`, `HANDBOOK`, `SOP`
 
 ### DataRequestStatus
 

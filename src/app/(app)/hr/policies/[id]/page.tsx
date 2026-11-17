@@ -4,7 +4,7 @@ import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { getPolicy } from "@/server/services/policies";
 import { options } from "@/server/options";
-import { ACK_LABELS } from "@/lib/policies";
+import { ACK_LABELS, POLICY_KIND_LABELS } from "@/lib/policies";
 import { fmtDate } from "@/lib/dates";
 import { fullName } from "@/lib/utils";
 import { FormPanel, PageHeader, Section, Stat, StatGrid, Empty } from "@/components/page";
@@ -12,9 +12,9 @@ import { ActionButton } from "@/components/action-button";
 import { SmartForm } from "@/components/smart-form";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { publishVersionAction, recordAcknowledgementAction, setPolicyStatusAction, updatePolicyAction } from "@/app/actions/policies";
+import { markPolicyReviewedAction, publishVersionAction, recordAcknowledgementAction, setPolicyStatusAction, updatePolicyAction } from "@/app/actions/policies";
 
-const ORDER = { OVERDUE: 0, PENDING: 1, ACKNOWLEDGED: 2 } as const;
+const ORDER = { OVERDUE: 0, PENDING: 1, ACKNOWLEDGED: 2, NOT_REQUIRED: 3 } as const;
 
 export default async function PolicyPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | undefined>> }) {
   const ctx = await requirePage("hr.view");
@@ -36,7 +36,8 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
         crumbs={[{ href: "/hr/policies", label: "Policies" }]}
         description={
           <span className="flex flex-wrap items-center gap-2">
-            <StatusBadge status={policy.status} /> {policy.category?.name ?? "Everyone"} · {policy.graceDays} days to acknowledge
+            <StatusBadge status={policy.status} /> {POLICY_KIND_LABELS[policy.kind]} · {policy.category?.name ?? "Everyone"} · {policy.acknowledgementRequired ? `${policy.graceDays} days to acknowledge` : "no acknowledgement needed"}
+            {policy.reviewDueOn ? ` · review due ${fmtDate(policy.reviewDueOn)}` : ""}
             {current ? ` · version ${current.version} in effect since ${fmtDate(current.effectiveDate)}` : " · not yet in effect"}
           </span>
         }
@@ -49,7 +50,13 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
         }
       />
 
-      {!archived && current && (
+      {!archived && current && !policy.acknowledgementRequired && (
+        <p className="mb-5 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+          This document is there to be read: {totals.applicable} current employee(s) can read it under My policies, and nobody is asked to acknowledge it. You can switch acknowledgement on under
+          &quot;Edit audience and settings&quot;.
+        </p>
+      )}
+      {!archived && current && policy.acknowledgementRequired && (
         <>
           <StatGrid cols={4}>
             <Stat label="Applies to" value={totals.applicable} sub="current employees" />
@@ -157,7 +164,9 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
       {configure && !archived && (
         <>
           <FormPanel title="Publish a new version">
-            <p className="mb-3 text-xs text-muted-foreground">Everyone this policy applies to will be asked to acknowledge the new version once it takes effect.</p>
+            <p className="mb-3 text-xs text-muted-foreground">
+              {policy.acknowledgementRequired ? "Everyone this document applies to will be asked to acknowledge the new version once it takes effect." : "It replaces the earlier wording for everyone it applies to once it takes effect. Nobody is asked to acknowledge it."}
+            </p>
             <SmartForm
               columns={2}
               submitLabel="Publish version"
@@ -181,8 +190,14 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
                 { name: "categoryId", label: "Applies to", type: "select", options: o!.categories, defaultValue: policy.categoryId ?? undefined, help: "Blank = every employee." },
                 { name: "summary", label: "One-line summary", span: 2, defaultValue: policy.summary ?? undefined },
                 { name: "graceDays", label: "Days to acknowledge", type: "number", min: 0, max: 365, defaultValue: policy.graceDays },
+                { name: "acknowledgementRequired", label: "Employees must acknowledge it", type: "select", options: [{ value: "true", label: "Yes" }, { value: "false", label: "No, it is there to be read" }], defaultValue: String(policy.acknowledgementRequired), help: "Switching it on asks people from now; what they already acknowledged stands." },
+                { name: "reviewDueOn", label: "Review due on", type: "date", defaultValue: policy.reviewDueOn ? policy.reviewDueOn.toISOString().slice(0, 10) : "", help: "Blank = no review date." },
               ]}
             />
+          </FormPanel>
+          <FormPanel title="Mark as reviewed">
+            <p className="mb-3 text-xs text-muted-foreground">Record that this has been reviewed, and set when it is next due. A change to the wording is a new version, published above.</p>
+            <SmartForm columns={2} submitLabel="Mark as reviewed" action={markPolicyReviewedAction.bind(null, policy.id)} fields={[{ name: "nextReviewOn", label: "Next review due on (blank = none)", type: "date" }]} />
           </FormPanel>
         </>
       )}
