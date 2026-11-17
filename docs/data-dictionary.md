@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-267 tables and 201 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+269 tables and 203 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -211,6 +211,8 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | requisitionCriteria | → RequisitionCriterion[] |  |  |
 | scorecardScores | → ScorecardScore[] |  |  |
 | candidateSelections | → CandidateSelection[] |  |  |
+| trainingCostLines | → TrainingCostLine[] |  |  |
+| trainingBudgets | → TrainingBudget[] |  |  |
 | screeningCriteria | → ScreeningCriterion[] |  |  |
 | candidateScreenings | → CandidateScreening[] |  |  |
 | candidateShortlists | → CandidateShortlist[] |  |  |
@@ -1120,6 +1122,7 @@ Single-use, short-lived password reset tokens — only the bcrypt hash is stored
 | name | String | yes |  |
 | employees | → Employee[] |  |  |
 | probationDeciders | → ProbationDecider[] |  |  |
+| trainingBudgets | → TrainingBudget[] |  |  |
 | costCenterId | String |  |  |
 | costCenter | → CostCenter |  |  |
 | requisitions | → JobRequisition[] |  |  |
@@ -1632,6 +1635,7 @@ One per organization — every number a buyer might want to change without a cod
 | trainingAlertDays | Int |  | Flag a certificate this many days before it expires. |
 | trainingEvaluationDays | Int |  | The manager is asked whether a course was applied on the job this many days after the session (0 = never asked). |
 | trainingEffectivenessDays | Int |  | The manager is asked whether the training improved performance on the work it targets this many days after the session, for programmes HR has marked (0 = never asked). Stage 3 of the training evaluation. |
+| trainingCostApprovalThreshold | Decimal |  | A training cost line at or above this amount (naira) waits for a second person to approve it. Empty = no second person. |
 | skillReassessDays | Int |  | A skill assessment older than this many days is listed as stale for HR (0 = never). |
 | surveyRetentionMonths | Int |  | Raw survey answers are deleted this many months after a survey closes (0 = never deleted automatically); the anonymised results are kept. |
 | sensitiveChangeApproval | Boolean |  | A change needs a second person's approval (otherwise anyone who can edit an employee can change it). |
@@ -6105,6 +6109,50 @@ A dated occurrence of a programme, with seats (a hard limit; no waiting list).
 | createdBy | String | yes |  |
 | createdAt | DateTime |  |  |
 | enrolments | → TrainingEnrolment[] |  |  |
+| costLines | → TrainingCostLine[] |  |  |
+
+### TrainingCostLine
+
+What a training session cost, in naira and kobo. A RECORD kept by HR: it posts nothing to the accounts and moves no money. A correction is a new negative line that reverses an old one (never an edit), so the history is kept. Only APPROVED lines count in the spend; a line at or above the company's approval threshold waits for a second person.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| sessionId | String | yes |  |
+| session | → TrainingSession |  |  |
+| kind | TrainingCostKind | yes |  |
+| amount | Decimal | yes | Naira, two decimals. Negative for a reversal. Money is only ever calculated in whole kobo (src/lib/money-exact.ts). |
+| description | String | yes |  |
+| invoiceReference | String |  | A text reference to the invoice, if any. There is no link to payables on purpose. |
+| reversesId | String |  | The line this one reverses (each line can be reversed once). (unique) |
+| reverses | → TrainingCostLine |  |  |
+| reversal | → TrainingCostLine |  |  |
+| status | TrainingCostStatus |  |  |
+| recordedById | String | yes |  |
+| recordedBy | String | yes |  |
+| recordedAt | DateTime |  |  |
+| decidedById | String |  |  |
+| decidedBy | String |  |  |
+| decidedAt | DateTime |  |  |
+| decisionNote | String |  |  |
+
+### TrainingBudget
+
+The year's training budget: one for the company (no department) and, optionally, one per department.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| year | Int | yes |  |
+| departmentId | String |  |  |
+| department | → Department |  |  |
+| amount | Decimal | yes |  |
+| setBy | String | yes |  |
+| updatedAt | DateTime |  |  |
 
 ### TrainingEnrolment
 
@@ -7405,6 +7453,14 @@ Whether an outbound message is a service message (about an active contract) or m
 ### TrainingPriority
 
 `LOW`, `NORMAL`, `HIGH`
+
+### TrainingCostKind
+
+`FEE`, `TRAVEL`, `MATERIALS`, `VENUE`, `OTHER`
+
+### TrainingCostStatus
+
+`PENDING`, `APPROVED`, `REJECTED`
 
 ### WelfareKind
 

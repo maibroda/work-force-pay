@@ -86,7 +86,7 @@ export async function updateHrPolicyAction(section: "terms" | "leave" | "gratuit
           guarantorCategoryIds: Object.keys(v).filter((k) => k.startsWith("gcat_") && v[k] === true).map((k) => k.slice(5)),
         };
       if (section === "retention") patch = { candidateRetentionMonths: v.candidateRetentionMonths, employeeRetentionYears: v.employeeRetentionYears };
-      if (section === "training") patch = { trainingAlertDays: v.trainingAlertDays, trainingEvaluationDays: v.trainingEvaluationDays, trainingEffectivenessDays: v.trainingEffectivenessDays, skillReassessDays: v.skillReassessDays };
+      if (section === "training") patch = { trainingAlertDays: v.trainingAlertDays, trainingEvaluationDays: v.trainingEvaluationDays, trainingEffectivenessDays: v.trainingEffectivenessDays, trainingCostApprovalThreshold: typeof v.trainingCostApprovalThreshold === "string" ? v.trainingCostApprovalThreshold : null, skillReassessDays: v.skillReassessDays };
       if (section === "privacy") patch = { dsarResponseDays: v.dsarResponseDays, breachNotifyHours: v.breachNotifyHours };
       if (section === "dpo") {
         const text = (x: unknown) => (String(x ?? "").trim() ? String(x).trim() : null);

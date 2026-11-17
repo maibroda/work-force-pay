@@ -406,6 +406,7 @@ export const HR_AREA: Area = {
     { group: "Disciplinary", href: "/hr/discipline", label: "Disciplinary cases & sanctions", perm: "discipline.view" },
     { group: "Learning & development", href: "/hr/training", label: "Training compliance", perm: "hr.view" },
     { group: "Learning & development", href: "/hr/training-calendar", label: "Training calendar", perm: "hr.view" },
+    { group: "Learning & development", href: "/hr/training-spend", label: "Training spend", perm: "hr.view" },
     { group: "Learning & development", href: "/hr/training-needs", label: "Training needs", perm: "hr.view" },
     { group: "Learning & development", href: "/hr/training-requests", label: "Training requests", perm: "hr.view" },
     { group: "Learning & development", href: "/hr/training-evaluations", label: "Training evaluation", perm: "hr.view" },

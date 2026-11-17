@@ -3,6 +3,7 @@ import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { SESSION_STATUS_LABELS, type SessionStatus } from "@/lib/training-plan";
 import { getSession } from "@/server/services/training-plan";
+import { sessionCosts } from "@/server/services/training-cost";
 import { BusinessError } from "@/server/services/_base";
 import { fmtDate, iso } from "@/lib/dates";
 import { fullName } from "@/lib/utils";
@@ -11,6 +12,8 @@ import { ActionButton } from "@/components/action-button";
 import { SmartForm } from "@/components/smart-form";
 import { Badge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
+import { approveCostAction, declineCostAction, recordCostAction, reverseCostAction } from "@/app/actions/training-cost";
+import { naira } from "@/lib/money";
 import { attendedAction, cancelSessionAction, completeSessionAction, enrolByNumberAction, notAttendedAction, unenrolAction } from "@/app/actions/training-plan";
 
 const RESULT_TONE = { ENROLLED: "gray", ATTENDED: "green", ABSENT: "amber" } as const;
@@ -25,6 +28,8 @@ export default async function TrainingSessionPage({ params }: { params: Promise<
   });
   if (!s) notFound();
   const manage = can(ctx.role, "hr.manage");
+  const approve = can(ctx.role, "hr.approve");
+  const costs = manage ? await sessionCosts(ctx, id) : null;
   const status = s.status as SessionStatus;
   const open = status === "SCHEDULED";
   const started = iso(s.sessionDate) <= iso(new Date()); // attendance can be recorded from the day of the session
@@ -107,6 +112,78 @@ export default async function TrainingSessionPage({ params }: { params: Promise<
           </Table>
         )}
       </Section>
+
+      {costs && (
+        <Section
+          title="What this session cost"
+          description="A record kept by HR: nothing is posted to the accounts and no payment is made. Only approved lines count in the spend. A mistake is corrected by a reversing line, never by editing. Wages are not a training cost."
+        >
+          {costs.lines.length === 0 ? (
+            <p className="mb-3 text-sm text-muted-foreground">No cost recorded yet.</p>
+          ) : (
+            <Table>
+              <THead>
+                <TR>
+                  <TH>Kind</TH>
+                  <TH>Amount</TH>
+                  <TH>What</TH>
+                  <TH>Recorded by</TH>
+                  <TH>Status</TH>
+                  <TH />
+                </TR>
+              </THead>
+              <TBody>
+                {costs.lines.map((l) => (
+                  <TR key={l.id}>
+                    <TD>{l.kind.toLowerCase()}</TD>
+                    <TD className={Number(l.amount) < 0 ? "text-red-700" : ""}>{naira(Number(l.amount))}</TD>
+                    <TD className="max-w-xs whitespace-normal text-xs">
+                      {l.description}
+                      {l.invoiceReference ? <span className="block text-muted-foreground">Invoice {l.invoiceReference}</span> : null}
+                    </TD>
+                    <TD className="text-xs">{l.recordedBy}</TD>
+                    <TD>
+                      <Badge tone={l.status === "APPROVED" ? "green" : l.status === "PENDING" ? "amber" : "gray"}>{l.status.toLowerCase()}</Badge>
+                    </TD>
+                    <TD className="whitespace-nowrap">
+                      {l.status === "PENDING" && approve && (
+                        <span className="flex gap-1">
+                          <ActionButton action={approveCostAction.bind(null, l.id)} variant="success">
+                            Approve
+                          </ActionButton>
+                          <ActionButton action={declineCostAction.bind(null, l.id)} reason reasonPlaceholder="Why decline? (required)" variant="outline">
+                            Decline
+                          </ActionButton>
+                        </span>
+                      )}
+                      {l.status === "APPROVED" && !l.reversesId && (
+                        <ActionButton action={reverseCostAction.bind(null, l.id)} reason reasonPlaceholder="Why reverse it? (required)" variant="outline">
+                          Reverse
+                        </ActionButton>
+                      )}
+                    </TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+          )}
+          <p className="my-3 text-sm">
+            Counted: <b>{naira(Number(costs.approvedTotal))}</b>
+            {Number(costs.pendingTotal) !== 0 && <span className="text-amber-700"> · waiting for a second person: {naira(Number(costs.pendingTotal))}</span>}
+          </p>
+          <SmartForm
+            columns={2}
+            submitLabel="Record the cost"
+            action={recordCostAction.bind(null, s.id)}
+            fields={[
+              { name: "kind", label: "Kind", type: "select", required: true, options: [{ value: "FEE", label: "Fee" }, { value: "TRAVEL", label: "Travel" }, { value: "MATERIALS", label: "Materials" }, { value: "VENUE", label: "Venue" }, { value: "OTHER", label: "Other" }] },
+              { name: "amount", label: "Amount in naira", type: "text", required: true, placeholder: "e.g. 125000.50", help: "Up to two decimals. Above the company's threshold a second person must approve it." },
+              { name: "description", label: "What it was for", required: true, span: 2 },
+              { name: "invoiceReference", label: "Invoice reference (optional)" },
+            ]}
+          />
+        </Section>
+      )}
 
       {manage && open && s.seatsLeft > 0 && (
         <Section title="Enrol someone">
