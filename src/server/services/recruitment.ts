@@ -19,7 +19,6 @@ import { nextNumber } from "./numbering";
 import { canCtx } from "@/lib/hr-functions";
 import { recordSensitiveAccess } from "./sensitive-access";
 import { d } from "@/lib/dates";
-import { num } from "@/lib/money";
 import { filledPositions, takenPositions } from "./recruitment-moves";
 
 const opt = z
@@ -661,7 +660,8 @@ export async function hireCandidate(ctx: Ctx, raw: z.input<typeof hireSchema>) {
         action: "CANDIDATE_HIRE",
         entity: "Candidate",
         entityId: c.id,
-        newValue: { employee: emp.employeeNumber, contract: contract.contractNumber, offer: o.offerNumber, monthlyGross: num(o.monthlyGross) },
+        // the new employee, the contract and the offer by number: not the pay (it is on the contract; the audit log is append-only and erasure cannot reach it)
+        newValue: { employee: emp.employeeNumber, contract: contract.contractNumber, offer: o.offerNumber },
       },
       tx,
     );
