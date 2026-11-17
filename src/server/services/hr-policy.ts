@@ -302,6 +302,8 @@ export const hrPolicySchema = z
     relationsCaseSlaDays: z.coerce.number().int().min(1).max(365),
     /** An HR enquiry should have a first reply within this many working days. */
     enquiryResponseDays: z.coerce.number().int().min(1).max(30),
+    /** A procedure (SOP) needs a review date no later than this many months after it takes effect. */
+    sopReviewMonths: z.coerce.number().int().min(1).max(60),
     pipDefaultDays: z.coerce.number().int().min(1).max(365),
     pipMaxDays: z.coerce.number().int().min(1).max(365),
     pipMaxExtensions: z.coerce.number().int().min(0).max(5),

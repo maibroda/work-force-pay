@@ -11,10 +11,10 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import type { Ctx } from "@/lib/auth/context";
 import { d, iso } from "@/lib/dates";
-import { POLICY_KINDS, POLICY_KIND_LABELS, ackDueDate, ackStateFor, acknowledgementDefault, appliesTo, currentVersion, scheduledVersion, type AckState } from "@/lib/policies";
+import { POLICY_KINDS, POLICY_KIND_LABELS, sopReviewLimit, ackDueDate, ackStateFor, acknowledgementDefault, appliesTo, currentVersion, scheduledVersion, type AckState } from "@/lib/policies";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
-import { todayUtc } from "./hr-policy";
+import { getHrPolicy, todayUtc } from "./hr-policy";
 
 const GONE = ["EXITED", "TERMINATED", "RESIGNED"] as const;
 
@@ -36,6 +36,24 @@ const content = {
 const maybeBool = z.union([z.boolean(), z.enum(["true", "false"]).transform((x) => x === "true"), z.literal("").transform(() => undefined)]).optional();
 const dayText = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Give a date (year-month-day)");
 
+/**
+ * A procedure (SOP) needs a review date, no later than the company's number of months (12 unless changed) after it takes effect (the founder's decision of 2026-11-17). A handbook and a policy are
+ * not held to it. `effective` is the day the wording in question takes effect; one that took effect in the past counts from today.
+ */
+async function checkSopReview(orgId: string, kind: string, reviewDueOn: string | null | undefined, effective: Date) {
+  if (kind !== "SOP") return;
+  const months = (await getHrPolicy(orgId)).sopReviewMonths;
+  if (!reviewDueOn) throw new BusinessError(`A procedure (SOP) needs a review date, no later than ${months} months after it takes effect.`);
+  const limit = sopReviewLimit(effective, todayUtc(), months);
+  if (reviewDueOn > limit) throw new BusinessError(`The review date can't be later than ${limit} (${months} months after the procedure takes effect).`);
+}
+
+/** The day the latest wording of a policy takes effect (it may be in the future). */
+async function latestEffective(policyId: string): Promise<Date> {
+  const v = await db.policyVersion.findFirst({ where: { policyId }, orderBy: { effectiveDate: "desc" }, select: { effectiveDate: true } });
+  return v?.effectiveDate ?? todayUtc();
+}
+
 export const policySchema = z.object({
   title: z.string().trim().min(3, "Name the policy"),
   summary: opt,
@@ -50,7 +68,12 @@ export const policySchema = z.object({
   ...content,
 });
 
+/** A review date given with a new version: a day, or blank (= not given). */
+const reviewDay = z.union([dayText, z.literal("").transform(() => undefined)]).optional();
+
 export const versionSchema = z.object({
+  /** Sets (or changes) the item's review date together with the new version; a procedure needs one that is within the window. */
+  reviewDueOn: reviewDay,
   ...content,
   changeSummary: z.string().trim().min(5, "Say what changed, so people know why they're asked again"),
 });
@@ -72,6 +95,7 @@ export async function createPolicy(ctx: Ctx, raw: z.input<typeof policySchema>) 
     throw new BusinessError(`There is already a policy called "${v.title}".`);
   const effective = v.effectiveDate ? d(v.effectiveDate) : todayUtc();
   if (Number.isNaN(effective.getTime())) throw new BusinessError("That effective date isn't valid.");
+  await checkSopReview(ctx.orgId, v.kind, v.reviewDueOn, effective);
   return db.$transaction(async (tx) => {
     const p = await tx.companyPolicy.create({
       data: {
@@ -100,6 +124,8 @@ export async function updatePolicy(ctx: Ctx, id: string, raw: Partial<Pick<z.inp
   const v = policySchema.pick({ title: true, summary: true, categoryId: true, graceDays: true, acknowledgementRequired: true }).partial().parse(raw);
   const reviewGiven = "reviewDueOn" in raw;
   const reviewDueOn = reviewGiven && raw.reviewDueOn ? dayText.parse(raw.reviewDueOn) : null;
+  // a procedure: a date that is given must be within the window and can never be cleared; one made before this rule, with no date, must be given one by its next edit
+  if (old.kind === "SOP" && (reviewGiven || !old.reviewDueOn)) await checkSopReview(ctx.orgId, "SOP", reviewGiven ? reviewDueOn : null, await latestEffective(id));
   await checkCategory(ctx, v.categoryId);
   if (v.title && v.title.toLowerCase() !== old.title.toLowerCase() && (await db.companyPolicy.findFirst({ where: { organizationId: ctx.orgId, id: { not: id }, title: { equals: v.title, mode: "insensitive" } } })))
     throw new BusinessError(`There is already a policy called "${v.title}".`);
@@ -140,9 +166,13 @@ export async function publishVersion(ctx: Ctx, policyId: string, raw: z.input<ty
   if (Number.isNaN(effective.getTime())) throw new BusinessError("That effective date isn't valid.");
   const last = p.versions.reduce((a, x) => (x.version > a.version ? x : a));
   if (effective < last.effectiveDate) throw new BusinessError(`A new version can't take effect before version ${last.version} did (${iso(last.effectiveDate)}).`);
+  // a procedure: the review date (the one given now, or the one on file) must be there and within the window for the new wording
+  await checkSopReview(ctx.orgId, p.kind, v.reviewDueOn ?? (p.reviewDueOn ? iso(p.reviewDueOn) : null), effective);
   const ver = await db.policyVersion.create({
     data: { organizationId: ctx.orgId, policyId, version: last.version + 1, effectiveDate: effective, body: v.body ?? null, documentReference: v.documentReference ?? null, changeSummary: v.changeSummary, publishedBy: ctx.name },
   });
+  // the review date given with the new version, set once the version exists
+  if (v.reviewDueOn) await db.companyPolicy.update({ where: { id: policyId }, data: { reviewDueOn: d(v.reviewDueOn) } });
   await logAudit(ctx, { action: "POLICY_PUBLISH", entity: "CompanyPolicy", entityId: policyId, newValue: { version: ver.version, effective: iso(effective) }, reason: v.changeSummary });
   return ver;
 }
@@ -273,6 +303,8 @@ export async function markPolicyReviewed(ctx: Ctx, id: string, nextReviewOn: str
   if (!p) throw new BusinessError("Policy not found.");
   const next = nextReviewOn ? dayText.parse(nextReviewOn) : null;
   if (next && next < iso(todayUtc())) throw new BusinessError("The next review date can't be in the past.");
+  // a procedure always has a next review date, no later than the company's months from today
+  await checkSopReview(ctx.orgId, p.kind, next, await latestEffective(id));
   const u = await db.companyPolicy.update({ where: { id }, data: { reviewDueOn: next ? d(next) : null } });
   await logAudit(ctx, { action: "POLICY_REVIEWED", entity: "CompanyPolicy", entityId: id, newValue: { reviewedOn: iso(todayUtc()), nextReviewOn: next } });
   return u;
