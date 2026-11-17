@@ -22,6 +22,7 @@ const OLD: Array<[string, Permission]> = [
   ["/hr/attrition", "hr.view"],
   ["/hr/training", "hr.view"],
   ["/hr/training-calendar", "hr.view"],
+  ["/hr/training-spend", "hr.view"],
   ["/hr/training-needs", "hr.view"],
   ["/hr/policies", "hr.view"],
   ["/hr/data-requests", "hr.view"],
@@ -124,7 +125,7 @@ describe("HR Lifecycle and Leave Management become one entry, HR", () => {
     const admin = HR_AREA.sections.filter((s) => s.group === "Employee administration").map((s) => s.href);
     for (const h of ["/hr/onboarding", "/hr/contracts", "/hr/exits", "/payroll/settlements", "/hr/attrition", "/hr/letters"]) expect(admin, h).toContain(h);
     expect(HR_AREA.sections.filter((s) => s.group === "Performance management").map((s) => s.href)).toEqual(["/hr/appraisals", "/hr/feedback", "/hr/improvement-plans", "/hr/recognition", "/hr/promotions", "/hr/skills", "/hr/succession", "/hr/job-descriptions", "/settings/appraisal-criteria", "/settings/career-paths", "/settings/skills"]);
-    expect(HR_AREA.sections.filter((s) => s.group === "Learning & development").map((s) => s.href)).toEqual(["/hr/training", "/hr/training-calendar", "/hr/training-needs", "/hr/training-requests", "/hr/training-evaluations", "/settings/training-requirements"]);
+    expect(HR_AREA.sections.filter((s) => s.group === "Learning & development").map((s) => s.href)).toEqual(["/hr/training", "/hr/training-calendar", "/hr/training-spend", "/hr/training-needs", "/hr/training-requests", "/hr/training-evaluations", "/settings/training-requirements"]);
     expect(HR_AREA.sections.filter((s) => s.group === "Employee relations").map((s) => s.href)).toEqual(["/hr/relations", "/hr/welfare-cases", "/hr/welfare-summary", "/hr/surveys"]);
     expect(HR_AREA.sections.filter((s) => s.group === "Disciplinary").map((s) => s.href)).toEqual(["/hr/discipline"]);
   });

@@ -769,6 +769,8 @@ model Organization {
   requisitionCriteria       RequisitionCriterion[]
   scorecardScores           ScorecardScore[]
   candidateSelections       CandidateSelection[]
+  trainingCostLines         TrainingCostLine[]
+  trainingBudgets           TrainingBudget[]
   screeningCriteria         ScreeningCriterion[]
   candidateScreenings       CandidateScreening[]
   candidateShortlists       CandidateShortlist[]
@@ -1892,6 +1894,7 @@ model Department {
   name           String
   employees      Employee[]
   probationDeciders ProbationDecider[]
+  trainingBudgets TrainingBudget[]
   costCenterId   String?
   costCenter     CostCenter?      @relation(fields: [costCenterId], references: [id])
   requisitions   JobRequisition[]
@@ -2484,6 +2487,8 @@ model HrPolicy {
   trainingEvaluationDays Int @default(60)
   /// The manager is asked whether the training improved performance on the work it targets this many days after the session, for programmes HR has marked (0 = never asked). Stage 3 of the training evaluation.
   trainingEffectivenessDays Int @default(120)
+  /// A training cost line at or above this amount (naira) waits for a second person to approve it. Empty = no second person.
+  trainingCostApprovalThreshold Decimal? @db.Decimal(16, 2)
   /// A skill assessment older than this many days is listed as stale for HR (0 = never).
   skillReassessDays Int @default(365)
   /// Raw survey answers are deleted this many months after a survey closes (0 = never deleted automatically); the anonymised results are kept.
@@ -8152,9 +8157,71 @@ model TrainingSession {
   createdAt       DateTime              @default(now())
 
   enrolments TrainingEnrolment[]
+  costLines  TrainingCostLine[]
 
   @@index([organizationId, sessionDate])
   @@index([programmeId])
+}
+
+enum TrainingCostKind {
+  FEE
+  TRAVEL
+  MATERIALS
+  VENUE
+  OTHER
+}
+
+enum TrainingCostStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// What a training session cost, in naira and kobo. A RECORD kept by HR: it posts nothing to the accounts and moves no money. A correction is a new negative line that reverses an old one (never an edit),
+/// so the history is kept. Only APPROVED lines count in the spend; a line at or above the company's approval threshold waits for a second person.
+model TrainingCostLine {
+  id               String             @id @default(cuid())
+  organizationId   String
+  organization     Organization       @relation(fields: [organizationId], references: [id])
+  sessionId        String
+  session          TrainingSession    @relation(fields: [sessionId], references: [id])
+  kind             TrainingCostKind
+  /// Naira, two decimals. Negative for a reversal. Money is only ever calculated in whole kobo (src/lib/money-exact.ts).
+  amount           Decimal            @db.Decimal(16, 2)
+  description      String
+  /// A text reference to the invoice, if any. There is no link to payables on purpose.
+  invoiceReference String?
+  /// The line this one reverses (each line can be reversed once).
+  reversesId       String?            @unique
+  reverses         TrainingCostLine?  @relation("CostReversal", fields: [reversesId], references: [id])
+  reversal         TrainingCostLine?  @relation("CostReversal")
+  status           TrainingCostStatus @default(APPROVED)
+  recordedById     String
+  recordedBy       String
+  recordedAt       DateTime           @default(now())
+  decidedById      String?
+  decidedBy        String?
+  decidedAt        DateTime?
+  decisionNote     String?
+
+  @@index([organizationId, sessionId])
+  @@index([organizationId, status])
+}
+
+/// The year's training budget: one for the company (no department) and, optionally, one per department.
+model TrainingBudget {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  year           Int
+  departmentId   String?
+  department     Department?  @relation(fields: [departmentId], references: [id])
+  amount         Decimal      @db.Decimal(16, 2)
+  setBy          String
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, year, departmentId])
+  @@index([organizationId, year])
 }
 
 /// One person in one session, and whether they attended. Marking Attended creates the certificate record (EmployeeTraining.enrolmentId).

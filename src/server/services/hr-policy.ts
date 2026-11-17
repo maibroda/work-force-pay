@@ -292,6 +292,10 @@ export const hrPolicySchema = z
     promotionApplyAlertDays: z.coerce.number().int().min(0).max(90),
     trainingEvaluationDays: z.coerce.number().int().min(0).max(365),
     trainingEffectivenessDays: z.coerce.number().int().min(0).max(365),
+    /** A training cost line at or above this amount (naira, up to two decimals) waits for a second person. Empty = none. */
+    trainingCostApprovalThreshold: z
+      .union([z.null(), z.literal("").transform(() => null), z.string().trim().regex(/^\d{1,12}(\.\d{1,2})?$/, "An amount in naira, up to two decimal places").refine((v) => Number(v) > 0, "The threshold must be above zero")])
+      .nullable(),
     skillReassessDays: z.coerce.number().int().min(0).max(1825),
     surveyRetentionMonths: z.coerce.number().int().min(0).max(120),
     offerValidityDays: z.coerce.number().int().min(1).max(180),
