@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-269 tables and 204 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+271 tables and 206 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -133,6 +133,8 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | clientApprovals | → PayrollClientApproval[] |  |  |
 | clientQueries | → ClientQuery[] |  |  |
 | clientQueryMessages | → ClientQueryMessage[] |  |  |
+| hrEnquiries | → HrEnquiry[] |  |  |
+| hrEnquiryMessages | → HrEnquiryMessage[] |  |  |
 | clientInputBatches | → ClientInputBatch[] |  |  |
 | clientInputRows | → ClientInputRow[] |  |  |
 | launchChecks | → LaunchCheck[] |  |  |
@@ -703,6 +705,46 @@ One message in a query's thread. Never edited or removed.
 | queryId | String | yes |  |
 | query | → ClientQuery |  |  |
 | side | String | yes | CLIENT or BUREAU. |
+| authorName | String | yes |  |
+| authorUserId | String | yes |  |
+| body | String | yes |  |
+| createdAt | DateTime |  |  |
+
+### HrEnquiry
+
+A question an employee puts to HR, with a thread of messages (slice 5A). Read only by the employee who asked it and the HR administrator (every read by HR is logged); nobody else, and never another employee. It is NOT the client Service Desk (ClientQuery) and NOT an Employee relations case: a grievance, harassment, whistleblowing or welfare concern goes through a case, and HR can move an enquiry into one.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| number | String | yes |  |
+| employeeId | String | yes |  |
+| employee | → Employee |  |  |
+| category | HrEnquiryCategory | yes |  |
+| subject | String | yes | Free text about a person: cleared when a former employee is erased. |
+| status | HrEnquiryStatus |  |  |
+| createdAt | DateTime |  |  |
+| firstResponseAt | DateTime |  | When HR first replied (or moved it into a case). The first-response target is measured to this. |
+| closedAt | DateTime |  |  |
+| closedBy | String |  | Who closed it: the employee's name, HR's name, or the person who moved it into a case. |
+| movedToCaseId | String |  | Set when HR moved it into an Employee relations case (the id only: the conversation is never copied into the case). |
+| updatedAt | DateTime |  |  |
+| messages | → HrEnquiryMessage[] |  |  |
+
+### HrEnquiryMessage
+
+One message in an enquiry's thread. Never edited or removed (the words are cleared only when a former employee is erased).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| enquiryId | String | yes |  |
+| enquiry | → HrEnquiry |  |  |
+| side | String | yes | EMPLOYEE or HR. |
 | authorName | String | yes |  |
 | authorUserId | String | yes |  |
 | body | String | yes |  |
@@ -1317,6 +1359,7 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | guarantors | → EmployeeGuarantor[] |  |  |
 | changeRequests | → EmployeeChangeRequest[] |  |  |
 | policyAcknowledgements | → PolicyAcknowledgement[] |  |  |
+| hrEnquiries | → HrEnquiry[] |  |  |
 | dataAccessRequests | → DataAccessRequest[] |  |  |
 | appraisals | → Appraisal[] |  |  |
 | improvementPlans | → PerformanceImprovementPlan[] |  |  |
@@ -1596,6 +1639,7 @@ One per organization — every number a buyer might want to change without a cod
 | promotionApplyAlertDays | Int |  | An approved promotion not yet applied for this many days is flagged in the HR digest (0 = never). |
 | offerValidityDays | Int |  |  |
 | relationsCaseSlaDays | Int |  |  |
+| enquiryResponseDays | Int |  | An HR enquiry should have a first reply within this many working days (Monday to Friday, not a public holiday the company has entered). Overdue ones are listed in the HR digest. |
 | pipDefaultDays | Int |  |  |
 | pipMaxDays | Int |  |  |
 | pipMaxExtensions | Int |  |  |
@@ -6972,6 +7016,16 @@ Where a vendor bill stands against its purchase order and the goods or services 
 `WITHHOLDING_TAX`, `OTHER`
 
 ### QueryStatus
+
+`OPEN`, `ANSWERED`, `CLOSED`
+
+### HrEnquiryCategory
+
+The kinds of question an employee can put to HR (docs/plans/hr-phases-4-5-plan.md, rule E1).
+
+`PAY`, `LEAVE`, `LETTER`, `POLICY`, `BENEFITS`, `OTHER`
+
+### HrEnquiryStatus
 
 `OPEN`, `ANSWERED`, `CLOSED`
 

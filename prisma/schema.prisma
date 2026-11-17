@@ -691,6 +691,8 @@ model Organization {
   clientApprovals           PayrollClientApproval[]
   clientQueries             ClientQuery[]
   clientQueryMessages       ClientQueryMessage[]
+  hrEnquiries               HrEnquiry[]
+  hrEnquiryMessages         HrEnquiryMessage[]
   clientInputBatches        ClientInputBatch[]
   clientInputRows           ClientInputRow[]
   launchChecks              LaunchCheck[]
@@ -861,6 +863,22 @@ model PayrollCalendarSetting {
 }
 
 enum QueryStatus {
+  OPEN
+  ANSWERED
+  CLOSED
+}
+
+/// The kinds of question an employee can put to HR (docs/plans/hr-phases-4-5-plan.md, rule E1).
+enum HrEnquiryCategory {
+  PAY
+  LEAVE
+  LETTER
+  POLICY
+  BENEFITS
+  OTHER
+}
+
+enum HrEnquiryStatus {
   OPEN
   ANSWERED
   CLOSED
@@ -1399,6 +1417,53 @@ model ClientQueryMessage {
   createdAt      DateTime     @default(now())
 
   @@index([queryId, createdAt])
+}
+
+/// A question an employee puts to HR, with a thread of messages (slice 5A). Read only by the employee who asked it and the HR administrator (every read by HR is logged); nobody else, and never another employee.
+/// It is NOT the client Service Desk (ClientQuery) and NOT an Employee relations case: a grievance, harassment, whistleblowing or welfare concern goes through a case, and HR can move an enquiry into one.
+model HrEnquiry {
+  id              String            @id @default(cuid())
+  organizationId  String
+  organization    Organization      @relation(fields: [organizationId], references: [id])
+  number          String
+  employeeId      String
+  employee        Employee          @relation(fields: [employeeId], references: [id])
+  category        HrEnquiryCategory
+  /// Free text about a person: cleared when a former employee is erased.
+  subject         String
+  status          HrEnquiryStatus   @default(OPEN)
+  createdAt       DateTime          @default(now())
+  /// When HR first replied (or moved it into a case). The first-response target is measured to this.
+  firstResponseAt DateTime?
+  closedAt        DateTime?
+  /// Who closed it: the employee's name, HR's name, or the person who moved it into a case.
+  closedBy        String?
+  /// Set when HR moved it into an Employee relations case (the id only: the conversation is never copied into the case).
+  movedToCaseId   String?
+  updatedAt       DateTime          @updatedAt
+
+  messages HrEnquiryMessage[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status])
+  @@index([organizationId, employeeId])
+}
+
+/// One message in an enquiry's thread. Never edited or removed (the words are cleared only when a former employee is erased).
+model HrEnquiryMessage {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  enquiryId      String
+  enquiry        HrEnquiry    @relation(fields: [enquiryId], references: [id])
+  /// EMPLOYEE or HR.
+  side           String
+  authorName     String
+  authorUserId   String
+  body           String
+  createdAt      DateTime     @default(now())
+
+  @@index([enquiryId, createdAt])
 }
 
 enum ClientDecision {
@@ -2098,6 +2163,7 @@ model Employee {
   guarantors              EmployeeGuarantor[]
   changeRequests          EmployeeChangeRequest[]
   policyAcknowledgements  PolicyAcknowledgement[]
+  hrEnquiries             HrEnquiry[]
   dataAccessRequests      DataAccessRequest[]
   appraisals              Appraisal[]
   improvementPlans        PerformanceImprovementPlan[]
@@ -2418,6 +2484,8 @@ model HrPolicy {
   promotionApplyAlertDays Int @default(14)
   offerValidityDays      Int @default(14)
   relationsCaseSlaDays   Int @default(21)
+  /// An HR enquiry should have a first reply within this many working days (Monday to Friday, not a public holiday the company has entered). Overdue ones are listed in the HR digest.
+  enquiryResponseDays    Int @default(3)
 
   // Performance improvement plans (proposed defaults; the company sets its own)
   pipDefaultDays        Int @default(60)

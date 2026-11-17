@@ -35,6 +35,7 @@ const DEFAULTS: Record<string, { prefix: string; digits: number }> = {
   CLIENT_REFUND: { prefix: "RFD", digits: 6 },
   CREDIT_NOTE: { prefix: "CN", digits: 6 },
   CLIENT_QUERY: { prefix: "QRY", digits: 5 },
+  HR_ENQUIRY: { prefix: "ENQ", digits: 5 },
   CLIENT_INPUT: { prefix: "INP", digits: 5 },
   LEAD: { prefix: "LD", digits: 5 },
   SALES_LEAD: { prefix: "SL", digits: 5 },

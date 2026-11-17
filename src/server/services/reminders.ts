@@ -26,6 +26,8 @@ import { recordsOverviewFor } from "./personal-records";
 import { complianceFor } from "./training";
 import { pendingChanges } from "./change-requests";
 import { policyAttention, policyReviewsDue } from "./policies";
+import { enquiriesOverdue } from "./hr-enquiries";
+import { ENQUIRY_CATEGORY_LABELS } from "@/lib/hr-enquiries";
 import { requestsNeedingAttention } from "./data-requests";
 import { breachesNeedingAttention } from "./breaches";
 import { retentionAttention } from "./employee-retention";
@@ -70,6 +72,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
   const probationHorizon = addDays(today, policy.probationAlertDays);
   const caseHorizon = addDays(today, 3);
   const reviewsDue = await policyReviewsDue(orgId, today);
+  const lateEnquiries = await enquiriesOverdue(orgId, iso(today));
   const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records, training, appraisals, changes, policies, dataRequests, breaches, retention, plans, failedProbations, retentionDue] =
     await Promise.all([
       db.organization.findUniqueOrThrow({ where: { id: orgId }, select: { name: true } }),
@@ -327,6 +330,14 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
       "policy-reviews",
       "Policies, handbook and procedures past their review date",
       reviewsDue.map((r) => ({ text: `${r.policy.title} (${r.kindLabel}) — review was due ${iso(r.dueOn)}`, path: `/hr/policies/${r.policy.id}` })),
+    ),
+  );
+  // an enquiry to HR is free text about a person: the digest names only its number, its category and the wait, never the subject, the words or the person
+  add(
+    section(
+      "hr-enquiries",
+      "HR enquiries past their first-reply target",
+      lateEnquiries.map((q) => ({ text: `${q.number} (${ENQUIRY_CATEGORY_LABELS[q.category]}) — raised ${q.raisedDay}, waiting ${q.waitingDays} working day(s)`, path: `/hr/enquiries/${q.id}` })),
     ),
   );
   add(

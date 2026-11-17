@@ -8,7 +8,7 @@
  * a named person has a welfare case or is on a succession list. Governance step 5 added the sanctions register (read as a list, counted) and a data export for a data access request
  * (logged by the request, shown as its request number), on the same rule.
  */
-export const RECORD_KINDS = ["WELFARE_CASE", "CONFIDENTIAL_CASE", "DISCIPLINARY_CASE", "SUCCESSION", "IMPROVEMENT_PLAN", "SANCTION", "DATA_EXPORT", "CANDIDATE_ASSESSMENT"] as const;
+export const RECORD_KINDS = ["WELFARE_CASE", "CONFIDENTIAL_CASE", "DISCIPLINARY_CASE", "SUCCESSION", "IMPROVEMENT_PLAN", "SANCTION", "DATA_EXPORT", "CANDIDATE_ASSESSMENT", "HR_ENQUIRY"] as const;
 export type RecordKind = (typeof RECORD_KINDS)[number];
 
 export const ACCESS_KINDS = ["IDENTIFIERS", "BANK", "PENSION", "TAX", "PERSONAL_RECORDS", "PAYSLIP", "PAYMENTS", "REPORT", ...RECORD_KINDS] as const;
@@ -33,6 +33,7 @@ export const ACCESS_KIND_LABELS: Record<AccessKind, string> = {
   SANCTION: "A disciplinary sanction, or the sanctions register",
   DATA_EXPORT: "A data export for a data access request",
   CANDIDATE_ASSESSMENT: "A candidate's interview feedback and scorecards, or a requisition's comparison",
+  HR_ENQUIRY: "An employee's enquiry to HR",
 };
 
 /** Opening the same thing again within this many minutes is one entry, so refreshing a page doesn't flood the record. */

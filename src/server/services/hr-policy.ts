@@ -300,6 +300,8 @@ export const hrPolicySchema = z
     surveyRetentionMonths: z.coerce.number().int().min(0).max(120),
     offerValidityDays: z.coerce.number().int().min(1).max(180),
     relationsCaseSlaDays: z.coerce.number().int().min(1).max(365),
+    /** An HR enquiry should have a first reply within this many working days. */
+    enquiryResponseDays: z.coerce.number().int().min(1).max(30),
     pipDefaultDays: z.coerce.number().int().min(1).max(365),
     pipMaxDays: z.coerce.number().int().min(1).max(365),
     pipMaxExtensions: z.coerce.number().int().min(0).max(5),
