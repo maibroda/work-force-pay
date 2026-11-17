@@ -117,6 +117,8 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
       }),
     ]);
 
+  // enquiries they put to HR, with the replies: their own words and what HR answered
+  const enquiries = await db.hrEnquiry.findMany({ where, include: { messages: { orderBy: { createdAt: "asc" } } }, orderBy: { createdAt: "asc" } });
   const confidential = cases.filter((c) => c.confidential).length;
   const sections: Record<string, DataSection> = {
     profile: {
@@ -286,6 +288,10 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
     feedback: {
       title: "Feedback recorded about you",
       records: feedback.map((f) => ({ date: dt(f.relatesOn), kind: words(f.kind), from: f.authorName, text: f.body, yourReply: f.employeeReply })),
+    },
+    hrEnquiries: {
+      title: "Your enquiries to HR, and the replies",
+      records: enquiries.map((q) => ({ reference: q.number, category: words(q.category), subject: q.subject, raisedOn: dt(q.createdAt), status: words(q.status), closedOn: dt(q.closedAt), messages: q.messages.map((m) => ({ from: m.side === "HR" ? "HR" : "you", on: dt(m.createdAt), text: m.body })) })),
     },
     policies: { title: "Policies you have acknowledged", records: acks.map((a) => ({ policy: a.version.policy.title, version: a.version.version, acknowledgedOn: dt(a.acknowledgedAt), how: a.method === "RECORDED" ? "paper sign-off recorded by HR" : "by you" })) },
     letters: { title: "Letters issued to you", records: letters.map((l) => ({ reference: l.referenceNumber, type: words(l.type), subject: l.subject, issuedOn: dt(l.createdAt), text: l.body })) },

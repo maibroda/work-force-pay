@@ -9,7 +9,7 @@ const row = (over: Partial<AccessRow> = {}): AccessRow => ({ userId: "u1", userN
 
 describe("the new kinds", () => {
   it("are the five records the founder named, then the sanctions register, a data export (governance step 5) and a candidate's interview assessment (recruitment panels, 2026-11-16), each with a plain label, and are told apart from the payroll kinds", () => {
-    expect([...RECORD_KINDS]).toEqual(["WELFARE_CASE", "CONFIDENTIAL_CASE", "DISCIPLINARY_CASE", "SUCCESSION", "IMPROVEMENT_PLAN", "SANCTION", "DATA_EXPORT", "CANDIDATE_ASSESSMENT"]);
+    expect([...RECORD_KINDS]).toEqual(["WELFARE_CASE", "CONFIDENTIAL_CASE", "DISCIPLINARY_CASE", "SUCCESSION", "IMPROVEMENT_PLAN", "SANCTION", "DATA_EXPORT", "CANDIDATE_ASSESSMENT", "HR_ENQUIRY"]);
     for (const k of RECORD_KINDS) {
       expect(ACCESS_KINDS).toContain(k);
       expect(ACCESS_KIND_LABELS[k].length).toBeGreaterThan(5);

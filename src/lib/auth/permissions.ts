@@ -34,6 +34,8 @@ export const PERMISSIONS = [
   "document.configure", // add, rename and switch off the company's document types
   "document.approve", // take a submitted document for review and approve or reject it (never the person who uploaded or submitted it); needs document.manage and document.view too
   "relations.raise", // raise your own grievance or confidential concern (self-service)
+  "enquiry.raise", // ask HR a question, reply on it and close it (self-service): only ever your own enquiries
+  "enquiry.respond", // read and answer employees' enquiries to HR (every read logged), close them, and move one into an Employee relations case: the HR administrator ONLY, withheld from the administrators below, finance, managers and the auditor
   "settlement.manage", // prepare end-of-service settlements (compute, add manual lines, submit)
   "settlement.approve", // approve and release settlements into payroll (never the preparer)
   "client.view",
@@ -164,9 +166,9 @@ const READ_ALL: Permission[] = [
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   // welfare cases are the most sensitive records we hold: the founder decided (2026-11-10) that ONLY the HR administrator reads them, so neither administrator role holds welfare.manage
-  SUPER_ADMIN: ALL.filter((p) => p !== "welfare.manage" && p !== "succession.manage" && p !== "survey.manage" && p !== "survey.assist" && p !== "recruitment.assess"),
+  SUPER_ADMIN: ALL.filter((p) => p !== "welfare.manage" && p !== "succession.manage" && p !== "survey.manage" && p !== "survey.assist" && p !== "recruitment.assess" && p !== "enquiry.respond"),
   // a company's administrator holds everything EXCEPT changing its own subscription (otherwise any company could give itself every module) and the welfare right
-  COMPANY_ADMIN: ALL.filter((p) => p !== "subscription.manage" && p !== "pricebook.manage" && p !== "welfare.manage" && p !== "succession.manage" && p !== "survey.manage" && p !== "survey.assist" && p !== "recruitment.assess"),
+  COMPANY_ADMIN: ALL.filter((p) => p !== "subscription.manage" && p !== "pricebook.manage" && p !== "welfare.manage" && p !== "succession.manage" && p !== "survey.manage" && p !== "survey.assist" && p !== "recruitment.assess" && p !== "enquiry.respond"),
   HR_ADMIN: [
     "probation.view",
     "dashboard.view",
@@ -202,6 +204,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "survey.manage",
     "survey.assist",
     "recruitment.assess",
+    "enquiry.respond",
     "training.request",
     "skills.assess",
     "probation.recommend",
@@ -322,6 +325,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "leave.approve",
     "leave.apply",
     "relations.raise",
+    "enquiry.raise",
     "appraisal.review",
     "feedback.give",
     "recognition.nominate",
@@ -330,7 +334,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "skills.assess",
     "probation.recommend",
   ],
-  EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise", "probation.view"],
+  EMPLOYEE: ["self.view", "self.security", "leave.apply", "relations.raise", "enquiry.raise", "probation.view"],
   // nothing in HR until a function is granted (see canCtx in src/lib/hr-functions.ts)
   HR_OFFICER: ["self.view", "self.security", "probation.view"],
   // the bureau's sales person sees the CRM and nothing else: no payroll, employee, client or finance data

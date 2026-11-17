@@ -318,6 +318,13 @@ export async function seedPolicyDemo(orgId: string) {
     if (force && e.categoryId === guard!.id && i % 5 !== 2) add(force.versions[0].id, e.id, 60, false);
   }
   await db.policyAcknowledgement.createMany({ data: acks });
+  // one enquiry to HR from the demo employee login (synthetic), so the HR enquiries pages have something to show
+  const asker = await db.user.findFirst({ where: { organizationId: orgId, email: "emp25@demosecurity.test" }, select: { employeeId: true, name: true, id: true } });
+  if (asker?.employeeId) {
+    const number = await db.$transaction((tx) => nextNumber(tx, orgId, "HR_ENQUIRY"));
+    const e = await db.hrEnquiry.create({ data: { organizationId: orgId, number, employeeId: asker.employeeId, category: "POLICY", subject: "Does the Code of Conduct cover social media" } });
+    await db.hrEnquiryMessage.create({ data: { organizationId: orgId, enquiryId: e.id, side: "EMPLOYEE", authorName: asker.name, authorUserId: asker.id, body: "Please tell me whether the Code of Conduct says anything about posting on social media while on duty." } });
+  }
   console.log("✔ Policy demo data seeded");
 }
 

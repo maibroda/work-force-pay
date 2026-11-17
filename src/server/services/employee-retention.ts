@@ -84,6 +84,9 @@ export async function anonymizeEmployee(tx: Tx, orgId: string, employeeId: strin
   counts.recognitionAwards = (await tx.recognitionAward.updateMany({ where, data: { citation: REMOVED, decisionNote: null, withdrawReason: null } })).count;
   // promotions: the words go (the reason, a decision note and a withdrawal reason); what stays is the shape. Succession: the one-line reason goes, the entry stays.
   counts.promotionProposals = (await tx.promotionProposal.updateMany({ where, data: { reason: REMOVED, decisionNote: null, withdrawReason: null } })).count;
+  // enquiries to HR: the subject and every message go (the employee's and HR's); what stays is the shape (that an enquiry existed, its number, category, status and dates)
+  counts.hrEnquiries = (await tx.hrEnquiry.updateMany({ where, data: { subject: REMOVED } })).count;
+  counts.hrEnquiryMessages = (await tx.hrEnquiryMessage.updateMany({ where: { organizationId: orgId, enquiry: { employeeId } }, data: { body: REMOVED } })).count;
   counts.dataRequests = (await tx.dataAccessRequest.updateMany({ where, data: { requesterName: REMOVED, identityNote: null, completionNote: null, refusalReason: null } })).count;
   if (candidateIds.length) {
     await tx.candidate.updateMany({ where: { id: { in: candidateIds } }, data: { firstName: "Anonymised", lastName: "Candidate", phone: null, email: null, resumeReference: null, notes: null, rejectionReason: REMOVED, anonymizedAt: now } });

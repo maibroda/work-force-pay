@@ -82,6 +82,10 @@ export async function sensitiveAccessLog(ctx: Ctx, f: { days?: number; userId?: 
   const requisitionIds = [...new Set(rows.filter((r) => r.entity === "JobRequisition" && r.entityId).map((r) => r.entityId!))];
   const requisitionsRead = requisitionIds.length ? await db.jobRequisition.findMany({ where: { id: { in: requisitionIds }, organizationId: ctx.orgId }, select: { id: true, requisitionNumber: true } }) : [];
   const requisitionNumbers = new Map(requisitionsRead.map((q) => [q.id, q.requisitionNumber]));
+  // an enquiry to HR is shown by its number, never by the employee who asked it
+  const enquiryIds = [...new Set(rows.filter((r) => r.entity === "HrEnquiry" && r.entityId).map((r) => r.entityId!))];
+  const enquiriesRead = enquiryIds.length ? await db.hrEnquiry.findMany({ where: { id: { in: enquiryIds }, organizationId: ctx.orgId }, select: { id: true, number: true } }) : [];
+  const enquiryNumbers = new Map(enquiriesRead.map((q) => [q.id, q.number]));
   const entries = rows.map((r) => {
     const v = (r.newValue ?? {}) as { kind?: AccessKind; count?: number; external?: boolean };
     const bureau = (r.metadata as { bureau?: string } | null)?.bureau ?? null;
@@ -108,8 +112,10 @@ export async function sensitiveAccessLog(ctx: Ctx, f: { days?: number; userId?: 
                   ? (candidateNumbers.get(r.entityId) ?? "Removed candidate")
                   : r.entity === "JobRequisition" && r.entityId
                     ? `Comparison for ${requisitionNumbers.get(r.entityId) ?? "a removed requisition"}`
-                    : null,
-      recordId: r.entity === "RelationsCase" || r.entity === "PerformanceImprovementPlan" || r.entity === "DataAccessRequest" || r.entity === "DisciplinaryRecord" || r.entity === "Candidate" || r.entity === "JobRequisition" ? r.entityId : null,
+                    : r.entity === "HrEnquiry" && r.entityId
+                      ? (enquiryNumbers.get(r.entityId) ?? "Removed enquiry")
+                      : null,
+      recordId: r.entity === "RelationsCase" || r.entity === "PerformanceImprovementPlan" || r.entity === "DataAccessRequest" || r.entity === "DisciplinaryRecord" || r.entity === "Candidate" || r.entity === "JobRequisition" || r.entity === "HrEnquiry" ? r.entityId : null,
       count: v.count ?? null,
       external: !!v.external,
       fromBureau: !!bureau,
