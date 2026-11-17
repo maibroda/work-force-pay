@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-271 tables and 206 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+273 tables and 207 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -135,6 +135,8 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | clientQueryMessages | → ClientQueryMessage[] |  |  |
 | hrEnquiries | → HrEnquiry[] |  |  |
 | hrEnquiryMessages | → HrEnquiryMessage[] |  |  |
+| probationReconsiderations | → ProbationReconsideration[] |  |  |
+| probationExpectations | → ProbationExpectation[] |  |  |
 | clientInputBatches | → ClientInputBatch[] |  |  |
 | clientInputRows | → ClientInputRow[] |  |  |
 | launchChecks | → LaunchCheck[] |  |  |
@@ -1360,6 +1362,7 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | changeRequests | → EmployeeChangeRequest[] |  |  |
 | policyAcknowledgements | → PolicyAcknowledgement[] |  |  |
 | hrEnquiries | → HrEnquiry[] |  |  |
+| probationReconsiderations | → ProbationReconsideration[] |  |  |
 | dataAccessRequests | → DataAccessRequest[] |  |  |
 | appraisals | → Appraisal[] |  |  |
 | improvementPlans | → PerformanceImprovementPlan[] |  |  |
@@ -1641,6 +1644,12 @@ One per organization — every number a buyer might want to change without a cod
 | relationsCaseSlaDays | Int |  |  |
 | enquiryResponseDays | Int |  | An HR enquiry should have a first reply within this many working days (Monday to Friday, not a public holiday the company has entered). Overdue ones are listed in the HR digest. |
 | sopReviewMonths | Int |  | A procedure (SOP) needs a review date no later than this many months after it takes effect (and, when marked reviewed, after today). Handbooks and policies are not held to it. |
+| reconsiderationEnabled | Boolean |  |  |
+| reconsiderationWindowDays | Int |  | A reconsideration can be asked for within this many days of the failed decision. |
+| probationCeilingMonths | Int |  | The total probation (original plus every extension) may not exceed this many months. A lawyer should confirm what the law allows. |
+| reconsiderationMax | Int |  | At most this many reconsiderations per contract: a second failure is final. |
+| reconsiderationMinJustification | Int |  |  |
+| reconsiderationMinExpectations | Int |  |  |
 | pipDefaultDays | Int |  |  |
 | pipMaxDays | Int |  |  |
 | pipMaxExtensions | Int |  |  |
@@ -1763,6 +1772,7 @@ The employee's own terms of employment (distinct from `Contract`, which is a CLI
 | renewals | → EmploymentContract[] |  |  |
 | decisions | → ProbationDecision[] |  |  |
 | probationReviews | → ProbationReview[] |  |  |
+| reconsiderations | → ProbationReconsideration[] |  |  |
 | terminatedAt | DateTime |  |  |
 | terminationReason | String |  |  |
 | notes | String |  |  |
@@ -6093,6 +6103,67 @@ One round of the probation workflow: the manager's recommendation, HR's review, 
 | responseReadBy | String |  |  |
 | responseReadAt | DateTime |  |  |
 
+### ProbationReconsideration
+
+A reconsideration of a FAILED probation (never automatic): the supervisor's justification and measurable expectations, HR's review, the designated authority's decision, and the formal statement to the employee, after which the probation is extended. The failed decision itself is never edited. Every step fills its own fields once. The words are cleared when a former employee is erased.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| employeeId | String | yes |  |
+| employee | → Employee |  |  |
+| contractId | String | yes |  |
+| contract | → EmploymentContract |  |  |
+| failedDecisionId | String | yes | The failed decision this reconsiders (an id kept as a snapshot). |
+| status | ReconsiderationStatus |  |  |
+| justification | String | yes | Free text about a person: cleared on erasure. |
+| proposedMonths | Int | yes |  |
+| requestedByUserId | String | yes |  |
+| requestedBy | String | yes |  |
+| requestedAt | DateTime |  |  |
+| recordedByHr | Boolean |  | HR recorded the request because the employee has no reporting manager. |
+| hrNote | String |  |  |
+| hrByUserId | String |  |  |
+| hrBy | String |  |  |
+| hrAt | DateTime |  |  |
+| approvedMonths | Int |  |  |
+| decisionNote | String |  |  |
+| decidedByUserId | String |  |  |
+| decidedBy | String |  |  |
+| decidedAt | DateTime |  |  |
+| withdrawnByUserId | String |  |  |
+| withdrawnBy | String |  |  |
+| withdrawnAt | DateTime |  |  |
+| withdrawReason | String |  |  |
+| statement | String |  | The statement the employee was given (facts only, generated), and who recorded that they were told. |
+| communicatedByUserId | String |  |  |
+| communicatedBy | String |  |  |
+| communicatedAt | DateTime |  |  |
+| newEndDate | DateTime |  | The revised probation end date once it took effect, and the extension decision that records it. |
+| extensionDecisionId | String |  | (unique) |
+| responseAgreed | Boolean |  | The employee's one response. |
+| responseText | String |  |  |
+| respondedAt | DateTime |  |  |
+| expectations | → ProbationExpectation[] |  |  |
+
+### ProbationExpectation
+
+One measurable expectation of a reconsidered probation: what is measured, the target and the day it is reviewed.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| reconsiderationId | String | yes |  |
+| reconsideration | → ProbationReconsideration |  |  |
+| sortOrder | Int | yes |  |
+| measure | String | yes | Free text: cleared on erasure. |
+| target | String | yes |  |
+| reviewOn | DateTime | yes |  |
+
 ### ProbationDecider
 
 A user the Company Administrator designated to make final probation decisions (for example a department head), optionally for one department. The Company Administrator and platform staff may always decide. Live until revoked.
@@ -7498,6 +7569,10 @@ Whether an outbound message is a service message (about an active contract) or m
 ### ProbationReviewStatus
 
 `RECOMMENDED`, `RETURNED`, `FORWARDED`, `DECIDED`
+
+### ReconsiderationStatus
+
+`REQUESTED`, `RETURNED`, `FORWARDED`, `APPROVED`, `DECLINED`, `EFFECTIVE`, `WITHDRAWN`
 
 ### TrainingSessionStatus
 

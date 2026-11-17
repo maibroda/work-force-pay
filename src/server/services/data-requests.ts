@@ -117,6 +117,12 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
       }),
     ]);
 
+  // a reconsideration of a failed probation, once it is in effect: what they were told (the statement and the conditions) and their response; never what the supervisor or HR wrote
+  const reconsiderations = await db.probationReconsideration.findMany({
+    where: { ...where, status: "EFFECTIVE" },
+    select: { statement: true, communicatedAt: true, newEndDate: true, responseAgreed: true, responseText: true, respondedAt: true, expectations: { select: { measure: true, target: true, reviewOn: true }, orderBy: { sortOrder: "asc" } } },
+    orderBy: { communicatedAt: "asc" },
+  });
   // enquiries they put to HR, with the replies: their own words and what HR answered
   const enquiries = await db.hrEnquiry.findMany({ where, include: { messages: { orderBy: { createdAt: "asc" } } }, orderBy: { createdAt: "asc" } });
   const confidential = cases.filter((c) => c.confidential).length;
@@ -284,6 +290,10 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
     trainingNeeds: {
       title: "Training needs recorded about you",
       records: trainingNeeds.map((x) => ({ course: x.courseName, why: words(x.source), note: x.note, priority: words(x.priority), dueBy: dt(x.dueBy), status: words(x.status), reasonDropped: x.droppedReason })),
+    },
+    probationReconsiderations: {
+      title: "The reconsideration of your probation: what you were told, the conditions and your response",
+      records: reconsiderations.map((x) => ({ toldOn: dt(x.communicatedAt), newReviewDate: dt(x.newEndDate), statement: x.statement, conditions: x.expectations.map((e) => ({ measure: e.measure, target: e.target, reviewedOn: dt(e.reviewOn) })), yourResponse: x.responseAgreed === null ? null : { agreed: x.responseAgreed, text: x.responseText, on: dt(x.respondedAt) } })),
     },
     feedback: {
       title: "Feedback recorded about you",

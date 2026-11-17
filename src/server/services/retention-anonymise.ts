@@ -50,6 +50,11 @@ export const ANONYMISERS: Record<RunnableCategory, Anonymiser> = {
       }
     }
     counts.contractNotes = changed;
+    // a reconsideration of a failed probation: the words go (the supervisor's justification, HR's and the authority's notes, the statement, the response and the conditions); what stays is the
+    // shape (that one existed, its status, the months and the dates)
+    counts.probationReconsiderations = (await tx.probationReconsideration.updateMany({ where, data: { justification: REMOVED, hrNote: null, decisionNote: null, withdrawReason: null, responseText: null } })).count;
+    await tx.probationReconsideration.updateMany({ where: { ...where, statement: { not: null } }, data: { statement: REMOVED } });
+    await tx.probationExpectation.updateMany({ where: { organizationId: orgId, reconsideration: { employeeId: { in: t.employeeIds ?? [] } } }, data: { measure: REMOVED, target: REMOVED } });
     return counts;
   },
 

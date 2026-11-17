@@ -153,6 +153,13 @@ export async function renewContract(ctx: Ctx, id: string, raw: z.input<typeof re
         : "This probation is still waiting for a decision. Confirm, extend or fail it first (on this contract's page), then renew if you still need to: renewing now would skip the decision record.",
     );
   }
+  // a probation recorded as FAILED is not renewed as an ordinary renewal: that skipped every control the founder asked for (a documented justification, HR review, an independent decision,
+  // measurable expectations, a formal statement to the employee). The only way back is a reconsideration (src/server/services/probation-reconsideration.ts), where the company has switched it on.
+  if (old.probationOutcome === "FAILED") {
+    throw new BusinessError(
+      "This probation was recorded as failed, so the contract can't be renewed as an ordinary renewal. Where the company has switched it on, the employee's supervisor can ask for a reconsideration within the window after the failed decision; otherwise the exit process applies.",
+    );
+  }
   const startStr = r.startDate ?? (old.endDate ? iso(addDays(old.endDate, 1)) : undefined);
   if (!startStr) throw new BusinessError("Give the start date of the renewed contract.");
   const startDate = d(startStr);
@@ -222,7 +229,8 @@ export interface ProbationReviewLink {
 }
 
 /**
- * The decision itself, shared by the direct path (above, workflow off) and the workflow (workflow on): the only place a contract's probation outcome changes. The caller has
+ * The decision itself, shared by the direct path (above, workflow off) and the workflow (workflow on): the place a contract's probation outcome changes (the one other place is the extension of a
+ * FAILED probation after a reconsideration, probation-reconsideration.ts, which never edits the failed decision). The caller has
  * already checked who may decide. With a review link, the review is completed in the same transaction as the contract change.
  */
 export async function applyProbationDecision(ctx: Ctx, id: string, raw: z.input<typeof probationDecisionSchema>, link?: ProbationReviewLink) {

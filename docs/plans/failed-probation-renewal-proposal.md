@@ -1,6 +1,6 @@
 # Failed-probation renewal: configurable parameters and approval workflow (a proposal)
 
-Written 2026-11-14. **No code will be written until the founder approves these parameters and this workflow.** The founder's rule (2026-11-14): **an employee who fails probation may still be considered for renewal, but never automatically.** Renewal must have: a **documented justification from the supervisor**; **HR review and approval by the designated authority**; the **extension period and a revised review date**; **measurable performance-improvement expectations**; **formal communication to the employee**; a **complete audit trail**.
+Written 2026-11-14. **Status: approved on 2026-11-17 (F1 to F4 as recommended; F5, the wording of the statement, left for the lawyer, so the statement is plain and flagged as unreviewed) and built on branch `probation-reconsideration`: see `failed-probation-reconsideration-explain-back.md`.** It was first a proposal only: **no code was written until the founder approved these parameters and this workflow.** The founder's rule (2026-11-14): **an employee who fails probation may still be considered for renewal, but never automatically.** Renewal must have: a **documented justification from the supervisor**; **HR review and approval by the designated authority**; the **extension period and a revised review date**; **measurable performance-improvement expectations**; **formal communication to the employee**; a **complete audit trail**.
 
 ## 1. What exists today (verified in the code)
 

@@ -695,6 +695,8 @@ model Organization {
   clientQueryMessages       ClientQueryMessage[]
   hrEnquiries               HrEnquiry[]
   hrEnquiryMessages         HrEnquiryMessage[]
+  probationReconsiderations ProbationReconsideration[]
+  probationExpectations     ProbationExpectation[]
   clientInputBatches        ClientInputBatch[]
   clientInputRows           ClientInputRow[]
   launchChecks              LaunchCheck[]
@@ -2166,6 +2168,7 @@ model Employee {
   changeRequests          EmployeeChangeRequest[]
   policyAcknowledgements  PolicyAcknowledgement[]
   hrEnquiries             HrEnquiry[]
+  probationReconsiderations ProbationReconsideration[]
   dataAccessRequests      DataAccessRequest[]
   appraisals              Appraisal[]
   improvementPlans        PerformanceImprovementPlan[]
@@ -2491,6 +2494,17 @@ model HrPolicy {
   /// A procedure (SOP) needs a review date no later than this many months after it takes effect (and, when marked reviewed, after today). Handbooks and policies are not held to it.
   sopReviewMonths        Int @default(12)
 
+  // Reconsideration of a failed probation (docs/plans/failed-probation-renewal-proposal.md; the founder's approval of 2026-11-17, F1 to F4 as recommended). OFF until a company switches it on.
+  reconsiderationEnabled          Boolean @default(false)
+  /// A reconsideration can be asked for within this many days of the failed decision.
+  reconsiderationWindowDays       Int     @default(14)
+  /// The total probation (original plus every extension) may not exceed this many months. A lawyer should confirm what the law allows.
+  probationCeilingMonths          Int     @default(9)
+  /// At most this many reconsiderations per contract: a second failure is final.
+  reconsiderationMax              Int     @default(1)
+  reconsiderationMinJustification Int     @default(50)
+  reconsiderationMinExpectations  Int     @default(1)
+
   // Performance improvement plans (proposed defaults; the company sets its own)
   pipDefaultDays        Int @default(60)
   pipMaxDays            Int @default(90)
@@ -2686,6 +2700,7 @@ model EmploymentContract {
   renewals            EmploymentContract[]     @relation("ContractChain")
   decisions           ProbationDecision[]
   probationReviews    ProbationReview[]
+  reconsiderations    ProbationReconsideration[]
   terminatedAt        DateTime?                @db.Date
   terminationReason   String?
   notes               String?
@@ -8145,6 +8160,97 @@ model ProbationReview {
   @@unique([contractId, round])
   @@index([organizationId, status])
   @@index([organizationId, employeeId])
+}
+
+enum ReconsiderationStatus {
+  /// The supervisor has asked; HR has not reviewed it yet.
+  REQUESTED
+  /// HR sent it back to the supervisor (a new request is a new row).
+  RETURNED
+  /// HR forwarded it to the designated authority.
+  FORWARDED
+  /// The authority approved it; it takes effect only once the employee has been formally told.
+  APPROVED
+  DECLINED
+  /// The employee was formally told and the probation extension took effect.
+  EFFECTIVE
+  WITHDRAWN
+}
+
+/// A reconsideration of a FAILED probation (never automatic): the supervisor's justification and measurable expectations, HR's review, the designated authority's decision, and the formal statement
+/// to the employee, after which the probation is extended. The failed decision itself is never edited. Every step fills its own fields once. The words are cleared when a former employee is erased.
+model ProbationReconsideration {
+  id             String                @id @default(cuid())
+  organizationId String
+  organization   Organization          @relation(fields: [organizationId], references: [id])
+  employeeId     String
+  employee       Employee              @relation(fields: [employeeId], references: [id])
+  contractId     String
+  contract       EmploymentContract    @relation(fields: [contractId], references: [id])
+  /// The failed decision this reconsiders (an id kept as a snapshot).
+  failedDecisionId String
+  status         ReconsiderationStatus @default(REQUESTED)
+
+  /// Free text about a person: cleared on erasure.
+  justification     String
+  proposedMonths    Int
+  requestedByUserId String
+  requestedBy       String
+  requestedAt       DateTime @default(now())
+  /// HR recorded the request because the employee has no reporting manager.
+  recordedByHr      Boolean  @default(false)
+
+  hrNote       String?
+  hrByUserId   String?
+  hrBy         String?
+  hrAt         DateTime?
+
+  approvedMonths Int?
+  decisionNote   String?
+  decidedByUserId String?
+  decidedBy      String?
+  decidedAt      DateTime?
+
+  withdrawnByUserId String?
+  withdrawnBy       String?
+  withdrawnAt       DateTime?
+  withdrawReason    String?
+
+  /// The statement the employee was given (facts only, generated), and who recorded that they were told.
+  statement          String?
+  communicatedByUserId String?
+  communicatedBy     String?
+  communicatedAt     DateTime?
+  /// The revised probation end date once it took effect, and the extension decision that records it.
+  newEndDate         DateTime? @db.Date
+  extensionDecisionId String?  @unique
+
+  /// The employee's one response.
+  responseAgreed Boolean?
+  responseText   String?
+  respondedAt    DateTime?
+
+  expectations ProbationExpectation[]
+
+  @@index([organizationId, status])
+  @@index([contractId])
+  @@index([organizationId, employeeId])
+}
+
+/// One measurable expectation of a reconsidered probation: what is measured, the target and the day it is reviewed.
+model ProbationExpectation {
+  id               String                   @id @default(cuid())
+  organizationId   String
+  organization     Organization             @relation(fields: [organizationId], references: [id])
+  reconsiderationId String
+  reconsideration  ProbationReconsideration @relation(fields: [reconsiderationId], references: [id], onDelete: Cascade)
+  sortOrder        Int
+  /// Free text: cleared on erasure.
+  measure          String
+  target           String
+  reviewOn         DateTime                 @db.Date
+
+  @@index([reconsiderationId])
 }
 
 /// A user the Company Administrator designated to make final probation decisions (for example a department head), optionally for one department. The Company Administrator and platform staff
