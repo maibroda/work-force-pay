@@ -4,6 +4,7 @@ import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { getRequisition } from "@/server/services/recruitment";
 import { listCriteria } from "@/server/services/recruitment-panel";
+import { listScreeningCriteria } from "@/server/services/recruitment-screening";
 import { fmtDate } from "@/lib/dates";
 import { naira } from "@/lib/money";
 import { fullName } from "@/lib/utils";
@@ -20,6 +21,7 @@ import {
   rejectRequisitionAction,
 } from "@/app/actions/hr-lifecycle";
 import { setCriteriaAction } from "@/app/actions/recruitment-panel";
+import { setScreeningCriteriaAction } from "@/app/actions/recruitment-screening";
 
 const SOURCES = ["REFERRAL", "JOB_BOARD", "WALK_IN", "AGENCY", "INTERNAL", "SOCIAL_MEDIA", "OTHER"];
 
@@ -35,6 +37,7 @@ export default async function RequisitionPage({ params }: { params: Promise<{ id
   // the scoring criteria for interview panels are set by HR (recruitment.assess) alone
   const assess = can(ctx.role, "recruitment.assess");
   const criteria = assess ? await listCriteria(ctx, id) : [];
+  const screening = assess ? await listScreeningCriteria(ctx, id) : [];
   return (
     <>
       <PageHeader
@@ -116,6 +119,29 @@ export default async function RequisitionPage({ params }: { params: Promise<{ id
             resetOnSuccess={false}
             action={setCriteriaAction.bind(null, r.id)}
             fields={[1, 2, 3, 4, 5, 6].map((n) => ({ name: `c${n}`, label: `Criterion ${n}${n <= 3 ? "" : " (optional)"}`, required: n <= 3, defaultValue: criteria[n - 1]?.name ?? "" }))}
+          />
+        </Section>
+      )}
+
+      {assess && (
+        <Section
+          title="Screening criteria"
+          description="What to check each candidate against before interviews: one to ten, each a must-have or preferred. HR records met, not met or unclear with the evidence. This is advice for the people deciding: it never orders, filters or rejects anyone. It can be changed until the first answer is recorded."
+          actions={
+            <Link className="text-sm text-primary underline" href={`/hr/requisitions/${r.id}/screening`}>
+              Screening overview
+            </Link>
+          }
+        >
+          <SmartForm
+            columns={2}
+            submitLabel="Save the screening criteria"
+            resetOnSuccess={false}
+            action={setScreeningCriteriaAction.bind(null, r.id)}
+            fields={[1, 2, 3, 4, 5, 6, 7, 8].flatMap((n) => [
+              { name: `n${n}`, label: `Criterion ${n}${n === 1 ? "" : " (optional)"}`, required: n === 1, defaultValue: screening[n - 1]?.name ?? "" },
+              { name: `k${n}`, label: "Kind", type: "select" as const, defaultValue: screening[n - 1]?.kind ?? "PREFERRED", options: [{ value: "MUST_HAVE", label: "Must have" }, { value: "PREFERRED", label: "Preferred" }] },
+            ])}
           />
         </Section>
       )}

@@ -4,6 +4,7 @@ import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { getCandidate } from "@/server/services/recruitment";
 import { eligiblePanelists, panelOverview } from "@/server/services/recruitment-panel";
+import { candidateScreening } from "@/server/services/recruitment-screening";
 import { enumOptions } from "@/server/options";
 import { fmtDate } from "@/lib/dates";
 import { naira } from "@/lib/money";
@@ -13,6 +14,7 @@ import { SmartForm } from "@/components/smart-form";
 import { StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { generateLetterAction } from "@/app/actions/letters";
+import { decideShortlistAction, recordScreeningAction } from "@/app/actions/recruitment-screening";
 import { approveSelectionAction, closePanelAction, declineSelectionAction, setPanelAction } from "@/app/actions/recruitment-panel";
 import {
   addCheckAction,
@@ -46,6 +48,7 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
   const assess = can(ctx.role, "recruitment.assess");
   const panels = assess ? await panelOverview(ctx, id) : null;
   const staff = assess ? await eligiblePanelists(ctx) : [];
+  const screen = assess ? await candidateScreening(ctx, id) : null;
   const panelled = new Set((panels?.interviews ?? []).filter((p) => p.members.length > 0).map((p) => p.interviewId));
   const open = OPEN.includes(c.stage);
   const liveOffer = c.offers.find((o) => ["PENDING_APPROVAL", "APPROVED", "SENT"].includes(o.status));
@@ -154,6 +157,44 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
               />
             </FormPanel>
           ))}
+      {screen && screen.criteria.length > 0 && open && (
+        <Section
+          title="Screening"
+          description="Check this candidate against the requisition's criteria. Each answer is met, not met or unclear; a met or not met needs the evidence. This is advice for the people deciding: it never moves, orders or rejects a candidate."
+        >
+          <SmartForm
+            columns={2}
+            submitLabel={screen.answers.length ? "Save my corrections" : "Save the answers"}
+            resetOnSuccess={false}
+            action={recordScreeningAction.bind(null, c.id)}
+            fields={screen.criteria.flatMap((cr) => {
+              const a = screen.answers.find((x) => x.criterionId === cr.id);
+              return [
+                { name: `outcome_${cr.id}`, label: `${cr.name} (${cr.kind === "MUST_HAVE" ? "must have" : "preferred"})`, type: "select" as const, required: true, defaultValue: a?.outcome ?? "", options: [{ value: "MET", label: "Met" }, { value: "NOT_MET", label: "Not met" }, { value: "UNCLEAR", label: "Unclear" }] },
+                { name: `evidence_${cr.id}`, label: "Evidence (needed for met or not met)", type: "text" as const, defaultValue: a?.evidence ?? "" },
+              ];
+            })}
+          />
+        </Section>
+      )}
+      {screen && open && (
+        <Section title="Shortlist" description="A named person's decision, with the reason. It changes nothing else: the candidate's stage is moved by a person.">
+          {screen.shortlist && (
+            <p className="mb-3 text-sm">
+              <StatusBadge status={screen.shortlist.decision} /> {screen.shortlist.reason} <span className="text-xs text-muted-foreground">— {screen.shortlist.decidedBy}</span>
+            </p>
+          )}
+          <SmartForm
+            columns={2}
+            submitLabel="Record the decision"
+            action={decideShortlistAction.bind(null, c.id)}
+            fields={[
+              { name: "decision", label: "Decision", type: "select", required: true, options: [{ value: "SHORTLISTED", label: "Shortlist" }, { value: "NOT_SHORTLISTED", label: "Do not shortlist" }] },
+              { name: "reason", label: "Reason (at least 10 characters)", required: true },
+            ]}
+          />
+        </Section>
+      )}
       {panels && (
         <Section title="Interview panels" description="A panel of two to five employees scores each interview. Scorecards stay blind until the scoring is closed. Scores are advice for the people deciding and never rank, filter or reject anyone.">
           {panels.interviews.length === 0 && <Empty>No interviews scheduled.</Empty>}

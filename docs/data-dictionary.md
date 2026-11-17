@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-264 tables and 197 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+267 tables and 200 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -211,6 +211,9 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | requisitionCriteria | → RequisitionCriterion[] |  |  |
 | scorecardScores | → ScorecardScore[] |  |  |
 | candidateSelections | → CandidateSelection[] |  |  |
+| screeningCriteria | → ScreeningCriterion[] |  |  |
+| candidateScreenings | → CandidateScreening[] |  |  |
+| candidateShortlists | → CandidateShortlist[] |  |  |
 | relationsCases | → RelationsCase[] |  |  |
 | relationsCaseNotes | → RelationsCaseNote[] |  |  |
 | exitSettlements | → ExitSettlement[] |  |  |
@@ -1750,6 +1753,7 @@ The employee's own terms of employment (distinct from `Contract`, which is a CLI
 | updatedAt | DateTime |  |  |
 | candidates | → Candidate[] |  |  |
 | criteria | → RequisitionCriterion[] |  |  |
+| screeningCriteria | → ScreeningCriterion[] |  |  |
 
 ### Candidate
 
@@ -1782,6 +1786,8 @@ The employee's own terms of employment (distinct from `Contract`, which is a CLI
 | checks | → CandidateCheck[] |  |  |
 | offers | → JobOffer[] |  |  |
 | selection | → CandidateSelection |  |  |
+| screenings | → CandidateScreening[] |  |  |
+| shortlist | → CandidateShortlist |  |  |
 
 ### Interview
 
@@ -1878,6 +1884,60 @@ The panel chair's recommendation to select a candidate, and the second person's 
 | decidedBy | String |  |  |
 | decidedAt | DateTime |  |  |
 | decisionNote | String |  |  |
+
+### ScreeningCriterion
+
+A thing a requisition's candidates are screened against (one to ten). Advice only: an answer never ranks, orders, filters or rejects a candidate.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| requisitionId | String | yes |  |
+| requisition | → JobRequisition |  |  |
+| position | Int | yes |  |
+| name | String | yes |  |
+| kind | ScreeningKind | yes |  |
+| createdAt | DateTime |  |  |
+| screenings | → CandidateScreening[] |  |  |
+
+### CandidateScreening
+
+HR's recorded answer for one candidate and one criterion: met, not met or unclear, with the evidence for a met or not met.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| candidateId | String | yes |  |
+| candidate | → Candidate |  |  |
+| criterionId | String | yes |  |
+| criterion | → ScreeningCriterion |  |  |
+| outcome | ScreeningOutcome | yes |  |
+| evidence | String |  | Free text about a person: cleared when an unsuccessful applicant is anonymised. |
+| recordedById | String | yes |  |
+| recordedBy | String | yes |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+
+### CandidateShortlist
+
+A named person's decision to shortlist a candidate or not, with the reason. It changes nothing else: the candidate's stage is moved by a person.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| candidateId | String | yes | (unique) |
+| candidate | → Candidate |  |  |
+| decision | ShortlistDecision | yes |  |
+| reason | String | yes | Free text about a person: cleared when an unsuccessful applicant is anonymised. |
+| decidedById | String | yes |  |
+| decidedBy | String | yes |  |
+| decidedAt | DateTime |  |  |
 
 ### CandidateCheck
 
@@ -6948,6 +7008,18 @@ The two sign-offs a statutory rate change needs before it reaches any client: on
 ### SelectionStatus
 
 `PENDING`, `APPROVED`, `REJECTED`
+
+### ScreeningKind
+
+`MUST_HAVE`, `PREFERRED`
+
+### ScreeningOutcome
+
+`MET`, `NOT_MET`, `UNCLEAR`
+
+### ShortlistDecision
+
+`SHORTLISTED`, `NOT_SHORTLISTED`
 
 ### PayRateProposalStatus
 

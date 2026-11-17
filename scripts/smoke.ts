@@ -130,6 +130,7 @@ function resolvers(orgId: string): Record<string, () => Promise<string | undefin
     "/hr/discipline/[id]": () => first(db.relationsCase.findFirst({ where: { ...where, type: "MISCONDUCT" }, select: { id: true } })),
     "/hr/requisitions/[id]": () => first(db.jobRequisition.findFirst({ where, select: { id: true } })),
     "/hr/requisitions/[id]/comparison": () => first(db.jobRequisition.findFirst({ where, select: { id: true } })),
+    "/hr/requisitions/[id]/screening": () => first(db.jobRequisition.findFirst({ where, select: { id: true } })),
     // an interview with a panel (the demo data has none, so this page is skipped with a note until one exists); anyone not on the panel gets a 404, which is fine for this page
     "/me/interviews/[id]": () => first(db.interview.findFirst({ where: { ...where, panelMembers: { some: {} } }, select: { id: true } })),
     "/me/interviews/compare/[requisitionId]": () => first(db.jobRequisition.findFirst({ where, select: { id: true } })),
