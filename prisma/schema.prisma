@@ -5411,6 +5411,13 @@ enum AckMethod {
 
 /// A company policy (code of conduct, data protection, safety…) that employees must read and acknowledge —
 /// everyone, or one category. The wording lives in its versions, which are never edited once published.
+/// What a company document is: a policy, the staff handbook, or a standard operating procedure. They share versions, effective dates and the audience; they differ in whether employees must acknowledge them.
+enum PolicyKind {
+  POLICY
+  HANDBOOK
+  SOP
+}
+
 model CompanyPolicy {
   id             String            @id @default(cuid())
   organizationId String
@@ -5422,6 +5429,12 @@ model CompanyPolicy {
   category       EmployeeCategory? @relation(fields: [categoryId], references: [id])
   /// Days an employee has to acknowledge, from the version taking effect or from joining (whichever is later).
   graceDays      Int               @default(14)
+  /// A policy (the default, so every existing row is unchanged), the handbook, or a procedure. Fixed when it is made.
+  kind           PolicyKind        @default(POLICY)
+  /// Whether employees must acknowledge it. On for every existing policy; off by default for a handbook or a procedure; HR can switch it either way.
+  acknowledgementRequired Boolean  @default(true)
+  /// The day it is due for review (optional). Once it has passed, the item is in the HR digest until it is marked reviewed.
+  reviewDueOn    DateTime?         @db.Date
   status         PolicyStatus      @default(ACTIVE)
   createdBy      String
   createdAt      DateTime          @default(now())

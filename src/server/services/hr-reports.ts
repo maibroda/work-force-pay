@@ -70,11 +70,12 @@ export async function trainingComplianceRows(ctx: Ctx): Promise<Row[]> {
     }));
 }
 
-const ACK_ORDER = { OVERDUE: 0, PENDING: 1, ACKNOWLEDGED: 2 } as const;
+const ACK_ORDER = { OVERDUE: 0, PENDING: 1, ACKNOWLEDGED: 2, NOT_REQUIRED: 3 } as const;
 
 export async function policyAcknowledgementRows(ctx: Ctx): Promise<Row[]> {
   const { active } = await listPolicies(ctx);
-  return active.flatMap((c) =>
+  // an acknowledgement report: a handbook or procedure that needs no acknowledgement has nothing to report
+  return active.filter((c) => c.policy.acknowledgementRequired).flatMap((c) =>
     [...c.rows]
       .sort((a, b) => ACK_ORDER[a.state] - ACK_ORDER[b.state] || a.employee.employeeNumber.localeCompare(b.employee.employeeNumber))
       .map((r) => ({

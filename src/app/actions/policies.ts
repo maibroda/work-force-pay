@@ -21,6 +21,15 @@ export async function updatePolicyAction(id: string, v: V) {
   }, PAGES);
 }
 
+/** Marks an item reviewed, with the next review date (blank = none). */
+export async function markPolicyReviewedAction(id: string, v: V) {
+  return act("hr.configure", async (ctx) => {
+    const next = typeof v.nextReviewOn === "string" && v.nextReviewOn.trim() ? v.nextReviewOn.trim() : null;
+    await pol.markPolicyReviewed(ctx, id, next);
+    return { message: next ? `Marked as reviewed. The next review is due ${next}.` : "Marked as reviewed. No further review date is set." };
+  }, PAGES);
+}
+
 export async function publishVersionAction(policyId: string, v: V) {
   return act("hr.configure", async (ctx) => {
     const ver = await pol.publishVersion(ctx, policyId, v as never);

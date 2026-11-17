@@ -2,13 +2,29 @@
  * Pure rules for company policies and acknowledgements. No database here.
  */
 
-export type AckState = "ACKNOWLEDGED" | "PENDING" | "OVERDUE";
+export type AckState = "ACKNOWLEDGED" | "PENDING" | "OVERDUE" | "NOT_REQUIRED";
 
 export const ACK_LABELS: Record<AckState, string> = {
   ACKNOWLEDGED: "Acknowledged",
   PENDING: "To acknowledge",
   OVERDUE: "Overdue",
+  NOT_REQUIRED: "No acknowledgement needed",
 };
+
+/** What a company document is. They share versions, effective dates and the audience; they differ in whether employees must acknowledge them. */
+export const POLICY_KINDS = ["POLICY", "HANDBOOK", "SOP"] as const;
+export type PolicyKind = (typeof POLICY_KINDS)[number];
+export const POLICY_KIND_LABELS: Record<PolicyKind, string> = { POLICY: "Policy", HANDBOOK: "Handbook", SOP: "Procedure (SOP)" };
+
+/** A handbook or a procedure is read, not signed, unless HR says otherwise; a policy is signed unless HR says otherwise. */
+export const acknowledgementDefault = (kind: PolicyKind) => kind === "POLICY";
+
+/** Whether an item matches what the employee typed: the title or the summary, ignoring case and spaces at the ends, as plain text (never a pattern). Empty matches everything. */
+export function matchesQuery(item: { title: string; summary: string | null }, query: string | undefined): boolean {
+  const q = (query ?? "").trim().toLowerCase();
+  if (!q) return true;
+  return item.title.toLowerCase().includes(q) || (item.summary ?? "").toLowerCase().includes(q);
+}
 
 const DAY = 86_400_000;
 
@@ -26,6 +42,11 @@ export function ackDueDate(effectiveDate: Date, employmentDate: Date, graceDays:
 export function ackState(acknowledged: boolean, due: Date, today: Date): AckState {
   if (acknowledged) return "ACKNOWLEDGED";
   return today.getTime() > due.getTime() ? "OVERDUE" : "PENDING";
+}
+
+/** The state for an item that may not need acknowledging: exactly the rule above when it does, "not required" when it does not. */
+export function ackStateFor(required: boolean, acknowledged: boolean, due: Date, today: Date): AckState {
+  return required ? ackState(acknowledged, due, today) : "NOT_REQUIRED";
 }
 
 interface Versioned {

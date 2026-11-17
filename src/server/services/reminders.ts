@@ -25,7 +25,7 @@ import { loansOwedByLeavers } from "./loans";
 import { recordsOverviewFor } from "./personal-records";
 import { complianceFor } from "./training";
 import { pendingChanges } from "./change-requests";
-import { policyAttention } from "./policies";
+import { policyAttention, policyReviewsDue } from "./policies";
 import { requestsNeedingAttention } from "./data-requests";
 import { breachesNeedingAttention } from "./breaches";
 import { retentionAttention } from "./employee-retention";
@@ -69,6 +69,7 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
   const contractHorizon = addDays(today, policy.contractAlertDays);
   const probationHorizon = addDays(today, policy.probationAlertDays);
   const caseHorizon = addDays(today, 3);
+  const reviewsDue = await policyReviewsDue(orgId, today);
   const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records, training, appraisals, changes, policies, dataRequests, breaches, retention, plans, failedProbations, retentionDue] =
     await Promise.all([
       db.organization.findUniqueOrThrow({ where: { id: orgId }, select: { name: true } }),
@@ -319,6 +320,13 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
       "policies",
       "Policies awaiting acknowledgement",
       policies.map((p) => ({ text: `${p.policy.title} — ${p.overdue} of ${p.applicable} overdue`, path: `/hr/policies/${p.policy.id}` })),
+    ),
+  );
+  add(
+    section(
+      "policy-reviews",
+      "Policies, handbook and procedures past their review date",
+      reviewsDue.map((r) => ({ text: `${r.policy.title} (${r.kindLabel}) — review was due ${iso(r.dueOn)}`, path: `/hr/policies/${r.policy.id}` })),
     ),
   );
   add(
