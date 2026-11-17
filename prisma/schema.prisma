@@ -8564,6 +8564,12 @@ enum SurveyCodeStatus {
 }
 
 /// An engagement survey: a few five-point statements and optional comments, for everyone, one role or one department.
+/// What a survey's results are broken down by. ONE per survey, never both: showing the role and the department views together lets a reader subtract one from the other and recover a group the rules hide.
+enum SurveyBreakdown {
+  ROLE
+  DEPARTMENT
+}
+
 model Survey {
   id             String       @id @default(cuid())
   organizationId String
@@ -8573,6 +8579,8 @@ model Survey {
   /// The audience: everyone when both are null, otherwise one role or one department.
   categoryId     String?
   departmentId   String?
+  /// The one breakdown the results show (and the one group label stored on an answer). Chosen by HR when the survey is created; a survey made before the choice existed shows the role.
+  breakdownBy    SurveyBreakdown @default(ROLE)
   opensOn        DateTime     @db.Date
   closesOn       DateTime     @db.Date
   status         SurveyStatus @default(DRAFT)

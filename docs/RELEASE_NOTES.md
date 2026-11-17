@@ -17,7 +17,16 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `recruitment-internal`, one migration: 20261216090000_recruitment_internal)
+
+## Not yet merged (branch `survey-one-breakdown`, one migration: 20261217090000_survey_one_breakdown)
+
+- **Survey results: one breakdown per survey** (the founder's choice of 2026-11-17, "option A", after a measurement the same day). Read `docs/plans/survey-one-breakdown-explain-back.md`. **No money, pay or statutory setting is touched.**
+- **The leak, measured with the real code:** the role view and the department view each obeyed the rules, but **read together they could be subtracted**: in a survey of 25 guards (20 in one department, 5 in another) and 12 office staff, *guards minus the large department* and *the other departments minus office* both gave the same result, **recovering a group of five invited (below the ten-invited rule) as "all five rated 1"**. HR holds the records, so HR knows who the five are. **Severity: medium to high.** It was never covered by a test.
+- **The fix:** HR chooses **when creating a survey** whether its results are broken down by **role (the default) or by department, never both**, and the choice is fixed. The results show only the chosen one (also for a result kept from before this change), and **an answer stores only the chosen group** (the unused dimension is not stored at all). Every rule inside a breakdown is unchanged. **A survey made before this change shows the role, so it loses its department view.**
+- **Migration (reversible, additive):** one enum and one column on the survey with a default of role, so every existing survey is valid. Round-tripped (up, down, up) on a copy of the seeded database: row counts unchanged, the existing survey became role, and no schema difference. The data dictionary was regenerated.
+- **Tests (written first):** `tests/integration/survey-breakdown.test.ts` (8), built on the exact case measured. **One existing test changed its expectation, with the reason in the explain-back note:** the hardening test that asserted both the role and the department were stored on an answer now asserts the chosen one only. The other survey tests pass unchanged (82 together). **Not covered:** comparing the same group across two surveys with different breakdowns (a separate risk, not measured), and anyone reading the database directly.
+
+## Merged in #213 (one migration: 20261216090000_recruitment_internal)
 
 - **Recruitment slice B: internal vacancies** (the founder's choice of 2026-11-17 under the plan's section 5, rules 6 and 7, approved as recommended on 2026-11-16). **No money, pay or statutory setting is touched; no new permission and no public surface** (signed-in employees only). Read `docs/plans/recruitment-internal-explain-back.md`, especially "Where I departed from, or chose within, the plan" and "Decisions for you".
 - **What it adds:** HR **publishes an approved requisition inside the company** with a **mandatory deadline** and a **short summary written for employees**; employees see **only** the title, role, department, contract type, target start, deadline and summary (**never** the justification, budget or hiring manager). **Any employee may apply once** while it is open (the vacancy's hiring manager may not); it creates an **internal candidate** and **tells nobody, including the applicant's manager**. The applicant sees their own applications and stage, nothing HR recorded. New employee page: **Vacancies**.

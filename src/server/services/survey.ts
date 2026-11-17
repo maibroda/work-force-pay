@@ -45,6 +45,8 @@ export const surveySchema = z.object({
     .transform((v) => (v ? v : undefined)),
   categoryId: z.string().optional().nullable(),
   departmentId: z.string().optional().nullable(),
+  /** The ONE breakdown the results show: by role (the default) or by department, never both (they could be subtracted to recover a small group). */
+  breakdownBy: z.enum(["ROLE", "DEPARTMENT"]).default("ROLE"),
   opensOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Give the opening day"),
   closesOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Give the closing day"),
 });
@@ -57,7 +59,7 @@ export async function createSurvey(ctx: Ctx, raw: z.input<typeof surveySchema>) 
   if (v.categoryId && !(await db.employeeCategory.findFirst({ where: { id: v.categoryId, organizationId: ctx.orgId }, select: { id: true } }))) throw new BusinessError("Role not found.");
   if (v.departmentId && !(await db.department.findFirst({ where: { id: v.departmentId, organizationId: ctx.orgId }, select: { id: true } }))) throw new BusinessError("Department not found.");
   const s = await db.survey.create({
-    data: { organizationId: ctx.orgId, title: v.title, intro: v.intro ?? null, categoryId: v.categoryId || null, departmentId: v.departmentId || null, opensOn: d(v.opensOn), closesOn: d(v.closesOn), createdBy: ctx.name },
+    data: { organizationId: ctx.orgId, title: v.title, intro: v.intro ?? null, categoryId: v.categoryId || null, departmentId: v.departmentId || null, breakdownBy: v.breakdownBy, opensOn: d(v.opensOn), closesOn: d(v.closesOn), createdBy: ctx.name },
   });
   await logAudit(ctx, { action: "SURVEY_CREATE", entity: "Survey", entityId: s.id, newValue: { everyone: !s.categoryId && !s.departmentId } });
   return s;
@@ -242,14 +244,20 @@ export async function results(ctx: Ctx, id: string) {
     commentsVisible: words,
     questions: r.questions.map((q) => (words ? q : { ...q, comments: null })) as R["questions"],
   });
-  if (s.aggregate) return { ...reader(s.aggregate.summary as unknown as Built), purged: true as const };
-  const r = await buildResults(s.id, s.organizationId, s.invitedCount);
-  return { ...reader(r), purged: false as const };
+  // ONE breakdown per survey: whatever is stored (a result kept from before the choice existed holds both), only the chosen one is returned
+  const one = <R extends { questions: Array<{ byRole: unknown; byDepartment: unknown }> }>(r: R) => ({
+    ...r,
+    breakdownBy: s.breakdownBy,
+    questions: r.questions.map((q) => ({ ...q, byRole: s.breakdownBy === "ROLE" ? q.byRole : null, byDepartment: s.breakdownBy === "DEPARTMENT" ? q.byDepartment : null })) as R["questions"],
+  });
+  if (s.aggregate) return { ...reader(one(s.aggregate.summary as unknown as Built)), purged: true as const };
+  const r = await buildResults(s.id, s.organizationId, s.invitedCount, s.breakdownBy);
+  return { ...reader(one(r)), purged: false as const };
 }
 
 type Built = Awaited<ReturnType<typeof buildResults>>;
 
-async function buildResults(surveyId: string, orgId: string, invited: number) {
+async function buildResults(surveyId: string, orgId: string, invited: number, breakdownBy: "ROLE" | "DEPARTMENT") {
   const [questions, responses, codes, cats, depts] = await Promise.all([
     db.surveyQuestion.findMany({ where: { surveyId }, select: { id: true, position: true, kind: true, text: true }, orderBy: { position: "asc" } }),
     db.surveyResponse.findMany({ where: { surveyId }, select: { id: true, categoryId: true, departmentId: true, answers: { select: { id: true, questionId: true, value: true, comment: true, hidden: true } } } }),
@@ -300,8 +308,8 @@ async function buildResults(surveyId: string, orgId: string, invited: number) {
       text: q.text,
       kind: q.kind,
       summary: summarise(values),
-      byRole: enough ? groupResult(rowsFor("categoryId", invCat, catName)) : null,
-      byDepartment: enough ? groupResult(rowsFor("departmentId", invDept, deptName)) : null,
+      byRole: enough && breakdownBy === "ROLE" ? groupResult(rowsFor("categoryId", invCat, catName)) : null,
+      byDepartment: enough && breakdownBy === "DEPARTMENT" ? groupResult(rowsFor("departmentId", invDept, deptName)) : null,
       comments: null as Array<{ id: string; text: string }> | null,
     };
   });
@@ -349,11 +357,13 @@ async function record(surveyId: string, code: { id: string; categoryId: string |
   await db.$transaction(async (tx) => {
     const claimed = await tx.surveyAccessCode.updateMany({ where: { id: code.id, status: "ACTIVE" }, data: { status: "USED", usedOn: d(todayIso()) } });
     if (claimed.count !== 1) throw new BusinessError("INVALID_CODE");
-    // The role and the department go on the response only when ten or more people were invited in that group, so a person in a small group cannot be matched to their answer by anyone
-    // reading the tables. The access-code row keeps the group (the invited counts come from it); a smaller group's answers are counted together in the results.
+    // Only the ONE group the survey is broken down by (its role or its department) goes on the response, and only when ten or more people were invited in that group, so a person in a small
+    // group cannot be matched to their answer by anyone reading the tables, and the unused dimension is not kept at all. The access-code row keeps both (the invited counts come from it);
+    // a smaller group's answers are counted together in the results.
+    const survey = await tx.survey.findUniqueOrThrow({ where: { id: surveyId }, select: { breakdownBy: true } });
     const invitedIn = async (where: { categoryId: string } | { departmentId: string }) => (await tx.surveyAccessCode.findMany({ where: { surveyId, ...where }, select: { employeeId: true }, distinct: ["employeeId"] })).length;
-    const categoryId = code.categoryId && (await invitedIn({ categoryId: code.categoryId })) >= MIN_INVITED_FOR_GROUP ? code.categoryId : null;
-    const departmentId = code.departmentId && (await invitedIn({ departmentId: code.departmentId })) >= MIN_INVITED_FOR_GROUP ? code.departmentId : null;
+    const categoryId = survey.breakdownBy === "ROLE" && code.categoryId && (await invitedIn({ categoryId: code.categoryId })) >= MIN_INVITED_FOR_GROUP ? code.categoryId : null;
+    const departmentId = survey.breakdownBy === "DEPARTMENT" && code.departmentId && (await invitedIn({ departmentId: code.departmentId })) >= MIN_INVITED_FOR_GROUP ? code.departmentId : null;
     const resp = await tx.surveyResponse.create({ data: { surveyId, categoryId, departmentId } });
     await tx.surveyAnswer.createMany({ data: answers.map((a) => ({ responseId: resp.id, questionId: a.questionId, value: a.value, comment: a.comment })) });
   });
@@ -473,13 +483,13 @@ export async function purgeExpired(ctx: Ctx, today = todayIso()) {
   const months = (await getHrPolicy(ctx.orgId)).surveyRetentionMonths;
   if (months === 0) return { surveys: 0, responses: 0 };
   if (await categoryHeld(ctx.orgId, "RAW_SURVEYS")) return { surveys: 0, responses: 0, held: true }; // a legal hold: nothing is purged until it is released
-  const candidates = await db.survey.findMany({ where: { organizationId: ctx.orgId, rawDeletedAt: null, status: { in: ["OPEN", "CLOSED"] } }, select: { id: true, status: true, opensOn: true, closesOn: true, closedAt: true, invitedCount: true } });
+  const candidates = await db.survey.findMany({ where: { organizationId: ctx.orgId, rawDeletedAt: null, status: { in: ["OPEN", "CLOSED"] } }, select: { id: true, breakdownBy: true, status: true, opensOn: true, closesOn: true, closedAt: true, invitedCount: true } });
   let surveys = 0;
   let responses = 0;
   for (const s of candidates) {
     if (surveyState(s.status, iso(s.opensOn), iso(s.closesOn), today) !== "CLOSED") continue;
     if (!retentionDue(iso(s.closedAt ?? s.closesOn), today, months)) continue;
-    const kept = await buildResults(s.id, ctx.orgId, s.invitedCount);
+    const kept = await buildResults(s.id, ctx.orgId, s.invitedCount, s.breakdownBy);
     // the anonymised result is kept without the comments (they are raw words)
     const summary = { ...kept, questions: kept.questions.map((q) => ({ ...q, comments: null })) };
     const count = await db.$transaction(async (tx) => {

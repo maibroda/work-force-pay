@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-267 tables and 200 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+267 tables and 201 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -6415,8 +6415,6 @@ One assessment of one person's level of one skill. Append-only: the current leve
 
 ### Survey
 
-An engagement survey: a few five-point statements and optional comments, for everyone, one role or one department.
-
 | Field | Type | Required | What it holds |
 | --- | --- | --- | --- |
 | id | String |  | (key) |
@@ -6426,6 +6424,7 @@ An engagement survey: a few five-point statements and optional comments, for eve
 | intro | String |  |  |
 | categoryId | String |  | The audience: everyone when both are null, otherwise one role or one department. |
 | departmentId | String |  |  |
+| breakdownBy | SurveyBreakdown |  | The one breakdown the results show (and the one group label stored on an answer). Chosen by HR when the survey is created; a survey made before the choice existed shows the role. |
 | opensOn | DateTime | yes |  |
 | closesOn | DateTime | yes |  |
 | status | SurveyStatus |  |  |
@@ -7452,6 +7451,12 @@ Stage 3 of the training evaluation: did the person's performance on the work the
 ### SurveyCodeStatus
 
 `ACTIVE`, `USED`, `CANCELLED`
+
+### SurveyBreakdown
+
+An engagement survey: a few five-point statements and optional comments, for everyone, one role or one department. What a survey's results are broken down by. ONE per survey, never both: showing the role and the department views together lets a reader subtract one from the other and recover a group the rules hide.
+
+`ROLE`, `DEPARTMENT`
 
 ### HrFunction
 
