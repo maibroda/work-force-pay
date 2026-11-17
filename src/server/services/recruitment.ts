@@ -41,6 +41,12 @@ export function internalApplicantFilter(ctx: Ctx): Prisma.CandidateWhereInput {
 const OPEN_STAGES = ["APPLIED", "SCREENING", "INTERVIEW", "ASSESSMENT", "OFFER"] as const;
 const OPEN_OFFER = ["PENDING_APPROVAL", "APPROVED", "SENT"];
 
+/**
+ * What the audit log says about an offer: its number and its status, never the pay, the approver's note, or the reason it was declined or withdrawn. The audit log is read by the administrators
+ * and the auditor, it is append-only, and erasing a person cannot reach it; the record itself holds everything for the people who may read it.
+ */
+const offerAudit = (o: { offerNumber: string; status: string }) => ({ offerNumber: o.offerNumber, status: o.status });
+
 // ───────────────────────────── Requisitions ─────────────────────────────
 
 export const requisitionSchema = z.object({
@@ -253,7 +259,8 @@ export async function addCandidate(ctx: Ctx, raw: z.input<typeof candidateSchema
         createdBy: ctx.name,
       },
     });
-    await logAudit(ctx, { action: "CANDIDATE_ADD", entity: "Candidate", entityId: c.id, newValue: c }, tx);
+    // the number, the vacancy and the source: never the name, contact details or notes (the audit log is append-only and erasing a person cannot reach it)
+    await logAudit(ctx, { action: "CANDIDATE_ADD", entity: "Candidate", entityId: c.id, newValue: { candidateNumber: c.candidateNumber, requisitionId: c.requisitionId, source: c.source } }, tx);
     return c;
   });
 }
@@ -304,7 +311,7 @@ export async function moveCandidate(
     entityId: id,
     oldValue: { stage: c.stage },
     newValue: { stage },
-    reason,
+    // no reason: why a person was rejected or withdrew is words about them, kept on the candidate (rejectionReason), which erasure clears
   });
   return u;
 }
@@ -340,7 +347,8 @@ export async function scheduleInterview(ctx: Ctx, raw: z.input<typeof interviewS
     });
     if (c.stage === "APPLIED" || c.stage === "SCREENING")
       await tx.candidate.update({ where: { id: c.id }, data: { stage: "INTERVIEW", stageChangedAt: new Date() } });
-    await logAudit(ctx, { action: "INTERVIEW_SCHEDULE", entity: "Candidate", entityId: c.id, newValue: iv }, tx);
+    // the interview and its round and day: never who the interviewer is or where
+    await logAudit(ctx, { action: "INTERVIEW_SCHEDULE", entity: "Candidate", entityId: c.id, newValue: { interviewId: iv.id, round: iv.round, scheduledAt: iv.scheduledAt } }, tx);
     return iv;
   });
 }
@@ -363,7 +371,8 @@ export async function recordInterviewFeedback(ctx: Ctx, interviewId: string, raw
     where: { id: interviewId },
     data: { score: v.score, recommendation: v.recommendation, feedback: v.feedback, completedAt: new Date() },
   });
-  await logAudit(ctx, { action: "INTERVIEW_FEEDBACK", entity: "Candidate", entityId: iv.candidateId, newValue: u });
+  // that feedback was recorded, for which interview: never the score, the recommendation or a word of it (it is read by HR and the panel only, every read logged: the audit log must not be a way round that)
+  await logAudit(ctx, { action: "INTERVIEW_FEEDBACK", entity: "Candidate", entityId: iv.candidateId, newValue: { interviewId: u.id, round: u.round } });
   return u;
 }
 
@@ -396,7 +405,7 @@ export async function addCheck(ctx: Ctx, raw: z.input<typeof checkSchema>) {
   const exists = await db.candidateCheck.findFirst({ where: { candidateId: v.candidateId, checkType: v.checkType } });
   if (exists) throw new BusinessError("That check is already on this candidate.");
   const chk = await db.candidateCheck.create({ data: { organizationId: ctx.orgId, ...v } });
-  await logAudit(ctx, { action: "CANDIDATE_CHECK_ADD", entity: "Candidate", entityId: v.candidateId, newValue: chk });
+  await logAudit(ctx, { action: "CANDIDATE_CHECK_ADD", entity: "Candidate", entityId: v.candidateId, newValue: { checkId: chk.id, checkType: chk.checkType, status: chk.status } });
   return chk;
 }
 
@@ -415,7 +424,8 @@ export async function updateCheck(
     where: { id },
     data: { status, notes: notes?.trim() || chk.notes, checkedBy: ctx.name, checkedAt: new Date() },
   });
-  await logAudit(ctx, { action: "CANDIDATE_CHECK_UPDATE", entity: "Candidate", entityId: chk.candidateId, oldValue: chk, newValue: u });
+  // the type and the status: never what the check found (a failed police clearance, a medical)
+  await logAudit(ctx, { action: "CANDIDATE_CHECK_UPDATE", entity: "Candidate", entityId: chk.candidateId, oldValue: { status: chk.status }, newValue: { checkType: u.checkType, status: u.status } });
   return u;
 }
 
@@ -473,7 +483,7 @@ export async function createOffer(ctx: Ctx, raw: z.input<typeof offerSchema>) {
         createdById: ctx.userId,
       },
     });
-    await logAudit(ctx, { action: "OFFER_RAISE", entity: "Candidate", entityId: c.id, newValue: o }, tx);
+    await logAudit(ctx, { action: "OFFER_RAISE", entity: "Candidate", entityId: c.id, newValue: { ...offerAudit(o), employmentType: o.employmentType } }, tx);
     return o;
   });
 }
@@ -493,7 +503,7 @@ export async function approveOffer(ctx: Ctx, id: string, note?: string) {
     where: { id },
     data: { status: "APPROVED", approvedBy: ctx.name, approvedAt: new Date(), decisionNote: note?.trim() || null },
   });
-  await logAudit(ctx, { action: "OFFER_APPROVE", entity: "Candidate", entityId: o.candidateId, newValue: u });
+  await logAudit(ctx, { action: "OFFER_APPROVE", entity: "Candidate", entityId: o.candidateId, newValue: offerAudit(u) });
   return u;
 }
 
@@ -504,7 +514,8 @@ export async function rejectOffer(ctx: Ctx, id: string, note: string) {
   if (o.status !== "PENDING_APPROVAL") throw new BusinessError(`This offer is already ${o.status.replace(/_/g, " ").toLowerCase()}.`);
   if (o.createdById === ctx.userId) throw new BusinessError("You can't decide an offer you raised — someone else must.");
   const u = await db.jobOffer.update({ where: { id }, data: { status: "REJECTED", approvedBy: ctx.name, approvedAt: new Date(), decisionNote: note.trim() } });
-  await logAudit(ctx, { action: "OFFER_REJECT", entity: "Candidate", entityId: o.candidateId, newValue: u, reason: note });
+  // no reason in the log: it is kept on the offer (decisionNote), which erasure clears
+  await logAudit(ctx, { action: "OFFER_REJECT", entity: "Candidate", entityId: o.candidateId, newValue: offerAudit(u) });
   return u;
 }
 
@@ -513,7 +524,7 @@ export async function markOfferSent(ctx: Ctx, id: string) {
   const o = await loadOffer(ctx, id);
   if (o.status !== "APPROVED") throw new BusinessError("Only an approved offer can be sent to the candidate.");
   const u = await db.jobOffer.update({ where: { id }, data: { status: "SENT", sentAt: new Date() } });
-  await logAudit(ctx, { action: "OFFER_SEND", entity: "Candidate", entityId: o.candidateId, newValue: u });
+  await logAudit(ctx, { action: "OFFER_SEND", entity: "Candidate", entityId: o.candidateId, newValue: offerAudit(u) });
   return u;
 }
 
@@ -530,7 +541,8 @@ export async function recordOfferResponse(ctx: Ctx, id: string, decision: "ACCEP
     where: { id },
     data: { status: decision, respondedAt: new Date(), declineReason: decision === "DECLINED" ? reason!.trim() : null },
   });
-  await logAudit(ctx, { action: decision === "ACCEPTED" ? "OFFER_ACCEPTED" : "OFFER_DECLINED", entity: "Candidate", entityId: o.candidateId, newValue: u, reason });
+  // no reason in the log: why a candidate declined is kept on the offer (declineReason), which erasure clears
+  await logAudit(ctx, { action: decision === "ACCEPTED" ? "OFFER_ACCEPTED" : "OFFER_DECLINED", entity: "Candidate", entityId: o.candidateId, newValue: offerAudit(u) });
   return u;
 }
 
@@ -540,7 +552,8 @@ export async function withdrawOffer(ctx: Ctx, id: string, reason: string) {
   const o = await loadOffer(ctx, id);
   if (!OPEN_OFFER.includes(o.status)) throw new BusinessError(`A ${o.status.replace(/_/g, " ").toLowerCase()} offer can't be withdrawn.`);
   const u = await db.jobOffer.update({ where: { id }, data: { status: "WITHDRAWN", declineReason: reason.trim() } });
-  await logAudit(ctx, { action: "OFFER_WITHDRAW", entity: "Candidate", entityId: o.candidateId, newValue: u, reason });
+  // no reason in the log: it is kept on the offer (declineReason), which erasure clears
+  await logAudit(ctx, { action: "OFFER_WITHDRAW", entity: "Candidate", entityId: o.candidateId, newValue: offerAudit(u) });
   return u;
 }
 

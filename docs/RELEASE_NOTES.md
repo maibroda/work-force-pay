@@ -23,7 +23,16 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `audit-requisition-justification`, no migration)
+
+## Not yet merged (branch `audit-recruitment-ids-only`, no migration)
+
+- **Recruitment no longer writes a candidate's words, contact details or pay to the audit log** (a finding reported with #219 and chosen by the founder on 2026-11-17). Several recruitment actions wrote the **whole record** to the audit log, which is read by the administrators and the auditor, is **append-only**, and cannot be reached when a person is erased. It included: a candidate's **name, phone, email and notes**; an interviewer's **name**, and an interviewer's **score, recommendation and free-text feedback** (which is meant to be read only by HR and the panel, every read logged, so this was a way round that rule); a vetting check's **notes** (what it found); and a job offer's **pay**, the approver's note and the reasons it was declined, rejected or withdrawn.
+- **Now the log carries ids, numbers, stages and statuses only:** a candidate's number, vacancy and source; an interview's id, round and day; that feedback was recorded; a check's type and status; an offer's number and status; and a change of stage without the reason. **The records themselves still hold everything**, for the people who may read them, and erasure still clears it there.
+- **Entries written before this change still hold the words** (append-only). A decision on whether to do anything about them is for the founder.
+- **Not changed:** the hire entry still records the offer's monthly pay beside the new employee number, contract number and offer number (the pay then belongs to the employee's own record); say if you want it removed too. The interview-panel, screening and internal-vacancy code already wrote ids only.
+- **Tests (written first, five failed before the fix):** `tests/integration/recruitment-audit.test.ts` (6), which runs a candidate through adding, interview, feedback, checks, offers (raised, approved, sent, declined, rejected, withdrawn) and rejection, and also proves the records still hold the words. The other recruitment, hiring, retention, erasure and privacy tests pass unchanged. No migration.
+
+## Merged in #219 (no migration)
 
 - **A requisition's private words no longer go into the audit log** (the founder's approval of 2026-11-17, S7 of `docs/plans/internal-selection-plan.md`). Raising, approving and rejecting a requisition used to write the **whole requisition row** to the audit log: the **justification** (it can name people), the **decision note** and the **budget**, readable by the administrators and the auditor. Now the log carries the **number, title, role, headcount and type** for a raise, and the **number and the new status** for an approval or rejection (a rejection keeps the approver's stated reason in the log's own reason field, as every decision does). The requisition itself still holds the words, for the people who may read it.
 - **The audit log is append-only, so entries written before this change still hold the words.** They cannot be edited; a decision on whether to do anything about them (for example, restricting who reads those older entries) is for the founder.
