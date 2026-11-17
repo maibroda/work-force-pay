@@ -113,6 +113,7 @@ export default async function SurveyPage({ params }: { params: Promise<{ id: str
             <p className="mb-3 text-sm">
               {r.participation.took} of {r.participation.invited} took part. {r.responses === null ? `Fewer than ${MIN_RESPONSES} answers: nothing is shown.` : `${r.responses} submissions.`}
             </p>
+            <p className="mb-3 text-xs text-muted-foreground">Broken down by {r.breakdownBy === "DEPARTMENT" ? "department" : "role"} only (chosen when the survey was created): one breakdown per survey, so two views cannot be subtracted to reveal a small group.</p>
             {r.questions.map((q) => (
               <div key={q.id} className="mb-4 rounded border p-3">
                 <p className="text-sm font-medium">{q.text}</p>

@@ -39,6 +39,17 @@ export default async function SurveysPage() {
               { name: "closesOn", label: "Closes on", type: "date", required: true },
               { name: "categoryId", label: "Invite one role only (optional)", type: "select", options: opts.categories },
               { name: "departmentId", label: "Or one department only (optional)", type: "select", options: opts.departments },
+              {
+                name: "breakdownBy",
+                label: "Break the results down by",
+                type: "select",
+                defaultValue: "ROLE",
+                options: [
+                  { value: "ROLE", label: "Role (the default)" },
+                  { value: "DEPARTMENT", label: "Department" },
+                ],
+                help: "One only, chosen now and fixed. Showing both would let the two be subtracted to reveal a small group.",
+              },
               { name: "intro", label: "A short introduction employees will read (optional)", type: "textarea", span: 3 },
             ]}
           />

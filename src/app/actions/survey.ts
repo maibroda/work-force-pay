@@ -18,7 +18,7 @@ function answersFrom(v: V) {
 // ── HR builds and runs a survey ──
 export async function createSurveyAction(v: V) {
   return act("survey.manage", async (ctx) => {
-    const s = await sv.createSurvey(ctx, { title: str(v.title) ?? "", intro: str(v.intro), categoryId: str(v.categoryId) || null, departmentId: str(v.departmentId) || null, opensOn: str(v.opensOn) ?? "", closesOn: str(v.closesOn) ?? "" });
+    const s = await sv.createSurvey(ctx, { title: str(v.title) ?? "", intro: str(v.intro), categoryId: str(v.categoryId) || null, departmentId: str(v.departmentId) || null, breakdownBy: (str(v.breakdownBy) || "ROLE") as "ROLE" | "DEPARTMENT", opensOn: str(v.opensOn) ?? "", closesOn: str(v.closesOn) ?? "" });
     return { message: "Survey created. Add its questions, then open it.", redirectTo: `/hr/surveys/${s.id}` };
   }, PAGES);
 }

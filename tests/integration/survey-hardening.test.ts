@@ -31,8 +31,8 @@ async function people(t: T, hr: Ctx, groups: Array<{ categoryId: string; departm
     }
   return out;
 }
-async function survey(hr: Ctx) {
-  const s = await createSurvey(hr, { title: "Hardening check", opensOn: today(), closesOn: iso(addDays(todayUtc(), 14)) } as never);
+async function survey(hr: Ctx, breakdownBy?: "ROLE" | "DEPARTMENT") {
+  const s = await createSurvey(hr, { title: "Hardening check", opensOn: today(), closesOn: iso(addDays(todayUtc(), 14)), ...(breakdownBy ? { breakdownBy } : {}) } as never);
   const q1 = await addQuestion(hr, s.id, { kind: "SCALE", text: "I feel safe at my site" });
   const q2 = await addQuestion(hr, s.id, { kind: "COMMENT", text: "What would you change?" });
   return { s, q1, q2 };
@@ -53,7 +53,9 @@ describe("S1: a response carries its group only when the group is large enough t
       for (const r of rows) expect(r.categoryId, `${n} invited`).toBe(expected ? t.guardId : null);
     }
   });
-  it("stores a group's role and department independently: a large role with a small department keeps the role only", async () => {
+  // CHANGED 2026-11-17 (the founder's option A, one breakdown per survey): this test used to assert that BOTH the role and the department were stored on an answer, each decided separately.
+  // Now only the survey's chosen dimension is stored (a role survey stores the role, a department survey the department), each still only for a group of ten or more invited.
+  it("stores a group only for the survey's chosen breakdown: the role of a group of ten or more for a role survey, the department for a department survey, and never the other", async () => {
     const t = await isolatedOrg();
     const hr = await login(t, "HR_ADMIN");
     const small = await db.department.create({ data: { organizationId: t.org.id, code: "SMALL", name: "Small department" } });
@@ -61,15 +63,22 @@ describe("S1: a response carries its group only when the group is large enough t
       { categoryId: t.guardId, departmentId: t.deptId, count: 10 },
       { categoryId: t.guardId, departmentId: small.id, count: 2 },
     ]);
-    const qs = await survey(hr);
-    await openSurvey(hr, qs.s.id);
-    for (const p of ppl) await submitAsEmployee(p.ctx, qs.s.id, answer(qs, 3));
-    const rows = await db.surveyResponse.findMany({ where: { surveyId: qs.s.id } });
-    expect(rows).toHaveLength(12);
-    expect(rows.every((r) => r.categoryId === t.guardId)).toBe(true); // twelve guards invited
-    expect(rows.filter((r) => r.departmentId === t.deptId)).toHaveLength(10);
-    expect(rows.filter((r) => r.departmentId === null)).toHaveLength(2); // the department of two people is not stored
-    expect(rows.some((r) => r.departmentId === small.id)).toBe(false);
+    const byRole = await survey(hr, "ROLE");
+    const byDept = await survey(hr, "DEPARTMENT");
+    for (const qs of [byRole, byDept]) {
+      await openSurvey(hr, qs.s.id);
+      for (const p of ppl) await submitAsEmployee(p.ctx, qs.s.id, answer(qs, 3));
+    }
+    const roleRows = await db.surveyResponse.findMany({ where: { surveyId: byRole.s.id } });
+    expect(roleRows).toHaveLength(12);
+    expect(roleRows.every((r) => r.categoryId === t.guardId)).toBe(true); // twelve guards invited
+    expect(roleRows.every((r) => r.departmentId === null)).toBe(true); // the department is not kept on a role survey at all
+    const deptRows = await db.surveyResponse.findMany({ where: { surveyId: byDept.s.id } });
+    expect(deptRows).toHaveLength(12);
+    expect(deptRows.every((r) => r.categoryId === null)).toBe(true); // the role is not kept on a department survey at all
+    expect(deptRows.filter((r) => r.departmentId === t.deptId)).toHaveLength(10);
+    expect(deptRows.filter((r) => r.departmentId === null)).toHaveLength(2); // the department of two people is not stored
+    expect(deptRows.some((r) => r.departmentId === small.id)).toBe(false);
   });
   it("leaves the access-code rows as they are (they still hold the group: the invited counts come from them)", async () => {
     const t = await isolatedOrg();
