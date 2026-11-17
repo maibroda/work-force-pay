@@ -40,7 +40,7 @@ export default async function PoliciesPage() {
               { name: "title", label: "Name", required: true, placeholder: "Code of Conduct" },
               { name: "kind", label: "What it is", type: "select", required: true, defaultValue: "POLICY", options: [{ value: "POLICY", label: "Policy" }, { value: "HANDBOOK", label: "Handbook" }, { value: "SOP", label: "Procedure (SOP)" }], help: "Fixed once made." },
               { name: "acknowledgementRequired", label: "Employees must acknowledge it", type: "select", options: [{ value: "true", label: "Yes" }, { value: "false", label: "No, it is there to be read" }], help: "Blank = yes for a policy, no for a handbook or procedure." },
-              { name: "reviewDueOn", label: "Review due on (optional)", type: "date", help: "Once this day has passed it appears in the HR digest until it is marked reviewed." },
+              { name: "reviewDueOn", label: "Review due on (required for a procedure)", type: "date", help: "A procedure (SOP) must have one, no later than the company's setting (12 months unless changed) after it takes effect. Once this day has passed it appears in the HR digest until it is marked reviewed." },
               { name: "categoryId", label: "Applies to", type: "select", options: o.categories, help: "Leave blank for every employee." },
               { name: "summary", label: "One-line summary", span: 2 },
               { name: "body", label: "The policy text employees will read", type: "textarea", span: 2, help: "Or give a document reference below, or both." },
@@ -72,6 +72,7 @@ export default async function PoliciesPage() {
                   </Link>
                   <span className="ml-2 text-[10px] uppercase text-muted-foreground">{POLICY_KIND_LABELS[c.policy.kind]}</span>
                   {c.policy.summary && <div className="text-xs text-muted-foreground">{c.policy.summary}</div>}
+                  {c.policy.kind === "SOP" && !c.policy.reviewDueOn && <div className="text-xs text-amber-700">No review date set: the next edit must set one</div>}
                   {c.policy.reviewDueOn && (
                     <div className={`text-xs ${iso(c.policy.reviewDueOn) < iso(new Date()) ? "text-red-700" : "text-muted-foreground"}`}>
                       {iso(c.policy.reviewDueOn) < iso(new Date()) ? "Review overdue since" : "Review due"} {fmtDate(c.policy.reviewDueOn)}

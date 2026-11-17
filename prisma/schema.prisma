@@ -2488,6 +2488,8 @@ model HrPolicy {
   relationsCaseSlaDays   Int @default(21)
   /// An HR enquiry should have a first reply within this many working days (Monday to Friday, not a public holiday the company has entered). Overdue ones are listed in the HR digest.
   enquiryResponseDays    Int @default(3)
+  /// A procedure (SOP) needs a review date no later than this many months after it takes effect (and, when marked reviewed, after today). Handbooks and policies are not held to it.
+  sopReviewMonths        Int @default(12)
 
   // Performance improvement plans (proposed defaults; the company sets its own)
   pipDefaultDays        Int @default(60)

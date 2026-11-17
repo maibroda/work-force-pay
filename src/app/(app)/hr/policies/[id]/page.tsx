@@ -37,7 +37,7 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
         description={
           <span className="flex flex-wrap items-center gap-2">
             <StatusBadge status={policy.status} /> {POLICY_KIND_LABELS[policy.kind]} · {policy.category?.name ?? "Everyone"} · {policy.acknowledgementRequired ? `${policy.graceDays} days to acknowledge` : "no acknowledgement needed"}
-            {policy.reviewDueOn ? ` · review due ${fmtDate(policy.reviewDueOn)}` : ""}
+            {policy.reviewDueOn ? ` · review due ${fmtDate(policy.reviewDueOn)}` : policy.kind === "SOP" ? " · no review date set" : ""}
             {current ? ` · version ${current.version} in effect since ${fmtDate(current.effectiveDate)}` : " · not yet in effect"}
           </span>
         }
@@ -176,6 +176,7 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
                 { name: "body", label: "The new text", type: "textarea", span: 2 },
                 { name: "documentReference", label: "Document reference" },
                 { name: "effectiveDate", label: "Effective from", type: "date", help: "Blank = today. A future date schedules it." },
+                { name: "reviewDueOn", label: "Review due on", type: "date", required: policy.kind === "SOP" && !policy.reviewDueOn, defaultValue: policy.reviewDueOn ? policy.reviewDueOn.toISOString().slice(0, 10) : "", help: policy.kind === "SOP" ? "A procedure needs one, no later than the company's months after this version takes effect." : "Optional." },
               ]}
             />
           </FormPanel>
@@ -191,13 +192,13 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
                 { name: "summary", label: "One-line summary", span: 2, defaultValue: policy.summary ?? undefined },
                 { name: "graceDays", label: "Days to acknowledge", type: "number", min: 0, max: 365, defaultValue: policy.graceDays },
                 { name: "acknowledgementRequired", label: "Employees must acknowledge it", type: "select", options: [{ value: "true", label: "Yes" }, { value: "false", label: "No, it is there to be read" }], defaultValue: String(policy.acknowledgementRequired), help: "Switching it on asks people from now; what they already acknowledged stands." },
-                { name: "reviewDueOn", label: "Review due on", type: "date", defaultValue: policy.reviewDueOn ? policy.reviewDueOn.toISOString().slice(0, 10) : "", help: "Blank = no review date." },
+                { name: "reviewDueOn", label: "Review due on", type: "date", required: policy.kind === "SOP", defaultValue: policy.reviewDueOn ? policy.reviewDueOn.toISOString().slice(0, 10) : "", help: policy.kind === "SOP" ? "A procedure always has a review date: it can be changed, not cleared." : "Blank = no review date." },
               ]}
             />
           </FormPanel>
           <FormPanel title="Mark as reviewed">
             <p className="mb-3 text-xs text-muted-foreground">Record that this has been reviewed, and set when it is next due. A change to the wording is a new version, published above.</p>
-            <SmartForm columns={2} submitLabel="Mark as reviewed" action={markPolicyReviewedAction.bind(null, policy.id)} fields={[{ name: "nextReviewOn", label: "Next review due on (blank = none)", type: "date" }]} />
+            <SmartForm columns={2} submitLabel="Mark as reviewed" action={markPolicyReviewedAction.bind(null, policy.id)} fields={[{ name: "nextReviewOn", label: policy.kind === "SOP" ? "Next review due on (required for a procedure)" : "Next review due on (blank = none)", type: "date", required: policy.kind === "SOP" }]} />
           </FormPanel>
         </>
       )}

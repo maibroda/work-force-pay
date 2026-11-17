@@ -49,6 +49,7 @@ export default async function HrPolicyPage() {
             { name: "offerValidityDays", label: "Job offers stay valid for (days)", type: "number", min: 1, defaultValue: p.offerValidityDays },
             { name: "relationsCaseSlaDays", label: "Employee-relations case target (days)", type: "number", min: 1, defaultValue: p.relationsCaseSlaDays },
             { name: "enquiryResponseDays", label: "First reply to an HR enquiry within (working days)", type: "number", min: 1, max: 30, defaultValue: p.enquiryResponseDays, help: "Monday to Friday, not counting the public holidays you have entered. An enquiry still unanswered after this appears in the HR digest." },
+            { name: "sopReviewMonths", label: "A procedure (SOP) must be reviewed within (months)", type: "number", min: 1, max: 60, defaultValue: p.sopReviewMonths, help: "Every procedure needs a review date no later than this many months after it takes effect, and after each review. Handbooks and policies are not held to it." },
             { name: "dailyRateDivisor", label: "Days in a month for a day's pay", type: "number", min: 1, max: 31, defaultValue: p.dailyRateDivisor, help: "30 = calendar convention; 26 = working days. Drives every end-of-service formula." },
           ]}
         />

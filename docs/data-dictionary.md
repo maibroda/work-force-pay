@@ -1640,6 +1640,7 @@ One per organization — every number a buyer might want to change without a cod
 | offerValidityDays | Int |  |  |
 | relationsCaseSlaDays | Int |  |  |
 | enquiryResponseDays | Int |  | An HR enquiry should have a first reply within this many working days (Monday to Friday, not a public holiday the company has entered). Overdue ones are listed in the HR digest. |
+| sopReviewMonths | Int |  | A procedure (SOP) needs a review date no later than this many months after it takes effect (and, when marked reviewed, after today). Handbooks and policies are not held to it. |
 | pipDefaultDays | Int |  |  |
 | pipMaxDays | Int |  |  |
 | pipMaxExtensions | Int |  |  |

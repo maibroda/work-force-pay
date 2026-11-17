@@ -25,7 +25,16 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `audit-hire-pay`, no migration)
+
+## Not yet merged (branch `sop-review-date`, one migration: 20261222090000_sop_review_months)
+
+- **A procedure (SOP) must have a review date** (the founder's approval of 2026-11-17, "approved as recommended"). **No money, pay or statutory setting is touched.** Read `docs/plans/sop-review-date-explain-back.md`.
+- **The rule:** a **new procedure needs a review date, no later than 12 months after it takes effect** (counted from a future effective day if it has one). **12 months is a company setting** under the HR policy settings ("A procedure (SOP) must be reviewed within (months)", 1 to 60; existing companies start at 12). **Publishing a new version** needs a valid date on file or one given with it (the Publish form has a new "Review due on" box); **marking a procedure reviewed** needs the next review date, within the months from today; **a procedure's date can be changed but never cleared**. **A handbook and a policy are not held to it.**
+- **Procedures made before this rule, with no date, are not blocked or changed:** they are flagged "No review date set" on the list and on their page, still read by employees, and **the next edit must set a date**. They do not appear in the HR digest until they have one (the digest lists only dates that have passed).
+- **Migration (reversible, additive):** one column on the HR policy (the months, default 12). Round-tripped (up, down, up) on a copy of the seeded database: no schema difference. The data dictionary was regenerated.
+- **Tests (written first):** `tests/unit/policy-sop-review.test.ts` (4) and `tests/integration/policy-sop-review.test.ts` (15). **Existing tests changed on purpose, with dated comments** (`policy-kinds.test.ts`: the helper now gives a procedure a review date; one test now says "optional" for a handbook only; one step that cleared a procedure's date when marking it reviewed now sets a new date). Every other behaviour there is unchanged. **Not built:** a reminder before the date, a second person approving a review, and a report of undated procedures.
+
+## Merged in #221 (no migration)
 
 - **A hire is recorded without the offer's pay** (the founder's decision of 2026-11-17, closing the last open item from #220). The hire entry in the audit log used to record the offer's monthly pay beside the new employee, contract and offer numbers. It now records **the three numbers only**; the pay is on the contract, and the audit log is append-only and cannot be reached when a person is erased.
 - **Entries written before this change still hold the pay** (append-only). A decision on whether to do anything about them is for the founder.

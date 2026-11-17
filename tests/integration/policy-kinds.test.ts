@@ -15,7 +15,9 @@ type Org = Awaited<ReturnType<typeof isolatedOrg>>;
 const day = (n: number) => iso(addDays(todayUtc(), n));
 const staff = (t: Org, first: string, opts: { office?: boolean } = {}) =>
   createEmployee(t.ctx("HR_ADMIN"), { firstName: first, lastName: "Reader", employmentDate: "2023-01-01", categoryId: opts.office ? t.officeId : t.guardId } as never);
-const item = (over: Record<string, unknown> = {}) => ({ title: `Item ${uid()}`, summary: "Read it", body: "Step one. Step two.", graceDays: 14, ...over });
+// CHANGED 2026-11-17 on purpose (sop-review-date, approved by the founder): a procedure (SOP) now needs a review date, so unless a test says otherwise a procedure here is made with one.
+// The rule itself is tested in policy-sop-review.test.ts; every other behaviour tested here is unchanged.
+const item = (over: Record<string, unknown> = {}) => ({ title: `Item ${uid()}`, summary: "Read it", body: "Step one. Step two.", graceDays: 14, ...(over.kind === "SOP" && !("reviewDueOn" in over) ? { reviewDueOn: day(90) } : {}), ...over });
 
 describe("kinds, and the default that changes nothing", () => {
   it("a policy created the old way is a POLICY that must be acknowledged, exactly as before", async () => {
@@ -131,11 +133,11 @@ describe("switching acknowledgement on and off", () => {
 });
 
 describe("the review date", () => {
-  it("is optional, can be set when the item is made or later, and must be a real date", async () => {
+  it("is optional for a handbook (a procedure needs one: policy-sop-review.test.ts), can be set when the item is made or later, and must be a real date", async () => {
     const t = await isolatedOrg();
     const hr = t.ctx("HR_ADMIN");
-    expect((await createPolicy(hr, item({ kind: "SOP" }))).reviewDueOn).toBeNull();
-    const withDate = await createPolicy(hr, item({ kind: "SOP", reviewDueOn: day(90) }));
+    expect((await createPolicy(hr, item({ kind: "HANDBOOK" }))).reviewDueOn).toBeNull();
+    const withDate = await createPolicy(hr, item({ kind: "HANDBOOK", reviewDueOn: day(90) }));
     expect(iso(withDate.reviewDueOn!)).toBe(day(90));
     await expect(createPolicy(hr, item({ reviewDueOn: "next spring" }))).rejects.toThrow();
     await updatePolicy(hr, withDate.id, { reviewDueOn: day(200) } as never);
@@ -159,7 +161,7 @@ describe("the review date", () => {
     expect(sec.items[0]).toMatchObject({ path: `/hr/policies/${due.id}` });
     expect(sec.items[0].text).toMatch(/Cash handling.*review was due/);
   });
-  it("is cleared by marking the item reviewed, with the next review date or none, and that is audited by ids and dates", async () => {
+  it("is cleared by marking the item reviewed, with the next review date, and that is audited by ids and dates", async () => {
     const t = await isolatedOrg();
     const hr = t.ctx("HR_ADMIN");
     const sop = await createPolicy(hr, item({ kind: "SOP", reviewDueOn: day(-5) }));
@@ -169,8 +171,9 @@ describe("the review date", () => {
     await markPolicyReviewed(hr, sop.id, day(365));
     expect(iso((await db.companyPolicy.findUniqueOrThrow({ where: { id: sop.id } })).reviewDueOn!)).toBe(day(365));
     expect(await policyReviewsDue(t.org.id, todayUtc())).toEqual([]);
-    await markPolicyReviewed(hr, sop.id, null);
-    expect((await db.companyPolicy.findUniqueOrThrow({ where: { id: sop.id } })).reviewDueOn).toBeNull();
+    // CHANGED 2026-11-17 on purpose: this step used to clear the date ("or none"); a procedure now always has a next review date (a handbook may still have none: policy-sop-review.test.ts)
+    await markPolicyReviewed(hr, sop.id, day(200));
+    expect(iso((await db.companyPolicy.findUniqueOrThrow({ where: { id: sop.id } })).reviewDueOn!)).toBe(day(200));
     const rows = await db.auditLog.findMany({ where: { organizationId: t.org.id, action: "POLICY_REVIEWED", entityId: sop.id } });
     expect(rows).toHaveLength(2);
     expect(JSON.stringify(rows)).toContain(day(365));
