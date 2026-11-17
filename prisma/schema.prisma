@@ -769,6 +769,9 @@ model Organization {
   requisitionCriteria       RequisitionCriterion[]
   scorecardScores           ScorecardScore[]
   candidateSelections       CandidateSelection[]
+  screeningCriteria         ScreeningCriterion[]
+  candidateScreenings       CandidateScreening[]
+  candidateShortlists       CandidateShortlist[]
   relationsCases            RelationsCase[]
   relationsCaseNotes        RelationsCaseNote[]
   exitSettlements           ExitSettlement[]
@@ -2651,6 +2654,7 @@ model JobRequisition {
 
   candidates Candidate[]
   criteria   RequisitionCriterion[]
+  screeningCriteria ScreeningCriterion[]
 
   @@unique([organizationId, requisitionNumber])
   @@index([organizationId, status])
@@ -2687,6 +2691,8 @@ model Candidate {
   checks     CandidateCheck[]
   offers     JobOffer[]
   selection  CandidateSelection?
+  screenings CandidateScreening[]
+  shortlist  CandidateShortlist?
 
   @@unique([organizationId, candidateNumber])
   @@index([organizationId, requisitionId, stage])
@@ -2800,6 +2806,78 @@ model CandidateSelection {
   decisionNote     String?
 
   @@index([organizationId, status])
+}
+
+enum ScreeningKind {
+  MUST_HAVE
+  PREFERRED
+}
+
+enum ScreeningOutcome {
+  MET
+  NOT_MET
+  UNCLEAR
+}
+
+enum ShortlistDecision {
+  SHORTLISTED
+  NOT_SHORTLISTED
+}
+
+/// A thing a requisition's candidates are screened against (one to ten). Advice only: an answer never ranks, orders, filters or rejects a candidate.
+model ScreeningCriterion {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  requisitionId  String
+  requisition    JobRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+  position       Int
+  name           String
+  kind           ScreeningKind
+  createdAt      DateTime       @default(now())
+
+  screenings CandidateScreening[]
+
+  @@unique([requisitionId, position])
+  @@index([organizationId, requisitionId])
+}
+
+/// HR's recorded answer for one candidate and one criterion: met, not met or unclear, with the evidence for a met or not met.
+model CandidateScreening {
+  id             String             @id @default(cuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  candidateId    String
+  candidate      Candidate          @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  criterionId    String
+  criterion      ScreeningCriterion @relation(fields: [criterionId], references: [id], onDelete: Cascade)
+  outcome        ScreeningOutcome
+  /// Free text about a person: cleared when an unsuccessful applicant is anonymised.
+  evidence       String?
+  recordedById   String
+  recordedBy     String
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@unique([candidateId, criterionId])
+  @@index([organizationId, candidateId])
+}
+
+/// A named person's decision to shortlist a candidate or not, with the reason. It changes nothing else: the candidate's stage is moved by a person.
+model CandidateShortlist {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  candidateId    String            @unique
+  candidate      Candidate         @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  decision       ShortlistDecision
+  /// Free text about a person: cleared when an unsuccessful applicant is anonymised.
+  reason         String
+  decidedById    String
+  decidedBy      String
+  decidedAt      DateTime          @default(now())
+
+  @@index([organizationId, decision])
 }
 
 /// Pre-employment vetting step (references, ID, police clearance, guarantor, medical…). A candidate
