@@ -22,7 +22,14 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `internal-move`, one migration: 20261221090000_internal_move)
+
+## Not yet merged (branch `audit-requisition-justification`, no migration)
+
+- **A requisition's private words no longer go into the audit log** (the founder's approval of 2026-11-17, S7 of `docs/plans/internal-selection-plan.md`). Raising, approving and rejecting a requisition used to write the **whole requisition row** to the audit log: the **justification** (it can name people), the **decision note** and the **budget**, readable by the administrators and the auditor. Now the log carries the **number, title, role, headcount and type** for a raise, and the **number and the new status** for an approval or rejection (a rejection keeps the approver's stated reason in the log's own reason field, as every decision does). The requisition itself still holds the words, for the people who may read it.
+- **The audit log is append-only, so entries written before this change still hold the words.** They cannot be edited; a decision on whether to do anything about them (for example, restricting who reads those older entries) is for the founder.
+- **Tests (written first, they failed before the fix):** `tests/integration/requisition-audit.test.ts` (4); the other recruitment tests pass unchanged. No migration. **Not changed (findings for the founder, see the PR):** the same whole-row pattern is used elsewhere in recruitment (a candidate's details, an interviewer's free-text feedback and a job offer's pay).
+
+## Merged in #218 (one migration: 20261221090000_internal_move)
 
 - **Internal applicants: what "selected" means** (recruitment slice B, part 2; the founder's approval of 2026-11-17 of `docs/plans/internal-selection-plan.md`: S1 to S3, S5 and S6 as recommended, S4 left with HR as today). **No pay, contract or salary structure is set or changed.** Read `docs/plans/internal-selection-explain-back.md`.
 - **What it adds:** on an internal applicant's candidate page, once they are at the offer stage, HR can **start the move**: it opens a **promotion proposal** (the existing process) to the vacancy's role, linked to the candidate, with **HR's own reason (nothing from the interviews is copied)**. **HR administrator only.** The existing rules then apply unchanged (a different HR person approves, a warning needs a reason, the employee sees it only once approved, their manager sees nothing, the system tells nobody). A panel-interviewed candidate needs the chair's recommendation and a second person's approval first, as for an offer. A move to the role already held is refused (a lateral move is recorded on the employee screens).
