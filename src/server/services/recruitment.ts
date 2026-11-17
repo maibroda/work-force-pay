@@ -91,7 +91,8 @@ export async function createRequisition(ctx: Ctx, raw: z.input<typeof requisitio
         requestedById: ctx.userId,
       },
     });
-    await logAudit(ctx, { action: "REQUISITION_RAISE", entity: "JobRequisition", entityId: r.id, newValue: r }, tx);
+    // the number, title, role and headcount: never the justification (it can name people) or the budget. The audit log is append-only, so words written to it can never be taken back.
+    await logAudit(ctx, { action: "REQUISITION_RAISE", entity: "JobRequisition", entityId: r.id, newValue: { requisitionNumber, title: r.title, categoryId: r.categoryId, departmentId: r.departmentId, headcount: r.headcount, employmentType: r.employmentType } }, tx);
     return r;
   });
 }
@@ -111,7 +112,8 @@ export async function approveRequisition(ctx: Ctx, id: string, note?: string) {
     where: { id },
     data: { status: "APPROVED", approvedBy: ctx.name, approvedAt: new Date(), decisionNote: note?.trim() || null },
   });
-  await logAudit(ctx, { action: "REQUISITION_APPROVE", entity: "JobRequisition", entityId: id, newValue: u });
+  // the number and the new status only: not the justification, the decision note or the budget
+  await logAudit(ctx, { action: "REQUISITION_APPROVE", entity: "JobRequisition", entityId: id, newValue: { requisitionNumber: u.requisitionNumber, status: u.status } });
   return u;
 }
 
@@ -125,7 +127,8 @@ export async function rejectRequisition(ctx: Ctx, id: string, note: string) {
     where: { id },
     data: { status: "REJECTED", approvedBy: ctx.name, approvedAt: new Date(), decisionNote: note.trim() },
   });
-  await logAudit(ctx, { action: "REQUISITION_REJECT", entity: "JobRequisition", entityId: id, newValue: u, reason: note });
+  // the number and the new status, with the approver's stated reason in the audit log's own reason field (as for every decision): not the justification or the budget
+  await logAudit(ctx, { action: "REQUISITION_REJECT", entity: "JobRequisition", entityId: id, newValue: { requisitionNumber: u.requisitionNumber, status: u.status }, reason: note });
   return u;
 }
 
