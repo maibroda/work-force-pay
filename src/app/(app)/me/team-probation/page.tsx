@@ -2,18 +2,22 @@ import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
 import { getHrPolicy } from "@/server/services/hr-policy";
 import { teamProbations } from "@/server/services/probation-workflow";
+import { reconsiderationCandidates } from "@/server/services/probation-reconsideration";
+import { requestFields } from "@/components/probation-reconsiderations";
 import { NOTE_MIN, RECOMMENDATION_LABELS, RECOMMENDATIONS } from "@/lib/probation-workflow";
 import { fmtDate } from "@/lib/dates";
 import { Empty, FormPanel, PageHeader, Section } from "@/components/page";
 import { SmartForm } from "@/components/smart-form";
 import { Badge } from "@/components/ui/badge";
 import { recommendProbationAction } from "@/app/actions/probation-workflow";
+import { requestReconsiderationAction } from "@/app/actions/probation-reconsideration";
 
 /** My Workspace > My team's probation: recommend for the people who report to you, from the alert window before their probation ends. HR sees the people with no reporting manager too. */
 export default async function TeamProbationPage() {
   const ctx = await requirePage("probation.recommend");
   const policy = await getHrPolicy(ctx.orgId);
   const rows = await teamProbations(ctx);
+  const reconsiderable = await reconsiderationCandidates(ctx);
   return (
     <>
       <PageHeader
@@ -54,6 +58,19 @@ export default async function TeamProbationPage() {
             )}
           </Section>
         ))
+      )}
+
+      {reconsiderable.length > 0 && (
+        <Section
+          title="A failed probation you may ask to have reconsidered"
+          description="A failed probation stays recorded as failed. You may ask for it to be reconsidered, once, within the window after the failed decision, with your justification and measurable conditions. HR reviews it, a designated decider decides, and the extension takes effect only once the employee has been formally told. Nothing is shown to the employee until then."
+        >
+          {reconsiderable.map((r) => (
+            <FormPanel key={r.contractId} title={`${r.employeeNumber} — ${r.name} (failed ${fmtDate(new Date(`${r.failedOn}T00:00:00Z`))}; you can ask until ${fmtDate(new Date(`${r.lastDay}T00:00:00Z`))})`}>
+              <SmartForm columns={3} submitLabel="Ask for a reconsideration" action={requestReconsiderationAction.bind(null, r.contractId)} fields={requestFields(policy.reconsiderationMinJustification)} />
+            </FormPanel>
+          ))}
+        </Section>
       )}
     </>
   );

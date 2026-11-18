@@ -361,6 +361,7 @@ export const ACTION_MODULES: Record<string, EntryModule> = {
   "recruitment-internal.ts": "hr",
   "training-cost.ts": "hr",
   "probation-workflow.ts": "hr",
+  "probation-reconsideration.ts": "hr",
   "welfare.ts": "hr",
   "hr-officers.ts": "core",
   "training-evaluation.ts": "hr",

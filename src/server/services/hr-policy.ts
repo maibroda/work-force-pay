@@ -304,6 +304,13 @@ export const hrPolicySchema = z
     enquiryResponseDays: z.coerce.number().int().min(1).max(30),
     /** A procedure (SOP) needs a review date no later than this many months after it takes effect. */
     sopReviewMonths: z.coerce.number().int().min(1).max(60),
+    /** Reconsideration of a failed probation (docs/plans/failed-probation-renewal-proposal.md): the switch, the window after the failed decision, the ceiling on the total probation, and the limits. */
+    reconsiderationEnabled: z.boolean(),
+    reconsiderationWindowDays: z.coerce.number().int().min(1).max(90),
+    probationCeilingMonths: z.coerce.number().int().min(1).max(36),
+    reconsiderationMax: z.coerce.number().int().min(1).max(3),
+    reconsiderationMinJustification: z.coerce.number().int().min(20).max(1000),
+    reconsiderationMinExpectations: z.coerce.number().int().min(1).max(10),
     pipDefaultDays: z.coerce.number().int().min(1).max(365),
     pipMaxDays: z.coerce.number().int().min(1).max(365),
     pipMaxExtensions: z.coerce.number().int().min(0).max(5),

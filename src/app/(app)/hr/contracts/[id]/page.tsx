@@ -16,6 +16,7 @@ import { fullName } from "@/lib/utils";
 import { FormPanel, KV, PageHeader, Section } from "@/components/page";
 import { SmartForm } from "@/components/smart-form";
 import { ProbationReviews } from "@/components/probation-reviews";
+import { ProbationReconsiderations } from "@/components/probation-reconsiderations";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { decideProbationAction, markProbationInformedAction, renewContractAction } from "@/app/actions/hr-lifecycle";
 import { generateLetterAction } from "@/app/actions/letters";
@@ -168,6 +169,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
       )}
 
       {workflowOn && c.probationOutcome && <ProbationReviews ctx={ctx} contractId={c.id} />}
+      <ProbationReconsiderations ctx={ctx} contractId={c.id} failed={c.probationOutcome === "FAILED" && active} noManager={!c.employee?.reportingManagerId} />
 
       {approve && reviewing && !workflowOn && recommendation && (
         <p className="mb-3 rounded-md border bg-muted/40 px-3 py-2 text-sm">
@@ -225,7 +227,12 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
           once it is decided.
         </p>
       )}
-      {manage && active && !reviewing && (
+      {manage && active && c.probationOutcome === "FAILED" && (
+        <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <b>This probation was recorded as failed,</b> so the contract can&apos;t be renewed as an ordinary renewal. Where the company has switched it on, the employee&apos;s supervisor can ask for a reconsideration within the window after the failed decision (above); otherwise the exit process applies.
+        </p>
+      )}
+      {manage && active && !reviewing && c.probationOutcome !== "FAILED" && (
         <FormPanel title="Renew, extend or convert this contract">
           <p className="mb-3 text-xs text-muted-foreground">
             Creates the next contract in the chain and supersedes this one. Leave the start date blank to start the day after this contract ends.

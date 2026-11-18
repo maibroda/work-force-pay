@@ -1,6 +1,7 @@
 import { requirePage } from "@/lib/auth/session";
 import { getHrPolicy } from "@/server/services/hr-policy";
 import { decisionQueue, myProbationReviews } from "@/server/services/probation-workflow";
+import { myReconsiderations, reconsiderationQueue } from "@/server/services/probation-reconsideration";
 import { FEEDBACK_MAX, RECOMMENDATION_LABELS, RESPONSE_MAX, type Recommendation } from "@/lib/probation-workflow";
 import { fmtDate } from "@/lib/dates";
 import { Empty, FormPanel, PageHeader, Section } from "@/components/page";
@@ -8,6 +9,7 @@ import { ActionButton } from "@/components/action-button";
 import { SmartForm } from "@/components/smart-form";
 import { Badge } from "@/components/ui/badge";
 import { decideReviewAction, markResponseReadAction, respondToReviewAction } from "@/app/actions/probation-workflow";
+import { decideReconsiderationAction, respondToReconsiderationAction } from "@/app/actions/probation-reconsideration";
 
 const DECISION_LABEL: Record<string, string> = { CONFIRMED: "Probation confirmed", EXTENDED: "Probation extended", FAILED: "Probation not confirmed" };
 const check = (v: boolean | null) => (v === null ? "not asked by the policy" : v ? "yes" : "no");
@@ -18,7 +20,7 @@ const check = (v: boolean | null) => (v === null ? "not asked by the policy" : v
  */
 export default async function MyProbationPage() {
   const ctx = await requirePage("probation.view");
-  const [policy, queue, mine] = await Promise.all([getHrPolicy(ctx.orgId), decisionQueue(ctx), myProbationReviews(ctx)]);
+  const [policy, queue, mine, reconsiderQueue, myReconsiderationRows] = await Promise.all([getHrPolicy(ctx.orgId), decisionQueue(ctx), myProbationReviews(ctx), reconsiderationQueue(ctx), myReconsiderations(ctx)]);
   return (
     <>
       <PageHeader title="Probation" description="Decisions waiting for you, responses to read, and your own probation. Nothing here is shown to anyone but the person it is for." />
@@ -77,6 +79,47 @@ export default async function MyProbationPage() {
         </Section>
       )}
 
+      {reconsiderQueue.length > 0 && (
+        <Section
+          title="A failed probation waiting for your decision on a reconsideration"
+          description="You were designated to decide. The probation stays recorded as failed unless you approve; if you approve, it is extended only once HR has formally told the employee. No pay is touched. You may approve a different period within the company's ceiling, with a reason."
+        >
+          {reconsiderQueue.map((r) => (
+            <div key={r.id} className="mb-6 rounded-md border p-3 text-sm">
+              <p>
+                <b>
+                  {r.employeeNumber} — {r.name}
+                </b>
+                <span className="text-muted-foreground"> · probation so far {r.probationMonths} month(s); {r.proposedMonths} more proposed</span>
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Asked by {r.requestedBy}. Their justification:</p>
+              <p className="whitespace-pre-line">{r.justification}</p>
+              <ul className="mt-2 list-disc pl-5 text-xs">
+                {r.expectations.map((e, i) => (
+                  <li key={i}>
+                    {e.measure}: {e.target} (reviewed {fmtDate(e.reviewOn)})
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-muted-foreground">HR review by {r.hrBy}:</p>
+              <p className="whitespace-pre-line">{r.hrNote}</p>
+              <FormPanel title="Make the decision">
+                <SmartForm
+                  columns={3}
+                  submitLabel="Record the decision"
+                  action={decideReconsiderationAction.bind(null, r.id)}
+                  fields={[
+                    { name: "decision", label: "Decision", type: "select", required: true, options: [{ value: "APPROVE", label: "Approve" }, { value: "DECLINE", label: "Decline" }] },
+                    { name: "months", label: "If approving: months", type: "number", min: 1, max: 36, defaultValue: r.proposedMonths },
+                    { name: "note", label: "Your reason (required to decline, or to approve a different period)", type: "textarea", span: 3 },
+                  ]}
+                />
+              </FormPanel>
+            </div>
+          ))}
+        </Section>
+      )}
+
       <Section title="My probation" description={policy.probationResponseDays > 0 ? `HR tells you in person first; then you can read the decision and the feedback written for you here. You may respond once, within ${policy.probationResponseDays} days of the day you were told.` : "HR tells you in person first; then you can read the decision and the feedback written for you here. You may respond once."}>
         {mine.length === 0 ? (
           <Empty>Nothing to show. A decision about your probation appears here once HR has told you about it.</Empty>
@@ -121,6 +164,41 @@ export default async function MyProbationPage() {
           ))
         )}
       </Section>
+
+      {myReconsiderationRows.length > 0 && (
+        <Section title="The reconsideration of my probation" description="What HR told you, the conditions of the extension and your one response.">
+          {myReconsiderationRows.map((r) => (
+            <div key={r.id} className="mb-5 space-y-2 text-sm">
+              <p className="whitespace-pre-line">{r.statement}</p>
+              <p className="text-xs text-muted-foreground">
+                Told on {fmtDate(r.communicatedAt)}; the new review date is {fmtDate(r.newEndDate)}.
+              </p>
+              {r.respondedAt ? (
+                <p className="whitespace-pre-line">
+                  <span className="text-xs text-muted-foreground">
+                    Your response ({r.responseAgreed ? "you agreed" : "you disagreed"}, {fmtDate(r.respondedAt)}):{" "}
+                  </span>
+                  {r.responseText}
+                </p>
+              ) : r.canRespond ? (
+                <FormPanel title="Respond">
+                  <SmartForm
+                    columns={3}
+                    submitLabel="Send my response"
+                    action={respondToReconsiderationAction.bind(null, r.id)}
+                    fields={[
+                      { name: "agree", label: "Do you agree?", type: "select", required: true, options: [{ value: "yes", label: "I agree" }, { value: "no", label: "I disagree" }] },
+                      { name: "comment", label: `Your comment (required if you disagree; up to ${RESPONSE_MAX} characters). You can respond once.`, type: "textarea", span: 3 },
+                    ]}
+                  />
+                </FormPanel>
+              ) : (
+                <p className="text-xs text-muted-foreground">The time to respond has passed.</p>
+              )}
+            </div>
+          ))}
+        </Section>
+      )}
     </>
   );
 }
