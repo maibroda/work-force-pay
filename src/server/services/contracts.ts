@@ -105,11 +105,23 @@ export async function createContractInTx(ctx: Ctx, tx: Tx, v: z.output<typeof co
   });
   await logAudit(
     ctx,
-    { action: "EMPLOYMENT_CONTRACT_CREATE", entity: "Employee", entityId: v.employeeId, newValue: contract },
+    { action: "EMPLOYMENT_CONTRACT_CREATE", entity: "Employee", entityId: v.employeeId, newValue: contractAudit(contract) },
     tx,
   );
   return contract;
 }
+
+/**
+ * What the audit log says about a contract: its number, type and dates, never its notes (they hold free text about a person, including the lines a probation decision writes). The audit log is read by
+ * the administrators and the auditor, it is append-only, and erasing a person cannot reach it; the contract itself holds everything for the people who may read it.
+ */
+const contractAudit = (c: { contractNumber: string; type: string; startDate: Date; endDate: Date | null; probationMonths: number }) => ({
+  contractNumber: c.contractNumber,
+  type: c.type,
+  startDate: iso(c.startDate),
+  endDate: c.endDate ? iso(c.endDate) : null,
+  probationMonths: c.probationMonths,
+});
 
 /** Records a new contract for an employee who has none in force (use renew for an existing one). */
 export async function createContract(ctx: Ctx, raw: ContractInput) {
@@ -192,7 +204,7 @@ export async function renewContract(ctx: Ctx, id: string, raw: z.input<typeof re
     );
     await logAudit(
       ctx,
-      { action: "EMPLOYMENT_CONTRACT_RENEW", entity: "Employee", entityId: old.employeeId, oldValue: old, newValue: next },
+      { action: "EMPLOYMENT_CONTRACT_RENEW", entity: "Employee", entityId: old.employeeId, oldValue: contractAudit(old), newValue: contractAudit(next) },
       tx,
     );
     return next;
@@ -298,7 +310,8 @@ export async function applyProbationDecision(ctx: Ctx, id: string, raw: z.input<
       });
       await tx.probationDecision.create({ data: record(newEnd, v.extensionMonths) });
       await complete(tx);
-      await logAudit(ctx, { action: "PROBATION_EXTEND", entity: "Employee", entityId: c.employeeId, oldValue: c, newValue: updated, reason: v.note }, tx);
+      // the decision, the months and the new end date: never the reason (it is on the probation decision, which erasure clears) or the contract's notes
+      await logAudit(ctx, { action: "PROBATION_EXTEND", entity: "Employee", entityId: c.employeeId, newValue: { contractId: c.id, decision: "EXTENDED", extensionMonths: v.extensionMonths, probationEndDate: iso(newEnd) } }, tx);
       return { contract: updated, next: null };
     });
   }
@@ -311,7 +324,7 @@ export async function applyProbationDecision(ctx: Ctx, id: string, raw: z.input<
       });
       await tx.probationDecision.create({ data: record(null) });
       await complete(tx);
-      await logAudit(ctx, { action: "PROBATION_FAIL", entity: "Employee", entityId: c.employeeId, oldValue: c, newValue: updated, reason: v.note }, tx);
+      await logAudit(ctx, { action: "PROBATION_FAIL", entity: "Employee", entityId: c.employeeId, newValue: { contractId: c.id, decision: "FAILED" } }, tx);
       return { contract: updated, next: null };
     });
   }
@@ -347,7 +360,7 @@ export async function applyProbationDecision(ctx: Ctx, id: string, raw: z.input<
     }
     await tx.probationDecision.create({ data: record(permanentFrom) });
     await complete(tx);
-    await logAudit(ctx, { action: "PROBATION_CONFIRM", entity: "Employee", entityId: c.employeeId, oldValue: c, newValue: next ?? confirmed, reason: v.note }, tx);
+    await logAudit(ctx, { action: "PROBATION_CONFIRM", entity: "Employee", entityId: c.employeeId, newValue: { contractId: c.id, decision: "CONFIRMED", ...(next ? { permanentContract: next.contractNumber } : {}), ...(permanentFrom ? { permanentFrom: iso(permanentFrom) } : {}) } }, tx);
     return { contract: confirmed, next };
   });
 }
