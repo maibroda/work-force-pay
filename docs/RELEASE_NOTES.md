@@ -29,7 +29,16 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `audit-relations-ids-only`, no migration)
+
+## Not yet merged (branch `audit-sanctions-ids-only`, no migration)
+
+- **A disciplinary sanction's words no longer go into the audit log** (the founder chose "go ahead with the sanction entries" on 2026-11-18, from the scan reported with #225; the same fix as #219 to #225). **Raising, approving and rejecting a sanction or a commendation wrote the whole disciplinary record to the audit log**: the description of the incident, the action taken and the remarks (the approve entry only removed the single-holder reason). A sanction is a disciplinary record, read only by those with disciplinary access and recorded by record number when read, but the audit log is read by the administrators and the auditor, is **append-only**, and cannot be reached when a person is erased.
+- **Now the log carries the record's id, type, status and incident day, the case it came from, and for an approval the single-holder flag, only.** No description, action taken, remarks or reason. **The record itself still holds everything**, for those with disciplinary access, and erasure still clears it there. A commendation is recorded the same way.
+- **Entries written before this change still hold the words** (append-only). A decision on whether to do anything about them is for the founder.
+- **Still open from the scan:** the exit entries (approve, exit interview, task waive), and **employee master data** (bank, tax and pension details, date of birth, phone, email and address in plain text; needs the founder's decision on masking).
+- **Tests (written first, four of six failed before the fix):** `tests/integration/sanction-audit.test.ts` (6): a sanction, one raised from a case and a commendation through raise, approve and reject, with the words and the record still held. The second-person, case, discipline, read-log and erasure tests (44 in the files re-run alone, more in the wider run) pass unchanged. No migration.
+
+## Merged in #225 (no migration)
 
 - **An Employee relations case's words no longer go into the audit log** (the founder chose "go ahead with the case entries" on 2026-11-18, after a read-only scan of the audit log for whole-record entries). **Resolving, closing and reopening a case wrote the whole case row to the audit log, including its summary, its description and its resolution**, for harassment, whistleblowing and welfare cases as well as grievances; reopening also wrote the reason. The case's own reads are recorded by record number and welfare cases are for the HR administrator only, but the audit log is read by the administrators and the auditor, is **append-only**, and cannot be reached when a person is erased. (The close entry's comment said "never the reason" but it still carried the description and resolution.)
 - **Now the log carries the case's number, type, status and outcome (a fixed word), and for a close the single-holder flag, only.** No summary, description, resolution or reason. **The case itself still holds everything** (the summary, description, the notes including the resolution and the reopen reason), for the people who may read it. Raising a case, adding a note, assigning it and changing its status were already ids-only.
