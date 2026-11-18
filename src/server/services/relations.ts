@@ -291,6 +291,13 @@ export async function setCaseStatus(ctx: Ctx, caseId: string, status: "INVESTIGA
   });
 }
 
+/**
+ * What the audit log says about a case when it is resolved, closed or reopened: its number, type, status and outcome (a fixed word), never the summary, the description, the resolution or a reason.
+ * Harassment, whistleblowing and welfare cases are confidential and reads of them are recorded by record number; the audit log, which the administrators and the auditor read, must not show the same
+ * words. It is append-only and cannot be reached when a person is erased. The case itself holds everything, for the people who may read it.
+ */
+const caseAudit = (c: { caseNumber: string; type: string; status: string; outcome: string | null }) => ({ caseNumber: c.caseNumber, type: c.type, status: c.status, outcome: c.outcome });
+
 export const resolveSchema = z.object({
   outcome: z.enum(["SUBSTANTIATED", "PARTIALLY_SUBSTANTIATED", "UNSUBSTANTIATED", "RESOLVED_INFORMALLY", "WITHDRAWN"]),
   resolution: z.string().trim().min(10, "Describe the finding and what was decided"),
@@ -308,7 +315,7 @@ export async function resolveCase(ctx: Ctx, caseId: string, raw: z.input<typeof 
       data: { status: "RESOLVED", outcome: v.outcome, resolution: v.resolution, resolvedAt: new Date(), resolvedByUserId: ctx.userId, closedSingleHolder: false, closedSingleReason: null },
     });
     await appendNote(ctx, tx, caseId, "DECISION", `Resolved — ${v.outcome.replace(/_/g, " ").toLowerCase()}. ${v.resolution}`);
-    await logAudit(ctx, { action: "RELATIONS_CASE_RESOLVE", entity: "RelationsCase", entityId: caseId, newValue: u }, tx);
+    await logAudit(ctx, { action: "RELATIONS_CASE_RESOLVE", entity: "RelationsCase", entityId: caseId, newValue: caseAudit(u) }, tx);
     return u;
   });
 }
@@ -348,10 +355,8 @@ export async function closeCase(ctx: Ctx, caseId: string, opts: { reason?: strin
       data: { status: "CLOSED", closedAt: new Date(), closedBy: ctx.name, closedSingleHolder: verdict.singleHolder, closedSingleReason: verdict.singleHolder ? (opts.reason ?? "").trim() : null },
     });
     await appendNote(ctx, tx, caseId, "NOTE", verdict.singleHolder ? "Case closed by the person who resolved it, being the only person who could (flagged)." : "Case closed.");
-    // the audit entry carries ids, the flag and the step, never the reason
-    const { closedSingleReason: _reason, ...safe } = u;
-    void _reason;
-    await logAudit(ctx, { action: "RELATIONS_CASE_CLOSE", entity: "RelationsCase", entityId: caseId, newValue: safe }, tx);
+    // the audit entry carries the number, the status, the outcome and the single-holder flag, never the reason or any of the case's words
+    await logAudit(ctx, { action: "RELATIONS_CASE_CLOSE", entity: "RelationsCase", entityId: caseId, newValue: { ...caseAudit(u), closedSingleHolder: u.closedSingleHolder } }, tx);
     return u;
   });
 }
@@ -381,7 +386,8 @@ export async function reopenCase(ctx: Ctx, caseId: string, reason: string) {
       },
     });
     await appendNote(ctx, tx, caseId, "APPEAL", `Re-opened: ${reason.trim()}`);
-    await logAudit(ctx, { action: "RELATIONS_CASE_REOPEN", entity: "RelationsCase", entityId: caseId, newValue: u, reason }, tx);
+    // no reason in the log: it is kept as the case's appeal note, which only those who may read the case can open
+    await logAudit(ctx, { action: "RELATIONS_CASE_REOPEN", entity: "RelationsCase", entityId: caseId, newValue: caseAudit(u) }, tx);
     return u;
   });
 }
