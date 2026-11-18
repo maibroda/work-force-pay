@@ -27,7 +27,16 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `probation-reconsideration`, one migration: 20261223090000_probation_reconsideration)
+
+## Not yet merged (branch `audit-probation-ids-only`, no migration)
+
+- **A probation decision, and a contract's notes, no longer go into the audit log** (the finding reported with #223; chosen by the founder on 2026-11-17, the same fix as #219 to #221). Confirming, extending or failing a probation, making a contract and renewing one wrote the **whole contract row** to the audit log, which includes the contract's **notes** (they hold free text about a person, including the line a probation decision writes), and the confirm, extend and fail entries also wrote the **decider's free-text reason**. The audit log is read by the administrators and the auditor, is **append-only**, and cannot be reached when a person is erased.
+- **Now the log carries ids, numbers, the decision and the dates only:** the contract's number, type and dates for a new or renewed contract (old and new); for a probation decision, the contract, the decision (confirmed, extended or failed), the months and new end date for an extension, and the permanent contract's number for a confirmation. **No reason and no notes.** The probation decision and the contract themselves still hold everything (the decision's note, the contract's notes), and erasure still clears them there.
+- **Scope note:** you named the confirm, extend and fail entries; the contract-create and renew entries log the same whole row (with the notes) in the same file, so they are fixed here too.
+- **Entries written before this change still hold the words** (append-only). A decision on whether to do anything about them is for the founder.
+- **Tests (written first, five failed before the fix):** `tests/integration/contract-audit.test.ts` (6), which also proves the records still hold the words. The probation, workflow, reconsideration, letters, hiring and erasure tests (178 in total with these) pass unchanged. No migration.
+
+## Merged in #223 (one migration: 20261223090000_probation_reconsideration)
 
 - **A failed probation can be reconsidered, never automatically** (the founder's rule of 2026-11-14 and approval of 2026-11-17: F1 to F4 as recommended, and "go, with plain wording flagged for the lawyer"). **No pay and no employee status is touched.** Read `docs/plans/failed-probation-reconsideration-explain-back.md`. **Behind a company switch that is OFF** (HR policy settings).
 - **What it adds:** a failed probation **stays recorded as failed**. The employee's **reporting manager** (or HR only where there is none) can **ask within 14 days** of the failed decision, with a **justification** and **measurable conditions** (what is measured, the target, the review day); a **different HR person reviews** it; a **designated decider** (the Company Administrator or someone designated, never the person who asked or the HR reviewer) approves or declines, possibly with a different period; and **only once HR records that the employee was formally told** does the probation become **extended** (the period counted from that day, the failed decision and the extension side by side in the history). **One per contract; a second failure is final.** The employee sees the **statement, the conditions and their own response** and may **respond once**; they see nothing before it takes effect.
