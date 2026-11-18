@@ -30,7 +30,16 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `audit-sanctions-ids-only`, no migration)
+
+## Not yet merged (branch `audit-exits-ids-only`, no migration)
+
+- **An exit's words no longer go into the audit log** (the founder chose "go ahead with the exit entries" on 2026-11-18, from the scan reported with #225; the same fix as #219 to #226). **Starting, approving and rejecting an exit, recording the exit interview, and completing or waiving a clearance or onboarding step wrote whole rows to the audit log**: the **reason for leaving**, the **remarks**, the **exit-interview notes** and the **reason a step was waived** (which went in twice, in the row and in the entry's reason). The exit and the steps are HR records, but the audit log is read by the administrators and the auditor, is **append-only**, and **cannot be reached when a person is erased**.
+- **Now the log carries the exit's id, type, status, notice and last working day, the summary-dismissal flag, the reason category, the exit-interview day and the rehire flag once known; and a step's id, status and its exit.** No reason, remarks, interview notes or waiver reason. **The records themselves still hold everything**, for those with HR access, and erasure still clears them there. I also fixed the start, reject and step-complete entries in the same functions, which had the same fault.
+- **Entries written before this change still hold the words** (append-only). A decision on whether to do anything about them is for the founder.
+- **Still open:** the settlement entries (a line's description when added or removed, the reason when a settlement is returned or cancelled), onboarding "add step" entries (the step's name, which HR can type freely), and **employee master data** (bank, tax and pension details, date of birth, phone, email and address in plain text; needs the founder's decision on masking).
+- **Tests (written first, seven of eight failed before the fix):** `tests/integration/exit-audit.test.ts` (8): start, approve, reject, interview, waive (exit and onboarding) and complete, with the words and the records still held. The hr-lifecycle, hr-records, documents, letters, records follow-up and sanction tests (75 in the files run alone) pass unchanged. No migration.
+
+## Merged in #226 (no migration)
 
 - **A disciplinary sanction's words no longer go into the audit log** (the founder chose "go ahead with the sanction entries" on 2026-11-18, from the scan reported with #225; the same fix as #219 to #225). **Raising, approving and rejecting a sanction or a commendation wrote the whole disciplinary record to the audit log**: the description of the incident, the action taken and the remarks (the approve entry only removed the single-holder reason). A sanction is a disciplinary record, read only by those with disciplinary access and recorded by record number when read, but the audit log is read by the administrators and the auditor, is **append-only**, and cannot be reached when a person is erased.
 - **Now the log carries the record's id, type, status and incident day, the case it came from, and for an approval the single-holder flag, only.** No description, action taken, remarks or reason. **The record itself still holds everything**, for those with disciplinary access, and erasure still clears it there. A commendation is recorded the same way.
