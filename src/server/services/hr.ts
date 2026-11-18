@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import type { Permission } from "@/lib/auth/permissions";
-import { d } from "@/lib/dates";
+import { d, iso } from "@/lib/dates";
 import { secondPerson } from "@/lib/second-person";
 import { otherHolders } from "./second-person";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
@@ -194,6 +194,19 @@ export const disciplinarySchema = z.object({
   caseId: opt,
 });
 
+/**
+ * What the audit log says about a sanction or a commendation: its id, type, status and incident day, and the case it came from, never the description, the action taken or anyone's remarks. A
+ * sanction is a disciplinary record, read only by those with disciplinary access and recorded by record number when read; the audit log, which the administrators and the auditor read, must not
+ * show the same words. It is append-only and cannot be reached when a person is erased. The record itself holds everything.
+ */
+const sanctionAudit = (r: { id: string; type: string; status: string; incidentDate: Date; caseId: string | null }) => ({
+  recordId: r.id,
+  type: r.type,
+  status: r.status,
+  incidentDate: iso(r.incidentDate),
+  ...(r.caseId ? { caseId: r.caseId } : {}),
+});
+
 /** Raises a disciplinary action or commendation — PENDING until signed off (maker/checker). */
 export async function raiseDisciplinary(ctx: Ctx, raw: z.input<typeof disciplinarySchema>) {
   assertCan(ctx, "hr.manage");
@@ -222,7 +235,7 @@ export async function raiseDisciplinary(ctx: Ctx, raw: z.input<typeof disciplina
     action: "DISCIPLINARY_RECORD_RAISE",
     entity: "Employee",
     entityId: v.employeeId,
-    newValue: rec,
+    newValue: sanctionAudit(rec),
   });
   return rec;
 }
@@ -275,14 +288,12 @@ export async function approveDisciplinary(ctx: Ctx, id: string, remarks?: string
     where: { id },
     data: { status: "APPROVED", approvedBy: ctx.name, approvedByUserId: ctx.userId, remarks: remarks ?? null, approvedSingleHolder: singleHolder, approvedSingleReason: singleHolder ? (opts.reason ?? "").trim() : null },
   });
-  // the audit entry carries ids, the flag and the step, never the reason
-  const { approvedSingleReason: _reason, ...safe } = updated;
-  void _reason;
+  // the audit entry carries the id, the type, the status and the single-holder flag, never the remarks, the reason or any of the record's words
   await logAudit(ctx, {
     action: "DISCIPLINARY_RECORD_APPROVE",
     entity: "Employee",
     entityId: rec.employeeId,
-    newValue: safe,
+    newValue: { ...sanctionAudit(updated), approvedSingleHolder: updated.approvedSingleHolder },
   });
   return updated;
 }
@@ -301,7 +312,7 @@ export async function rejectDisciplinary(ctx: Ctx, id: string, remarks: string) 
     action: "DISCIPLINARY_RECORD_REJECT",
     entity: "Employee",
     entityId: rec.employeeId,
-    newValue: updated,
+    newValue: sanctionAudit(updated),
   });
   return updated;
 }
