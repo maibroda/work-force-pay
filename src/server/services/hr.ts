@@ -411,6 +411,40 @@ const EXIT_TO_EMPLOYEE_STATUS: Record<string, string> = {
   DECEASED: "EXITED",
 };
 
+/**
+ * What the audit log says about an exit: its id, type, status and dates, the summary-dismissal flag, the reason category, and the rehire flag once it is known, never the reason, the remarks or the
+ * exit-interview notes. Those are HR records, read by those with HR access; the audit log, which the administrators and the auditor read, must not show the same words. It is append-only and cannot be
+ * reached when a person is erased. The exit record itself holds everything.
+ */
+const exitAudit = (r: {
+  id: string;
+  exitType: string;
+  status: string;
+  noticeDate: Date;
+  lastWorkingDate: Date;
+  summaryDismissal: boolean;
+  reasonCategory: string | null;
+  eligibleForRehire: boolean | null;
+  exitInterviewDate: Date | null;
+}) => ({
+  recordId: r.id,
+  exitType: r.exitType,
+  status: r.status,
+  noticeDate: iso(r.noticeDate),
+  lastWorkingDate: iso(r.lastWorkingDate),
+  summaryDismissal: r.summaryDismissal,
+  ...(r.reasonCategory ? { reasonCategory: r.reasonCategory } : {}),
+  ...(r.eligibleForRehire !== null ? { eligibleForRehire: r.eligibleForRehire } : {}),
+  ...(r.exitInterviewDate ? { exitInterviewDate: iso(r.exitInterviewDate) } : {}),
+});
+
+/** What the audit log says about a checklist step being completed or waived: its id and status (and the exit it belongs to), never the reason for a waiver, which the step itself holds. */
+const stepAudit = (t: { id: string; status: string; exitRecordId?: string }) => ({
+  taskId: t.id,
+  status: t.status,
+  ...(t.exitRecordId ? { exitRecordId: t.exitRecordId } : {}),
+});
+
 /** Initiates offboarding — PENDING until HR/admin signs off (maker/checker, mirrors StaffMovement). */
 export async function initiateExit(ctx: Ctx, raw: z.input<typeof exitSchema>) {
   assertCan(ctx, "hr.manage");
@@ -452,7 +486,7 @@ export async function initiateExit(ctx: Ctx, raw: z.input<typeof exitSchema>) {
     action: "EXIT_INITIATE",
     entity: "Employee",
     entityId: v.employeeId,
-    newValue: rec,
+    newValue: exitAudit(rec),
   });
   return rec;
 }
@@ -484,7 +518,7 @@ export async function approveExit(ctx: Ctx, id: string, remarks?: string) {
     });
     await logAudit(
       ctx,
-      { action: "EXIT_APPROVE", entity: "Employee", entityId: rec.employeeId, newValue: updated },
+      { action: "EXIT_APPROVE", entity: "Employee", entityId: rec.employeeId, newValue: exitAudit(updated) },
       tx,
     );
     return updated;
@@ -504,7 +538,7 @@ export async function rejectExit(ctx: Ctx, id: string, remarks: string) {
     action: "EXIT_REJECT",
     entity: "Employee",
     entityId: rec.employeeId,
-    newValue: updated,
+    newValue: exitAudit(updated),
   });
   return updated;
 }
@@ -525,7 +559,7 @@ export async function completeExitTask(ctx: Ctx, id: string) {
     action: "EXIT_TASK_COMPLETE",
     entity: "Employee",
     entityId: task.exitRecord.employeeId,
-    newValue: updated,
+    newValue: stepAudit(updated),
   });
   return updated;
 }
@@ -543,7 +577,7 @@ export async function markTaskNotApplicable(ctx: Ctx, kind: "onboarding" | "exit
       where: { id },
       data: { status: "NOT_APPLICABLE", completedBy: ctx.name, completedAt: new Date(), notes },
     });
-    await logAudit(ctx, { action: "ONBOARDING_TASK_WAIVE", entity: "Employee", entityId: task.employeeId, newValue: updated, reason: notes });
+    await logAudit(ctx, { action: "ONBOARDING_TASK_WAIVE", entity: "Employee", entityId: task.employeeId, newValue: stepAudit(updated) });
     return updated;
   }
   const task = await db.exitTask.findFirst({ where: { id, organizationId: ctx.orgId }, include: { exitRecord: true } });
@@ -553,7 +587,7 @@ export async function markTaskNotApplicable(ctx: Ctx, kind: "onboarding" | "exit
     where: { id },
     data: { status: "NOT_APPLICABLE", completedBy: ctx.name, completedAt: new Date(), notes },
   });
-  await logAudit(ctx, { action: "EXIT_TASK_WAIVE", entity: "Employee", entityId: task.exitRecord.employeeId, newValue: updated, reason: notes });
+  await logAudit(ctx, { action: "EXIT_TASK_WAIVE", entity: "Employee", entityId: task.exitRecord.employeeId, newValue: stepAudit(updated) });
   return updated;
 }
 
@@ -591,7 +625,7 @@ export async function recordExitInterview(ctx: Ctx, raw: z.input<typeof exitInte
       },
       data: { status: "DONE", completedBy: ctx.name, completedAt: new Date() },
     });
-    await logAudit(ctx, { action: "EXIT_INTERVIEW_RECORD", entity: "Employee", entityId: rec.employeeId, newValue: updated }, tx);
+    await logAudit(ctx, { action: "EXIT_INTERVIEW_RECORD", entity: "Employee", entityId: rec.employeeId, newValue: exitAudit(updated) }, tx);
     return updated;
   });
 }
