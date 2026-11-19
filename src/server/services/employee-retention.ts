@@ -88,6 +88,8 @@ export async function anonymizeEmployee(tx: Tx, orgId: string, employeeId: strin
   // enquiries to HR: the subject and every message go (the employee's and HR's); what stays is the shape (that an enquiry existed, its number, category, status and dates)
   counts.hrEnquiries = (await tx.hrEnquiry.updateMany({ where, data: { subject: REMOVED } })).count;
   counts.hrEnquiryMessages = (await tx.hrEnquiryMessage.updateMany({ where: { organizationId: orgId, enquiry: { employeeId } }, data: { body: REMOVED } })).count;
+  // hourly shifts: the words typed on them go (the reason for a correction and the note on a rejection); what stays is the fact (the times, the status, the approved hours, who approved). The database allows exactly this change to a decided entry (20261227090000).
+  counts.timeEntries = (await tx.timeEntry.updateMany({ where: { ...where, OR: [{ reason: { not: null } }, { decisionNote: { not: null } }] }, data: { reason: null, decisionNote: null } })).count;
   counts.dataRequests = (await tx.dataAccessRequest.updateMany({ where, data: { requesterName: REMOVED, identityNote: null, completionNote: null, refusalReason: null } })).count;
   if (candidateIds.length) {
     await tx.candidate.updateMany({ where: { id: { in: candidateIds } }, data: { firstName: "Anonymised", lastName: "Candidate", phone: null, email: null, resumeReference: null, notes: null, rejectionReason: REMOVED, anonymizedAt: now } });
