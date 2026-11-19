@@ -361,3 +361,6 @@ export async function holidayStatesOfYear(ctx: Ctx, year: number): Promise<Recor
   for (const r of rows) (out[r.holidayId] ??= []).push(r.state);
   return out;
 }
+
+/** The switch check other hourly services (time entries) use: refuses, in plain words, while hourly pay is off for the company. */
+export const assertHourlyPayOn = assertOn;

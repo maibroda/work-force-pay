@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-277 tables and 209 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+280 tables and 211 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -80,6 +80,8 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | deployments | → Deployment[] |  |  |
 | movements | → StaffMovement[] |  |  |
 | workRegister | → WorkRegister[] |  |  |
+| timeEntries | → TimeEntry[] |  |  |
+| timeEntrySegments | → TimeEntrySegment[] |  |  |
 | payrollPeriods | → PayrollPeriod[] |  |  |
 | payrollRuns | → PayrollRun[] |  |  |
 | payrollRecords | → PayrollRecord[] |  |  |
@@ -1322,6 +1324,7 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | deployments | → Deployment[] |  |  |
 | movements | → StaffMovement[] |  |  |
 | workRegister | → WorkRegister[] |  |  |
+| timeEntries | → TimeEntry[] |  |  |
 | salaryOverrides | → EmployeeSalaryOverride[] |  |  |
 | payRates | → EmployeePayRate[] |  |  |
 | payRateProposals | → PayRateProposal[] |  |  |
@@ -2206,6 +2209,7 @@ What an exiting employee is owed (or owes) beyond their final month's pay. Compu
 | employees | → Employee[] |  |  |
 | deployments | → Deployment[] |  |  |
 | workRegister | → WorkRegister[] |  |  |
+| timeEntries | → TimeEntry[] |  |  |
 | overtime | → Overtime[] |  |  |
 | allocations | → PayrollAllocation[] |  |  |
 | movementsFrom | → StaffMovement[] |  |  |
@@ -2248,6 +2252,7 @@ What an exiting employee is owed (or owes) beyond their final month's pay. Compu
 | beats | → Beat[] |  |  |
 | deployments | → Deployment[] |  |  |
 | workRegister | → WorkRegister[] |  |  |
+| timeEntries | → TimeEntry[] |  |  |
 | overtime | → Overtime[] |  |  |
 | allocations | → PayrollAllocation[] |  |  |
 | invoiceLines | → ClientInvoiceLine[] |  |  |
@@ -2313,6 +2318,7 @@ CLIENT → CONTRACT → EMPLOYEE CATEGORY → SALARY STRUCTURE → AGREED RATE (
 | currentEmployees | → Employee[] |  |  |
 | deployments | → Deployment[] |  |  |
 | workRegister | → WorkRegister[] |  |  |
+| timeEntries | → TimeEntry[] |  |  |
 | overtime | → Overtime[] |  |  |
 | allocations | → PayrollAllocation[] |  |  |
 | movementsFrom | → StaffMovement[] |  |  |
@@ -5981,6 +5987,73 @@ How a person is paid from a date: monthly (every employee, until a row says othe
 | decidedAt | DateTime |  |  |
 | decisionNote | String |  |  |
 
+### TimeEntry
+
+One shift of an hourly-paid person: a clock-in and a clock-out in Nigerian time (hourly pay, phase 3 of docs/plans/hourly-payroll-assessment.md). Captured by one person and APPROVED by another, never the capturer (the founder's H9, 2026-11-19); an entry with no clock-out stays a DRAFT and is never payable (H10); an approved entry is never edited, a CORRECTION entry replaces it and the original is kept as SUPERSEDED (H16). Approval stores the paid pieces by day and class (TimeEntrySegment) and the breaks (TimeEntryBreak, H5). Nothing in the pay run reads these yet (phase 4).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| employeeId | String | yes |  |
+| employee | → Employee |  |  |
+| clientId | String | yes |  |
+| client | → Client |  |  |
+| contractId | String | yes |  |
+| contract | → Contract |  |  |
+| beatId | String | yes |  |
+| beat | → Beat |  |  |
+| clockIn | DateTime | yes |  |
+| clockOut | DateTime |  | Empty until the real clock-out is entered: such an entry is never payable. |
+| status | TimeEntryStatus |  |  |
+| correctsId | String |  | The approved entry this one corrects; approving the correction makes that entry SUPERSEDED. |
+| corrects | → TimeEntry |  |  |
+| corrections | → TimeEntry[] |  |  |
+| reason | String |  | Why a correction was made (words, kept here and never in the audit log). |
+| capturedBy | String | yes |  |
+| capturedByUserId | String | yes |  |
+| createdAt | DateTime |  |  |
+| completedBy | String |  | Who entered the real clock-out when it was missing (H10). Changing the times makes them as much a maker as the capturer, so they can never approve the entry either. |
+| completedByUserId | String |  |  |
+| submittedAt | DateTime |  |  |
+| decidedBy | String |  |  |
+| decidedByUserId | String |  |  |
+| decidedAt | DateTime |  |  |
+| decisionNote | String |  |  |
+| placeState | String |  | Set at approval: the state of the work location (the founder's H11) and whether the holiday list of every year the shift touches was confirmed, as they were then; and the minutes that are paid. |
+| calendarConfirmed | Boolean |  |  |
+| payableMinutes | Int |  |  |
+| breaks | → TimeEntryBreak[] |  |  |
+| segments | → TimeEntrySegment[] |  |  |
+
+### TimeEntryBreak
+
+A break taken inside an approved shift, as the times it was taken (so it comes off the right day). Never changed or deleted.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| entryId | String | yes |  |
+| entry | → TimeEntry |  |  |
+| startsAt | DateTime | yes |  |
+| endsAt | DateTime | yes |  |
+
+### TimeEntrySegment
+
+The paid minutes of an approved shift on one day, with that day's class as it was at approval. A day with a break in it can have more than one row. Never changed or deleted: a correction supersedes the entry and writes new rows.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| entryId | String | yes |  |
+| entry | → TimeEntry |  |  |
+| date | DateTime | yes |  |
+| dayClass | DayClass | yes |  |
+| minutes | Int | yes |  |
+
 ### HolidayCalendarYear
 
 The company's confirmation that its list of public holidays for a year is complete and right. A contract that excludes public holidays cannot be paid cleanly for a month in an unconfirmed year.
@@ -7646,6 +7719,14 @@ Whether an outbound message is a service message (about an active contract) or m
 ### HourlyRateScope
 
 `EMPLOYEE`, `CONTRACT_CATEGORY`, `CATEGORY`
+
+### TimeEntryStatus
+
+`DRAFT`, `SUBMITTED`, `APPROVED`, `REJECTED`, `WITHDRAWN`, `SUPERSEDED`
+
+### DayClass
+
+`WEEKDAY`, `WEEKEND`, `HOLIDAY`
 
 ### FeedbackKind
 

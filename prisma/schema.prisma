@@ -637,6 +637,8 @@ model Organization {
   deployments               Deployment[]
   movements                 StaffMovement[]
   workRegister              WorkRegister[]
+  timeEntries               TimeEntry[]
+  timeEntrySegments         TimeEntrySegment[]
   payrollPeriods            PayrollPeriod[]
   payrollRuns               PayrollRun[]
   payrollRecords            PayrollRecord[]
@@ -2130,6 +2132,7 @@ model Employee {
   deployments             Deployment[]
   movements               StaffMovement[]
   workRegister            WorkRegister[]
+  timeEntries             TimeEntry[]
   salaryOverrides         EmployeeSalaryOverride[]
   payRates                EmployeePayRate[]
   payRateProposals        PayRateProposal[]
@@ -3214,6 +3217,7 @@ model Client {
   employees         Employee[]
   deployments       Deployment[]
   workRegister      WorkRegister[]
+  timeEntries       TimeEntry[]
   overtime          Overtime[]
   allocations       PayrollAllocation[]
   movementsFrom     StaffMovement[]          @relation("MoveFromClient")
@@ -3257,6 +3261,7 @@ model Contract {
   beats         Beat[]
   deployments   Deployment[]
   workRegister  WorkRegister[]
+  timeEntries   TimeEntry[]
   overtime      Overtime[]
   allocations   PayrollAllocation[]
   invoiceLines  ClientInvoiceLine[]
@@ -3323,6 +3328,7 @@ model Beat {
   currentEmployees        Employee[]               @relation("CurrentBeat")
   deployments             Deployment[]
   workRegister            WorkRegister[]
+  timeEntries             TimeEntry[]
   overtime                Overtime[]
   allocations             PayrollAllocation[]
   movementsFrom           StaffMovement[]          @relation("MoveFromBeat")
@@ -7977,6 +7983,95 @@ model EmployeeCompensationType {
   decisionNote     String?
 
   @@index([organizationId, employeeId, status])
+}
+
+enum TimeEntryStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  WITHDRAWN
+  SUPERSEDED
+}
+
+enum DayClass {
+  WEEKDAY
+  WEEKEND
+  HOLIDAY
+}
+
+/// One shift of an hourly-paid person: a clock-in and a clock-out in Nigerian time (hourly pay, phase 3 of docs/plans/hourly-payroll-assessment.md). Captured by one person and APPROVED by another, never the capturer (the
+/// founder's H9, 2026-11-19); an entry with no clock-out stays a DRAFT and is never payable (H10); an approved entry is never edited, a CORRECTION entry replaces it and the original is kept as SUPERSEDED (H16).
+/// Approval stores the paid pieces by day and class (TimeEntrySegment) and the breaks (TimeEntryBreak, H5). Nothing in the pay run reads these yet (phase 4).
+model TimeEntry {
+  id                String          @id @default(cuid())
+  organizationId    String
+  organization      Organization    @relation(fields: [organizationId], references: [id])
+  employeeId        String
+  employee          Employee        @relation(fields: [employeeId], references: [id])
+  clientId          String
+  client            Client          @relation(fields: [clientId], references: [id])
+  contractId        String
+  contract          Contract        @relation(fields: [contractId], references: [id])
+  beatId            String
+  beat              Beat            @relation(fields: [beatId], references: [id])
+  clockIn           DateTime
+  /// Empty until the real clock-out is entered: such an entry is never payable.
+  clockOut          DateTime?
+  status            TimeEntryStatus @default(DRAFT)
+  /// The approved entry this one corrects; approving the correction makes that entry SUPERSEDED.
+  correctsId        String?
+  corrects          TimeEntry?      @relation("TimeEntryCorrection", fields: [correctsId], references: [id], onDelete: Restrict)
+  corrections       TimeEntry[]     @relation("TimeEntryCorrection")
+  /// Why a correction was made (words, kept here and never in the audit log).
+  reason            String?
+  capturedBy        String
+  capturedByUserId  String
+  createdAt         DateTime        @default(now())
+  /// Who entered the real clock-out when it was missing (H10). Changing the times makes them as much a maker as the capturer, so they can never approve the entry either.
+  completedBy       String?
+  completedByUserId String?
+  submittedAt       DateTime?
+  decidedBy         String?
+  decidedByUserId   String?
+  decidedAt         DateTime?
+  decisionNote      String?
+  /// Set at approval: the state of the work location (the founder's H11) and whether the holiday list of every year the shift touches was confirmed, as they were then; and the minutes that are paid.
+  placeState        String?
+  calendarConfirmed Boolean?
+  payableMinutes    Int?
+  breaks            TimeEntryBreak[]
+  segments          TimeEntrySegment[]
+
+  @@index([organizationId, employeeId, clockIn])
+  @@index([organizationId, status])
+  @@index([organizationId, beatId, clockIn])
+}
+
+/// A break taken inside an approved shift, as the times it was taken (so it comes off the right day). Never changed or deleted.
+model TimeEntryBreak {
+  id       String    @id @default(cuid())
+  entryId  String
+  entry    TimeEntry @relation(fields: [entryId], references: [id], onDelete: Restrict)
+  startsAt DateTime
+  endsAt   DateTime
+
+  @@index([entryId])
+}
+
+/// The paid minutes of an approved shift on one day, with that day's class as it was at approval. A day with a break in it can have more than one row. Never changed or deleted: a correction supersedes the entry and writes new rows.
+model TimeEntrySegment {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  entryId        String
+  entry          TimeEntry    @relation(fields: [entryId], references: [id], onDelete: Restrict)
+  date           DateTime     @db.Date
+  dayClass       DayClass
+  minutes        Int
+
+  @@index([organizationId, date])
+  @@index([entryId])
 }
 
 /// The company's confirmation that its list of public holidays for a year is complete and right. A contract that excludes public holidays cannot be paid cleanly for a month in an unconfirmed year.

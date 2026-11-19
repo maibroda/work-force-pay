@@ -70,7 +70,7 @@ describe("the 12-entry Operations group becomes one entry", () => {
 
   it("groups the pages by the job", () => {
     expect(groupSections(OPERATIONS_AREA.sections).map((g) => g.group)).toEqual(["Overview", "Deployment", "Attendance", "Uniform & kit"]);
-    expect(OPERATIONS_AREA.sections.filter((s) => s.group === "Attendance").map((s) => s.href)).toEqual(["/operations/work-register", "/operations/attendance", "/operations/rosters", "/operations/absence"]);
+    expect(OPERATIONS_AREA.sections.filter((s) => s.group === "Attendance").map((s) => s.href)).toEqual(["/operations/work-register", "/operations/attendance", "/operations/rosters", "/operations/absence", "/operations/time-entries"]); // Hourly shifts was added on 2026-11-19 (hourly pay, phase 3), with the same permission as the other Attendance pages
   });
 });
 
