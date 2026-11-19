@@ -38,7 +38,15 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `hourly-payroll-phase1`, no migration)
+## Not yet merged (branch `hourly-payroll-phase2`, one additive migration)
+
+- **Hourly pay, phase 2: the agreed facts, with their history, and a switch that is OFF** (the founder said "go with phase 2, work location decides the holiday" on 2026-11-19). Migration `20261225090000_hourly_pay_foundation` (four new tables and two new types; nothing that existed is changed; round-tripped up, down, up on a copy of the test database with no drift left). **Nothing in the pay run reads any of it yet**: every employee is still paid exactly as before.
+- **A company switch, off by default** (a company administrator switches it; with it off every hourly action and screen refuses plainly). **Hourly rates** for weekdays, weekends and public holidays, for one employee, a contract and job role, or a job role; proposed by a payroll person and approved by a different person (the payroll manager), effective-dated, the old rate ended the day before the new one, never deleted or edited once decided (the database itself refuses). The rate that applies is the employee's own, then the contract and job role, then the job role; none found is "no rate", never zero. **How a person is paid** (monthly until an approved record says hourly from a date), refused inside an approved or locked payroll period. **Public holidays limited to states**, the state of the work location deciding; changing them takes the year's confirmation away.
+- **New screen:** Payroll > Pay setup > Hourly pay; the Public holidays screen shows an "Applies to" column and a form once hourly pay is on. No new permission; `hourly-pay.ts` added to CODEOWNERS.
+- **Open for the founder (H17):** a contract paid on working days with public holidays excluded still treats a state-limited holiday as a holiday for everyone; nothing changes until a company uses state limits.
+- **Tests (written first):** `tests/unit/hourly-rates.test.ts` (20), `tests/integration/hourly-pay-setup.test.ts` (24; with three safeguards removed, four failed). Explain-back note: `docs/plans/hourly-payroll-phase2-explain-back.md`. Data dictionary regenerated.
+
+## Merged in #238 (no migration)
 
 - **Hourly pay, phase 1: the hours arithmetic** (the plan merged in #237, `docs/plans/hourly-payroll-assessment.md`; the founder said "go with phase 1" on 2026-11-19). A new, self-contained calculator, `src/lib/payroll/hourly.ts`: it cuts a shift at every midnight in Nigerian time (a Friday 19:00 to Saturday 07:00 shift is 5 hours of Friday and 7 of Saturday), gives each piece the class of its day (weekday, weekend, or public holiday, **the holiday winning over the weekend**), and prices the hours in exact kobo, rounding half up once per class line. A helper gives the pieces that fall in a pay month, so a shift over a month end is paid half in each month.
 - **Nothing uses it yet.** No pay run, payslip, screen or database table calls it, so no one is paid by the hour and nothing existing changes. Overtime, night differential, minimum hours, breaks, which rate applies to whom, and the salary structure that splits an hourly person's gross are NOT built: they wait for the founder's decisions (H1 and H4 to H16 of the plan).
