@@ -61,6 +61,19 @@ I cannot recommend a method: it is a tax rule. If your adviser says the existing
 
 Still open from before and needed by the later pieces: **H7** minimum hours, **H14** leave and sickness pay for an hourly person, **H15** hourly client billing, and where a budget would come from for budget against actual.
 
+### Answered by the founder on 2026-11-20 (all as recommended)
+
+| # | Answer |
+| --- | --- |
+| H20 | **A person with a personal monthly pay rate who is paid by the hour: block until the monthly rate is ended.** A blocking finding: the payroll cannot be approved while a person has both, so a person is never paid both ways. |
+| H21 | **Hours still waiting for approval (or with no clock-out) when a payroll is calculated are left out, and block approving the payroll.** A blocking finding lists them for the payroll approver, who must get them approved or explicitly override with a reason (the existing override). Nothing is paid a month late by accident. |
+| H22 | **Hours approved after a payroll is locked are paid in a supplementary payroll** (the existing mechanism); the locked payroll is never changed. |
+| H15 | **Hourly client billing is out of scope for now.** Hourly pay is payroll cost only; the reports show cost per client and contract. |
+
+**H19 follows from H15 and is for your confirmation.** With no hourly client billing there is no client monthly rate to work the "management share" from, so the add-on costs that are worked from it (insurance, uniform and kits, recruitment and training, leave reliever, outsourcing leave allowance) would be **not applicable** for hourly staff. ITF and NSITF are worked as a percentage of the person's gross by the existing rule and would still apply to an hourly person on a guarding or outsourcing contract. These employer costs are statutory or contractual, so please confirm this reading (or give another) before it is built.
+
+**Still needed to start phase 4: H8 and H12** (yours or your tax adviser's) and the H19 confirmation. Open for later: H7, H14, and where a budget would come from.
+
 ## 4. What I will not do without your answers
 
 - Choose a salary structure split (H8) or a PAYE method (H12).
