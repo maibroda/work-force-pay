@@ -21,6 +21,7 @@ import {
   sameValues,
   type ChangeKindName,
 } from "@/lib/change-control";
+import { maskedChange } from "@/lib/audit-mask";
 import { addDays } from "@/lib/dates";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
@@ -82,7 +83,8 @@ export async function requestChangeCore(ctx: Ctx, employeeId: string, kind: Chan
   const r = await db.employeeChangeRequest.create({
     data: { organizationId: ctx.orgId, employeeId, kind, proposed, previous, reason: reason.trim(), requestedBy: ctx.name, requestedByUserId: ctx.userId },
   });
-  await logAudit(ctx, { action: "CHANGE_REQUEST", entity: "Employee", entityId: employeeId, oldValue: previous, newValue: proposed, reason });
+  // the old and new last four of a number, the plain values, and the NAMES of personal fields that change (an account name, a declared rent), never their values
+  await logAudit(ctx, { action: "CHANGE_REQUEST", entity: "Employee", entityId: employeeId, ...maskedChange(previous, proposed, fields), reason });
   return r;
 }
 
@@ -138,7 +140,7 @@ export async function approveChange(ctx: Ctx, id: string, note?: string) {
       where: { id },
       data: { status: "APPROVED", decidedBy: ctx.name, decidedByUserId: ctx.userId, decidedAt: new Date(), decisionNote: note?.trim() || null, appliedAt: new Date() },
     });
-    await logAudit(ctx, { action: KIND_AUDIT[kind], entity: "Employee", entityId: r.employeeId, oldValue: r.previous, newValue: proposed, reason: r.reason }, tx);
+    await logAudit(ctx, { action: KIND_AUDIT[kind], entity: "Employee", entityId: r.employeeId, ...maskedChange(r.previous as Record<string, unknown>, proposed, fields), reason: r.reason }, tx);
     await logAudit(ctx, { action: "CHANGE_REQUEST_APPROVE", entity: "Employee", entityId: r.employeeId, newValue: { kind, requestedBy: r.requestedBy }, reason: note }, tx);
     return u;
   });

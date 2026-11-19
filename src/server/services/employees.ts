@@ -9,6 +9,7 @@ import { normaliseState } from "@/lib/nigeria-states";
 import { fullName } from "@/lib/utils";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
+import { maskedChange } from "@/lib/audit-mask";
 import { recordSensitiveAccess } from "./sensitive-access";
 import { nextNumber } from "./numbering";
 import { seedOnboardingTasks } from "./hr";
@@ -154,7 +155,8 @@ export async function createEmployeeInTx(ctx: Ctx, tx: Tx, input: z.output<typeo
     },
     tx,
   );
-  await logAudit(ctx, { action: "EMPLOYEE_CREATE", entity: "Employee", entityId: emp.id, newValue: emp }, tx);
+  // the audit entry carries the number, the category, the plain values, the last four of any bank, tax or pension number, and the NAMES of the personal fields given, never the person's details
+  await logAudit(ctx, { action: "EMPLOYEE_CREATE", entity: "Employee", entityId: emp.id, ...onlyNew(maskedChange({}, emp)) }, tx);
   await seedOnboardingTasks(ctx, emp.id, tx);
   if (v.monthlyGross !== undefined) {
     // a PROPOSAL, not a pay rate: it counts only when a payroll manager approves it. It starts on the employment date. Refused here means the employee is not created either.
@@ -183,9 +185,10 @@ export async function updateEmployee(ctx: Ctx, id: string, raw: EmployeeInput, r
     v.pfa = (await resolvePfa(tx, ctx.orgId, v.pfa, old.pfa)) ?? undefined; // held to the company's list; the one they already have is always accepted
     const data = { ...toData(v), nhfOptedInOn: v.nhfContributes ? (old.nhfContributes && old.nhfOptedInOn ? old.nhfOptedInOn : d(new Date().toISOString().slice(0, 10))) : null };
     const emp = await tx.employee.update({ where: { id }, data });
+    // the changed fields only: plain values as they are, the last four of a number, the names of personal fields (never their values)
     await logAudit(
       ctx,
-      { action: "EMPLOYEE_UPDATE", entity: "Employee", entityId: id, oldValue: old, newValue: emp, reason },
+      { action: "EMPLOYEE_UPDATE", entity: "Employee", entityId: id, ...maskedChange(old, emp), reason },
       tx,
     );
     const changed = (keys: readonly string[]) =>
@@ -208,8 +211,7 @@ export async function updateEmployee(ctx: Ctx, id: string, raw: EmployeeInput, r
           action: "BANK_INFORMATION_CHANGE",
           entity: "Employee",
           entityId: id,
-          oldValue: pick(old, SENSITIVE_BANK),
-          newValue: pick(emp, SENSITIVE_BANK),
+          ...maskedChange(old, emp, SENSITIVE_BANK),
           reason,
         },
         tx,
@@ -221,8 +223,7 @@ export async function updateEmployee(ctx: Ctx, id: string, raw: EmployeeInput, r
           action: "PENSION_INFORMATION_CHANGE",
           entity: "Employee",
           entityId: id,
-          oldValue: pick(old, SENSITIVE_PENSION),
-          newValue: pick(emp, SENSITIVE_PENSION),
+          ...maskedChange(old, emp, SENSITIVE_PENSION),
           reason,
         },
         tx,
@@ -234,8 +235,7 @@ export async function updateEmployee(ctx: Ctx, id: string, raw: EmployeeInput, r
           action: "TAX_INFORMATION_CHANGE",
           entity: "Employee",
           entityId: id,
-          oldValue: pick(old, SENSITIVE_TAX),
-          newValue: pick(emp, SENSITIVE_TAX),
+          ...maskedChange(old, emp, SENSITIVE_TAX),
           reason,
         },
         tx,
@@ -244,8 +244,9 @@ export async function updateEmployee(ctx: Ctx, id: string, raw: EmployeeInput, r
   });
 }
 
-function pick(o: Record<string, unknown>, keys: readonly string[]) {
-  return Object.fromEntries(keys.map((k) => [k, o[k]]));
+/** A new record has no old value: the entry carries the new picture only. */
+function onlyNew(c: ReturnType<typeof maskedChange>) {
+  return { newValue: c.newValue };
 }
 
 export async function listEmployees(
