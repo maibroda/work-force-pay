@@ -42,6 +42,9 @@
 # ── Audit log ──
 /src/server/services/audit.ts              @maibroda @developeraideehem
 /src/server/services/auth-audit.ts         @maibroda @developeraideehem
+/src/lib/audit-mask.ts                     @maibroda @developeraideehem
+/tests/unit/audit-mask.test.ts             @maibroda @developeraideehem
+/tests/integration/master-data-audit.test.ts @maibroda @developeraideehem
 /prisma/migrations/20261030100000_audit_log_append_only/ @maibroda @developeraideehem
 
 # ── Authentication and access control ──
