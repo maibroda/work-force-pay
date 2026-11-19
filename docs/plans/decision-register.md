@@ -46,3 +46,59 @@ Status key: **A** approved and authorised to proceed, **R** rule settled (no cod
 ## 5. Separate pull requests
 
 Each approved piece of code is its own pull request and is reported with its link: (a) the survey rate limit, (b) training evaluation, (c) survey anonymity tests, (d) demo-data safeguards. Documents that are proposals or the gap analysis are not committed until the founder has reviewed them.
+
+## 6. Founder decisions recorded 2026-11-19
+
+The founder confirmed the following decisions on 2026-11-19. This section supersedes any earlier "waiting for founder" status above where the same item is addressed. **These approvals authorise the stated design or preparation only; they do not authorise merging any pull request. Every implementation remains subject to its own PR, CI/review and the founder's explicit approval to merge.**
+
+### 6.1 Older audit rows (plan PR #232)
+
+| Question | Decision | Status / boundary |
+| --- | --- | --- |
+| O1 — timing | Run the clean-up later, as a go-live checklist item, and only if the inventory finds affected historical rows. | A |
+| O2 — `reason` column | Include `reason` in the redaction scope. | A |
+| O3 — CODEOWNERS | Add the audit-seal files to CODEOWNERS before modifying them. | A |
+| O4 — who may run it | Platform administrator only, following the founder's written authorisation; not exposed as a company-admin screen action. | A |
+| O5 — retain old text | Do not retain a separate copy of the old free text. Normal database backup governance still applies; do not create a special plaintext archive. | A |
+
+**Real-company-data status remains unverified.** Do not assume that no real company or employee data exists. Before go-live, inventory every database/environment the application has used and establish the provenance of records. The cleanup is conditional on that inventory and must be run only against the identified affected dataset, with its own recorded execution and post-cleanup audit-seal verification.
+
+### 6.2 Failed-probation reconsideration / lawyer items
+
+- **Reconsideration extension commencement:** settled. Count the approved extension from the date the employee is formally informed of the reconsideration. Record the notification date and calculate the revised review date from it.
+- **Reconsideration statement wording:** retain the current plain-language wording only provisionally. It is not legally approved; obtain the lawyer's review before adopting it as the standard production communication.
+- **Nine-month ceiling:** retain as a provisional technical ceiling only. It is not a confirmed statutory maximum or legal entitlement. Obtain the lawyer's written confirmation against applicable law, contract terms and any collective agreement before enabling the feature for production.
+- No legal conclusion is inferred from the software configuration. These lawyer-dependent items remain **E** until written advice is received.
+
+### 6.3 H4 — demo-data safeguards
+
+**Approved on 2026-11-19.** Proceed with the H4 design and implementation in its own pull request. The approved safeguards include:
+
+1. An explicit `isDemo` organization flag and a visible demo-company indicator.
+2. Exclusion of demo organizations from platform-level production aggregates.
+3. Server-side blocks on production bank-file generation and statutory-remittance generation for demo organizations.
+4. A demo-only, tenant-scoped reset; it must never truncate or affect non-demo organizations.
+5. Production and non-local seed protections, retaining the existing seed guard.
+
+The demo flag must be enforced server-side on relevant APIs and services, not only in the UI. This approval authorises implementation and tests; it does **not** authorise running a reset against production data or merging the implementation PR.
+
+### 6.4 Retention R1–R9
+
+**Remain on hold.** No retention implementation, policy-period changes or production retention run is authorised. The lawyer's review remains a prerequisite.
+
+### 6.5 Hosting decision
+
+**Vercel is selected as the application-hosting direction.** Proceed with Vercel deployment preparation and a provider-specific configuration plan. The intended architecture is:
+
+- Vercel for the Next.js application.
+- Managed PostgreSQL, with documented backup and restore arrangements.
+- External persistent object storage for CVs and employee documents, with encryption applied before storage as designed.
+- A shared rate-limiting service and corresponding edge/proxy limits; in-process counters alone are not sufficient across multiple instances.
+- The document-encryption key held only in the provider's production secret configuration; never committed, logged or disclosed in chat.
+
+The Vercel selection does not imply that PostgreSQL, object storage or the shared rate-limiting provider has been selected. Verify data-processing terms, database and backup regions, access controls, recovery and applicable Nigerian data-protection/cross-border-transfer requirements before production employee data is loaded. Do not deploy real employee/payroll data until this review and the security configuration are complete.
+
+### 6.6 Merge control
+
+The founder explicitly reiterated on 2026-11-19: **do not merge any pull request without the founder's explicit approval.** A decision-register update, design approval, implementation approval, passing CI or a PR approval from another reviewer is not permission to merge. Wait for an explicit instruction identifying the PR to merge.
+
