@@ -36,7 +36,16 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `audit-old-rows-plan`, a plan only: no code, no data, no migration)
+
+## Not yet merged (branch `digest-lines-and-audit-seal-owners`, no migration)
+
+- **Two new lines in the HR digest, and the audit seal files in CODEOWNERS** (the founder chose "yes" to each on 2026-11-19).
+- **Failed-probation reconsiderations that are waiting** (new digest section "Failed-probation reconsiderations waiting"): one line per waiting reconsideration, by its **stage and the days it has waited**, with a link to the contract, and **never the person, the justification, a note or any words**. Asked and not yet reviewed (waiting for HR to review), forwarded (waiting for the designated authority to decide) and approved but not yet told to the employee (waiting for HR to tell the employee) are listed; returned, declined, in effect and withdrawn are not. **Nothing is listed while the company's switch is off.** Days are counted from the day the stage began, in West Africa Time, oldest first.
+- **Procedures with no review date** (new section "Procedures with no review date"): active procedures (SOPs) from before the date became mandatory are listed **by title with a link**, so each gets a date at its next edit. A dated procedure, a handbook, a policy and an archived procedure are not listed. This company's procedures only.
+- **CODEOWNERS:** `src/lib/audit-seal.ts` and `src/server/services/audit-seal.ts` now need your review to change, with the same two owners as the other audit files. **It takes effect only where branch protection "Require review from Code Owners" is switched on; I did not touch branch protection or any CI setting.** This is also what the older-rows plan (#232) asked for before the redaction routine is touched (question O3).
+- **Tests (written first, six of the seven new cases failed before the change):** three added to `tests/integration/policy-kinds.test.ts` and four to `tests/integration/probation-reconsideration.test.ts`. The other test files that read the digest pass unchanged (17 files, 291 tests; and the hr-enquiries and reminders tests with the two edited files, 89 tests). No migration, no screen change.
+
+## Merged in #232 (a plan only: no code, no data, no migration)
 
 - **A plan for the older audit rows that still hold the words** (the founder chose "plan a one-off clean-up, run later" on 2026-11-19). Entries written before #219 to #231 still hold the words because the log is append-only. `docs/plans/older-audit-rows-cleanup-plan.md` sets out a tested routine, run only on the founder's approval, that rewrites old rows into the new masked shape through the **existing sanctioned redaction** (`redactAuditRows`, which keeps the tamper check passing), with a dry run first and a checked backup before anything is written.
 - **Finding:** `redactAuditRows` cannot change the `reason` column, where some older rows hold free text; clearing it would need a small extension of a critical audit file that is not in CODEOWNERS. **Five questions (O1 to O5) are for the founder.** I believe no live company data exists yet (the host is not chosen); please confirm.

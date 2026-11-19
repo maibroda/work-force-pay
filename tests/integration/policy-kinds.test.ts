@@ -180,3 +180,44 @@ describe("the review date", () => {
     await expect(markPolicyReviewed((await isolatedOrg()).ctx("HR_ADMIN"), sop.id, day(30))).rejects.toThrow(/not found/i);
   });
 });
+
+// Added 2026-11-19 (the founder chose "yes, add the line" for undated SOPs in the HR digest): a procedure with no review date (an older one, from before the date became mandatory) is listed in the
+// digest by title with a link, so it gets a date at its next edit. A dated procedure, a handbook, a policy and an archived procedure are not listed.
+describe("the HR digest and procedures with no review date", () => {
+  it("lists an active procedure with no review date by title and link, and nothing else", async () => {
+    const t = await isolatedOrg();
+    const hr = t.ctx("HR_ADMIN");
+    const today = new Date(`${day(0)}T00:00:00Z`);
+    expect((await buildHrDigest(t.org.id, today)).sections.map((s) => s.key)).not.toContain("sops-undated");
+    const old = await createPolicy(hr, item({ kind: "SOP", title: "Old post orders" }));
+    await db.companyPolicy.update({ where: { id: old.id }, data: { reviewDueOn: null } }); // an older procedure, from before the date became mandatory
+    await createPolicy(hr, item({ kind: "SOP", title: "Dated post orders" })); // has a review date
+    await createPolicy(hr, item({ kind: "HANDBOOK", title: "Staff handbook" })); // may have none
+    await createPolicy(hr, item({ title: "Code of conduct" })); // a policy
+    const archived = await createPolicy(hr, item({ kind: "SOP", title: "Archived orders" }));
+    await db.companyPolicy.update({ where: { id: archived.id }, data: { reviewDueOn: null } });
+    await setPolicyStatus(hr, archived.id, "ARCHIVED");
+    const sec = (await buildHrDigest(t.org.id, today)).sections.find((s) => s.key === "sops-undated")!;
+    expect(sec.count).toBe(1);
+    expect(sec.items).toEqual([{ text: "Old post orders — no review date set", path: `/hr/policies/${old.id}` }]);
+  });
+
+  it("drops off the digest once the procedure is given a date", async () => {
+    const t = await isolatedOrg();
+    const hr = t.ctx("HR_ADMIN");
+    const today = new Date(`${day(0)}T00:00:00Z`);
+    const old = await createPolicy(hr, item({ kind: "SOP", title: "Old post orders" }));
+    await db.companyPolicy.update({ where: { id: old.id }, data: { reviewDueOn: null } });
+    expect((await buildHrDigest(t.org.id, today)).sections.map((s) => s.key)).toContain("sops-undated");
+    await markPolicyReviewed(hr, old.id, day(200));
+    expect((await buildHrDigest(t.org.id, today)).sections.map((s) => s.key)).not.toContain("sops-undated");
+  });
+
+  it("is about this company only", async () => {
+    const t = await isolatedOrg();
+    const other = await isolatedOrg();
+    const old = await createPolicy(other.ctx("HR_ADMIN"), item({ kind: "SOP", title: "Their orders" }));
+    await db.companyPolicy.update({ where: { id: old.id }, data: { reviewDueOn: null } });
+    expect((await buildHrDigest(t.org.id, new Date(`${day(0)}T00:00:00Z`))).sections.map((s) => s.key)).not.toContain("sops-undated");
+  });
+});
