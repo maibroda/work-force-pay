@@ -20,6 +20,7 @@ import {
   withdrawReconsideration,
 } from "@/server/services/probation-reconsideration";
 import { extensionEnd } from "@/lib/probation-reconsideration";
+import { buildHrDigest } from "@/server/services/reminders";
 import { isolatedOrg, uid } from "../helpers";
 
 // Failed-probation reconsideration (the founder's approval of 2026-11-17, F1 to F4 as recommended; docs/plans/failed-probation-renewal-proposal.md). A failed probation stays recorded as failed; a
@@ -435,5 +436,62 @@ describe("privacy: the audit log, erasure and the person's own copy", () => {
     const text = JSON.stringify((await compileEmployeeData(w.t.org.id, w.emp.id)).sections.probationReconsiderations.records);
     for (const s of ["extended by 3 months", "Rota gaps per month", "I accept the conditions"]) expect(text, s).toContain(s);
     for (const s of ["JUSTIF-SECRET", "Complete and reasonable", "Approved on the evidence"]) expect(text, s).not.toContain(s);
+  });
+});
+
+// Added 2026-11-19 (the founder chose "yes, add the line" for waiting reconsiderations in the HR digest): a reconsideration waiting on someone is listed by its stage and the days it has waited, with a link
+// to the contract, and never the person, the justification, a note or any words. Asked and not yet reviewed (waiting on HR), forwarded (waiting on the designated authority) and approved but not yet
+// told to the employee (waiting on HR) count; one that is returned, declined, in effect or withdrawn does not. Nothing is listed while the switch is off.
+describe("the HR digest and reconsiderations that are waiting", () => {
+  const digestOf = async (w: Awaited<ReturnType<typeof world>>) => (await buildHrDigest(w.t.org.id, todayUtc())).sections.find((s) => s.key === "probation-reconsiderations");
+
+  it("lists a reconsideration by its stage and days waited, with a link to the contract, and never the person or the words", async () => {
+    const w = await world();
+    expect(await digestOf(w)).toBeUndefined();
+    const r = await w.ask();
+    await db.probationReconsideration.update({ where: { id: r.id }, data: { requestedAt: new Date(`${day(-4)}T09:00:00Z`) } });
+    const sec = (await digestOf(w))!;
+    expect(sec.count).toBe(1);
+    expect(sec.items).toEqual([{ text: "Waiting for HR to review — 4 day(s)", path: `/hr/contracts/${w.contract.id}` }]);
+    const text = JSON.stringify(sec);
+    for (const s of ["JUSTIF-SECRET", "Probee", "Employee", "Rota gaps"]) expect(text, s).not.toContain(s);
+  });
+
+  it("follows the request through its stages: forwarded waits on the designated authority, approved waits on HR to tell the employee", async () => {
+    const w = await world();
+    const r = await w.ask();
+    await reviewReconsideration(w.hr1, r.id, { outcome: "FORWARD", note: "Complete and reasonable." });
+    await db.probationReconsideration.update({ where: { id: r.id }, data: { hrAt: new Date(`${day(-2)}T09:00:00Z`) } });
+    expect((await digestOf(w))!.items[0].text).toBe("Waiting for the designated authority to decide — 2 day(s)");
+    await decideReconsideration(w.boss, r.id, { decision: "APPROVE", note: "Approved on the evidence." });
+    await db.probationReconsideration.update({ where: { id: r.id }, data: { decidedAt: new Date(`${day(-1)}T09:00:00Z`) } });
+    expect((await digestOf(w))!.items[0].text).toBe("Approved: waiting for HR to tell the employee — 1 day(s)");
+    await communicateReconsideration(w.hr2, r.id);
+    expect(await digestOf(w)).toBeUndefined();
+  });
+
+  it("does not list one that is returned, declined or withdrawn", async () => {
+    const w = await world();
+    const returned = await w.ask();
+    await reviewReconsideration(w.hr1, returned.id, { outcome: "RETURN", note: "Add the measurable conditions." });
+    expect(await digestOf(w)).toBeUndefined();
+    const withdrawn = await w.ask();
+    await withdrawReconsideration(w.mgr, withdrawn.id, "I will ask again later");
+    expect(await digestOf(w)).toBeUndefined();
+    const declined = await w.ask(w.hr1, w.lonerContract.id);
+    await reviewReconsideration(w.hr2, declined.id, { outcome: "FORWARD", note: "Forwarded." });
+    await decideReconsideration(w.boss, declined.id, { decision: "DECLINE", note: "Not enough evidence." });
+    expect(await digestOf(w)).toBeUndefined();
+  });
+
+  it("lists nothing while the switch is off, and nothing of another company's", async () => {
+    const w = await world();
+    await w.ask();
+    expect(await digestOf(w)).toBeDefined();
+    await db.hrPolicy.update({ where: { organizationId: w.t.org.id }, data: { reconsiderationEnabled: false } });
+    expect(await digestOf(w)).toBeUndefined();
+    const other = await world();
+    const text = JSON.stringify((await buildHrDigest(other.t.org.id, todayUtc())).sections.find((s) => s.key === "probation-reconsiderations") ?? {});
+    expect(text).not.toContain(w.contract.id);
   });
 });

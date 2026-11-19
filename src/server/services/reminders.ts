@@ -25,7 +25,8 @@ import { loansOwedByLeavers } from "./loans";
 import { recordsOverviewFor } from "./personal-records";
 import { complianceFor } from "./training";
 import { pendingChanges } from "./change-requests";
-import { policyAttention, policyReviewsDue } from "./policies";
+import { policyAttention, policyReviewsDue, undatedSops } from "./policies";
+import { reconsiderationsWaiting } from "./probation-reconsideration";
 import { enquiriesOverdue } from "./hr-enquiries";
 import { ENQUIRY_CATEGORY_LABELS } from "@/lib/hr-enquiries";
 import { requestsNeedingAttention } from "./data-requests";
@@ -73,6 +74,8 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
   const caseHorizon = addDays(today, 3);
   const reviewsDue = await policyReviewsDue(orgId, today);
   const lateEnquiries = await enquiriesOverdue(orgId, iso(today));
+  const undated = await undatedSops(orgId);
+  const waitingReconsiderations = await reconsiderationsWaiting(orgId, iso(today));
   const [org, reqs, offers, exits, discipline, settlements, loans, awaitingRelease, ending, probation, noContract, onboarding, cases, kit, owed, docs, records, training, appraisals, changes, policies, dataRequests, breaches, retention, plans, failedProbations, retentionDue] =
     await Promise.all([
       db.organization.findUniqueOrThrow({ where: { id: orgId }, select: { name: true } }),
@@ -330,6 +333,16 @@ export async function buildHrDigest(orgId: string, today = todayUtc(), opts: { d
       "policy-reviews",
       "Policies, handbook and procedures past their review date",
       reviewsDue.map((r) => ({ text: `${r.policy.title} (${r.kindLabel}) — review was due ${iso(r.dueOn)}`, path: `/hr/policies/${r.policy.id}` })),
+    ),
+  );
+  // a procedure with no review date (an older one): by title, so it gets a date at its next edit
+  add(section("sops-undated", "Procedures with no review date", undated.map((p) => ({ text: `${p.title} — no review date set`, path: `/hr/policies/${p.id}` }))));
+  // a failed-probation reconsideration is about a person and carries their justification: the digest names only the stage and the days waited, with a link to the contract, never the person or the words
+  add(
+    section(
+      "probation-reconsiderations",
+      "Failed-probation reconsiderations waiting",
+      waitingReconsiderations.map((r) => ({ text: `${r.label} — ${r.waitingDays} day(s)`, path: `/hr/contracts/${r.contractId}` })),
     ),
   );
   // an enquiry to HR is free text about a person: the digest names only its number, its category and the wait, never the subject, the words or the person

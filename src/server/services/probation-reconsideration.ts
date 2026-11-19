@@ -29,6 +29,8 @@ import {
   type ReconsiderationStatus,
 } from "@/lib/probation-reconsideration";
 import { checkResponse, deciderConflict, responseOpen, reviewerConflict } from "@/lib/probation-workflow";
+import { daysBetween } from "@/lib/career";
+import { watDay } from "@/lib/hr-enquiries";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { getHrPolicy, todayUtc } from "./hr-policy";
@@ -283,6 +285,28 @@ export async function reconsiderationsForContract(ctx: Ctx, contractId: string) 
     orderBy: { requestedAt: "desc" },
   });
   return rows;
+}
+
+/**
+ * Reconsiderations waiting on someone, for the HR digest (the founder chose on 2026-11-19 to list them: the stage and the days waited, never the person, the justification, a note or any words). Asked and
+ * not yet reviewed (waiting on HR), forwarded (waiting on the designated authority) and approved but not yet told to the employee (waiting on HR). Returned, declined, in effect and withdrawn are not
+ * waiting. Nothing while the company's switch is off. The days are counted from the day the stage began, in West Africa Time.
+ */
+export async function reconsiderationsWaiting(orgId: string, today: string) {
+  const policy = await getHrPolicy(orgId);
+  if (!policy.reconsiderationEnabled) return [];
+  const rows = await db.probationReconsideration.findMany({
+    where: { organizationId: orgId, status: { in: ["REQUESTED", "FORWARDED", "APPROVED"] } },
+    select: { contractId: true, status: true, requestedAt: true, hrAt: true, decidedAt: true },
+  });
+  const STAGE: Record<string, { label: string; since: (r: (typeof rows)[number]) => Date }> = {
+    REQUESTED: { label: "Waiting for HR to review", since: (r) => r.requestedAt },
+    FORWARDED: { label: "Waiting for the designated authority to decide", since: (r) => r.hrAt ?? r.requestedAt },
+    APPROVED: { label: "Approved: waiting for HR to tell the employee", since: (r) => r.decidedAt ?? r.requestedAt },
+  };
+  return rows
+    .map((r) => ({ contractId: r.contractId, label: STAGE[r.status].label, waitingDays: Math.max(0, daysBetween(watDay(STAGE[r.status].since(r)), today)) }))
+    .sort((a, b) => b.waitingDays - a.waitingDays);
 }
 
 /** The employee's own reconsiderations that are in effect: the statement, the conditions and their response. Nothing the supervisor or HR wrote, no user id, nothing before it takes effect. */

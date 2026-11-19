@@ -316,6 +316,14 @@ export async function policyReviewsDue(orgId: string, today: Date) {
   return rows.map((policy) => ({ policy, kindLabel: POLICY_KIND_LABELS[policy.kind], dueOn: policy.reviewDueOn! }));
 }
 
+/**
+ * Active procedures (SOPs) with no review date, for the HR digest (the founder chose on 2026-11-19 to list them): older ones, from before the date became mandatory. They are not blocked; the next edit
+ * must set a date. A handbook or a policy may have none and is not listed. Titles and ids only.
+ */
+export async function undatedSops(orgId: string) {
+  return db.companyPolicy.findMany({ where: { organizationId: orgId, kind: "SOP", status: "ACTIVE", reviewDueOn: null }, select: { id: true, title: true }, orderBy: { title: "asc" } });
+}
+
 /** Overdue acknowledgements per policy, for the HR digest. */
 export async function policyAttention(orgId: string, today: Date) {
   const all = await policyCompliance(orgId, today);
