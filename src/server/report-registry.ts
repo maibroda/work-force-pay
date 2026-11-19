@@ -13,6 +13,7 @@ import {
   recordsCompletenessRows,
   trainingComplianceRows,
 } from "@/server/services/hr-reports";
+import { buildHourlyReport } from "@/server/services/hourly-reports";
 import { listArrears, listDeductions, listOvertime } from "@/server/services/inputs";
 import { employeeLocationHistory, listMovements, listWorkRegister } from "@/server/services/operations";
 import {
@@ -75,6 +76,10 @@ export const REPORT_TYPES = [
   "records-completeness",
   "detail-changes",
   "audit",
+  "hourly-summary",
+  "hourly-by-client",
+  "hourly-monthly",
+  "hourly-status",
 ] as const;
 export type ReportType = (typeof REPORT_TYPES)[number];
 
@@ -112,6 +117,11 @@ export async function buildReport(
     (run ? iso(run.period.startDate) : iso(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))));
   const to = p.to ?? (run ? iso(run.period.endDate) : iso(now));
   switch (type) {
+    case "hourly-summary":
+    case "hourly-by-client":
+    case "hourly-monthly":
+    case "hourly-status":
+      return buildHourlyReport(ctx, type, p);
     case "payroll-register": {
       const recs = run ? await payrollRegister(ctx, run.id, { clientId: p.clientId, beatId: p.beatId }) : [];
       const columns: Col[] = [
