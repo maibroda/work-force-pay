@@ -38,7 +38,7 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `demo-data-safeguards`, one small migration)
+## Merged in #235 (one small migration)
 
 - **Demo company safeguards** (decision 9 of the register; the founder approved the design on 2026-11-19). **A company made by the seed is now marked as a demo company** (`Organization.isDemo`, migration `20261224090000_organization_is_demo`, additive, with a down.sql, round-tripped up, down, up on a copy of the seeded database with no schema difference). **Only the seed sets the flag**; a test reads all of `src/` and fails if any screen, action or service writes it.
 - **A visible banner on every page of a demo company:** "Demo company: every name and number here is invented, and nothing for this company can be paid or filed." Checked in the browser; a company that is not a demo company shows no banner.
