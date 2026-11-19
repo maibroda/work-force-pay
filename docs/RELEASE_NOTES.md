@@ -38,7 +38,7 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `time-entry-erasure`, one small migration)
+## Merged in #243 (one small migration)
 
 - **Erasing a person now clears the words typed on their hourly shifts** (the reason for a correction and the note on a rejection), on the founder's "go with the erasure migration" of 2026-11-20. What stays is the facts a pay record needs: the times, the status, the approved hours, the paid pieces and who approved. A colleague's entries are never touched.
 - **Migration `20261227090000_time_entry_erasure`:** it replaces ONE database protection function (no table, column or data is touched). The protection built with time entries refused every change to a decided entry; it now allows exactly one more change, to an entry in any state: clearing its reason and/or note to nothing with nothing else changing. Changing the words to other words, clearing them together with any other change, and deleting an entry are still refused. `down.sql` restores the earlier function exactly (checked by its stored definition, round-tripped up, down, up on a copy of the test database).
