@@ -38,7 +38,14 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `hourly-payroll-followups`, no migration)
+## Not yet merged (branch `time-entry-erasure`, one small migration)
+
+- **Erasing a person now clears the words typed on their hourly shifts** (the reason for a correction and the note on a rejection), on the founder's "go with the erasure migration" of 2026-11-20. What stays is the facts a pay record needs: the times, the status, the approved hours, the paid pieces and who approved. A colleague's entries are never touched.
+- **Migration `20261227090000_time_entry_erasure`:** it replaces ONE database protection function (no table, column or data is touched). The protection built with time entries refused every change to a decided entry; it now allows exactly one more change, to an entry in any state: clearing its reason and/or note to nothing with nothing else changing. Changing the words to other words, clearing them together with any other change, and deleting an entry are still refused. `down.sql` restores the earlier function exactly (checked by its stored definition, round-tripped up, down, up on a copy of the test database).
+- **Not covered:** a scheduled retention run does not clear these words (no retention category for hourly shifts; the retention periods are on hold for the lawyer). The names of the staff who captured or approved a shift are not cleared (they are the record of who approved pay).
+- **Tests (written first):** `tests/integration/time-entry-erasure.test.ts` (6; with the database function reverted and the erasure step removed, the three tests that look for the change failed). Explain-back note: `docs/plans/time-entry-erasure-explain-back.md`. No data dictionary change (no schema change). The release-note heading for #242 is renamed to "Merged in #242".
+
+## Merged in #242 (no migration)
 
 - **A contract's "working days, public holidays excluded" paid-days basis now considers only NATIONAL holidays** (the founder's H17, 2026-11-19). A holiday limited to states (hourly pay, phase 2) is for hourly pay, where the work location's state decides, and no longer removes a working day from every contract. A company that never limits a holiday to states gets exactly the list it always had; nothing changes for any company until it uses state limits. This touches an input to the pay run (`holidayContext`).
 - **A person's own data copy lists their hourly shifts** (the site, the clock-in and clock-out in Nigerian time, the status and the approved hours; never anyone else's, and never the words typed about a shift: a rejection note or a correction reason, which the copy's "left out" list now says).
