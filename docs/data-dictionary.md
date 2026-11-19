@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-273 tables and 207 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+277 tables and 209 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -35,6 +35,10 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | payRateProposals | → PayRateProposal[] |  |  |
 | contractPayBases | → ContractPayBasis[] |  |  |
 | publicHolidays | → PublicHoliday[] |  |  |
+| hourlyPaySetting | → HourlyPaySetting |  |  |
+| hourlyRates | → HourlyRate[] |  |  |
+| compensationTypes | → EmployeeCompensationType[] |  |  |
+| publicHolidayStates | → PublicHolidayState[] |  |  |
 | employeeDocumentTypes | → EmployeeDocumentType[] |  |  |
 | documentVersions | → EmployeeDocumentVersion[] |  |  |
 | documentBlobs | → EmployeeDocumentBlob[] |  |  |
@@ -1228,6 +1232,7 @@ A per-cost-center, per-period budget for budget-vs-actual variance reporting.
 | name | String | yes |  |
 | description | String |  |  |
 | employees | → Employee[] |  |  |
+| hourlyRates | → HourlyRate[] |  |  |
 | contractRates | → ContractRate[] |  |  |
 | salaryStructures | → SalaryStructure[] |  |  |
 | deployments | → Deployment[] |  |  |
@@ -1320,6 +1325,8 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | salaryOverrides | → EmployeeSalaryOverride[] |  |  |
 | payRates | → EmployeePayRate[] |  |  |
 | payRateProposals | → PayRateProposal[] |  |  |
+| hourlyRates | → HourlyRate[] |  |  |
+| compensationTypes | → EmployeeCompensationType[] |  |  |
 | payrollRecords | → PayrollRecord[] |  |  |
 | overtime | → Overtime[] |  |  |
 | arrears | → Arrears[] |  |  |
@@ -2251,6 +2258,7 @@ What an exiting employee is owed (or owes) beyond their final month's pay. Compu
 | serviceType | → ServiceType |  |  |
 | billingRules | → BillingRule[] |  |  |
 | payBases | → ContractPayBasis[] |  |  |
+| hourlyRates | → HourlyRate[] |  |  |
 
 ### ContractRate
 
@@ -5888,6 +5896,90 @@ A public holiday the company has entered (some are announced each year, so the d
 | name | String | yes |  |
 | createdBy | String | yes |  |
 | createdAt | DateTime |  |  |
+| states | → PublicHolidayState[] |  | The states this holiday applies to; none = a national holiday, which applies everywhere (docs/plans/hourly-payroll-phase2-explain-back.md). |
+
+### PublicHolidayState
+
+A state a public holiday is limited to (the founder's rule H11, 2026-11-19: the state of the WORK LOCATION decides which holidays apply to an hour worked). A holiday with no rows here is national. Only hourly pay reads this; the paid-days basis of a contract still treats every listed holiday as a holiday (an open finding in the phase 2 note).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| holidayId | String | yes |  |
+| holiday | → PublicHoliday |  |  |
+| state | String | yes | A proper state name from src/lib/nigeria-states.ts. |
+| createdBy | String | yes |  |
+| createdAt | DateTime |  |  |
+
+### HourlyPaySetting
+
+Whether a company pays anyone by the hour (hourly pay, phase 2 of docs/plans/hourly-payroll-assessment.md). OFF until a company administrator switches it on; with it OFF no hourly screen opens and no hourly service acts.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes | (unique) |
+| organization | → Organization |  |  |
+| enabled | Boolean |  |  |
+| changedBy | String | yes |  |
+| changedByUserId | String | yes |  |
+| changedAt | DateTime |  |  |
+
+### HourlyRate
+
+An agreed hourly rate for the three classes of day, effective-dated and approved by a second person (the same maker and checker rule as a personal monthly gross). The scope says whom it is for, and the founder's precedence (H1, 2026-11-19) is: the employee's own rate, then the contract and job role, then the job role. A rate is never edited once decided: a change is a new row, and approval ends the previous one the day before. Nothing reads these in the pay run yet (phase 4).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| scope | HourlyRateScope | yes |  |
+| employeeId | String |  |  |
+| employee | → Employee |  |  |
+| contractId | String |  |  |
+| contract | → Contract |  |  |
+| categoryId | String |  |  |
+| category | → EmployeeCategory |  |  |
+| weekdayRate | Decimal | yes |  |
+| weekendRate | Decimal | yes |  |
+| holidayRate | Decimal | yes |  |
+| effectiveFrom | DateTime | yes |  |
+| effectiveTo | DateTime |  |  |
+| reason | String | yes |  |
+| status | PayRateProposalStatus |  |  |
+| proposedBy | String | yes |  |
+| proposedByUserId | String | yes |  |
+| createdAt | DateTime |  |  |
+| decidedBy | String |  |  |
+| decidedByUserId | String |  |  |
+| decidedAt | DateTime |  |  |
+| decisionNote | String |  |  |
+
+### EmployeeCompensationType
+
+How a person is paid from a date: monthly (every employee, until a row says otherwise) or by the hour. Proposed by one person and approved by another; the type on a day is the latest APPROVED row starting on or before it. Nothing reads it in the pay run yet (phase 4).
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| employeeId | String | yes |  |
+| employee | → Employee |  |  |
+| type | CompensationType | yes |  |
+| effectiveFrom | DateTime | yes |  |
+| reason | String | yes |  |
+| status | PayRateProposalStatus |  |  |
+| proposedBy | String | yes |  |
+| proposedByUserId | String | yes |  |
+| createdAt | DateTime |  |  |
+| decidedBy | String |  |  |
+| decidedByUserId | String |  |  |
+| decidedAt | DateTime |  |  |
+| decisionNote | String |  |  |
 
 ### HolidayCalendarYear
 
@@ -7546,6 +7638,14 @@ Whether an outbound message is a service message (about an active contract) or m
 ### PaidDaysBasis
 
 `CALENDAR_DAYS`, `WORKING_DAYS`
+
+### CompensationType
+
+`MONTHLY`, `HOURLY`
+
+### HourlyRateScope
+
+`EMPLOYEE`, `CONTRACT_CATEGORY`, `CATEGORY`
 
 ### FeedbackKind
 

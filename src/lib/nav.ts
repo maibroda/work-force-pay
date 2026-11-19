@@ -158,6 +158,7 @@ export const PAYROLL_AREA: Area = {
     { group: "Pay setup", href: "/settings/employer-costs", label: "Employer cost rules", perm: "payroll.view" },
     { group: "Pay setup", href: "/settings/recurring-deductions", label: "Recurring deductions", perm: "payroll.view" },
     { group: "Pay setup", href: "/payroll/holidays", label: "Public holidays", perm: "payroll.view" },
+    { group: "Pay setup", href: "/payroll/hourly-pay", label: "Hourly pay", perm: "payroll.view" },
     { group: "Pay out", href: "/payments/batches", label: "Payment batches", perm: "payroll.view" },
     { group: "Pay out", href: "/payments/transactions", label: "Payment transactions", perm: "payroll.view" },
     { group: "Pay out", href: "/payments/reconciliation", label: "Salary payment reconciliation", perm: "payroll.view" },

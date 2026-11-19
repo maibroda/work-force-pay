@@ -3,12 +3,14 @@ import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { fmtDate } from "@/lib/dates";
 import { listHolidays } from "@/server/services/holidays";
+import { holidayStatesOfYear, hourlyPayEnabled } from "@/server/services/hourly-pay";
 import { Empty, FormPanel, PageHeader, Section } from "@/components/page";
 import { SmartForm } from "@/components/smart-form";
 import { ActionButton } from "@/components/action-button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { addHolidayAction, confirmHolidayYearAction, removeHolidayAction } from "@/app/actions/holidays";
+import { setHolidayStatesAction } from "@/app/actions/hourly-pay";
 
 export default async function HolidaysPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const ctx = await requirePage("payroll.view");
@@ -16,6 +18,9 @@ export default async function HolidaysPage({ searchParams }: { searchParams: Pro
   const thisYear = new Date().getUTCFullYear();
   const year = Number(sp.year) >= 2000 && Number(sp.year) <= 2100 ? Number(sp.year) : thisYear;
   const { holidays, confirmed } = await listHolidays(ctx, year);
+  // with hourly pay switched on, a holiday can be limited to states (the state of the work location decides which holidays apply to an hour worked)
+  const hourly = await hourlyPayEnabled(ctx.orgId);
+  const states = hourly ? await holidayStatesOfYear(ctx, year) : {};
   const manage = can(ctx.role, "payroll.run");
   const confirm = can(ctx.role, "payrate.approve");
   return (
@@ -54,6 +59,7 @@ export default async function HolidaysPage({ searchParams }: { searchParams: Pro
               <TR>
                 <TH>Date</TH>
                 <TH>Holiday</TH>
+                {hourly && <TH>Applies to</TH>}
                 {manage && <TH />}
               </TR>
             </THead>
@@ -62,6 +68,7 @@ export default async function HolidaysPage({ searchParams }: { searchParams: Pro
                 <TR key={h.id}>
                   <TD>{fmtDate(h.date)}</TD>
                   <TD>{h.name}</TD>
+                  {hourly && <TD className="text-xs">{states[h.id]?.length ? states[h.id].join(", ") : "Every state"}</TD>}
                   {manage && (
                     <TD className="text-right">
                       <ActionButton action={removeHolidayAction.bind(null, h.id)} confirm="Remove this holiday? The year will need confirming again." variant="outline">
@@ -86,6 +93,19 @@ export default async function HolidaysPage({ searchParams }: { searchParams: Pro
             fields={[
               { name: "date", label: "Date", type: "date", required: true },
               { name: "name", label: "Holiday", required: true, placeholder: "e.g. Independence Day" },
+            ]}
+          />
+        </FormPanel>
+      )}
+      {manage && hourly && holidays.length > 0 && (
+        <FormPanel title="Limit a holiday to states (hourly pay)">
+          <SmartForm
+            columns={2}
+            submitLabel="Save"
+            action={setHolidayStatesAction}
+            fields={[
+              { name: "holidayId", label: "Holiday", type: "select", required: true, options: holidays.map((h) => ({ value: h.id, label: `${fmtDate(h.date)} — ${h.name}` })) },
+              { name: "states", label: "States it applies in", placeholder: "e.g. Lagos, Ogun (leave empty for every state)", help: "The state of the place where the hours were worked decides which holidays apply. Changing this takes the year's confirmation away." },
             ]}
           />
         </FormPanel>

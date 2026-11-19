@@ -11,7 +11,7 @@ import { logAudit } from "./audit";
  */
 const yearOf = (date: Date) => date.getUTCFullYear();
 
-async function unconfirm(ctx: Ctx, tx: Tx, year: number) {
+export async function unconfirm(ctx: Ctx, tx: Tx, year: number) {
   const row = await tx.holidayCalendarYear.findUnique({ where: { organizationId_year: { organizationId: ctx.orgId, year } } });
   if (!row) return;
   await tx.holidayCalendarYear.delete({ where: { id: row.id } });

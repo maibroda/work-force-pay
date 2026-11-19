@@ -592,6 +592,10 @@ model Organization {
   payRateProposals          PayRateProposal[]
   contractPayBases          ContractPayBasis[]
   publicHolidays            PublicHoliday[]
+  hourlyPaySetting          HourlyPaySetting?
+  hourlyRates               HourlyRate[]
+  compensationTypes         EmployeeCompensationType[]
+  publicHolidayStates       PublicHolidayState[]
   employeeDocumentTypes     EmployeeDocumentType[]
   documentVersions          EmployeeDocumentVersion[]
   documentBlobs             EmployeeDocumentBlob[]
@@ -2029,6 +2033,7 @@ model EmployeeCategory {
   name                 String
   description          String?
   employees            Employee[]
+  hourlyRates          HourlyRate[]
   contractRates        ContractRate[]
   salaryStructures     SalaryStructure[]
   deployments          Deployment[]
@@ -2128,6 +2133,8 @@ model Employee {
   salaryOverrides         EmployeeSalaryOverride[]
   payRates                EmployeePayRate[]
   payRateProposals        PayRateProposal[]
+  hourlyRates             HourlyRate[]
+  compensationTypes       EmployeeCompensationType[]
   payrollRecords          PayrollRecord[]
   overtime                Overtime[]
   arrears                 Arrears[]
@@ -3261,6 +3268,7 @@ model Contract {
   serviceType   ServiceType?        @relation(fields: [serviceTypeId], references: [id], onDelete: Restrict)
   billingRules  BillingRule[]
   payBases      ContractPayBasis[]
+  hourlyRates   HourlyRate[]
 
   @@unique([organizationId, contractNumber])
 }
@@ -7869,8 +7877,106 @@ model PublicHoliday {
   name           String
   createdBy      String
   createdAt      DateTime     @default(now())
+  /// The states this holiday applies to; none = a national holiday, which applies everywhere (docs/plans/hourly-payroll-phase2-explain-back.md).
+  states         PublicHolidayState[]
 
   @@unique([organizationId, date])
+}
+
+/// A state a public holiday is limited to (the founder's rule H11, 2026-11-19: the state of the WORK LOCATION decides which holidays apply to an hour worked). A holiday with no rows here is national.
+/// Only hourly pay reads this; the paid-days basis of a contract still treats every listed holiday as a holiday (an open finding in the phase 2 note).
+model PublicHolidayState {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  holidayId      String
+  holiday        PublicHoliday @relation(fields: [holidayId], references: [id], onDelete: Cascade)
+  /// A proper state name from src/lib/nigeria-states.ts.
+  state          String
+  createdBy      String
+  createdAt      DateTime      @default(now())
+
+  @@unique([holidayId, state])
+  @@index([organizationId])
+}
+
+enum CompensationType {
+  MONTHLY
+  HOURLY
+}
+
+enum HourlyRateScope {
+  EMPLOYEE
+  CONTRACT_CATEGORY
+  CATEGORY
+}
+
+/// Whether a company pays anyone by the hour (hourly pay, phase 2 of docs/plans/hourly-payroll-assessment.md). OFF until a company administrator switches it on; with it OFF no hourly screen opens and no hourly service acts.
+model HourlyPaySetting {
+  id              String       @id @default(cuid())
+  organizationId  String       @unique
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  enabled         Boolean      @default(false)
+  changedBy       String
+  changedByUserId String
+  changedAt       DateTime     @default(now())
+}
+
+/// An agreed hourly rate for the three classes of day, effective-dated and approved by a second person (the same maker and checker rule as a personal monthly gross). The scope says whom it is for, and the
+/// founder's precedence (H1, 2026-11-19) is: the employee's own rate, then the contract and job role, then the job role. A rate is never edited once decided: a change is a new row, and approval ends the
+/// previous one the day before. Nothing reads these in the pay run yet (phase 4).
+model HourlyRate {
+  id               String                @id @default(cuid())
+  organizationId   String
+  organization     Organization          @relation(fields: [organizationId], references: [id])
+  scope            HourlyRateScope
+  employeeId       String?
+  employee         Employee?             @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  contractId       String?
+  contract         Contract?             @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  categoryId       String?
+  category         EmployeeCategory?     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  weekdayRate      Decimal               @db.Decimal(14, 2)
+  weekendRate      Decimal               @db.Decimal(14, 2)
+  holidayRate      Decimal               @db.Decimal(14, 2)
+  effectiveFrom    DateTime              @db.Date
+  effectiveTo      DateTime?             @db.Date
+  reason           String
+  status           PayRateProposalStatus @default(PENDING)
+  proposedBy       String
+  proposedByUserId String
+  createdAt        DateTime              @default(now())
+  decidedBy        String?
+  decidedByUserId  String?
+  decidedAt        DateTime?
+  decisionNote     String?
+
+  @@index([organizationId, status])
+  @@index([organizationId, scope, employeeId])
+  @@index([organizationId, scope, contractId, categoryId])
+}
+
+/// How a person is paid from a date: monthly (every employee, until a row says otherwise) or by the hour. Proposed by one person and approved by another; the type on a day is the latest APPROVED row
+/// starting on or before it. Nothing reads it in the pay run yet (phase 4).
+model EmployeeCompensationType {
+  id               String                @id @default(cuid())
+  organizationId   String
+  organization     Organization          @relation(fields: [organizationId], references: [id])
+  employeeId       String
+  employee         Employee              @relation(fields: [employeeId], references: [id])
+  type             CompensationType
+  effectiveFrom    DateTime              @db.Date
+  reason           String
+  status           PayRateProposalStatus @default(PENDING)
+  proposedBy       String
+  proposedByUserId String
+  createdAt        DateTime              @default(now())
+  decidedBy        String?
+  decidedByUserId  String?
+  decidedAt        DateTime?
+  decisionNote     String?
+
+  @@index([organizationId, employeeId, status])
 }
 
 /// The company's confirmation that its list of public holidays for a year is complete and right. A contract that excludes public holidays cannot be paid cleanly for a month in an unconfirmed year.

@@ -109,8 +109,9 @@ The seven in the request, with a recommended answer where I have one, plus the o
 | H3 | **The public holiday rate wins** over the weekend rate when a holiday falls on a Saturday or Sunday. |
 | H4 | **Overtime is a separate, configurable premium** on top of the three rates. Still not built: it needs the threshold (per day, week or month) and the multiplier from the founder, and it is phase 6. |
 | H6 | **Monthly, in the existing pay month.** Weekly or per-client cycles are separate pieces if ever wanted. |
+| H11 | **The state of the WORK LOCATION decides which public holidays apply** to an hour worked (answered 2026-11-19, with the "go" for phase 2). A holiday with no states is national; a place with no recognised state gets the national holidays only. |
 
-Still open: H5, H7 to H16 (H8 and H12 touch pay and tax and need the founder or an adviser; I will not choose them).
+Still open: H5, H7 to H10, H12 to H16 (H8 and H12 touch pay and tax and need the founder or an adviser; I will not choose them). **H17 (raised in phase 2):** should a contract's "working days, public holidays excluded" paid-days basis consider only national holidays, now that a holiday can be limited to states? See `hourly-payroll-phase2-explain-back.md`.
 
 ## 8. Business rules I am NOT inventing
 
