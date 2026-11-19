@@ -69,10 +69,14 @@ export async function confirmHolidayYear(ctx: Ctx, year: number) {
   });
 }
 
-/** What the pay run needs for a year: the holiday dates (ISO) and whether the year is confirmed. */
+/**
+ * What the pay run needs for a year: the holiday dates (ISO) and whether the year is confirmed. For a contract's "working days, public holidays excluded" basis only NATIONAL holidays count (the founder's H17,
+ * 2026-11-19): a holiday limited to states is for hourly pay, where the state of the work location decides, and must not remove a working day from every contract. A company that never limits a holiday to states
+ * gets exactly the list it always had.
+ */
 export async function holidayContext(tx: Tx, orgId: string, year: number) {
   const [rows, confirmed] = await Promise.all([
-    tx.publicHoliday.findMany({ where: { organizationId: orgId, date: { gte: d(`${year}-01-01`), lte: d(`${year}-12-31`) } }, select: { date: true } }),
+    tx.publicHoliday.findMany({ where: { organizationId: orgId, date: { gte: d(`${year}-01-01`), lte: d(`${year}-12-31`) }, states: { none: {} } }, select: { date: true } }),
     tx.holidayCalendarYear.findUnique({ where: { organizationId_year: { organizationId: orgId, year } }, select: { id: true } }),
   ]);
   return { holidays: rows.map((r) => iso(r.date)), confirmed: Boolean(confirmed) };
