@@ -38,6 +38,12 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
+## Not yet merged (branch `hourly-payroll-phase1`, no migration)
+
+- **Hourly pay, phase 1: the hours arithmetic** (the plan merged in #237, `docs/plans/hourly-payroll-assessment.md`; the founder said "go with phase 1" on 2026-11-19). A new, self-contained calculator, `src/lib/payroll/hourly.ts`: it cuts a shift at every midnight in Nigerian time (a Friday 19:00 to Saturday 07:00 shift is 5 hours of Friday and 7 of Saturday), gives each piece the class of its day (weekday, weekend, or public holiday, **the holiday winning over the weekend**), and prices the hours in exact kobo, rounding half up once per class line. A helper gives the pieces that fall in a pay month, so a shift over a month end is paid half in each month.
+- **Nothing uses it yet.** No pay run, payslip, screen or database table calls it, so no one is paid by the hour and nothing existing changes. Overtime, night differential, minimum hours, breaks, which rate applies to whom, and the salary structure that splits an hourly person's gross are NOT built: they wait for the founder's decisions (H1 and H4 to H16 of the plan).
+- **Tests (written first):** `tests/unit/hourly.test.ts` (37; with the holiday rule reversed and the cut moved to UTC midnight, 13 of them failed). Explain-back note: `docs/plans/hourly-payroll-phase1-explain-back.md`. No data dictionary change (no table).
+
 ## Merged in #235 (one small migration)
 
 - **Demo company safeguards** (decision 9 of the register; the founder approved the design on 2026-11-19). **A company made by the seed is now marked as a demo company** (`Organization.isDemo`, migration `20261224090000_organization_is_demo`, additive, with a down.sql, round-tripped up, down, up on a copy of the seeded database with no schema difference). **Only the seed sets the flag**; a test reads all of `src/` and fails if any screen, action or service writes it.
