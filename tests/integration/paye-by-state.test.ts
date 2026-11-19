@@ -11,7 +11,7 @@ import { deployEmployee, recordAttendance } from "@/server/services/operations";
 import { generateRemittances, listRemittances } from "@/server/services/payments";
 import { approveRun, createPeriod, lockRun, runPayroll, submitForApproval } from "@/server/services/payroll";
 import { payeSchedule } from "@/server/services/reports";
-import { ctxFor, explainVariances, isolatedOrg, uid } from "../helpers";
+import { ctxFor, explainVariances, isolatedOrg, treatAsRealCompany, uid } from "../helpers";
 
 /**
  * PAYE goes to the tax authority of the worker's state of residence (CLAUDE.md). The state is kept on the worker, copied onto the payroll record
@@ -123,6 +123,7 @@ describe("PAYE by state on a payroll run", () => {
     await submitForApproval(payroll, run.id);
     await approveRun(fin, run.id);
     await lockRun(fin, run.id);
+    await treatAsRealCompany(fin.orgId); // CHANGED 2026-11-19 on purpose: a demo company cannot generate a remittance (see tests/helpers.ts)
     await generateRemittances(fin, run.id);
 
     const lines = (await listRemittances(fin, { runId: run.id })).filter((r) => r.type === "PAYE");

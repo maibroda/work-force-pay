@@ -72,6 +72,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <NavTracker who={ctx.userId} />
       </Suspense>
       <div className="lg:pl-60">
+        {/* a fictional company made by the seed (Organization.isDemo; the founder approved this on 2026-11-19): said on every page, so it can never be mistaken for a real company's records */}
+        {org?.isDemo && (
+          <div role="status" data-testid="demo-banner" className="no-print border-b border-amber-300 bg-amber-100 px-4 py-1.5 text-center text-sm font-medium text-amber-900">
+            Demo company: every name and number here is invented, and nothing for this company can be paid or filed.
+          </div>
+        )}
         <header className="no-print flex flex-wrap items-center justify-between gap-2 border-b bg-card px-4 py-2 text-sm">
           {/* the Back button: one component for every page, top left (src/lib/global-back.ts) */}
           <Suspense fallback={<span className="h-9 w-9" aria-hidden="true" />}>

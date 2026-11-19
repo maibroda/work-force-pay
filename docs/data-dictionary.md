@@ -17,6 +17,7 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | phone | String |  |  |
 | email | String |  |  |
 | currency | String |  | ISO 4217 currency code this organization reports and bills in. See CURRENCIES in src/lib/money.ts for the supported set and their symbol/locale. Changing this is purely a display setting for now — amounts are not converted, and most of the app still assumes NGN. |
+| isDemo | Boolean |  | True for a FICTIONAL company made by the seed (demo data, the founder approved on 2026-11-14 and 2026-11-19). Set only by the seed. A demo company shows a visible banner, cannot produce a bank payment file or a statutory remittance, and is the only kind of company the scoped demo reset may delete. Never set by a screen. |
 | createdAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |
 | users | → User[] |  |  |

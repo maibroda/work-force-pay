@@ -571,6 +571,9 @@ model Organization {
   /// src/lib/money.ts for the supported set and their symbol/locale. Changing this is purely a
   /// display setting for now — amounts are not converted, and most of the app still assumes NGN.
   currency  String   @default("NGN")
+  /// True for a FICTIONAL company made by the seed (demo data, the founder approved on 2026-11-14 and 2026-11-19). Set only by the seed. A demo company shows a visible banner, cannot produce a bank payment file
+  /// or a statutory remittance, and is the only kind of company the scoped demo reset may delete. Never set by a screen.
+  isDemo    Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

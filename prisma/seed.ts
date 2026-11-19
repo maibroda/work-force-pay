@@ -1354,6 +1354,10 @@ async function main() {
   await changePlan(demoCtx, demo.client.id, { planKey: "workforce_suite", reason: "Demo data" });
   for (const o of await db.organization.findMany({ select: { id: true } })) await ensureSubscription(db, demoCtx, o.id, { planKey: "workforce_suite", reason: "Demo data" });
 
+  // everything in this database was just made by this seed (it truncated every table first), so every company in it is fictional: mark them all as demo companies (Organization.isDemo, approved by the founder
+  // on 2026-11-19). Done last, so the seed's own set-up (bank batches, remittances for the demo month) runs as it always has. The application never sets this flag; only this seed does.
+  await db.organization.updateMany({ data: { isDemo: true } });
+
   const counts = {
     employees: await db.employee.count({ where: { organizationId: org.id } }),
     beats: await db.beat.count({ where: { organizationId: org.id } }),

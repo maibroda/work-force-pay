@@ -16,7 +16,7 @@ Status key: **A** approved and authorised to proceed, **R** rule settled (no cod
 | 6 | Training evaluation (the merged plan of PR #187) | **All ten recommendations approved.** | A | **Implement** (one PR, one small migration, tests first). | `training-evaluation-stages-plan.md` |
 | 7 | Host settings: document encryption key | Configure securely through the hosting provider's secret settings; never commit, log or show the key. | E | Prepare the procedure and verification checklist. **No host has been chosen, so it cannot be configured yet; I will never see the key.** | `host-configuration-and-demo-data.md` |
 | 8 | Host settings: survey code rate limit | Implement an appropriate configurable limit; report threshold, abuse protection and test results. | A | Implement as its own PR. | `host-configuration-and-demo-data.md` |
-| 9 | Synthetic demo data | Approved, with safeguards (fictional only; clearly distinguished from real records; isolated from production payroll and statutory calculations; a controlled reset). | A, then P | Propose the safeguards' design first (a database flag needs a migration), then build as its own PR. | `host-configuration-and-demo-data.md` |
+| 9 | Synthetic demo data | Approved, with safeguards (fictional only; clearly distinguished from real records; isolated from production payroll and statutory calculations; a controlled reset). | A, then P | Propose the safeguards' design first (a database flag needs a migration), then build as its own PR. **Design approved and built 2026-11-19** (flag, banner, bank-file and remittance block, seed test; the scoped reset was dropped, demo data lives in its own database): `demo-data-safeguards-explain-back.md`. | `host-configuration-and-demo-data.md` |
 
 ## 2. Business rules now settled
 

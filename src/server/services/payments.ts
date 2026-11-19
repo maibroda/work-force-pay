@@ -5,6 +5,7 @@ import { remittanceDueInfo, type DueInfo, type PayeTiming } from "@/lib/paye-dat
 import { totalOf } from "@/lib/payroll/pay-inputs";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
+import { assertNotDemo } from "./demo-guard";
 import { nextNumber } from "./numbering";
 import { EMPLOYER_COST_FIELDS, type EmployerCostField } from "./reports";
 
@@ -84,6 +85,7 @@ export async function createPaymentBatches(ctx: Ctx, runId: string) {
 
 export async function markBatchPaid(ctx: Ctx, batchId: string) {
   assertCan(ctx, "payment.manage");
+  await assertNotDemo(ctx.orgId, "marking a payment batch as paid");
   const b = await db.paymentBatch.findFirst({
     where: { id: batchId, organizationId: ctx.orgId },
     include: { run: true },
@@ -183,6 +185,7 @@ export async function listTransactions(ctx: Ctx, batchId?: string) {
 /** PAYE (one line per state of residence) and pension (per PFA, employee + employer) remittance schedules. */
 export async function generateRemittances(ctx: Ctx, runId: string) {
   assertCan(ctx, "payment.manage");
+  await assertNotDemo(ctx.orgId, "a statutory remittance");
   const run = await db.payrollRun.findFirst({ where: { id: runId, organizationId: ctx.orgId } });
   if (!run) throw new BusinessError("Payroll run not found.");
   if (!["LOCKED", "PAID"].includes(run.status))
@@ -341,6 +344,7 @@ export const REMITTANCE_TYPE_LABELS: Record<string, string> = {
 
 export async function markRemitted(ctx: Ctx, id: string, reference: string) {
   assertCan(ctx, "payment.manage");
+  await assertNotDemo(ctx.orgId, "marking a statutory remittance as remitted");
   const r = await db.statutoryRemittance.findFirst({ where: { id, organizationId: ctx.orgId } });
   if (!r) throw new BusinessError("Remittance not found.");
   await db.statutoryRemittance.update({ where: { id }, data: { status: "PAID", reference } });
