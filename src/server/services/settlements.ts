@@ -241,6 +241,21 @@ const draftOnly = (s: { status: string }) => {
   if (s.status !== "DRAFT") throw new BusinessError(`This settlement is ${s.status.replace(/_/g, " ").toLowerCase()} — lines can only change while it's a draft.`);
 };
 
+/**
+ * What the audit log says about a settlement line being added or removed: its id, kind, code, amount and flags, never its description. The amount stays because the log is the money trail for a
+ * settlement; the description is free text that HR or payroll type, held on the line itself. The audit log, which the administrators and the auditor read, is append-only and cannot be reached when a
+ * person is erased.
+ */
+const lineAudit = (l: { id: string; kind: string; code: string; amount: unknown; taxable: boolean; manual: boolean; loanId: string | null }) => ({
+  lineId: l.id,
+  kind: l.kind,
+  code: l.code,
+  amount: num(l.amount),
+  taxable: l.taxable,
+  manual: l.manual,
+  ...(l.loanId ? { loanId: l.loanId } : {}),
+});
+
 /** Loan recovery, unreturned property, ex-gratia payment… anything the policy can't know about. */
 export async function addManualLine(ctx: Ctx, settlementId: string, raw: z.input<typeof manualLineSchema>) {
   assertCan(ctx, "settlement.manage");
@@ -266,7 +281,7 @@ export async function addManualLine(ctx: Ctx, settlementId: string, raw: z.input
       },
     });
     await recomputeTotals(tx, settlementId);
-    await logAudit(ctx, { action: "SETTLEMENT_LINE_ADD", entity: "ExitSettlement", entityId: settlementId, newValue: line }, tx);
+    await logAudit(ctx, { action: "SETTLEMENT_LINE_ADD", entity: "ExitSettlement", entityId: settlementId, newValue: lineAudit(line) }, tx);
     return line;
   });
 }
@@ -342,7 +357,7 @@ export async function removeManualLine(ctx: Ctx, lineId: string) {
   await db.$transaction(async (tx) => {
     await tx.exitSettlementLine.delete({ where: { id: lineId } });
     await recomputeTotals(tx, line.settlementId);
-    await logAudit(ctx, { action: "SETTLEMENT_LINE_REMOVE", entity: "ExitSettlement", entityId: line.settlementId, oldValue: line }, tx);
+    await logAudit(ctx, { action: "SETTLEMENT_LINE_REMOVE", entity: "ExitSettlement", entityId: line.settlementId, oldValue: lineAudit(line) }, tx);
   });
 }
 
@@ -391,7 +406,8 @@ export async function returnSettlement(ctx: Ctx, id: string, reason: string) {
   const s = await loadSettlement(ctx, id);
   if (s.status !== "PENDING_APPROVAL") throw new BusinessError("Only a settlement awaiting approval can be sent back.");
   const u = await db.exitSettlement.update({ where: { id }, data: { status: "DRAFT", submittedAt: null, remarks: reason.trim() } });
-  await logAudit(ctx, { action: "SETTLEMENT_RETURN", entity: "ExitSettlement", entityId: id, reason });
+  // the number and the new status, never the reason (the settlement's remarks hold it)
+  await logAudit(ctx, { action: "SETTLEMENT_RETURN", entity: "ExitSettlement", entityId: id, newValue: { number: s.settlementNumber, status: u.status } });
   return u;
 }
 
@@ -413,7 +429,8 @@ export async function cancelSettlement(ctx: Ctx, id: string, reason: string) {
         where: { exitRecordId: s.exitRecordId, systemKey: "FINAL_SETTLEMENT", status: "DONE" },
         data: { status: "PENDING", completedBy: null, completedAt: null },
       });
-    await logAudit(ctx, { action: "SETTLEMENT_CANCEL", entity: "ExitSettlement", entityId: id, reason }, tx);
+    // the number and the new status, never the reason (the settlement's remarks hold it)
+    await logAudit(ctx, { action: "SETTLEMENT_CANCEL", entity: "ExitSettlement", entityId: id, newValue: { number: s.settlementNumber, status: u.status } }, tx);
     return u;
   });
 }

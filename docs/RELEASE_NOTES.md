@@ -31,7 +31,16 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `audit-exits-ids-only`, no migration)
+
+## Not yet merged (branch `audit-settlements-ids-only`, no migration)
+
+- **A settlement's words no longer go into the audit log** (the founder chose "go ahead with the settlement entries" on 2026-11-18, from the scan reported with #225; the same fix as #219 to #227). **Adding or removing a manual settlement line wrote the whole line to the audit log, including its description** (free text typed by HR or payroll, for example the reason for a recovery), and **sending a settlement back or cancelling it wrote the reason**. The audit log is read by the administrators and the auditor, is **append-only**, and **cannot be reached when a person is erased**.
+- **Now the log carries a line's id, kind, code, amount and flags (taxable, manual, the loan it recovers), and for a return or cancellation the settlement's number and new status.** No description and no reason. **The records themselves still hold everything**: the line's description and the settlement's remarks, for those with settlement access; erasure still clears them there. **The amount stays on purpose**, because the log is the money trail for a settlement (the approve, prepare and recompute entries already carry the totals); **I'd like the founder to confirm that choice.**
+- **Entries written before this change still hold the words** (append-only). A decision on whether to do anything about them is for the founder.
+- **Still open:** the onboarding "add step" entry (the step's name, which HR can type freely; low risk), and **employee master data** (bank, tax and pension details, date of birth, phone, email and address in plain text; needs the founder's decision on masking).
+- **Tests (written first, four of five failed before the fix):** `tests/integration/settlement-audit.test.ts` (5): add, remove, return and cancel, with the words and the records still held. The hr-lifecycle, inventory, loans, records follow-up and exit-audit tests (60 in the files run alone with it) pass unchanged. No migration.
+
+## Merged in #227 (no migration)
 
 - **An exit's words no longer go into the audit log** (the founder chose "go ahead with the exit entries" on 2026-11-18, from the scan reported with #225; the same fix as #219 to #226). **Starting, approving and rejecting an exit, recording the exit interview, and completing or waiving a clearance or onboarding step wrote whole rows to the audit log**: the **reason for leaving**, the **remarks**, the **exit-interview notes** and the **reason a step was waived** (which went in twice, in the row and in the entry's reason). The exit and the steps are HR records, but the audit log is read by the administrators and the auditor, is **append-only**, and **cannot be reached when a person is erased**.
 - **Now the log carries the exit's id, type, status, notice and last working day, the summary-dismissal flag, the reason category, the exit-interview day and the rehire flag once known; and a step's id, status and its exit.** No reason, remarks, interview notes or waiver reason. **The records themselves still hold everything**, for those with HR access, and erasure still clears them there. I also fixed the start, reject and step-complete entries in the same functions, which had the same fault.
