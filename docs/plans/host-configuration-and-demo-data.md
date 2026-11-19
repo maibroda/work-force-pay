@@ -56,3 +56,18 @@ Written 2026-11-14, for the founder's consolidated direction of that date.
 **Also:** my own synthetic check data (cases, holds, runs, sanctions) sits in the local demo database from earlier browser checks; a reseed removes it. I will not reseed the founder's database without asking.
 
 **Plan:** present this design for approval (it needs a migration), then build it as its own pull request.
+
+### Status, 2026-11-19: the design was approved and built (with two answers)
+
+The founder approved the whole design on 2026-11-19 and chose two things where the design met the code: **(1) a demo company is BLOCKED from the bank file and the remittance** (not stamped), and **(2) the scoped reset is dropped**, demo data living in its own database.
+
+| Safeguard | Status |
+| --- | --- |
+| `isDemo` flag on the company, set only by the seed (one small reversible migration) | **Built** |
+| A visible "Demo company" banner on every page | **Built**, checked in the browser |
+| A demo company cannot make a bank payment file, mark a batch paid, generate a statutory remittance or mark one remitted | **Built**, refusal checked through the real download route |
+| The seed refuses production and any database not on this machine unless the database name is typed | **Already existed** (`src/lib/seed-guard.ts`) |
+| A test that the seed looks fictional | **Built**, with a stated limit: a random ten-digit account number cannot be proved not to be somebody's real number; the bank-file block is what stops it being paid |
+| A scoped reset that deletes only demo companies | **Dropped.** Tried on a copy of the seeded database: about 50 database protections (posted journals, invoices, tax records, bank payment-file records, billing rules, CRM history) stop rows being deleted, and switching them all off needs full database administrator rights. Demo data lives in its own database, wiped and re-seeded with the guarded seed. The code was removed. |
+
+Not excluded from "any platform-level aggregate": no platform-level aggregate across companies exists in the application that I found; the flag is there for one if it is ever built. Explain-back note: `demo-data-safeguards-explain-back.md`.

@@ -15,6 +15,7 @@ import { GENERIC_LAYOUT, layoutCells, narrationFor, type FileRowLike, type Payin
 import { buildPaymentRows, type PaymentLine } from "@/lib/payment-file";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
+import { assertNotDemo } from "./demo-guard";
 import { payingBankForFile } from "./paying-banks";
 
 // ─────────────────────────────── Bank codes ───────────────────────────────
@@ -158,6 +159,7 @@ const safeName = (s: string) => s.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/
  */
 export async function exportPaymentFile(ctx: Ctx, runId: string, opts: { leaveOutProblems?: boolean; payingBankId?: string | null } = {}) {
   assertCan(ctx, "payment.manage");
+  await assertNotDemo(ctx.orgId, "a bank payment file");
   const p = await paymentFilePreview(ctx, runId, { payingBankId: opts.payingBankId });
   if (p.blockers.length) throw new BusinessError(p.blockers[0]);
   if (p.alreadyPaid) throw new BusinessError("This payroll has already been marked paid, so a payment file is not made again.");

@@ -16,7 +16,7 @@ import { deployEmployee, recordAttendance, recordMonthlyAttendance } from "@/ser
 import { generateRemittances, listRemittances } from "@/server/services/payments";
 import { approveRun, createPeriod, lockRun, runPayroll, submitForApproval } from "@/server/services/payroll";
 import { clientProfitability } from "@/server/services/reports";
-import { beatByName, ctxFor, explainVariances, uid } from "../helpers";
+import { beatByName, ctxFor, explainVariances, treatAsRealCompany, uid } from "../helpers";
 
 describe("business lines: guarding vs outsourcing vs back-office", () => {
   it("a contract's business line can be reclassified, and only by someone who can manage clients", async () => {
@@ -141,6 +141,7 @@ describe("business lines: guarding vs outsourcing vs back-office", () => {
     expect(p.otherCosts).toBeCloseTo(num(rec.totalEmployerAddOns), 2);
 
     // each employer add-on cost type gets its own remittance schedule (employer-only — no employee share)
+    await treatAsRealCompany(fin.orgId); // CHANGED 2026-11-19 on purpose: a demo company cannot generate a remittance (see tests/helpers.ts)
     await generateRemittances(fin, run.id);
     const remittances = await listRemittances(fin, { runId: run.id });
     const byType = new Map(remittances.map((r) => [r.type, r]));

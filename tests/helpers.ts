@@ -27,6 +27,15 @@ export async function periodFor(ctx: Ctx, year: number, month: number) {
   return db.payrollPeriod.findFirstOrThrow({ where: { organizationId: ctx.orgId, year, month } });
 }
 
+/**
+ * CHANGED 2026-11-19 on purpose (demo company safeguards, approved by the founder): the seeded companies are demo companies (Organization.isDemo) and a demo company cannot generate a statutory remittance
+ * or make a bank payment file, so a test that does so on the seeded company first makes it an ordinary company in the TEST database. It is never put back: tests run in parallel against one database, so
+ * switching it back could block another test half-way. The test database is rebuilt from the seed on every run, and no test depends on the seeded company being a demo company (demo-company.test.ts uses its own).
+ */
+export async function treatAsRealCompany(orgId: string) {
+  await db.organization.update({ where: { id: orgId }, data: { isDemo: false } });
+}
+
 export const uid = () => Math.random().toString(36).slice(2, 7).toUpperCase();
 
 /**

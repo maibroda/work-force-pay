@@ -10,7 +10,7 @@ import { deployEmployee, recordAttendance } from "@/server/services/operations";
 import { generateRemittances, listRemittances, remittanceTiming } from "@/server/services/payments";
 import { approveRun, createPeriod, lockRun, runPayroll, submitForApproval } from "@/server/services/payroll";
 import { copyStatutoryRules, createPayrollRule } from "@/server/services/statutory";
-import { ctxFor, explainVariances, isolatedOrg, uid } from "../helpers";
+import { ctxFor, explainVariances, isolatedOrg, treatAsRealCompany, uid } from "../helpers";
 
 /**
  * The employee's NHF (National Housing Fund) contribution is VOLUNTARY: 2.5% of basic pay, taken only from an employee who has chosen to contribute, and
@@ -139,6 +139,7 @@ describe("a payroll with the employee NHF", () => {
       expect(cents(num(head[0].credit))).toBe(nhfTotal);
 
       // the remittance schedule: one line for the authority, the employee share only, due at the end of the pay month
+      await treatAsRealCompany(fin.orgId); // CHANGED 2026-11-19 on purpose: a demo company cannot generate a remittance (see tests/helpers.ts)
       await generateRemittances(fin, run.id);
       const lines2 = await listRemittances(fin, { runId: run.id });
       const rem = lines2.find((r) => r.payee.startsWith("Federal Mortgage Bank"));
