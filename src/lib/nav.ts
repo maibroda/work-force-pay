@@ -443,6 +443,7 @@ export const OPERATIONS_AREA: Area = {
     { group: "Attendance", href: "/operations/attendance", label: "Attendance", perm: "attendance.record" },
     { group: "Attendance", href: "/operations/rosters", label: "Rosters", perm: "operations.view" },
     { group: "Attendance", href: "/operations/absence", label: "Absence", perm: "operations.view" },
+    { group: "Attendance", href: "/operations/time-entries", label: "Hourly shifts", perm: "operations.view" },
     { group: "Uniform & kit", href: "/inventory", label: "Stock & kit", perm: "inventory.view" },
     { group: "Uniform & kit", href: "/inventory/packs", label: "Kit packs", perm: "inventory.view" },
     { group: "Uniform & kit", href: "/inventory/outstanding", label: "Kit held by staff", perm: "inventory.view" },
