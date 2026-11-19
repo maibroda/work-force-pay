@@ -342,7 +342,8 @@ export async function addOnboardingTask(ctx: Ctx, employeeId: string, taskName: 
     action: "ONBOARDING_TASK_ADD",
     entity: "Employee",
     entityId: employeeId,
-    newValue: task,
+    // the step's id, status and due day, never its name (HR types it freely, so it can hold anything)
+    newValue: { ...stepAudit(task), ...(task.dueDate ? { dueDate: iso(task.dueDate) } : {}) },
   });
   return task;
 }
@@ -360,7 +361,7 @@ export async function completeOnboardingTask(ctx: Ctx, id: string) {
     action: "ONBOARDING_TASK_COMPLETE",
     entity: "Employee",
     entityId: task.employeeId,
-    newValue: updated,
+    newValue: stepAudit(updated),
   });
   return updated;
 }
@@ -438,7 +439,7 @@ const exitAudit = (r: {
   ...(r.exitInterviewDate ? { exitInterviewDate: iso(r.exitInterviewDate) } : {}),
 });
 
-/** What the audit log says about a checklist step being completed or waived: its id and status (and the exit it belongs to), never the reason for a waiver, which the step itself holds. */
+/** What the audit log says about a checklist step being added, completed or waived: its id and status (and the exit it belongs to), never its name, a note on it or the reason for a waiver, which the step itself holds. */
 const stepAudit = (t: { id: string; status: string; exitRecordId?: string }) => ({
   taskId: t.id,
   status: t.status,

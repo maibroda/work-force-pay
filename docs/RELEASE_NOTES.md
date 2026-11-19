@@ -34,7 +34,16 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `audit-codeowners-and-mid-month-test`, CODEOWNERS and a test; no pay code change)
+
+## Not yet merged (branch `audit-onboarding-step-ids-only`, no migration)
+
+- **An onboarding step's name no longer goes into the audit log** (the last finding of the audit-log scan reported with #225; the same fix as #219 to #229). **Adding an onboarding step wrote the whole step to the audit log, including its name, which HR types freely and so can hold anything**, and completing a step wrote the whole row, including any note on it. The audit log is read by the administrators and the auditor, is **append-only**, and **cannot be reached when a person is erased**.
+- **Now the log carries the step's id, status and due day only.** No name and no note. **The step itself still holds both**, for those with HR access, and erasure still clears them there. The step's name for a standard step (from the template) is no longer in the log either; the log says which step by its id.
+- **Entries written before this change still hold the words** (append-only). Whether to restrict who can read those older entries is still the founder's decision.
+- **This closes the audit-log scan's findings** (requisitions, recruitment, hire pay, contracts and probation, relations cases, sanctions, exits, settlements, employee master data, onboarding steps). Not yet checked: entries written through spread or multi-line calls the scan could have missed.
+- **Tests (written first, three of four failed before the fix):** `tests/integration/onboarding-step-audit.test.ts` (4): add (with and without a due day), complete with a note on the step, and the step still holding its name and note. The exit-audit, hr-lifecycle, hr-records, documents and records follow-up tests (64 in the files run alone with it) pass unchanged. No migration.
+
+## Merged in #230 (CODEOWNERS and a test; no pay code change)
 
 - **A promotion that starts mid-month is paid by the day: the old rate up to the day before, the new rate from the change date** (the founder chose this on 2026-11-19, item S4 of the internal-selection plan). **Payroll already did this** for a person on a personal pay rate, when HR enters the new rate with the change date as its start date; nothing was proved before. **New tests, written first, passed without any change to pay code:** `tests/integration/mid-month-pay-rate.test.ts` (2). Worked example: ₦300,000 a month promoted to ₦360,000 from the 16th of a 30-day month pays 15 x ₦10,000 + 15 x ₦12,000 = **₦330,000**; promoted on the 30th, ₦302,000; from the 1st, ₦360,000; no change, ₦300,000; a 31-day month promoted on the 16th, ₦330,967.74.
 - **Not covered, not assumed:** a company on the fixed 30-day rule, a client contract with its own paid-days basis, and people paid from the work register on a contract rate. **Not built:** the promotion creating the new pay rate itself (HR still enters it with the same start date); that is a separate decision for the founder. Explain-back note: `docs/plans/mid-month-pay-rate-explain-back.md`.
