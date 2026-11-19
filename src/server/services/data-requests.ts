@@ -16,6 +16,7 @@ import { can } from "@/lib/auth/permissions";
 import { d, iso } from "@/lib/dates";
 import { dueDateFor, dueState, daysLeft, WITHHELD_NOTES } from "@/lib/data-requests";
 import { num } from "@/lib/money";
+import { hoursOf } from "@/lib/payroll/hourly-report";
 import { assertCan, BusinessError, db } from "./_base";
 import { logAudit } from "./audit";
 import { getHrPolicy, todayUtc } from "./hr-policy";
@@ -31,6 +32,8 @@ const opt = z
 
 const dt = (v: Date | null | undefined) => (v ? iso(v) : null);
 const money = (v: unknown) => (v === null || v === undefined ? null : num(v));
+/** A clock time as Nigerian wall-clock time, "2026-11-20 19:00". */
+const wat = (v: Date) => new Date(v.getTime() + 3_600_000).toISOString().slice(0, 16).replace("T", " ");
 const words = (s: string | null | undefined) => (s ? s.replace(/_/g, " ").toLowerCase() : null);
 
 export interface DataSection {
@@ -59,7 +62,7 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
   // the probation workflow: the manager's recommendation and reasons, HR's review note, the feedback written for the employee and their response
   const probationReviews = await db.probationReview.findMany({ where, orderBy: [{ round: "asc" }, { id: "asc" }] });
 
-  const [contracts, exits, settlements, onboarding, deployments, movements, attendance, payslips, loans, leave, training, documents, discipline, cases, contacts, guarantors, appraisals, acks, letters, changes, candidate, kit, plans, probationDecisions, feedback, trainingEnrolments, trainingNeeds, recognition, trainingEvaluations, trainingRequests, skillAssessments, surveyParticipation, promotions, trainingEffectiveness] =
+  const [contracts, exits, settlements, onboarding, deployments, movements, attendance, payslips, loans, leave, training, documents, discipline, cases, contacts, guarantors, appraisals, acks, letters, changes, candidate, kit, plans, probationDecisions, feedback, trainingEnrolments, trainingNeeds, recognition, trainingEvaluations, trainingRequests, skillAssessments, surveyParticipation, promotions, trainingEffectiveness, timeEntries] =
     await Promise.all([
       db.employmentContract.findMany({ where, orderBy: { startDate: "asc" } }),
       db.exitRecord.findMany({ where, orderBy: { createdAt: "asc" } }),
@@ -115,6 +118,8 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
         select: { outcome: true, comment: true, byName: true, createdAt: true, enrolment: { select: { session: { select: { sessionDate: true, programme: { select: { name: true } } } } } } },
         orderBy: { createdAt: "asc" },
       }),
+      // their hourly shifts (hourly pay, phase 3): the site, the clock times in Nigerian time, the status and the approved hours. Never the words typed about a shift (a rejection note, a correction reason).
+      db.timeEntry.findMany({ where, select: { clockIn: true, clockOut: true, status: true, payableMinutes: true, beat: { select: { name: true } } }, orderBy: { clockIn: "asc" } }),
     ]);
 
   // a reconsideration of a failed probation, once it is in effect: what they were told (the statement and the conditions) and their response; never what the supervisor or HR wrote
@@ -175,6 +180,10 @@ export async function compileEmployeeData(orgId: string, employeeId: string): Pr
     attendance: {
       title: "Attendance records (summary — the day-by-day register is available on request)",
       records: attendance._count ? [{ daysRecorded: attendance._count, firstDay: dt(attendance._min.date), lastDay: dt(attendance._max.date) }] : [],
+    },
+    hourlyShifts: {
+      title: "Hourly shifts (clock-in and clock-out times, Nigerian time)",
+      records: timeEntries.map((x) => ({ site: x.beat.name, clockIn: wat(x.clockIn), clockOut: x.clockOut ? wat(x.clockOut) : "not entered", status: words(x.status), approvedHours: x.status === "APPROVED" && x.payableMinutes !== null ? hoursOf(x.payableMinutes) : null })),
     },
     pay: {
       title: "Payslips",

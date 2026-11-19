@@ -5906,7 +5906,7 @@ A public holiday the company has entered (some are announced each year, so the d
 
 ### PublicHolidayState
 
-A state a public holiday is limited to (the founder's rule H11, 2026-11-19: the state of the WORK LOCATION decides which holidays apply to an hour worked). A holiday with no rows here is national. Only hourly pay reads this; the paid-days basis of a contract still treats every listed holiday as a holiday (an open finding in the phase 2 note).
+A state a public holiday is limited to (the founder's rule H11, 2026-11-19: the state of the WORK LOCATION decides which holidays apply to an hour worked). A holiday with no rows here is national. Hourly pay reads this. A contract's paid-days basis considers only NATIONAL holidays (a holiday with no rows here), the founder's H17 of 2026-11-19.
 
 | Field | Type | Required | What it holds |
 | --- | --- | --- | --- |

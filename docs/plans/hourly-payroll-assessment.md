@@ -114,10 +114,13 @@ The seven in the request, with a recommended answer where I have one, plus the o
 | H9 | **The supervisor approves an hourly person's hours, and never the person who captured the same entry** (answered 2026-11-19). Unapproved hours never enter a pay run. |
 | H10 | **A missing clock-out is not payable until completed** (answered 2026-11-19): the entry stays a draft until a supervisor enters the real clock-out; no hours are ever assumed. |
 | H16 | **An approved entry is never edited; a correction entry replaces it** (answered 2026-11-19): the original is marked superseded and kept, and a different person approves the correction. Inside a locked pay period it goes through a supplementary payroll. |
+| H17 | **A contract's "working days, public holidays excluded" paid-days basis considers only NATIONAL holidays** (answered 2026-11-19): a holiday limited to states is for hourly pay, where the work location's state decides. Built (no migration). |
+| H18 | **Breaks are recorded as the clock times they were taken** (answered 2026-11-19: kept as built), not as minutes, so a break across midnight comes off the right day and class. |
+| H13 | **A minimum-pay warning for hourly staff** (answered 2026-11-19): a configurable warning only, with a figure you or your adviser enter; no figure in the code; it never blocks pay. To be built with phase 4, where pay is calculated. |
 
 **H18 (raised in phase 3):** your answer to H5 says the supervisor records break minutes; I record the TIMES the breaks were taken instead, because on a shift over midnight a number of minutes does not say which day, and so which class (weekday, weekend or holiday), they come off, and no rule for that was decided. If you prefer minutes, a rule is needed. See `hourly-payroll-phase3-explain-back.md`.
 
-Still open: H7, H12 to H16 (H8 and H12 touch pay and tax and need the founder or an adviser; I will not choose them). **H17 (raised in phase 2):** should a contract's "working days, public holidays excluded" paid-days basis consider only national holidays, now that a holiday can be limited to states? See `hourly-payroll-phase2-explain-back.md`.
+Still open: H7, H8, H12, H14, H15 (H8 and H12 touch pay and tax and need the founder or an adviser; I will not choose them). **H17 (raised in phase 2):** should a contract's "working days, public holidays excluded" paid-days basis consider only national holidays, now that a holiday can be limited to states? See `hourly-payroll-phase2-explain-back.md`.
 
 ## 8. Business rules I am NOT inventing
 

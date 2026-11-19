@@ -38,4 +38,5 @@ export const WITHHELD_NOTES = [
   "Confidential investigation records (for example harassment and whistleblowing cases), to protect the people involved. Ask HR which exemption applies to a given record.",
   "Other people's personal details: for guarantors and referees only a name, relationship and status are shown, not their contact details or ID numbers.",
   "Security and system logs, and the audit trail of who has used the system.",
+  "The words typed about an hourly shift (a rejection note or the reason for a correction); the shift itself, with its times and approved hours, is included.",
 ] as const;

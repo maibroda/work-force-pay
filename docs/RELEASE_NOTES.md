@@ -38,7 +38,14 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `hourly-payroll-phase5`, no migration)
+## Not yet merged (branch `hourly-payroll-followups`, no migration)
+
+- **A contract's "working days, public holidays excluded" paid-days basis now considers only NATIONAL holidays** (the founder's H17, 2026-11-19). A holiday limited to states (hourly pay, phase 2) is for hourly pay, where the work location's state decides, and no longer removes a working day from every contract. A company that never limits a holiday to states gets exactly the list it always had; nothing changes for any company until it uses state limits. This touches an input to the pay run (`holidayContext`).
+- **A person's own data copy lists their hourly shifts** (the site, the clock-in and clock-out in Nigerian time, the status and the approved hours; never anyone else's, and never the words typed about a shift: a rejection note or a correction reason, which the copy's "left out" list now says).
+- **Decisions recorded:** H18 (breaks stay as clock times), H13 (a configurable minimum-pay warning, to be built with phase 4). **Not built:** erasure of the words typed on a person's shifts (rejection notes and correction reasons): the database protects time entries from any change, so it needs a small migration that allows only blanking those two fields; waiting for the founder's go.
+- **Tests (written first):** `tests/integration/hourly-data-copy-and-holidays.test.ts` (6; with both changes reverted, four failed). Explain-back note: `docs/plans/hourly-payroll-followups-explain-back.md`. Data dictionary regenerated (a comment only). The release-note heading for #241 is renamed to "Merged in #241".
+
+## Merged in #241 (no migration)
 
 - **Hourly pay, phase 5: the hourly reports** (the founder said "go with phase 5" on 2026-11-19). Four reports on the existing Reports screens, with the usual CSV download: **by employee** (weekday, weekend and public holiday hours and cost), **by client and contract**, **month by month** (with the change on the month before; a shift over a month end is split between the two months), and **approved and waiting** (approved hours against hours still waiting for approval, drafts, shifts with no clock-out, rejected or withdrawn ones). No migration, no new table: they only read what phases 2 and 3 keep.
 - **The cost is indicative, not payroll** (approved hours at the approved hourly rates; the pay run does not read hours yet). Only approved shifts count; a corrected shift counts only as its approved correction. Every figure is worked once, at one grain (person, contract, month, class, rate), rounded half up to the kobo once per line, and every report is a roll-up of the same lines, so all of them add up to the same total. Hours with no approved rate are shown apart and are never priced as zero. The three cost reports need the payroll right; the status report has no money and needs only the reports right. Off, they are empty and say why.
