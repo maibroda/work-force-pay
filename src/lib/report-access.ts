@@ -14,6 +14,10 @@ const SPECIFIC: Record<string, Permission> = {
   guarantors: "employee.sensitive",
   "records-completeness": "employee.sensitive",
   "detail-changes": "employee.sensitive",
+  // hourly pay (docs/plans/hourly-payroll-assessment.md, phase 5): the three cost reports show pay, so they need the payroll right; the status report is hours only
+  "hourly-summary": "payroll.view",
+  "hourly-by-client": "payroll.view",
+  "hourly-monthly": "payroll.view",
 };
 
 export const reportPermission = (slug: string): Permission => SPECIFIC[slug] ?? "reports.view";

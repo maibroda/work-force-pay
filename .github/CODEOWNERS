@@ -19,6 +19,7 @@
 /src/server/services/rates.ts              @maibroda @developeraideehem
 /src/server/services/hourly-pay.ts         @maibroda @developeraideehem
 /src/server/services/time-entries.ts       @maibroda @developeraideehem
+/src/server/services/hourly-reports.ts      @maibroda @developeraideehem
 /src/server/services/deduction-rules.ts    @maibroda @developeraideehem
 /src/server/services/quick-payslip.ts      @maibroda @developeraideehem
 /eslint.config.mjs                         @maibroda @developeraideehem
