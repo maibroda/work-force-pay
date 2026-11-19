@@ -35,7 +35,14 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `audit-onboarding-step-ids-only`, no migration)
+
+## Not yet merged (branch `audit-old-rows-plan`, a plan only: no code, no data, no migration)
+
+- **A plan for the older audit rows that still hold the words** (the founder chose "plan a one-off clean-up, run later" on 2026-11-19). Entries written before #219 to #231 still hold the words because the log is append-only. `docs/plans/older-audit-rows-cleanup-plan.md` sets out a tested routine, run only on the founder's approval, that rewrites old rows into the new masked shape through the **existing sanctioned redaction** (`redactAuditRows`, which keeps the tamper check passing), with a dry run first and a checked backup before anything is written.
+- **Finding:** `redactAuditRows` cannot change the `reason` column, where some older rows hold free text; clearing it would need a small extension of a critical audit file that is not in CODEOWNERS. **Five questions (O1 to O5) are for the founder.** I believe no live company data exists yet (the host is not chosen); please confirm.
+- **Nothing is built or changed.** No audit row has been touched.
+
+## Merged in #231 (no migration)
 
 - **An onboarding step's name no longer goes into the audit log** (the last finding of the audit-log scan reported with #225; the same fix as #219 to #229). **Adding an onboarding step wrote the whole step to the audit log, including its name, which HR types freely and so can hold anything**, and completing a step wrote the whole row, including any note on it. The audit log is read by the administrators and the auditor, is **append-only**, and **cannot be reached when a person is erased**.
 - **Now the log carries the step's id, status and due day only.** No name and no note. **The step itself still holds both**, for those with HR access, and erasure still clears them there. The step's name for a standard step (from the template) is no longer in the log either; the log says which step by its id.
