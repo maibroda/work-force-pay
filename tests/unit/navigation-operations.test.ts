@@ -53,7 +53,7 @@ describe("the 12-entry Operations group becomes one entry", () => {
   });
 
   it("opens each page to exactly the roles that could see it before: same permission per page", () => {
-    const was = new Map(OLD);
+    const was = new Map<string, (typeof OLD)[number][1]>([...OLD, ["/operations/time-entries", "operations.view"]]); // Hourly shifts was added on 2026-11-19 (hourly pay, phase 3), with the same permission as the other Attendance pages
     for (const s of OPERATIONS_AREA.sections) {
       expect(s.perm, s.href).toBe(was.get(s.href));
       for (const r of roles) expect(can(r, s.perm)).toBe(can(r, was.get(s.href)!));
