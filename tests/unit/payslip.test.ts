@@ -60,6 +60,38 @@ describe("the payslip", () => {
     for (const amount of ["13,500", "1,350", "10,125", "2,700"]) expect(out, amount).not.toContain(amount);
   });
 
+  it("a monthly payslip has no hours section, and keeps its monthly gross", () => {
+    const out = html();
+    expect(out).not.toContain("Hours worked and pay");
+    expect(out).toContain("Monthly gross (contractual)");
+  });
+
+  describe("for a person paid by the hour (phase 4c)", () => {
+    const hourly = [
+      { siteName: "Victoria Island", dayClass: "WEEKDAY" as const, minutes: 480, rate: "1000.00", amount: "8000.00" },
+      { siteName: "Victoria Island", dayClass: "WEEKEND" as const, minutes: 510, rate: "1500.00", amount: "12750.00" },
+      { siteName: "Victoria Island", dayClass: "HOLIDAY" as const, minutes: 240, rate: "2000.00", amount: "8000.00" },
+    ];
+    const hourlyHtml = (over: object = {}) => renderToStaticMarkup(createElement(Payslip, { rec: { ...rec, monthlyGross: 0, totalEarnings: 28750, hourly, ...over }, orgName: "Demo" }));
+    it("shows the hours worked and the pay for them by kind of day, with the rate and the totals", () => {
+      const out = hourlyHtml();
+      for (const shown of ["Hours worked and pay", "Weekday", "Weekend", "Public holiday", "8 h", "8 h 30 min", "4 h", "1,000.00", "1,500.00", "2,000.00", "12,750.00", "28,750.00", "20 h 30 min"]) expect(out, shown).toContain(shown);
+    });
+    it("says the person is paid by the hour instead of showing a contractual monthly gross of nothing", () => {
+      const out = hourlyHtml();
+      expect(out).not.toContain("Monthly gross (contractual)");
+      expect(out).toContain("Paid by the hour");
+    });
+    it("a person with both monthly pay and hours keeps the monthly gross and also shows the hours", () => {
+      const out = hourlyHtml({ monthlyGross: 90000 });
+      expect(out).toContain("Monthly gross (contractual)");
+      expect(out).toContain("Hours worked and pay");
+    });
+    it("an old record with no hourly lines at all renders as before", () => {
+      expect(renderToStaticMarkup(createElement(Payslip, { rec: { ...rec, hourly: [] }, orgName: "Demo" }))).not.toContain("Hours worked and pay");
+    });
+  });
+
   it("still renders when a record has no employer lines at all", () => {
     const out = renderToStaticMarkup(createElement(Payslip, { rec: { ...rec, lines: lines.filter((l) => l.type !== "EMPLOYER") }, orgName: "Demo" }));
     expect(out).toContain("Total earnings");

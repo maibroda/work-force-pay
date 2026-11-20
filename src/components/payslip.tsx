@@ -1,5 +1,6 @@
 import { naira, num } from "@/lib/money";
 import { d, fmtDate, fmtShort } from "@/lib/dates";
+import { hourlyPayslip, type HourlyLineInput } from "@/lib/payroll/payslip-hourly";
 
 type Line = { type: string; code: string; name: string; amount: number };
 type Loc = { clientName: string; beatName: string; days: number; from: string; to: string };
@@ -31,6 +32,8 @@ export function Payslip({
     hasOverride: boolean;
     lines: unknown;
     locations: unknown;
+    /** The stored hourly pay lines of the record with the site's name (phase 4c); none for a person paid monthly. */
+    hourly?: HourlyLineInput[];
     run: {
       type: string;
       runNumber: number;
@@ -47,6 +50,9 @@ export function Payslip({
   const earnings = lines.filter((l) => l.type === "EARNING");
   const deductions = lines.filter((l) => l.type === "DEDUCTION");
   const period = rec.run.period;
+  const hs = hourlyPayslip(rec.hourly ?? []);
+  // a person paid only by the hour has no contractual monthly gross
+  const hourlyOnly = hs !== null && num(rec.monthlyGross) === 0;
   // Merge contiguous ranges into a per-client/beat summary for the "Work Locations" table
   const summary = new Map<string, Loc & { ranges: string[] }>();
   for (const l of locs) {
@@ -106,10 +112,16 @@ export function Payslip({
         <p>
           <span className="text-muted-foreground">PFA:</span> {rec.pfa ?? "—"}
         </p>
-        <p>
-          <span className="text-muted-foreground">Monthly gross (contractual):</span>{" "}
-          {naira(rec.monthlyGross)}
-        </p>
+        {hourlyOnly ? (
+          <p>
+            <span className="text-muted-foreground">Pay basis:</span> <b>Paid by the hour</b>
+          </p>
+        ) : (
+          <p>
+            <span className="text-muted-foreground">Monthly gross (contractual):</span>{" "}
+            {naira(rec.monthlyGross)}
+          </p>
+        )}
       </div>
       {rec.hasOverride && (
         <p className="mt-3 rounded bg-violet-50 px-2 py-1 text-xs text-violet-800">
@@ -150,6 +162,44 @@ export function Payslip({
           </p>
         </div>
       </div>
+      {hs && (
+        <div className="border-t py-3">
+          <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Hours worked and pay</h4>
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="py-1">Site</th>
+                <th>Day type</th>
+                <th className="text-right">Hours</th>
+                <th className="text-right">Rate / hour</th>
+                <th className="text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {hs.rows.map((r, i) => (
+                <tr key={i} className="border-t">
+                  <td className="py-1">{r.site}</td>
+                  <td>{r.dayLabel}</td>
+                  <td className="text-right tabular-nums">{r.duration}</td>
+                  <td className="text-right tabular-nums">{naira(r.rate)}</td>
+                  <td className="text-right tabular-nums">{naira(r.amount)}</td>
+                </tr>
+              ))}
+              <tr className="border-t font-semibold">
+                <td className="py-1" colSpan={2}>
+                  Total
+                </td>
+                <td className="text-right tabular-nums">{hs.totalDuration}</td>
+                <td />
+                <td className="text-right tabular-nums">{naira(hs.totalAmount)}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {hs.byClass.map((c) => `${c.dayLabel}: ${c.duration} (${naira(c.amount)})`).join(" · ")}
+          </p>
+        </div>
+      )}
       <div className="border-t py-3">
         <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Work locations — {period.name}
@@ -183,7 +233,8 @@ export function Payslip({
       </div>
       <div className="grid grid-cols-2 gap-2 border-t pt-3 text-xs sm:grid-cols-4">
         <p>
-          Days worked: <b>{num(rec.daysWorked)}</b> / {rec.basisDays}
+          Days worked: <b>{num(rec.daysWorked)}</b>
+          {hourlyOnly ? "" : ` / ${rec.basisDays}`}
         </p>
         <p>
           Days absent: <b>{rec.daysAbsent}</b>

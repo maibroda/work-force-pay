@@ -29,7 +29,7 @@ import { findDuplicates } from "./employees";
 import { recentBankChanges } from "./change-requests";
 import { CLIENT_MISMATCH, LOCATION_MISMATCH } from "./operations";
 import { submissionBlockers, varianceIssues } from "./payroll-controls";
-import { hourlyDecreaseFinding, hourlyFindings, hourlyRateConflict, isHourlyOn, loadHourlyForPeriod, loadLateHourly, monthlyRateWhileHourly } from "./hourly-payroll";
+import { hourlyDecreaseFinding, hourlyFindings, hourlyRateConflict, isHourlyOn, loadHourlyForPeriod, loadLateHourly, loadPayslipHourly, monthlyRateWhileHourly } from "./hourly-payroll";
 import { loadRateBook } from "./rates";
 import { employerCostRuleFor, payrollRuleFor, pensionRuleFor, taxRuleFor } from "./statutory";
 import { enforceVerifiedRules } from "./statutory-verification";
@@ -1495,7 +1495,9 @@ export async function getPayslip(ctx: Ctx, recordId: string) {
       allocations: { include: { client: true, beat: true } },
     },
   });
-  return rec;
+  if (!rec) return null;
+  // the hours worked and the pay for them, for a person paid by the hour (none for a person paid monthly)
+  return { ...rec, hourly: await loadPayslipHourly(db, ctx.orgId, rec.id) };
 }
 
 export async function employeePayslips(ctx: Ctx, employeeId: string) {
