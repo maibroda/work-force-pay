@@ -21,6 +21,7 @@ import { Exact } from "../exact-fraction";
 import { iso } from "../dates";
 import {
   addKobo,
+  asKobo,
   koboFromNaira as kobo,
   koboToNumber,
   koboToString,
@@ -60,7 +61,7 @@ export interface WorkDay {
 
 export interface RateInfo {
   key: string; // unique key of the rate/structure combination
-  source: "CONTRACT_RATE" | "EMPLOYEE_PAY_RATE";
+  source: "CONTRACT_RATE" | "EMPLOYEE_PAY_RATE" | "HOURLY";
   agreedRate: number | null; // client billing per head per month
   operativeSharePct: number | null;
   monthlyGross: number; // operative monthly gross
@@ -81,6 +82,35 @@ export interface EmployerCostRuleInput {
   outsourcingLeaveAllowancePct: number; // OUTSOURCING only, % of Basic
 }
 
+/** One class of day at one rate within an hourly site's piece of pay: the minutes, the rate used (naira) and the amount in WHOLE KOBO (already worked and rounded once: src/lib/payroll/hourly-earnings.ts). */
+export interface HourlyLineInput {
+  dayClass: "WEEKDAY" | "WEEKEND" | "HOLIDAY";
+  minutes: number;
+  rateId?: string | null;
+  rate: number;
+  amountKobo: number;
+}
+
+/**
+ * One site's piece of an hourly person's pay for the month (hourly pay, phase 4): the approved hours already priced into whole kobo, and the salary structure that splits THIS site's gross (the founder's H8:
+ * the established structure for the location). A person who is paid by the hour has no fixed monthly gross: the month's hourly earnings ARE their gross, and go through exactly the same pension, PAYE and
+ * net-pay arithmetic as a monthly person's (the founder's H12).
+ */
+export interface HourlySiteInput {
+  key: string;
+  clientId: string | null;
+  clientName: string;
+  contractId: string | null;
+  beatId: string | null;
+  beatName: string;
+  structure: StructureDef;
+  from: string;
+  to: string;
+  /** The distinct Nigerian calendar days worked at this site (for the days on the payslip and in the allocation). */
+  dates: string[];
+  lines: HourlyLineInput[];
+}
+
 export interface EngineInput {
   basisDays: number;
   /**
@@ -90,6 +120,11 @@ export interface EngineInput {
   nonProratedDates?: string[];
   days: WorkDay[];
   resolveRate: (day: WorkDay) => RateInfo | null;
+  /**
+   * Hourly earnings (hourly pay, phase 4): the person's approved hours as pay lines per site. Left out or empty: the person is paid exactly as pay has always been worked. A person can be monthly for part of a
+   * month (the days above) and hourly for the rest (this): the hourly part never changes the divisor of the monthly days. Not allowed in a run that pays only adjustments.
+   */
+  hourly?: HourlySiteInput[];
   /** Business line of a contract (null = no contract → back-office pay, no add-on costs). */
   businessLineFor?: (contractId: string | null) => BusinessLine | null;
   employerCostRule?: EmployerCostRuleInput;
@@ -144,6 +179,8 @@ export interface Segment {
   to: string;
   factor: number;
   rate: RateInfo;
+  /** Set for a site of an hourly person: the pay lines the gross came from, for the stored breakdown. */
+  hourly?: { lines: HourlyLineInput[]; dates: string[] };
   components: ComponentAmount[];
   gross: number;
   pensionable: number;
@@ -384,7 +421,49 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
   }
   const segments = [...segMap.values()];
   const totalPaid = segments.reduce((a, s) => a + s.paidDays, 0);
-  const divisor = Math.max(input.basisDays, totalPaid); // never pay more than one full month
+  const divisor = Math.max(input.basisDays, totalPaid); // never pay more than one full month (the monthly days only: hourly sites never change it)
+
+  // ── 1b. Hourly sites: the approved hours, already priced, become pieces of pay whose gross is the sum of the lines ──
+  const hourlySites = input.hourly ?? [];
+  if (hourlySites.length && input.adjustmentsOnly) throw new MoneyError("Hourly earnings are not paid in a supplementary run that pays only adjustments.");
+  const hourlyGross = new Map<string, Kobo>();
+  for (const h of hourlySites) {
+    for (const l of h.lines) {
+      if (!Number.isSafeInteger(l.amountKobo) || l.amountKobo < 0) throw new MoneyError("An hourly amount must be a whole number of kobo, not below zero.");
+      if (!Number.isInteger(l.minutes) || l.minutes < 1) throw new MoneyError("An hourly line must be a whole number of minutes, at least one.");
+    }
+    const key = `H|${h.key}`;
+    hourlyGross.set(key, sumKobo(h.lines.map((l) => asKobo(l.amountKobo))));
+    segments.push({
+      key,
+      clientId: h.clientId,
+      clientName: h.clientName,
+      contractId: h.contractId,
+      beatId: h.beatId,
+      beatName: h.beatName,
+      paidDays: h.dates.length,
+      recordedDays: h.dates.length,
+      from: h.from,
+      to: h.to,
+      factor: 1,
+      rate: { key: `H:${h.key}`, source: "HOURLY", agreedRate: null, operativeSharePct: null, monthlyGross: koboToNumber(hourlyGross.get(key)!), structure: h.structure },
+      hourly: { lines: h.lines, dates: h.dates },
+      components: [],
+      gross: 0,
+      pensionable: 0,
+      clientBilling: 0,
+      managementShare: 0,
+      businessLine: null,
+      itf: 0,
+      nsitf: 0,
+      nhfMedical: 0,
+      insurance: 0,
+      uniformKits: 0,
+      recruitmentTraining: 0,
+      leaveReliever: 0,
+      outsourcingLeaveAllowance: 0,
+    });
+  }
 
   // ── 2. Components per segment (prorated) ──
   // Components are carried as exact fractions and only rounded once the sites are added (step 3), as they always have been.
@@ -392,9 +471,11 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
   let billedGrossRaw = Exact.int(0);
   const works: SegmentWork[] = [];
   for (const seg of segments) {
-    seg.factor = input.adjustmentsOnly ? 0 : seg.paidDays / divisor; // for display only
-    const factor = input.adjustmentsOnly || divisor === 0 ? Exact.int(0) : Exact.ratio(seg.paidDays, divisor);
-    const comps = computeComponentsExact(seg.rate.structure, kobo(seg.rate.monthlyGross, "The monthly gross"), factor, overrides, {});
+    // an hourly site's gross is the sum of its priced lines, all of it (no days to prorate); a monthly site's is the monthly gross x paid days / basis days
+    const hourlyKobo = hourlyGross.get(seg.key);
+    seg.factor = hourlyKobo !== undefined ? 1 : input.adjustmentsOnly ? 0 : seg.paidDays / divisor; // for display only
+    const factor = hourlyKobo !== undefined ? Exact.int(1) : input.adjustmentsOnly || divisor === 0 ? Exact.int(0) : Exact.ratio(seg.paidDays, divisor);
+    const comps = computeComponentsExact(seg.rate.structure, hourlyKobo ?? kobo(seg.rate.monthlyGross, "The monthly gross"), factor, overrides, {});
     const rawGross = sumExact(comps.map((c) => c.amount));
     const w: SegmentWork = {
       seg,
@@ -438,7 +519,8 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
       w.recruitmentTraining = mulPct(statBase, cost.recruitmentTraining);
       w.leaveReliever = mulPct(statBase, cost.leaveReliever);
       if (seg.businessLine === "GUARDING") w.uniformKits = mulPct(statBase, cost.uniformKits);
-      if (seg.businessLine === "OUTSOURCING") {
+      // not applicable for an hourly person (the founder confirmed this on 2026-11-20, with the other costs that are not worked from gross)
+      if (seg.businessLine === "OUTSOURCING" && hourlyKobo === undefined) {
         // The leave allowance is a share of the site's Basic BEFORE it is rounded, as it always was.
         const segBasic = comps.find((c) => c.code === "BASIC")?.amount ?? Exact.int(0);
         w.outsourcingLeaveAllowance = segBasic.mul(Exact.ratio(BigInt(cost.outsourcingLeaveAllowance), RATE_SCALE)).round();
@@ -627,7 +709,10 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
     });
 
   // ── 9. Locations worked (for payslip) ──
-  const locations = buildLocationRanges(days);
+  const locations = [
+    ...buildLocationRanges(days),
+    ...hourlySites.map((h) => ({ clientName: h.clientName, beatName: h.beatName, days: h.dates.length, from: h.from, to: h.to })),
+  ];
 
   // ── 10. Allocation by client / contract / beat ──
   const allocMap = new Map<string, AllocationWork>();
@@ -746,11 +831,14 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
     s.outsourcingLeaveAllowance = koboToNumber(w.outsourcingLeaveAllowance);
   }
 
-  const primarySeg = segments.reduce<Segment | null>((p, c) => (!p || c.paidDays > p.paidDays ? c : p), null);
+  // the "monthly gross" of the record is that of the monthly site with the most days; a person paid only by the hour has none (their hourly earnings are their gross)
+  const primarySeg = segments.filter((s) => !s.hourly).reduce<Segment | null>((p, c) => (!p || c.paidDays > p.paidDays ? c : p), null);
+  const paidDates = new Set(paidDaysList.map((x) => iso(x.date)));
+  const hourlyOnlyDays = new Set(hourlySites.flatMap((h) => h.dates).filter((x) => !paidDates.has(x))).size;
 
   return {
     basisDays: input.basisDays,
-    daysWorked: paidDaysList.length,
+    daysWorked: paidDaysList.length + hourlyOnlyDays,
     daysAbsent,
     suspensionDays,
     overtimeHours,
