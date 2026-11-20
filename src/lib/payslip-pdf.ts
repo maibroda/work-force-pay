@@ -7,6 +7,7 @@
  * Amounts are written "NGN 1,234.56": the standard PDF fonts have no naira sign, and a missing glyph on a payslip is worse than a letter code.
  */
 import { PDFDocument, StandardFonts, rgb, type PDFFont } from "pdf-lib";
+import { hourlyPayslip, type HourlyLineInput } from "./payroll/payslip-hourly";
 
 export type PayslipLine = { type: string; code: string; name: string; amount: number };
 
@@ -36,6 +37,8 @@ export type PayslipInput = {
   hasOverride: boolean;
   lines: PayslipLine[];
   locations: { clientName: string; beatName: string; days: number }[];
+  /** The stored hourly pay lines of the record (phase 4c), with the site's name; none for a person paid monthly. */
+  hourly?: HourlyLineInput[];
   periodName: string;
   periodStart: string;
   periodEnd: string;
@@ -73,12 +76,19 @@ export type PayslipModel = {
   deductions: [string, number][];
   totals: { earnings: number; deductions: number; net: number };
   locations: string[];
+  /** The hours worked and the pay for them, for a person paid by the hour (phase 4c); null otherwise. */
+  hourly: { columns: string[]; rows: string[][]; total: string[] } | null;
   attendance: string;
   notes: string[];
   footer: string;
 };
 
+const amt = (s: string) => Number(s).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 export function payslipModel(p: PayslipInput): PayslipModel {
+  const hs = hourlyPayslip(p.hourly ?? []);
+  // a person paid only by the hour has no contractual monthly gross, and their days are not compared with the month's
+  const hourlyOnly = hs !== null && p.monthlyGross === 0;
   const own = p.lines.filter((l) => l.type === "EARNING" || l.type === "DEDUCTION");
   const real = p.locations.filter((l) => l.clientName !== "Head Office");
   const byPlace = new Map<string, number>();
@@ -96,13 +106,18 @@ export function payslipModel(p: PayslipInput): PayslipModel {
       ["Tax ID", mask(p.taxId)],
       ["Pension PIN", mask(p.pensionPin)],
       ["Pension fund", p.pfa ?? "-"],
-      ["Monthly gross", money(p.monthlyGross)],
+      hourlyOnly ? ["Pay basis", "Paid by the hour"] : ["Monthly gross", money(p.monthlyGross)],
     ],
     earnings: own.filter((l) => l.type === "EARNING").map((l) => [l.name, l.amount]),
     deductions: own.filter((l) => l.type === "DEDUCTION").map((l) => [l.name, l.amount]),
     totals: { earnings: p.totalEarnings, deductions: p.totalDeductions, net: p.netPay },
     locations: [...byPlace.entries()].map(([k, days]) => `${k}: ${days} day(s)`),
-    attendance: `Days worked ${p.daysWorked} of ${p.basisDays}; absent ${p.daysAbsent}; overtime ${p.overtimeHours} hour(s)`,
+    hourly: hs && {
+      columns: ["Site", "Day type", "Hours", "Rate / hour (NGN)", "Amount (NGN)"],
+      rows: hs.rows.map((r) => [r.site, r.dayLabel, r.duration, amt(r.rate), amt(r.amount)]),
+      total: ["Total", "", hs.totalDuration, "", amt(hs.totalAmount)],
+    },
+    attendance: hourlyOnly ? `Days worked ${p.daysWorked}; absent ${p.daysAbsent}; overtime ${p.overtimeHours} hour(s)` : `Days worked ${p.daysWorked} of ${p.basisDays}; absent ${p.daysAbsent}; overtime ${p.overtimeHours} hour(s)`,
     notes: [...(p.hasOverride ? ["An employee salary override applied this period."] : []), `PAYE computed with rule ${p.taxRuleVersion}.`],
     footer: `${p.bureauName ? `Prepared by ${p.bureauName}${p.tagline ? ` - ${p.tagline}` : ""}. ` : ""}Generated ${p.generatedOn}. Confidential: this payslip contains salary information.`,
   };
@@ -203,6 +218,29 @@ async function drawPayslip(doc: PDFDocument, m: PayslipModel) {
   rightText(money(m.totals.net), right - 10, 13, bold);
   y -= 34;
 
+  if (m.hourly) {
+    text("HOURS WORKED AND PAY", left, 8.5, bold, MUTED);
+    y -= 14;
+    const xs = [left, left + 190, left + 290, right - 110, right]; // site, day type, hours, rate (right edge at xs[3]), amount (right edge at xs[4])
+    const cell = (s: string, i: number, f: PDFFont, color = INK) => {
+      const t = i < 3 ? clip(s, f, 9, (i === 0 ? 180 : 95)) : pdfSafe(s);
+      page.drawText(t, { x: i < 3 ? xs[i] : xs[i] - f.widthOfTextAtSize(t, 9), y, size: 9, font: f, color });
+    };
+    m.hourly.columns.forEach((c, i) => cell(c, i, bold, MUTED));
+    y -= 13;
+    const shown = m.hourly.rows.slice(0, 9);
+    for (const r of shown) {
+      r.forEach((c, i) => cell(c, i, font));
+      y -= 12;
+    }
+    if (m.hourly.rows.length > shown.length) {
+      text(`... and ${m.hourly.rows.length - shown.length} more line(s), included in the total`, left, 8.5, font, MUTED);
+      y -= 12;
+    }
+    page.drawLine({ start: { x: left, y: y + 9 }, end: { x: right, y: y + 9 }, thickness: 0.5, color: RULE });
+    m.hourly.total.forEach((c, i) => cell(c, i, bold));
+    y -= 20;
+  }
   if (m.locations.length) {
     text("WORK LOCATIONS", left, 8.5, bold, MUTED);
     y -= 14;

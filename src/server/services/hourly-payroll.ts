@@ -3,6 +3,7 @@ import { compensationTypeOn, type CompensationRow, type HourlyRateRow } from "@/
 import type { ApprovedPiece, UnresolvedPiece } from "@/lib/payroll/hourly-earnings";
 import { hoursOf } from "@/lib/payroll/hourly-report";
 import { netLatePieces, type Decrease, type LateNet, type SegRef } from "@/lib/payroll/hourly-late";
+import type { HourlyLineInput } from "@/lib/payroll/payslip-hourly";
 import { parseWatLocal } from "@/lib/payroll/time-entry";
 import type { Tx } from "./_base";
 import { loadApprovedHourlyRates } from "./hourly-pay";
@@ -114,6 +115,19 @@ export async function loadLateHourly(tx: Tx, orgId: string, period: { id: string
   const missing = [...new Set(replaced.map((r) => r.entry.beatId))].filter((id) => !known.has(id));
   if (missing.length) for (const b of await tx.beat.findMany({ where: { organizationId: orgId, id: { in: missing } }, select: { id: true, name: true, client: { select: { name: true } } } })) base.names.set(b.id, { clientName: b.client.name, beatName: b.name });
   return { ...base, pieces: net.pieces, waitingByEmp: new Map(), doubtfulByEmp: new Map(), settled: net.settled, decreases: net.decreases };
+}
+
+/**
+ * The hourly pay lines of one payroll record for its payslip (phase 4c): the hours, the rate and the amount of each line as stored, with the name of the site. Read for ONE company; nothing is worked out here, so
+ * the payslip can only show what the payroll paid. A record with no hourly lines (a person paid monthly) gives none.
+ */
+export async function loadPayslipHourly(tx: Tx, orgId: string, recordId: string): Promise<HourlyLineInput[]> {
+  const lines = await tx.hourlyPayLine.findMany({ where: { organizationId: orgId, recordId }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+  if (!lines.length) return [];
+  const beatIds = [...new Set(lines.flatMap((l) => (l.beatId ? [l.beatId] : [])))];
+  const beats = beatIds.length ? await tx.beat.findMany({ where: { organizationId: orgId, id: { in: beatIds } }, select: { id: true, name: true } }) : [];
+  const names = new Map(beats.map((b) => [b.id, b.name]));
+  return lines.map((l) => ({ siteName: (l.beatId && names.get(l.beatId)) || "", dayClass: l.dayClass, minutes: l.minutes, rate: l.rate.toString(), amount: l.amount.toString() }));
 }
 
 /** The finding for an overpayment after a correction made once the payroll was locked: no negative pay is made, so someone enters a deduction (or the approver overrides it, with a reason). */

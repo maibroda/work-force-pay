@@ -8,9 +8,10 @@ import { loadApprovedBases } from "./pay-basis";
 import { holidayContext } from "./holidays";
 import { getLeavePolicy } from "./leave";
 import { num } from "@/lib/money";
-import { asKobo, koboToString, roundPlaces } from "@/lib/money-exact";
+import { asKobo, koboToString, roundPlaces, sumKobo } from "@/lib/money-exact";
 import { missingStateSeverity, normaliseState } from "@/lib/nigeria-states";
 import { buildHourlyEarnings } from "@/lib/payroll/hourly-earnings";
+import { minimumPayFinding } from "@/lib/payroll/hourly-minimum";
 import { percentOfAmount, totalOf } from "@/lib/payroll/pay-inputs";
 import { fullName } from "@/lib/utils";
 import {
@@ -29,7 +30,7 @@ import { findDuplicates } from "./employees";
 import { recentBankChanges } from "./change-requests";
 import { CLIENT_MISMATCH, LOCATION_MISMATCH } from "./operations";
 import { submissionBlockers, varianceIssues } from "./payroll-controls";
-import { hourlyDecreaseFinding, hourlyFindings, hourlyRateConflict, isHourlyOn, loadHourlyForPeriod, loadLateHourly, monthlyRateWhileHourly } from "./hourly-payroll";
+import { hourlyDecreaseFinding, hourlyFindings, hourlyRateConflict, isHourlyOn, loadHourlyForPeriod, loadLateHourly, loadPayslipHourly, monthlyRateWhileHourly } from "./hourly-payroll";
 import { loadRateBook } from "./rates";
 import { employerCostRuleFor, payrollRuleFor, pensionRuleFor, taxRuleFor } from "./statutory";
 import { enforceVerifiedRules } from "./statutory-verification";
@@ -488,6 +489,11 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
     // once more with them included. Pure/cheap function; a second pass costs nothing meaningful.
     const recurring = recurringDeductionsFor(a, emp.id, days, res.totalEarnings);
     if (recurring.length) res = calculateEmployeePayroll(buildInput([...adHocDeductions, ...recurring]));
+    // the minimum-pay warning (H13): a person paid only by the hour who earned less from hours than the figure in the payroll rules (0 = no check). A warning only: pay is not blocked and not changed.
+    if (a.rules.hourlyMinMonthlyPayKobo > 0 && he.sites.length && res.monthlyGross === 0) {
+      const f = minimumPayFinding({ employeeId: emp.id, label: `${emp.employeeNumber} ${fullName(emp)}`, periodName: period.name, hourlyGross: sumKobo(he.sites.flatMap((s) => s.lines.map((l) => asKobo(l.amountKobo)))), minimum: a.rules.hourlyMinMonthlyPayKobo });
+      if (f) issues.push(f);
+    }
     rows.push({ emp, res });
   }
 
@@ -1495,7 +1501,9 @@ export async function getPayslip(ctx: Ctx, recordId: string) {
       allocations: { include: { client: true, beat: true } },
     },
   });
-  return rec;
+  if (!rec) return null;
+  // the hours worked and the pay for them, for a person paid by the hour (none for a person paid monthly)
+  return { ...rec, hourly: await loadPayslipHourly(db, ctx.orgId, rec.id) };
 }
 
 export async function employeePayslips(ctx: Ctx, employeeId: string) {

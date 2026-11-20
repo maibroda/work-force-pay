@@ -2974,6 +2974,7 @@ Recurring payroll deductions applied automatically on every REGULAR run — dist
 | requirePayeState | Boolean |  | A worker with PAYE and no state of residence is a warning (false, the default) or a CRITICAL finding that blocks approval until fixed or overridden with a reason (true). |
 | nhfEmployeeRatePct | Decimal |  | The rate of the VOLUNTARY NHF (National Housing Fund) contribution, as a % of BASIC pay: 2.5 by the founder's rule (the tax adviser confirms it). It is taken only from employees who have chosen to contribute (Employee.nhfContributes), as its own deduction line, and is allowed against PAYE at the amount taken. 0 = none. |
 | minTakeHomePctOfGross | Decimal |  | The take-home floor, % of gross: loan and salary-advance recoveries may not take net pay below this share of gross; the part not taken is carried forward by the loan book. 0 (the default) = no floor, as pay has always been worked. A client-specific policy, not a statutory one. |
+| hourlyMinMonthlyPay | Decimal |  | The minimum monthly pay, in naira, for a person paid only by the hour (the founder's H13): a WARNING (never a block, never a change to pay) when what they earned from hours in the month is below it. A figure the company or its adviser enters; none is built in. 0 (the default) = no check. |
 | effectiveFrom | DateTime | yes |  |
 | effectiveTo | DateTime |  |  |
 | createdAt | DateTime |  |  |

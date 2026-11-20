@@ -56,6 +56,43 @@ describe("what a payslip shows", () => {
   });
 });
 
+describe("the hours section of an hourly person's payslip (phase 4c)", () => {
+  const hourly = [
+    { siteName: "Gate 1", dayClass: "WEEKDAY" as const, minutes: 480, rate: "1000.00", amount: "8000.00" },
+    { siteName: "Gate 1", dayClass: "WEEKEND" as const, minutes: 510, rate: "1500.00", amount: "12750.00" },
+  ];
+  it("is nothing for a monthly payslip, which keeps its monthly gross and its days", () => {
+    const m = payslipModel(base());
+    expect(m.hourly).toBeNull();
+    expect(m.details.find(([k]) => k === "Monthly gross")?.[1]).toBe("NGN 200,000.00");
+    expect(m.attendance).toMatch(/Days worked 31 of 31/);
+  });
+  it("lists the hours, the rate and the pay for each kind of day, then the totals", () => {
+    const m = payslipModel(base({ monthlyGross: 0, daysWorked: 2, hourly }));
+    expect(m.hourly).toEqual({
+      columns: ["Site", "Day type", "Hours", "Rate / hour (NGN)", "Amount (NGN)"],
+      rows: [["Gate 1", "Weekday", "8 h", "1,000.00", "8,000.00"], ["Gate 1", "Weekend", "8 h 30 min", "1,500.00", "12,750.00"]],
+      total: ["Total", "", "16 h 30 min", "", "20,750.00"],
+    });
+  });
+  it("says paid by the hour instead of a monthly gross of nothing, and does not compare the days with the month", () => {
+    const m = payslipModel(base({ monthlyGross: 0, daysWorked: 2, hourly }));
+    expect(m.details.find(([k]) => k === "Monthly gross")).toBeUndefined();
+    expect(m.details.find(([k]) => k === "Pay basis")?.[1]).toBe("Paid by the hour");
+    expect(m.attendance).toBe("Days worked 2; absent 0; overtime 0 hour(s)");
+  });
+  it("a person with monthly pay and hours keeps the monthly gross", () => {
+    const m = payslipModel(base({ monthlyGross: 90000, hourly }));
+    expect(m.details.find(([k]) => k === "Monthly gross")?.[1]).toBe("NGN 90,000.00");
+    expect(m.hourly).not.toBeNull();
+  });
+  it("draws on the one page, even with many sites and kinds of day", async () => {
+    const many = Array.from({ length: 14 }, (_, i) => ({ siteName: `Site number ${i} with a long name`, dayClass: "WEEKDAY" as const, minutes: 60 * (i + 1), rate: "1000.00", amount: `${1000 * (i + 1)}.00` }));
+    const bytes = await renderPayslipPdf(payslipModel(base({ monthlyGross: 0, hourly: many })));
+    expect((await PDFDocument.load(bytes)).getPageCount()).toBe(1);
+  });
+});
+
 describe("text a PDF can draw", () => {
   it("removes accents, straightens quotes and replaces what the font cannot draw", () => {
     expect(pdfSafe("Ọlá Adéwálé")).toBe("Ola Adewale");

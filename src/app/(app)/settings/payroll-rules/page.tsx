@@ -2,7 +2,7 @@ import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { listPayrollRules } from "@/server/services/statutory";
 import { fmtDate } from "@/lib/dates";
-import { num } from "@/lib/money";
+import { naira, num } from "@/lib/money";
 import { FormPanel, PageHeader, Section } from "@/components/page";
 import { SmartForm } from "@/components/smart-form";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +33,7 @@ export default async function PayrollRulesPage() {
               <TH>Back office charge %</TH>
               <TH>NHF rate (voluntary)</TH>
               <TH>Take-home floor</TH>
+              <TH>Hourly minimum pay</TH>
               <TH>State of residence</TH>
               <TH>Effective</TH>
             </TR>
@@ -52,6 +53,7 @@ export default async function PayrollRulesPage() {
                 <TD>{num(x.backOfficeChargePct)}%</TD>
                 <TD>{num(x.nhfEmployeeRatePct) > 0 ? `${num(x.nhfEmployeeRatePct)}% of basic` : <span className="text-muted-foreground text-xs">not offered</span>}</TD>
                 <TD>{num(x.minTakeHomePctOfGross) > 0 ? `${num(x.minTakeHomePctOfGross)}% of gross` : <span className="text-muted-foreground text-xs">no floor</span>}</TD>
+                <TD>{num(x.hourlyMinMonthlyPay) > 0 ? naira(x.hourlyMinMonthlyPay) : <span className="text-muted-foreground text-xs">no check</span>}</TD>
                 <TD>{x.requirePayeState ? <Badge tone="amber">required to approve</Badge> : <span className="text-muted-foreground text-xs">warning only</span>}</TD>
                 <TD>
                   {fmtDate(x.effectiveFrom)} →{" "}
@@ -140,6 +142,15 @@ export default async function PayrollRulesPage() {
                 max: 100,
                 defaultValue: num(r.minTakeHomePctOfGross),
                 help: "0 = no floor. Above 0, loan and salary-advance recoveries are limited so net pay is not taken below this share of gross; the part not taken stays owed on the loan and is scheduled again next month. Penalties and other deductions are never reduced. A client-specific policy, not a statutory one.",
+                span: 3,
+              },
+              {
+                name: "hourlyMinMonthlyPay",
+                label: "Minimum monthly pay for staff paid by the hour (₦)",
+                type: "number",
+                min: 0,
+                defaultValue: num(r.hourlyMinMonthlyPay),
+                help: "0 = no check. A figure you or your adviser enter: no figure is built in. Above 0, the payroll raises a warning for anyone paid only by the hour whose pay from hours in the month is below it. It is a warning only: pay is never blocked or changed.",
                 span: 3,
               },
               {
