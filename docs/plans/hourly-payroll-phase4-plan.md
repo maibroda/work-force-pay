@@ -70,9 +70,19 @@ Still open from before and needed by the later pieces: **H7** minimum hours, **H
 | H22 | **Hours approved after a payroll is locked are paid in a supplementary payroll** (the existing mechanism); the locked payroll is never changed. |
 | H15 | **Hourly client billing is out of scope for now.** Hourly pay is payroll cost only; the reports show cost per client and contract. |
 
-**H19 follows from H15 and is for your confirmation.** With no hourly client billing there is no client monthly rate to work the "management share" from, so the add-on costs that are worked from it (insurance, uniform and kits, recruitment and training, leave reliever, outsourcing leave allowance) would be **not applicable** for hourly staff. ITF and NSITF are worked as a percentage of the person's gross by the existing rule and would still apply to an hourly person on a guarding or outsourcing contract. These employer costs are statutory or contractual, so please confirm this reading (or give another) before it is built.
+### Answered by the founder on 2026-11-20 (H8, H12 and H19): phase 4 is unblocked
 
-**Still needed to start phase 4: H8 and H12** (yours or your tax adviser's) and the H19 confirmation. Open for later: H7, H14, and where a budget would come from.
+| # | Answer |
+| --- | --- |
+| H8 | **The hourly person's gross follows the established salary structure for the location** (the default structure or the agreed one), exactly as for a monthly person on the same contract; "BHT" (Basic, Housing, Transport) was shorthand for that structure's split, not a separate three-part structure. **The prevailing PAYE settings apply unchanged** (the company's verified tax rule; no new rate). This is option A of H8. |
+| H12 | **Hourly pay IS the person's gross earnings** (they have no fixed monthly salary): the month's approved hourly earnings are added up to make the gross, and are taxed and pension-ed by **the same method as monthly staff** (the month's regular taxable pay, x12, then a twelfth). This is option A of H12. It follows that a person is either monthly or hourly (H20); the variant of hourly pay on top of a fixed salary was not chosen. |
+| H19 | **Confirmed.** The employer costs worked from the client's monthly rate (insurance, uniform and kits, recruitment and training, leave reliever, outsourcing leave allowance) are not applicable for hourly staff. ITF and NSITF still apply as a percentage of gross by the existing rule. |
+
+**How "the established structure for the location" will be found (my reading, for you to confirm before it is built).** For an hourly person's hours at a site, the structure is, in this order: (1) the structure on the contract's rate for the person's job role on that day (`ContractRate`); (2) the contract's default structure; (3) the company's default structure. This is the same order a monthly person's rate is found today, without the personal pay rate (which H20 does not allow alongside hourly pay). Because a person can work at sites on different contracts, each site's hours are split by that site's structure, as monthly pay is split site by site today. If none is found, the payroll raises a finding and the hours are not paid until it is fixed.
+
+**The tax adviser's confirmation of H12 is recommended** (it is a tax treatment); the note for them is `hourly-payroll-adviser-note.md`. The system will follow whatever the company's verified tax settings say; if the adviser later says the existing treatment is wrong for variable pay, that is a change made then, as its own piece.
+
+**Still needed to start phase 4:** only your "go", once you have read this plan. Open for later pieces: H7 minimum hours, H14 leave and sickness pay for an hourly person, and where a budget would come from.
 
 ## 4. What I will not do without your answers
 
