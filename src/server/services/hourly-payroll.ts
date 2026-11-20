@@ -2,6 +2,7 @@ import { iso } from "@/lib/dates";
 import { compensationTypeOn, type CompensationRow, type HourlyRateRow } from "@/lib/payroll/hourly-rates";
 import type { ApprovedPiece, UnresolvedPiece } from "@/lib/payroll/hourly-earnings";
 import { hoursOf } from "@/lib/payroll/hourly-report";
+import { netLatePieces, type Decrease, type LateNet, type SegRef } from "@/lib/payroll/hourly-late";
 import { parseWatLocal } from "@/lib/payroll/time-entry";
 import type { Tx } from "./_base";
 import { loadApprovedHourlyRates } from "./hourly-pay";
@@ -35,7 +36,7 @@ export const EMPTY_HOURLY: HourlyForPeriod = { pieces: [], rates: [], compByEmp:
 
 export async function loadHourlyForPeriod(tx: Tx, orgId: string, start: Date, end: Date): Promise<HourlyForPeriod> {
   const segs = await loadApprovedSegments(tx, orgId, start, end);
-  const pieces: ApprovedPiece[] = segs.map((s) => ({ employeeId: s.employeeId, beatId: s.beatId, contractId: s.contractId, clientId: s.clientId, date: s.date, dayClass: s.dayClass, minutes: s.minutes, entryId: s.entryId }));
+  const pieces: ApprovedPiece[] = segs.map((s) => ({ employeeId: s.employeeId, beatId: s.beatId, contractId: s.contractId, clientId: s.clientId, date: s.date, dayClass: s.dayClass, minutes: s.minutes, entryId: s.entryId, segmentId: s.segmentId }));
   const entryIds = [...new Set(segs.map((s) => s.entryId))];
   const beatIds = [...new Set(segs.map((s) => s.beatId))];
   const from = parseWatLocal(`${iso(start)}T00:00`);
@@ -67,6 +68,64 @@ export async function loadHourlyForPeriod(tx: Tx, orgId: string, start: Date, en
     doubtfulByEmp.set(e.employeeId, cur);
   }
   return { pieces, rates, compByEmp, waitingByEmp, doubtfulByEmp, names: new Map(beats.map((b) => [b.id, { clientName: b.client.name, beatName: b.name }])) };
+}
+
+/**
+ * Hourly pay, phase 4c (the founder's H22): the hours that missed the payroll that was locked for the period, for a supplementary payroll to pay. Read for ONE company and one period:
+ * - UNPAID: approved pieces that no payroll of the period (a regular or supplementary one that has not been replaced) has marked as paid;
+ * - CREDIT: pieces of shifts that were paid and have since been replaced by a correction, and have not yet been set against what the correction owes.
+ * `netLatePieces` (src/lib/payroll/hourly-late.ts) sets one against the other. A payroll calculated before pieces were recorded has no marks: the shifts its pay lines name count as paid, so older data is never paid twice.
+ * Waiting shifts and holiday doubts are not raised again here: the regular payroll raised them, and an override of them was the approver's decision.
+ */
+export interface LateHourly extends HourlyForPeriod {
+  /** The pieces still owed, each with the credit pieces it was set against. */
+  pieces: LateNet["pieces"];
+  /** Pieces whose group nets to nothing or to an overpayment: nothing to pay, so they are marked at once. */
+  settled: LateNet["settled"];
+  /** What was overpaid after a correction, to be recovered by a deduction someone enters. */
+  decreases: Decrease[];
+}
+
+export async function loadLateHourly(tx: Tx, orgId: string, period: { id: string; startDate: Date; endDate: Date }): Promise<LateHourly> {
+  const base = await loadHourlyForPeriod(tx, orgId, period.startDate, period.endDate);
+  const runs = await tx.payrollRun.findMany({ where: { organizationId: orgId, periodId: period.id, status: { not: "SUPERSEDED" } }, select: { id: true } });
+  const runIds = runs.map((r) => r.id);
+  const [marks, lines] = await Promise.all([
+    tx.hourlyPayPiece.findMany({ where: { organizationId: orgId, runId: { in: runIds } }, select: { runId: true, segmentId: true, kind: true } }),
+    tx.hourlyPayLine.findMany({ where: { organizationId: orgId, runId: { in: runIds } }, select: { runId: true, entryIds: true } }),
+  ]);
+  const paid = new Set(marks.filter((m) => m.kind === "PAID").map((m) => m.segmentId));
+  const credited = new Set(marks.filter((m) => m.kind === "CREDITED").map((m) => m.segmentId));
+  // older data: a run with pay lines but no marks at all was calculated before pieces were recorded, and the shifts its lines name were paid
+  const marked = new Set(marks.map((m) => m.runId));
+  const legacyEntries = new Set(lines.filter((l) => !marked.has(l.runId)).flatMap((l) => l.entryIds));
+  const isPaid = (segmentId: string, entryId: string) => paid.has(segmentId) || legacyEntries.has(entryId);
+  const unpaid: SegRef[] = base.pieces.flatMap((p) => (p.segmentId && p.entryId && !isPaid(p.segmentId, p.entryId) ? [{ segmentId: p.segmentId, entryId: p.entryId, employeeId: p.employeeId, beatId: p.beatId, contractId: p.contractId, clientId: p.clientId, date: p.date, dayClass: p.dayClass, minutes: p.minutes }] : []));
+  const replaced = await tx.timeEntrySegment.findMany({
+    where: { organizationId: orgId, date: { gte: period.startDate, lte: period.endDate }, entry: { status: "SUPERSEDED" } },
+    include: { entry: { select: { employeeId: true, beatId: true, contractId: true, clientId: true } } },
+    orderBy: [{ date: "asc" }, { id: "asc" }],
+  });
+  const credit: SegRef[] = replaced
+    .filter((r) => isPaid(r.id, r.entryId) && !credited.has(r.id))
+    .map((r) => ({ segmentId: r.id, entryId: r.entryId, employeeId: r.entry.employeeId, beatId: r.entry.beatId, contractId: r.entry.contractId, clientId: r.entry.clientId, date: iso(r.date), dayClass: r.dayClass, minutes: r.minutes }));
+  const net = netLatePieces(unpaid, credit);
+  const known = new Set(base.names.keys());
+  const missing = [...new Set(replaced.map((r) => r.entry.beatId))].filter((id) => !known.has(id));
+  if (missing.length) for (const b of await tx.beat.findMany({ where: { organizationId: orgId, id: { in: missing } }, select: { id: true, name: true, client: { select: { name: true } } } })) base.names.set(b.id, { clientName: b.client.name, beatName: b.name });
+  return { ...base, pieces: net.pieces, waitingByEmp: new Map(), doubtfulByEmp: new Map(), settled: net.settled, decreases: net.decreases };
+}
+
+/** The finding for an overpayment after a correction made once the payroll was locked: no negative pay is made, so someone enters a deduction (or the approver overrides it, with a reason). */
+export function hourlyDecreaseFinding(a: { employeeId: string; label: string; periodName: string; siteName: string; decrease: Decrease }): HourlyFinding {
+  const d = a.decrease;
+  return {
+    employeeId: a.employeeId,
+    category: "ATTENDANCE",
+    severity: "CRITICAL",
+    code: "HOURLY_PAY_DECREASED",
+    message: `${a.label} was paid for ${hoursOf(d.minutes)} h more than a later correction says they worked on ${d.date} (${a.siteName}, ${d.dayClass.toLowerCase()} rate) in ${a.periodName}. No negative pay is made: enter a deduction for the overpayment (Payroll > Deductions), or override this finding with a reason. It is raised once only.`,
+  };
 }
 
 /** Whether a person is paid by the hour on a day (monthly unless an approved record says hourly from a date). */

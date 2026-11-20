@@ -29,7 +29,7 @@ import { findDuplicates } from "./employees";
 import { recentBankChanges } from "./change-requests";
 import { CLIENT_MISMATCH, LOCATION_MISMATCH } from "./operations";
 import { submissionBlockers, varianceIssues } from "./payroll-controls";
-import { EMPTY_HOURLY, hourlyFindings, hourlyRateConflict, isHourlyOn, loadHourlyForPeriod, monthlyRateWhileHourly } from "./hourly-payroll";
+import { hourlyDecreaseFinding, hourlyFindings, hourlyRateConflict, isHourlyOn, loadHourlyForPeriod, loadLateHourly, monthlyRateWhileHourly } from "./hourly-payroll";
 import { loadRateBook } from "./rates";
 import { employerCostRuleFor, payrollRuleFor, pensionRuleFor, taxRuleFor } from "./statutory";
 import { enforceVerifiedRules } from "./statutory-verification";
@@ -129,8 +129,9 @@ async function assemble(
     rules.defaultOperativeSharePct,
   );
 
-  // hourly pay (docs/plans/hourly-payroll-phase4-plan.md): the approved hours, the approved hourly rates and how each person is paid; a supplementary run pays only adjustments
-  const hourly = opts.supplementary ? EMPTY_HOURLY : await loadHourlyForPeriod(db, ctx.orgId, period.startDate, period.endDate);
+  // hourly pay (docs/plans/hourly-payroll-phase4-plan.md): the approved hours, the approved hourly rates and how each person is paid; a supplementary run pays only the adjustments and the hours that missed the locked payroll (H22)
+  const late = opts.supplementary ? await loadLateHourly(db, ctx.orgId, period) : null;
+  const hourly = late ?? (await loadHourlyForPeriod(db, ctx.orgId, period.startDate, period.endDate));
 
   const [
     employees,
@@ -221,6 +222,7 @@ async function assemble(
     unpaidLeave,
     book,
     hourly,
+    late,
     employees,
     work,
     overrides,
@@ -303,6 +305,33 @@ function overridesFor(a: Assembled, employeeId: string): ComponentOverride[] {
       fixedAmount: o.fixedAmount === null ? null : num(o.fixedAmount),
       reason: o.reason,
     }));
+}
+
+/** The stored hourly pay lines of one person's record, and the marks of the approved pieces they were worked from (so a later supplementary payroll pays only what no payroll has paid). */
+function hourlyRowsFor(orgId: string, runId: string, recordId: string, employeeId: string, res: EngineResult) {
+  const lines: Prisma.HourlyPayLineCreateManyInput[] = [];
+  const pieces: Prisma.HourlyPayPieceCreateManyInput[] = [];
+  for (const seg of res.segments)
+    for (const l of seg.hourly?.lines ?? []) {
+      lines.push({
+        organizationId: orgId,
+        runId,
+        recordId,
+        employeeId,
+        clientId: seg.clientId,
+        contractId: seg.contractId,
+        beatId: seg.beatId,
+        structureCode: seg.rate.structure.code,
+        dayClass: l.dayClass,
+        minutes: l.minutes,
+        rateId: l.rateId ?? null,
+        rate: l.rate,
+        amount: koboToString(asKobo(l.amountKobo)),
+        entryIds: l.entryIds ?? [],
+      });
+      for (const segmentId of l.segmentIds ?? []) pieces.push({ organizationId: orgId, runId, recordId, employeeId, segmentId, kind: "PAID" });
+    }
+  return { lines, pieces };
 }
 
 // ───────────────────────────── Run payroll ─────────────────────────────
@@ -497,27 +526,14 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
       const recordData: Prisma.PayrollRecordCreateManyInput[] = [];
       const allocData: Prisma.PayrollAllocationCreateManyInput[] = [];
       const hourlyData: Prisma.HourlyPayLineCreateManyInput[] = [];
+      const pieceData: Prisma.HourlyPayPieceCreateManyInput[] = [];
       for (const { emp, res } of rows) {
         const id = randomUUID();
         recordData.push(recordRow(ctx.orgId, runId, id, emp, res, a.tax.def.code + "@" + a.tax.def.version));
-        for (const seg of res.segments)
-          for (const l of seg.hourly?.lines ?? [])
-            hourlyData.push({
-              organizationId: ctx.orgId,
-              runId,
-              recordId: id,
-              employeeId: emp.id,
-              clientId: seg.clientId,
-              contractId: seg.contractId,
-              beatId: seg.beatId,
-              structureCode: seg.rate.structure.code,
-              dayClass: l.dayClass,
-              minutes: l.minutes,
-              rateId: l.rateId ?? null,
-              rate: l.rate,
-              amount: koboToString(asKobo(l.amountKobo)),
-              entryIds: l.entryIds ?? [],
-            });
+        // the hourly pay lines, and which approved pieces of shifts this payroll paid, so a supplementary payroll pays only what it did not (H22)
+        const hr = hourlyRowsFor(ctx.orgId, runId, id, emp.id, res);
+        hourlyData.push(...hr.lines);
+        pieceData.push(...hr.pieces);
         for (const al of res.allocations)
           allocData.push({
             id: randomUUID(),
@@ -549,6 +565,8 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
       if (recordData.length) await tx.payrollRecord.createMany({ data: recordData });
       if (allocData.length) await tx.payrollAllocation.createMany({ data: allocData });
       if (hourlyData.length) await tx.hourlyPayLine.createMany({ data: hourlyData });
+      await tx.hourlyPayPiece.deleteMany({ where: { runId } }); // a recalculation starts again (the records above were deleted, and their marks with them; any that had no record go too)
+      if (pieceData.length) await tx.hourlyPayPiece.createMany({ data: pieceData });
 
       const overrideKey = (i: { code: string; employeeId: string | null; message: string }) =>
         `${i.code}|${i.employeeId ?? ""}|${i.message}`;
@@ -1255,6 +1273,8 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
   const base = await currentRun(ctx, periodId);
   const a = await assemble(ctx, period, { supplementary: true });
   const rows: Array<{ emp: Assembled["employees"][number]; res: EngineResult }> = [];
+  const issues: Issue[] = [];
+  const late = a.late!; // a supplementary run always loads the late hours
   const allEmps = await db.employee.findMany({
     where: { organizationId: ctx.orgId },
     include: { category: true, department: true, deployments: true },
@@ -1265,7 +1285,27 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
     const oth = a.others.filter((x) => x.employeeId === emp.id);
     const ded = a.deductions.filter((x) => x.employeeId === emp.id);
     const ot = a.overtime.filter((x) => x.employeeId === emp.id);
-    if (!arr.length && !oth.length && !ded.length && !ot.length) continue;
+    const latePieces = late.pieces.filter((p) => p.employeeId === emp.id);
+    const lateDecreases = late.decreases.filter((d) => d.employeeId === emp.id);
+    if (!arr.length && !oth.length && !ded.length && !ot.length && !latePieces.length && !lateDecreases.length) continue;
+    const label = `${emp.employeeNumber} ${fullName(emp)}`;
+    // the hours that missed the locked payroll (H22): priced like a regular run's; what cannot be priced is not paid and is reported, and stays owed
+    let he: ReturnType<typeof buildHourlyEarnings> = { sites: [], unresolved: [], totalMinutes: 0, pricedMinutes: 0 };
+    if (latePieces.length) {
+      try {
+        he = buildHourlyEarnings(emp.id, latePieces, a.hourly.rates, {
+          categoryOf: () => emp.categoryId,
+          structureFor: (q) => a.book.structureFor(q.contractId, q.categoryId, new Date(`${q.date}T00:00:00Z`)),
+          namesOf: (beatId) => a.hourly.names.get(beatId) ?? { clientName: "", beatName: "" },
+        });
+      } catch (e) {
+        issues.push(hourlyRateConflict(emp.id, label, period.name, e instanceof Error ? e.message : ""));
+      }
+      for (const f of hourlyFindings({ employeeId: emp.id, label, periodName: period.name, unresolved: he.unresolved, monthlyRateWhileHourly: false })) issues.push(f);
+    }
+    for (const d of lateDecreases) issues.push(hourlyDecreaseFinding({ employeeId: emp.id, label, periodName: period.name, siteName: a.hourly.names.get(d.beatId)?.beatName ?? "that site", decrease: d }));
+    // nothing to pay (the late hours could not be priced, or were an overpayment): the findings are all there is
+    if (!arr.length && !oth.length && !ded.length && !ot.length && !he.sites.length) continue;
     const prev = locked.find((r) => r.employeeId === emp.id);
     const basic = prev
       ? num((prev.lines as Array<{ code: string; amount: number }>).find((l) => l.code === "BASIC")?.amount)
@@ -1274,6 +1314,7 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
       basisDays: a.basisDays,
       days: [],
       resolveRate: () => null,
+      ...(he.sites.length ? { hourly: he.sites, businessLineFor: (contractId: string | null) => a.book.businessLineOf(contractId), employerCostRule: a.employerCosts, overrides: overridesFor(a, emp.id) } : {}),
       overtime: ot.map((o) => ({
         id: o.id,
         beatId: o.beatId,
@@ -1317,7 +1358,7 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
     });
     rows.push({ emp, res });
   }
-  if (!rows.length)
+  if (!rows.length && !issues.length && !late.settled.length)
     throw new BusinessError("There are no approved, unprocessed adjustments for this period.");
   const totals = summarize(rows.map((r) => r.res));
   return db.$transaction(async (tx) => {
@@ -1363,6 +1404,13 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
             netAmount: al.netAmount,
           },
         });
+      // the hours paid here: their pay lines, and the marks that make sure they are never paid twice; the pieces of a shift that a correction replaced are marked as credited once their pay has been set against what is owed
+      const hr = hourlyRowsFor(ctx.orgId, run.id, id, emp.id, res);
+      if (hr.lines.length) await tx.hourlyPayLine.createMany({ data: hr.lines });
+      const priced = new Set(hr.pieces.map((p) => p.segmentId));
+      const credits = late.pieces.filter((p) => p.employeeId === emp.id && (p.segmentIds ?? []).every((s) => priced.has(s))).flatMap((p) => p.creditSegmentIds);
+      const marks: Prisma.HourlyPayPieceCreateManyInput[] = [...hr.pieces, ...credits.map((segmentId) => ({ organizationId: ctx.orgId, runId: run.id, recordId: id, employeeId: emp.id, segmentId, kind: "CREDITED" as const }))];
+      if (marks.length) await tx.hourlyPayPiece.createMany({ data: marks });
       const arrIds = a.arrears.filter((x) => x.employeeId === emp.id).map((x) => x.id);
       if (arrIds.length)
         await tx.arrears.updateMany({
@@ -1370,6 +1418,16 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
           data: { processedRunId: run.id, processedPeriodId: periodId },
         });
     }
+    // groups that need no pay (they net to nothing, or to an overpayment that was flagged above): settled now, with no record to put them on, so they are never flagged or paid again
+    const settledMarks: Prisma.HourlyPayPieceCreateManyInput[] = late.settled.flatMap((g) => [
+      ...g.segmentIds.map((segmentId) => ({ organizationId: ctx.orgId, runId: run.id, recordId: null, employeeId: g.employeeId, segmentId, kind: "PAID" as const })),
+      ...g.creditSegmentIds.map((segmentId) => ({ organizationId: ctx.orgId, runId: run.id, recordId: null, employeeId: g.employeeId, segmentId, kind: "CREDITED" as const })),
+    ]);
+    if (settledMarks.length) await tx.hourlyPayPiece.createMany({ data: settledMarks });
+    if (issues.length)
+      await tx.payrollValidationIssue.createMany({
+        data: issues.map((i) => ({ organizationId: ctx.orgId, runId: run.id, employeeId: i.employeeId, category: i.category, severity: i.severity, code: i.code, message: i.message, requiresExplanation: Boolean(i.requiresExplanation) })),
+      });
     await logAudit(
       ctx,
       {

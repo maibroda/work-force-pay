@@ -1,0 +1,40 @@
+# Explain-back note: hourly pay, phase 4c (1 of 3), hours approved after the payroll was locked
+
+First piece of phase 4c (`hourly-payroll-phase4-plan.md`), started on the founder's "go with phase 4c" of 2026-11-20, on his answers of the same day to three questions: (1) a shift in an approved, locked or paid month may still be captured, approved and corrected, and is paid by a supplementary payroll, and only a CLOSED month refuses; (2) a correction after the lock that LOWERS pay pays only the increase, and a decrease is flagged with a blocking finding for a manual deduction (no negative pay); (3) the minimum-pay figure (H13) goes in the payroll rules, effective-dated (a later piece). It builds on phase 4b (the pay run pays approved hours, #249). **One additive migration** (`20261229090000_hourly_pay_pieces`, with `down.sql`, round-tripped up, down, up on a copy of the test database with no drift left). It closes the gap the 4b note warned about: **hours approved after a payroll is locked are now paid by a supplementary payroll.** Files: `src/server/services/payroll.ts` (critical), `src/server/services/hourly-payroll.ts` (critical), `src/server/services/time-entries.ts` (critical), `src/lib/payroll/hourly-late.ts` (new, pure), the engine and earnings step, the migration, and the tests below.
+
+## What it does, step by step
+
+1. **Every payroll remembers which approved pieces of shifts it paid.** A shift is cut into paid pieces (by day and class of day). When a regular payroll pays an hourly person, it now writes one mark ("PAID") per piece it paid, on the person's record (the new table `HourlyPayPiece`). Calculating the payroll again replaces the marks together with the record, so they never double.
+2. **A supplementary payroll finds the hours nobody has paid.** It reads the approved pieces of the period that no payroll (regular or supplementary, not replaced) has marked as paid. These are the late hours: a shift approved after the lock, or one that could not be priced earlier (no approved rate) and is priced now.
+3. **A correction pays only what is still owed.** A correction replaces a shift; the old shift becomes SUPERSEDED. If the old shift was already paid, its pieces are the "credit". For each site, contract, day and class of day the supplementary payroll sets the credit against what is owed now: owed minus credit. More than nothing is paid; nothing is paid if it is equal; if it is less, **no negative pay is made** and a **critical finding** ("paid for 2 h more than a later correction says they worked on 2038-03-02 ... enter a deduction ...") is raised once. The pieces on both sides are then marked (paid and credited), so the same correction is never paid or flagged twice. Minutes are compared only within the same site, day and class, so the rate that applies is always the one for that class; a shift moved to another day or site is owed at the new day and flagged at the old one.
+4. **The late pay is worked like a regular payroll's hourly pay:** each piece at the rate in force that day, each site's hours divided by the site's established salary structure (the same lookup as 4b), pension from the structure's pensionable parts, and the employer costs as for hourly staff (ITF and NSITF as percentages of gross, H19). **PAYE is only the extra tax over what the locked payroll already taxed**: the tax on (what the locked payroll taxed plus the late pay) less the tax on what it taxed, the same method the supplementary payroll already uses for arrears and overtime (your H12 method, annualised x12, bands, /12).
+5. **Whatever cannot be priced is not paid and stays owed**: no approved hourly rate, or no salary structure for the site, is a critical finding, nothing is marked, and a later supplementary payroll pays it once the rate is approved. A rate conflict is a finding, not a crash.
+6. **Older data cannot be paid twice.** A payroll calculated before marks existed has pay lines naming the shifts it paid; those shifts count as paid even with no marks. (Nothing in production has hourly pay yet; this is a safeguard.)
+7. **The locked payroll is never changed.** A supplementary payroll is a new run with its own records, lines and marks.
+8. **A closed month still refuses** new, changed or approved shifts. An approved, locked or paid month no longer does (your answer 1).
+
+## Where each rule comes from
+
+H22 (late hours by supplementary payroll) and the answers of 2026-11-20 above; H12, H19 and H8 as in 4b; the PAYE-on-top method is the existing supplementary payroll's. H16 (an approved shift is never edited; a correction replaces it) is phase 3.
+
+## Worked example (invented rates: role weekday 1,000, weekend 1,500 an hour)
+
+A guard worked Monday 8 h (8,000), approved and paid by the regular payroll, which is then locked. On Tuesday they worked 6 h; the shift is approved after the lock: the supplementary payroll pays 6 x 1,000 = 6,000 (with pension and the extra PAYE over the locked payroll's) and marks Tuesday's pieces as paid; a second supplementary payroll finds nothing. Later a correction says Monday was 9 h: 1 h more is owed, 1,000 is paid, Monday's old pieces are marked credited. Had it said 6 h instead, 2 h were overpaid: nothing is paid, a critical finding names the 2 h, and Finance or HR enters a deduction (or the approver overrides the finding with a reason); it is flagged only once.
+
+## What could go wrong, and what is NOT covered
+
+- **An overpayment is flagged by hours, not by naira.** The finding names the hours, day, site and class; the deduction amount is entered by a person. (A suggestion: show the amount at the current rate.)
+- **A supplementary payroll with only a finding has no records.** It is created so the finding has a home; approving it needs Finance to override the critical finding with a reason (the existing mechanism). I have not tested taking such a run through approve and lock.
+- **NHF is not deducted from late hourly pay** (the existing supplementary payroll never deducts it; the regular payroll does for people who chose it). Please say whether late hourly pay should carry it.
+- **The "take-home floor" is not applied** to a supplementary payroll (as before).
+- **Waiting shifts and holiday doubts are not raised again** in a supplementary payroll: the regular payroll raised them.
+- **Several supplementary payrolls for one period**: each pays what no other has marked. A supplementary payroll that is not approved still counts as having paid; if one is discarded by being superseded, its marks stop counting.
+- **A shift corrected across a month end** is netted within each month separately.
+- **Leave and sickness (H14)**, the payslip hours, the minimum-pay warning (H13) and the performance test are the next pieces of 4c.
+
+## Tests that prove it
+
+- `tests/unit/hourly-late.test.ts` (12): the pure rule: full owed, pieces added together, increase, decrease flagged (never negative pay), no change, a moved day or site is not netted, ids carried, every minute accounted for, no floating-point maths.
+- `tests/unit/engine-hourly.test.ts`: a supplementary run pays only the hourly gross (no monthly pay, no days) and its PAYE equals an independent tax computation (tax on earlier plus late, less tax on earlier).
+- `tests/integration/hourly-late-payroll.test.ts` (7), real payrolls in the demo company: a regular payroll marks the pieces it paid and a recalculation replaces them; a late shift is paid alone, the locked payroll is unchanged and a second supplementary payroll pays nothing; PAYE is only the extra tax; a correction that raises pay pays only the difference and marks both sides; a correction that lowers pay pays nothing, raises the finding with the hours, is flagged once; older data is not paid twice; a role with no rate is named and nothing is marked.
+- `tests/integration/time-entries.test.ts`: a shift in an approved, locked or paid month can be captured, submitted and approved, and a correction after the lock can be approved; a CLOSED month still refuses.

@@ -91,6 +91,8 @@ export interface HourlyLineInput {
   amountKobo: number;
   /** The approved time entries the line was worked from (kept so the stored breakdown can be traced; the engine does not use it). */
   entryIds?: string[];
+  /** The approved pieces (time entry segments) the line was worked from, so the pay run can mark them as paid. */
+  segmentIds?: string[];
 }
 
 /**
@@ -124,7 +126,7 @@ export interface EngineInput {
   resolveRate: (day: WorkDay) => RateInfo | null;
   /**
    * Hourly earnings (hourly pay, phase 4): the person's approved hours as pay lines per site. Left out or empty: the person is paid exactly as pay has always been worked. A person can be monthly for part of a
-   * month (the days above) and hourly for the rest (this): the hourly part never changes the divisor of the monthly days. Not allowed in a run that pays only adjustments.
+   * month (the days above) and hourly for the rest (this): the hourly part never changes the divisor of the monthly days. In a supplementary run (adjustments only) it carries the hours that missed the locked payroll.
    */
   hourly?: HourlySiteInput[];
   /** Business line of a contract (null = no contract → back-office pay, no add-on costs). */
@@ -427,7 +429,7 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
 
   // ── 1b. Hourly sites: the approved hours, already priced, become pieces of pay whose gross is the sum of the lines ──
   const hourlySites = input.hourly ?? [];
-  if (hourlySites.length && input.adjustmentsOnly) throw new MoneyError("Hourly earnings are not paid in a supplementary run that pays only adjustments.");
+  // in a supplementary run (adjustments only) the hourly hours that missed the locked payroll are paid here, and PAYE is worked on top of what the locked payroll already taxed (`payeBase`)
   const hourlyGross = new Map<string, Kobo>();
   for (const h of hourlySites) {
     for (const l of h.lines) {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { d, eachDay } from "@/lib/dates";
-import { MoneyError } from "@/lib/money-exact";
+import { MoneyError, asKobo } from "@/lib/money-exact";
 import { calculateEmployeePayroll, type EngineInput, type HourlySiteInput, type RateInfo, type WorkDay } from "@/lib/payroll/engine";
-import { NTA_2025_BANDS, type TaxRuleDef } from "@/lib/payroll/paye";
+import { NTA_2025_BANDS, computePayeKobo, type TaxRuleDef } from "@/lib/payroll/paye";
 import { DEFAULT_EARNINGS, type StructureDef } from "@/lib/payroll/structure";
 
 /**
@@ -182,10 +182,32 @@ describe("employer costs for an hourly person (H19, confirmed 2026-11-20)", () =
   });
 });
 
-describe("what the engine refuses", () => {
-  it("hourly earnings in a supplementary run that pays only adjustments (late hours are a later piece)", () => {
-    expect(() => calculateEmployeePayroll(base({ hourly: [site()], adjustmentsOnly: true }))).toThrow(MoneyError);
+describe("a supplementary run pays the hours that missed the locked payroll (H22)", () => {
+  const earlier = { regularTaxable: 300_000, employeePension: 12_000, basic: 30_000 };
+  const late = site({}, [{ dayClass: "WEEKDAY", minutes: 6_000, rate: 1000, amountKobo: 10_000_000 }]); // 100 hours at 1,000 = 100,000
+
+  it("pays only the hourly gross (no monthly pay, no days), and PAYE is the tax on top of what the locked payroll already taxed", () => {
+    const r = calculateEmployeePayroll(base({ hourly: [late], adjustmentsOnly: true, payeBase: earlier }));
+    expect(r.earnedGross).toBe(100_000);
+    expect(r.monthlyGross).toBe(0);
+    // the same tax worked independently: the tax on (earlier + this) less the tax on what was already taxed, both with the earlier pension and basic (as a supplementary run always is)
+    const common = { employeePension: asKobo(1_200_000), basic: asKobo(3_000_000), annualRent: asKobo(0) };
+    const before = computePayeKobo({ ...common, regularTaxable: asKobo(30_000_000), irregularTaxable: asKobo(0) }, TAX);
+    const after = computePayeKobo({ ...common, regularTaxable: asKobo(40_000_000), irregularTaxable: asKobo(0) }, TAX);
+    expect(r.paye.paye).toBe((after.paye - before.paye) / 100);
+    expect(r.paye.paye).toBeGreaterThan(0);
+    expect(r.netPay).toBeCloseTo(r.totalEarnings - r.employeePension - r.paye.paye, 2);
   });
+
+  it("is the same hourly arithmetic as a regular run for the pension and the split of the gross", () => {
+    const supp = calculateEmployeePayroll(base({ hourly: [late], adjustmentsOnly: true, payeBase: earlier }));
+    const regular = calculateEmployeePayroll(base({ hourly: [late] }));
+    expect(supp.components).toEqual(regular.components);
+    expect([supp.pensionBase, supp.employeePension, supp.employerPension]).toEqual([regular.pensionBase, regular.employeePension, regular.employerPension]);
+  });
+});
+
+describe("what the engine refuses", () => {
 
   it("an hourly amount that is not whole kobo, or is negative, or a line with no minutes", () => {
     for (const bad of [{ minutes: 60, rate: 1, amountKobo: 1.5 }, { minutes: 60, rate: 1, amountKobo: -1 }, { minutes: 0, rate: 1, amountKobo: 100 }, { minutes: 60.5, rate: 1, amountKobo: 100 }]) {
