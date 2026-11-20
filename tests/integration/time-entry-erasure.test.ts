@@ -98,12 +98,12 @@ describe("erasing a person clears the words on their shifts and keeps the facts"
     const b = await w.hourly("Colleague");
     const xa = await w.withWords(a.id, "A", "2026-11-02");
     const xb = await w.withWords(b.id, "B", "2026-11-02");
-    const before = await db.timeEntry.findMany({ where: { employeeId: a.id }, orderBy: { clockIn: "asc" } });
+    const before = await db.timeEntry.findMany({ where: { employeeId: a.id }, orderBy: [{ clockIn: "asc" }, { id: "asc" }] });
     const counts = await db.$transaction((tx) => anonymizeEmployee(tx, w.t.org.id, a.id, new Date("2026-12-01T00:00:00Z")));
     expect(counts.timeEntries).toBe(before.filter((r) => r.reason !== null || r.decisionNote !== null).length); // only the entries that had words
-    const after = await db.timeEntry.findMany({ where: { employeeId: a.id }, orderBy: { clockIn: "asc" } });
+    const after = await db.timeEntry.findMany({ where: { employeeId: a.id }, orderBy: [{ clockIn: "asc" }, { id: "asc" }] });
     expect(after.map((r) => [r.reason, r.decisionNote])).toEqual(after.map(() => [null, null]));
-    // the facts stay: times, status, the approved hours, who approved
+    // the facts stay: times, status, the approved hours, who approved (three entries start at the same minute, so both lists are put in a fixed order: by start time, then by id)
     expect(after.map((r) => [r.id, r.clockIn.getTime(), r.clockOut?.getTime() ?? null, r.status, r.payableMinutes, r.decidedByUserId])).toEqual(before.map((r) => [r.id, r.clockIn.getTime(), r.clockOut?.getTime() ?? null, r.status, r.payableMinutes, r.decidedByUserId]));
     expect(await db.timeEntrySegment.count({ where: { entryId: { in: [xa.original.id, xa.c1.id, xa.c2.id] } } })).toBe(3);
     // the colleague's words are untouched
