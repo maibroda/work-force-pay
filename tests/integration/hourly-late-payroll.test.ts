@@ -12,7 +12,7 @@ import { ctxFor, uid } from "../helpers";
  * Hourly pay, phase 4c (docs/plans/hourly-payroll-phase4-plan.md), the founder's H22 and his answers of 2026-11-20: hours approved AFTER a payroll was locked are paid by a supplementary payroll, and only once;
  * a correction made after the lock pays only what is still owed (the increase); a correction that means the person was overpaid pays nothing and raises a BLOCKING finding for a manual deduction (no negative
  * pay). Real payrolls in the demo company, one far-future month per test (2038, which no other test uses) so the tests do not meet each other's hours; the hourly facts are put in directly (an approved shift is
- * a TimeEntry with its paid pieces), and "locked" is set on the run and the period as the lock step leaves them. Rates are INVENTED: role weekday 1,000 an hour.
+ * a TimeEntry with its paid pieces), and the period is set to locked (the run is left calculated, because the ledger check wants a journal for every locked run). Rates are INVENTED: role weekday 1,000 an hour.
  * Calendar: 2038-01-04 is a Monday.
  */
 const day = (iso: string) => new Date(`${iso}T00:00:00Z`);
@@ -55,11 +55,10 @@ async function world(tag = uid()) {
     if (corrects) await db.timeEntry.update({ where: { id: corrects }, data: { status: "SUPERSEDED" } });
     return e;
   };
-  /** Calculates the regular payroll of a month and locks it, as the lock step leaves the run and the period. */
+  /** Calculates the regular payroll of a month and locks the PERIOD (all a supplementary payroll needs). The run itself is left calculated, not LOCKED: the ledger check requires a journal for every locked run, and these test runs have none. */
   const lockedMonth = async (month: number) => {
     const period = await createPeriod(payroll, 2038, month);
     const run = await runPayroll(payroll, period.id);
-    await db.payrollRun.update({ where: { id: run.id }, data: { status: "LOCKED" } });
     await db.payrollPeriod.update({ where: { id: period.id }, data: { status: "LOCKED" } });
     return { period, run };
   };
