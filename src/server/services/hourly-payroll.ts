@@ -78,6 +78,8 @@ export async function loadHourlyForPeriod(tx: Tx, orgId: string, start: Date, en
  * Waiting shifts and holiday doubts are not raised again here: the regular payroll raised them, and an override of them was the approver's decision.
  */
 export interface LateHourly extends HourlyForPeriod {
+  /** The pieces still owed, each with the credit pieces it was set against. */
+  pieces: LateNet["pieces"];
   /** Pieces whose group nets to nothing or to an overpayment: nothing to pay, so they are marked at once. */
   settled: LateNet["settled"];
   /** What was overpaid after a correction, to be recovered by a deduction someone enters. */
