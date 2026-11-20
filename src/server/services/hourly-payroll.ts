@@ -4,6 +4,8 @@ import type { ApprovedPiece, UnresolvedPiece } from "@/lib/payroll/hourly-earnin
 import { hoursOf } from "@/lib/payroll/hourly-report";
 import { netLatePieces, type Decrease, type LateNet, type SegRef } from "@/lib/payroll/hourly-late";
 import type { HourlyLineInput } from "@/lib/payroll/payslip-hourly";
+import { naira } from "@/lib/payroll/hourly-minimum";
+import type { Kobo } from "@/lib/money-exact";
 import { parseWatLocal } from "@/lib/payroll/time-entry";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
@@ -149,14 +151,15 @@ export async function loadPayslipHourly(tx: Tx, orgId: string, recordId: string)
 }
 
 /** The finding for an overpayment after a correction made once the payroll was locked: no negative pay is made, so someone enters a deduction (or the approver overrides it, with a reason). */
-export function hourlyDecreaseFinding(a: { employeeId: string; label: string; periodName: string; siteName: string; decrease: Decrease }): HourlyFinding {
+export function hourlyDecreaseFinding(a: { employeeId: string; label: string; periodName: string; siteName: string; decrease: Decrease; /** What the overpaid hours are worth at the rate in force that day; null when no rate applies. */ amount?: Kobo | null }): HourlyFinding {
   const d = a.decrease;
+  const worth = a.amount ? ` That is about NGN ${naira(a.amount)} at the rate in force that day.` : "";
   return {
     employeeId: a.employeeId,
     category: "ATTENDANCE",
     severity: "CRITICAL",
     code: "HOURLY_PAY_DECREASED",
-    message: `${a.label} was paid for ${hoursOf(d.minutes)} h more than a later correction says they worked on ${d.date} (${a.siteName}, ${d.dayClass.toLowerCase()} rate) in ${a.periodName}. No negative pay is made: enter a deduction for the overpayment (Payroll > Deductions), or override this finding with a reason. It is raised once only.`,
+    message: `${a.label} was paid for ${hoursOf(d.minutes)} h more than a later correction says they worked on ${d.date} (${a.siteName}, ${d.dayClass.toLowerCase()} rate) in ${a.periodName}.${worth} No negative pay is made: enter a deduction for the overpayment (Payroll > Deductions), or override this finding with a reason. It is raised once only.`,
   };
 }
 

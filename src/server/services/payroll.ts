@@ -10,7 +10,7 @@ import { getLeavePolicy } from "./leave";
 import { num } from "@/lib/money";
 import { asKobo, koboToString, roundPlaces, sumKobo } from "@/lib/money-exact";
 import { missingStateSeverity, normaliseState } from "@/lib/nigeria-states";
-import { buildHourlyEarnings } from "@/lib/payroll/hourly-earnings";
+import { buildHourlyEarnings, valueOfMinutes } from "@/lib/payroll/hourly-earnings";
 import { minimumPayFinding } from "@/lib/payroll/hourly-minimum";
 import { percentOfAmount, totalOf } from "@/lib/payroll/pay-inputs";
 import { fullName } from "@/lib/utils";
@@ -1317,7 +1317,17 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
       }
       for (const f of hourlyFindings({ employeeId: emp.id, label, periodName: period.name, unresolved: he.unresolved, monthlyRateWhileHourly: false })) issues.push(f);
     }
-    for (const d of lateDecreases) issues.push(hourlyDecreaseFinding({ employeeId: emp.id, label, periodName: period.name, siteName: a.hourly.names.get(d.beatId)?.beatName ?? "that site", decrease: d }));
+    for (const d of lateDecreases)
+      issues.push(
+        hourlyDecreaseFinding({
+          employeeId: emp.id,
+          label,
+          periodName: period.name,
+          siteName: a.hourly.names.get(d.beatId)?.beatName ?? "that site",
+          decrease: d,
+          amount: valueOfMinutes(a.hourly.rates, { employeeId: emp.id, contractId: d.contractId, categoryId: emp.categoryId, date: new Date(`${d.date}T00:00:00Z`), dayClass: d.dayClass }, d.minutes),
+        }),
+      );
     // nothing to pay (the late hours could not be priced, or were an overpayment): the findings are all there is
     if (!arr.length && !oth.length && !ded.length && !ot.length && !he.sites.length) continue;
     const prev = locked.find((r) => r.employeeId === emp.id);
@@ -1328,7 +1338,7 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
       basisDays: a.basisDays,
       days: [],
       resolveRate: () => null,
-      ...(he.sites.length ? { hourly: he.sites, businessLineFor: (contractId: string | null) => a.book.businessLineOf(contractId), employerCostRule: a.employerCosts, overrides: overridesFor(a, emp.id) } : {}),
+      ...(he.sites.length ? { hourly: he.sites, businessLineFor: (contractId: string | null) => a.book.businessLineOf(contractId), employerCostRule: a.employerCosts, overrides: overridesFor(a, emp.id), nhfEmployeeRatePct: emp.nhfContributes ? a.rules.nhfEmployeeRatePct : 0 } : {}),
       overtime: ot.map((o) => ({
         id: o.id,
         beatId: o.beatId,

@@ -159,11 +159,36 @@ describe("a correction made after the lock (H22, the founder's answers of 2026-1
     expect(found).toHaveLength(1);
     expect(found[0].severity).toBe("CRITICAL");
     expect(found[0].message).toMatch(/2 h/);
+    expect(found[0].message).toContain("2,000.00"); // 2 h at the weekday rate of 1,000, the rate in force that day
     expect(found[0].message).toMatch(/deduction/i);
     expect(await openCriticalCount(supp.id)).toBeGreaterThan(0);
     near(num((await w.record(run.id, e.id)).earnedGross), 8_000); // the locked payroll is untouched
     // it is flagged once: the pieces are settled, so the next supplementary payroll does not flag or pay it again
     await expect(createSupplementaryRun(w.payroll, period.id, "Again")).rejects.toThrow(/no approved, unprocessed/i);
+  });
+});
+
+describe("NHF on late hourly pay (the founder's answer of 2026-11-20)", () => {
+  it("takes the NHF of a person who chose it from the late pay as its own deduction line, 2.5% of the Basic part, and none from a person who did not", async () => {
+    const w = await world();
+    const chose = await w.person("Chose");
+    const notChose = await w.person("NotChose");
+    await db.employee.update({ where: { id: chose.id }, data: { nhfContributes: true, nhfOptedInOn: day("2038-01-01") } });
+    const { period } = await w.lockedMonth(8);
+    for (const p of [chose, notChose]) await w.shift(p.id, "2038-08-02T08:00", "2038-08-02T20:00"); // approved after the lock: 12 h = 12,000 each
+    const supp = await createSupplementaryRun(w.payroll, period.id, "Late hours");
+    const a = await w.record(supp.id, chose.id);
+    const lines = a.lines as Array<{ type: string; code: string; amount: number }>;
+    const nhf = lines.find((l) => l.code === "NHF");
+    const basic = lines.find((l) => l.code === "BASIC")!;
+    expect(nhf).toBeDefined();
+    expect(nhf!.type).toBe("DEDUCTION");
+    near(nhf!.amount, basic.amount * 0.025);
+    expect(nhf!.amount).toBeGreaterThan(0);
+    near(num(a.netPay), num(a.totalEarnings) - num(a.employeePension) - num(a.paye) - nhf!.amount);
+    const b = await w.record(supp.id, notChose.id);
+    expect((b.lines as Array<{ code: string }>).some((l) => l.code === "NHF")).toBe(false);
+    near(num(b.netPay), num(b.totalEarnings) - num(b.employeePension) - num(b.paye));
   });
 });
 

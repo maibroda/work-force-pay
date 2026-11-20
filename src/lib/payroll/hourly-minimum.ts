@@ -15,7 +15,7 @@ export interface MinimumPayFinding {
 }
 
 /** Whole kobo as naira with thousands separators: "70,000.00". */
-function naira(k: Kobo): string {
+export function naira(k: Kobo): string {
   const [whole, kobo] = koboToString(k).split(".");
   return `${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}.${kobo}`;
 }

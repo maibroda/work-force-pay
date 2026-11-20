@@ -10,7 +10,7 @@
  * or loses a kobo to the number of pieces it was cut into. (The phase 5 reports round at the coarser grain of person, contract and month, so a payroll can differ from a report by a kobo when a person
  * works more than one site on a contract.)
  */
-import { koboFromNaira, mulDiv } from "../money-exact";
+import { koboFromNaira, mulDiv, type Kobo } from "../money-exact";
 import type { HourlyRates, DayClass } from "./hourly";
 import { resolveHourlyRate, type HourlyRateRow } from "./hourly-rates";
 import type { HourlySiteInput } from "./engine";
@@ -121,4 +121,14 @@ export function buildHourlyEarnings(employeeId: string, pieces: readonly Approve
     out.push(site);
   }
   return { sites: out, unresolved, totalMinutes: total, pricedMinutes: priced };
+}
+
+/**
+ * What some minutes are worth at the approved rate in force on a day, for that kind of day, in whole kobo (rounded half up once, like a pay line). Null, never zero, when no approved rate applies: the caller says so
+ * instead of showing a made-up amount. Used to put a naira figure on an overpayment found after a correction (the founder's answer of 2026-11-20); it prices nothing that is paid.
+ */
+export function valueOfMinutes(rates: readonly HourlyRateRow[], q: { employeeId: string; contractId: string; categoryId: string; date: Date; dayClass: DayClass }, minutes: number): Kobo | null {
+  const found = resolveHourlyRate(rates, { employeeId: q.employeeId, contractId: q.contractId, categoryId: q.categoryId, date: q.date });
+  if (!found) return null;
+  return mulDiv(koboFromNaira(found.rates[RATE_FIELD[q.dayClass]], "An hourly rate"), minutes, 60);
 }
