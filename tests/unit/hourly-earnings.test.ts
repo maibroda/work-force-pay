@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { DayClass } from "@/lib/payroll/hourly";
-import { buildHourlyEarnings, type ApprovedPiece } from "@/lib/payroll/hourly-earnings";
+import { buildHourlyEarnings, valueOfMinutes, type ApprovedPiece } from "@/lib/payroll/hourly-earnings";
 import type { HourlyRateRow } from "@/lib/payroll/hourly-rates";
 import { DEFAULT_EARNINGS, type StructureDef } from "@/lib/payroll/structure";
 
@@ -117,5 +117,19 @@ describe("buildHourlyEarnings: approved pieces become pay lines per site", () =>
 describe("the file keeps to the exact-money rules", () => {
   it("uses no floating-point rounding or parsing", () => {
     expect(readFileSync("src/lib/payroll/hourly-earnings.ts", "utf8")).not.toMatch(/toFixed|parseFloat|Math\.round/);
+  });
+});
+
+describe("valueOfMinutes: what some minutes are worth at the rate in force that day (the overpayment finding)", () => {
+  const q = { employeeId: "e1", contractId: "k1", categoryId: "guard", date: day("2026-11-20") };
+  it("is the minutes at the rate of that kind of day, in whole kobo, rounded half up once", () => {
+    expect(valueOfMinutes([ROLE], { ...q, dayClass: "WEEKDAY" }, 120)).toBe(200_000); // 2 h at 1,000
+    expect(valueOfMinutes([ROLE], { ...q, dayClass: "WEEKEND" }, 90)).toBe(225_000); // 1 h 30 min at 1,500
+    expect(valueOfMinutes([ROLE], { ...q, dayClass: "HOLIDAY" }, 60)).toBe(200_000);
+    expect(valueOfMinutes([ROLE], { ...q, dayClass: "WEEKDAY" }, 1)).toBe(1_667); // 1,000 x 1/60 = 16.666... naira, half up to the kobo
+  });
+  it("is nothing (null, never zero) when no approved rate applies on that day", () => {
+    expect(valueOfMinutes([], { ...q, dayClass: "WEEKDAY" }, 120)).toBeNull();
+    expect(valueOfMinutes([ROLE], { ...q, categoryId: "office", dayClass: "WEEKDAY" }, 120)).toBeNull();
   });
 });

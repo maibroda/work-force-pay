@@ -38,7 +38,14 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `hourly-phase4c-performance`, no migration; builds on #251)
+
+## Not yet merged (branch `hourly-late-nhf-amount`, no migration; builds on #252)
+
+- **Hourly pay, late hours: NHF and the overpayment amount** (the founder's answers of 2026-11-20). In a supplementary payroll, a person paid by the hour who has chosen the voluntary NHF now has it taken from their late pay as its own deduction line (the payroll rule's rate of the Basic part, as the regular payroll does); a person who has not chosen it has none; arrears, overtime and other adjustments are unchanged. The blocking finding for an overpayment found after a correction now also shows what the overpaid hours are worth at the approved rate in force that day (never shown as zero when no rate applies); it is still a finding only, with no negative pay.
+- **Open question for the founder:** the PAYE on late pay does not relieve the pension and NHF taken on that late pay itself (the same method as arrears and overtime in a supplementary payroll, using the locked payroll's reliefs). Should it? See the explain-back note.
+- **Tests (written first):** additions to `tests/integration/hourly-late-payroll.test.ts` and `tests/unit/hourly-earnings.test.ts`. Explain-back note: `docs/plans/hourly-payroll-late-nhf-amount-explain-back.md`.
+
+## Merged in #252 (no migration)
 
 - **Hourly pay, phase 4c (3 of 3, part 2): the performance test, and a fault it found.** A new test (`tests/integration/hourly-performance.test.ts`) pays **3,000 people by the hour with 30 approved shifts each (90,000 shifts)** through the real pay run and checks the project's rule 12 (payroll for 3,000 workers inside 10 minutes), that every person is paid exactly what their hours earned with no minute lost or paid twice, and that a recalculation also finishes inside the limit. It runs in CI and adds about 4 to 5 minutes to the suite. **On its first run it found a real fault:** saving the payroll (one database transaction with a 2-minute limit) needed about 128 seconds on a cold database for a company this size, so the payroll was rolled back and nothing was saved. Fixed in the hourly code: the 90,000 "piece paid" marks are saved in bulk (they took 86 of the 128 seconds), the pieces are grouped by person once instead of scanned for every person, and the save transaction's limit is raised from 2 to 5 minutes. No amount changes. No company has hourly pay switched on yet, so nothing was affected in use.
 - **Not yet built (stated plainly):** leave and sickness for hourly staff (H14, a policy decision for the founder); the existing pay run's own cost of saving 3,000 records (about 35 seconds on a cold database) was not changed.
