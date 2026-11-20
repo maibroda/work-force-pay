@@ -24,7 +24,6 @@ async function world(tag = uid()) {
   const payroll = await ctxFor("PAYROLL_ADMIN");
   const org = payroll.orgId;
   const cat = await db.employeeCategory.findFirstOrThrow({ where: { organizationId: org, code: "GUARD" } });
-  const other = await db.employeeCategory.findFirstOrThrow({ where: { organizationId: org, code: "OFF" } });
   const structure = await createStructure(payroll, {
     code: `HL-${tag}`, name: `Hourly late ${tag}`, effectiveFrom: "2036-01-01", activate: true,
     components: DEFAULT_EARNINGS.map((c, i) => ({ code: c.code, name: c.name, calcType: "PERCENTAGE" as const, percentage: [10, 14, 15, 5, 15, 20, 2.5, 5, 13.5][i], taxable: true, pensionable: c.pensionable })),
@@ -66,7 +65,7 @@ async function world(tag = uid()) {
   };
   const record = (runId: string, employeeId: string) => db.payrollRecord.findFirstOrThrow({ where: { runId, employeeId } });
   const pieces = (runId: string, employeeId: string, kind: "PAID" | "CREDITED") => db.hourlyPayPiece.findMany({ where: { runId, employeeId, kind } });
-  return { payroll, org, cat, other, person, shift, lockedMonth, record, pieces, tag, structure };
+  return { payroll, org, cat, person, shift, lockedMonth, record, pieces, tag, structure };
 }
 
 describe("a regular payroll records which approved pieces it paid", () => {
@@ -187,7 +186,9 @@ describe("a payroll locked before pieces were recorded (older data) is not paid 
 describe("late hours that cannot be priced are not paid, and stay owed", () => {
   it("a job role with no approved hourly rate: a blocking finding names the hours and nothing is marked as paid", async () => {
     const w = await world();
-    const e = await w.person("NoRate", w.other.id); // the office role has no hourly rate
+    // a job role made for this test, so no other test file can ever give it an hourly rate
+    const bare = await db.employeeCategory.create({ data: { organizationId: w.org, code: `NR${w.tag}`.slice(0, 12), name: `No-rate role ${w.tag}` } });
+    const e = await w.person("NoRate", bare.id);
     const { period } = await w.lockedMonth(5);
     await w.shift(e.id, "2038-05-03T08:00", "2038-05-03T16:00");
     const supp = await createSupplementaryRun(w.payroll, period.id, "Late hours");
