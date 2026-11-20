@@ -30,7 +30,7 @@ import { findDuplicates } from "./employees";
 import { recentBankChanges } from "./change-requests";
 import { CLIENT_MISMATCH, LOCATION_MISMATCH } from "./operations";
 import { submissionBlockers, varianceIssues } from "./payroll-controls";
-import { hourlyDecreaseFinding, hourlyFindings, hourlyRateConflict, isHourlyOn, loadHourlyForPeriod, loadLateHourly, loadPayslipHourly, monthlyRateWhileHourly } from "./hourly-payroll";
+import { hourlyDecreaseFinding, hourlyFindings, hourlyRateConflict, isHourlyOn, loadHourlyForPeriod, loadLateHourly, loadPayslipHourly, monthlyRateWhileHourly, saveHourlyPieces } from "./hourly-payroll";
 import { loadRateBook } from "./rates";
 import { employerCostRuleFor, payrollRuleFor, pensionRuleFor, taxRuleFor } from "./statutory";
 import { enforceVerifiedRules } from "./statutory-verification";
@@ -359,6 +359,12 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
   const rows: Row[] = [];
   let holidaysUnconfirmed = false;
 
+  const piecesByEmp = new Map<string, typeof a.hourly.pieces>();
+  for (const p of a.hourly.pieces) {
+    const own = piecesByEmp.get(p.employeeId);
+    if (own) own.push(p);
+    else piecesByEmp.set(p.employeeId, [p]);
+  }
   for (const emp of a.employees) {
     let days = workDaysFor(a, emp.id);
     const exited = EXITED.includes(emp.status);
@@ -405,9 +411,10 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
     const proration = monthProration(period.year, period.month, setting, { companyBasisDays: a.basisDays, leaveWorkingDaysPerWeek: a.leaveWorkingDaysPerWeek, holidays: a.holidays });
     // hourly earnings: the person's approved hours priced at the approved rates, each site split by its own salary structure; anything that cannot be priced is not paid and is reported
     let he: ReturnType<typeof buildHourlyEarnings> = { sites: [], unresolved: [], totalMinutes: 0, pricedMinutes: 0 };
-    if (a.hourly.pieces.some((p) => p.employeeId === emp.id)) {
+    const myPieces = piecesByEmp.get(emp.id);
+    if (myPieces?.length) {
       try {
-        he = buildHourlyEarnings(emp.id, a.hourly.pieces, a.hourly.rates, {
+        he = buildHourlyEarnings(emp.id, myPieces, a.hourly.rates, {
           categoryOf: () => emp.categoryId,
           structureFor: (q) => a.book.structureFor(q.contractId, q.categoryId, new Date(`${q.date}T00:00:00Z`)),
           namesOf: (beatId) => a.hourly.names.get(beatId) ?? { clientName: "", beatName: "" },
@@ -572,7 +579,7 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
       if (allocData.length) await tx.payrollAllocation.createMany({ data: allocData });
       if (hourlyData.length) await tx.hourlyPayLine.createMany({ data: hourlyData });
       await tx.hourlyPayPiece.deleteMany({ where: { runId } }); // a recalculation starts again (the records above were deleted, and their marks with them; any that had no record go too)
-      if (pieceData.length) await tx.hourlyPayPiece.createMany({ data: pieceData });
+      await saveHourlyPieces(tx, pieceData);
 
       const overrideKey = (i: { code: string; employeeId: string | null; message: string }) =>
         `${i.code}|${i.employeeId ?? ""}|${i.message}`;
@@ -654,7 +661,8 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
       );
       return updated;
     },
-    { timeout: 120_000 },
+    // the save of a whole payroll is one transaction. 3,000 people paid by the hour (90,000 shifts) took 128 s to save when first measured on a cold database (docs/plans/hourly-payroll-phase4c-performance-explain-back.md), over the old 2-minute limit, so the payroll was rolled back; 5 minutes keeps a wide margin inside the 10-minute rule for a whole payroll
+    { timeout: 300_000 },
   );
   return result;
 }

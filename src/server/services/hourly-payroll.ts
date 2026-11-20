@@ -5,6 +5,8 @@ import { hoursOf } from "@/lib/payroll/hourly-report";
 import { netLatePieces, type Decrease, type LateNet, type SegRef } from "@/lib/payroll/hourly-late";
 import type { HourlyLineInput } from "@/lib/payroll/payslip-hourly";
 import { parseWatLocal } from "@/lib/payroll/time-entry";
+import { randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import type { Tx } from "./_base";
 import { loadApprovedHourlyRates } from "./hourly-pay";
 import { loadApprovedSegments } from "./time-entries";
@@ -115,6 +117,22 @@ export async function loadLateHourly(tx: Tx, orgId: string, period: { id: string
   const missing = [...new Set(replaced.map((r) => r.entry.beatId))].filter((id) => !known.has(id));
   if (missing.length) for (const b of await tx.beat.findMany({ where: { organizationId: orgId, id: { in: missing } }, select: { id: true, name: true, client: { select: { name: true } } } })) base.names.set(b.id, { clientName: b.client.name, beatName: b.name });
   return { ...base, pieces: net.pieces, waitingByEmp: new Map(), doubtfulByEmp: new Map(), settled: net.settled, decreases: net.decreases };
+}
+
+/**
+ * Saves the marks of the approved pieces a payroll paid or credited (`HourlyPayPiece`). A payroll for 3,000 people with 30 shifts each saves 90,000 of them, and row by row through the ORM that took 86 seconds in the
+ * performance test (docs/plans/hourly-payroll-phase4c-performance-explain-back.md); one statement per 20,000 rows, from arrays passed as parameters (never built into the text), is far quicker. Marks with no
+ * payroll record (a settled correction) are few and go through the ORM.
+ */
+export async function saveHourlyPieces(tx: Tx, rows: readonly Prisma.HourlyPayPieceCreateManyInput[]): Promise<void> {
+  const withRecord = rows.filter((r) => r.recordId);
+  const without = rows.filter((r) => !r.recordId);
+  for (let i = 0; i < withRecord.length; i += 20_000) {
+    const part = withRecord.slice(i, i + 20_000);
+    await tx.$executeRaw`INSERT INTO "HourlyPayPiece" ("id", "organizationId", "runId", "recordId", "employeeId", "segmentId", "kind")
+      SELECT * FROM unnest(${part.map(() => randomUUID())}::text[], ${part.map((r) => r.organizationId)}::text[], ${part.map((r) => r.runId)}::text[], ${part.map((r) => r.recordId as string)}::text[], ${part.map((r) => r.employeeId)}::text[], ${part.map((r) => r.segmentId)}::text[], ${part.map((r) => r.kind)}::"HourlyPieceKind"[])`;
+  }
+  if (without.length) await tx.hourlyPayPiece.createMany({ data: without });
 }
 
 /**
