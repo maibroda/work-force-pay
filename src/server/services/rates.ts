@@ -103,6 +103,20 @@ export async function loadRateBook(
     };
   }
 
+  /**
+   * The established salary structure for a location (the founder's H8, 2026-11-20), for an hourly person's hours at a site: the structure on the contract's rate for the person's job role on that day, else the
+   * contract's own default structure, else the company's default structure; null when there is none (the pay run then raises a finding and the hours are not paid).
+   */
+  function structureFor(contractId: string, categoryId: string, date: Date): StructureDef | null {
+    const cr = contractRate(contractId, categoryId, date);
+    const fromRate = cr ? structMap.get(cr.salaryStructureId) : undefined;
+    if (fromRate) return fromRate;
+    const own = contractMap.get(contractId)?.defaultStructureId;
+    const fromContract = own ? structMap.get(own) : undefined;
+    if (fromContract) return fromContract;
+    return defaultStructure ? (structMap.get(defaultStructure.id) ?? null) : null;
+  }
+
   /** Business line (guarding / outsourcing) of a contract — null for no contract (back-office pay). */
   function businessLineOf(contractId: string | null): "GUARDING" | "OUTSOURCING" | null {
     if (!contractId) return null;
@@ -113,6 +127,7 @@ export async function loadRateBook(
     resolve,
     contractRate,
     employeePayRate,
+    structureFor,
     businessLineOf,
     defaultStructure: defaultStructure ? structMap.get(defaultStructure.id) : undefined,
   };

@@ -89,6 +89,8 @@ export interface HourlyLineInput {
   rateId?: string | null;
   rate: number;
   amountKobo: number;
+  /** The approved time entries the line was worked from (kept so the stored breakdown can be traced; the engine does not use it). */
+  entryIds?: string[];
 }
 
 /**

@@ -8,8 +8,9 @@ import { loadApprovedBases } from "./pay-basis";
 import { holidayContext } from "./holidays";
 import { getLeavePolicy } from "./leave";
 import { num } from "@/lib/money";
-import { roundPlaces } from "@/lib/money-exact";
+import { asKobo, koboToString, roundPlaces } from "@/lib/money-exact";
 import { missingStateSeverity, normaliseState } from "@/lib/nigeria-states";
+import { buildHourlyEarnings } from "@/lib/payroll/hourly-earnings";
 import { percentOfAmount, totalOf } from "@/lib/payroll/pay-inputs";
 import { fullName } from "@/lib/utils";
 import {
@@ -28,6 +29,7 @@ import { findDuplicates } from "./employees";
 import { recentBankChanges } from "./change-requests";
 import { CLIENT_MISMATCH, LOCATION_MISMATCH } from "./operations";
 import { submissionBlockers, varianceIssues } from "./payroll-controls";
+import { EMPTY_HOURLY, hourlyFindings, hourlyRateConflict, isHourlyOn, loadHourlyForPeriod, monthlyRateWhileHourly } from "./hourly-payroll";
 import { loadRateBook } from "./rates";
 import { employerCostRuleFor, payrollRuleFor, pensionRuleFor, taxRuleFor } from "./statutory";
 import { enforceVerifiedRules } from "./statutory-verification";
@@ -127,6 +129,9 @@ async function assemble(
     rules.defaultOperativeSharePct,
   );
 
+  // hourly pay (docs/plans/hourly-payroll-phase4-plan.md): the approved hours, the approved hourly rates and how each person is paid; a supplementary run pays only adjustments
+  const hourly = opts.supplementary ? EMPTY_HOURLY : await loadHourlyForPeriod(db, ctx.orgId, period.startDate, period.endDate);
+
   const [
     employees,
     work,
@@ -215,6 +220,7 @@ async function assemble(
     leaveWorkingDaysPerWeek: leavePolicy.workingDaysPerWeek,
     unpaidLeave,
     book,
+    hourly,
     employees,
     work,
     overrides,
@@ -346,6 +352,9 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
         }));
       }
     }
+    // a person paid by the hour on a day is never paid monthly for it (the work register defaults a present day to 12 hours, and a monthly rate may exist): those days are dropped from the monthly days
+    const hourlyComp = a.hourly.compByEmp.get(emp.id);
+    if (hourlyComp?.length) days = days.filter((x) => !isHourlyOn(hourlyComp, x.date));
     // unpaid leave (approved): its working days are not paid days, whether the person is on the work register or on a personal pay rate
     const unpaid = unpaidDatesFor(a, emp.id);
     if (unpaid.size) days = days.filter((x) => !unpaid.has(iso(x.date)));
@@ -364,11 +373,35 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
       });
     if (setting?.excludePublicHolidays && !a.holidaysConfirmed) holidaysUnconfirmed = true;
     const proration = monthProration(period.year, period.month, setting, { companyBasisDays: a.basisDays, leaveWorkingDaysPerWeek: a.leaveWorkingDaysPerWeek, holidays: a.holidays });
+    // hourly earnings: the person's approved hours priced at the approved rates, each site split by its own salary structure; anything that cannot be priced is not paid and is reported
+    let he: ReturnType<typeof buildHourlyEarnings> = { sites: [], unresolved: [], totalMinutes: 0, pricedMinutes: 0 };
+    if (a.hourly.pieces.some((p) => p.employeeId === emp.id)) {
+      try {
+        he = buildHourlyEarnings(emp.id, a.hourly.pieces, a.hourly.rates, {
+          categoryOf: () => emp.categoryId,
+          structureFor: (q) => a.book.structureFor(q.contractId, q.categoryId, new Date(`${q.date}T00:00:00Z`)),
+          namesOf: (beatId) => a.hourly.names.get(beatId) ?? { clientName: "", beatName: "" },
+        });
+      } catch (e) {
+        // two approved rates in force at the same level (the services prevent it): this person's hourly hours are not paid and a blocking finding says why; the rest of the payroll is worked
+        issues.push(hourlyRateConflict(emp.id, `${emp.employeeNumber} ${fullName(emp)}`, period.name, e instanceof Error ? e.message : ""));
+      }
+    }
+    for (const f of hourlyFindings({
+      employeeId: emp.id,
+      label: `${emp.employeeNumber} ${fullName(emp)}`,
+      periodName: period.name,
+      unresolved: he.unresolved,
+      waiting: a.hourly.waitingByEmp.get(emp.id),
+      doubtful: a.hourly.doubtfulByEmp.get(emp.id),
+      monthlyRateWhileHourly: monthlyRateWhileHourly(hourlyComp, (day) => Boolean(a.book.employeePayRate(emp.id, day)), period.startDate, period.endDate),
+    }))
+      issues.push(f);
     const ot = a.overtime.filter((o) => o.employeeId === emp.id);
     const arr = a.arrears.filter((x) => x.employeeId === emp.id);
     const oth = a.others.filter((x) => x.employeeId === emp.id);
     const ded = a.deductions.filter((x) => x.employeeId === emp.id);
-    if (!days.length && !ot.length && !arr.length && !oth.length) {
+    if (!days.length && !ot.length && !arr.length && !oth.length && !he.sites.length) {
       if (!exited && ["ACTIVE", "ON_LEAVE"].includes(emp.status))
         issues.push({
           employeeId: emp.id,
@@ -390,6 +423,7 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
       basisDays: proration.basisDays,
       nonProratedDates: proration.nonProratedDates,
       days,
+      hourly: he.sites,
       resolveRate: (day: WorkDay) => a.book.resolve(emp.id, day),
       businessLineFor: (contractId: string | null) => a.book.businessLineOf(contractId),
       employerCostRule: a.employerCosts,
@@ -462,9 +496,28 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
 
       const recordData: Prisma.PayrollRecordCreateManyInput[] = [];
       const allocData: Prisma.PayrollAllocationCreateManyInput[] = [];
+      const hourlyData: Prisma.HourlyPayLineCreateManyInput[] = [];
       for (const { emp, res } of rows) {
         const id = randomUUID();
         recordData.push(recordRow(ctx.orgId, runId, id, emp, res, a.tax.def.code + "@" + a.tax.def.version));
+        for (const seg of res.segments)
+          for (const l of seg.hourly?.lines ?? [])
+            hourlyData.push({
+              organizationId: ctx.orgId,
+              runId,
+              recordId: id,
+              employeeId: emp.id,
+              clientId: seg.clientId,
+              contractId: seg.contractId,
+              beatId: seg.beatId,
+              structureCode: seg.rate.structure.code,
+              dayClass: l.dayClass,
+              minutes: l.minutes,
+              rateId: l.rateId ?? null,
+              rate: l.rate,
+              amount: koboToString(asKobo(l.amountKobo)),
+              entryIds: l.entryIds ?? [],
+            });
         for (const al of res.allocations)
           allocData.push({
             id: randomUUID(),
@@ -495,6 +548,7 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
       }
       if (recordData.length) await tx.payrollRecord.createMany({ data: recordData });
       if (allocData.length) await tx.payrollAllocation.createMany({ data: allocData });
+      if (hourlyData.length) await tx.hourlyPayLine.createMany({ data: hourlyData });
 
       const overrideKey = (i: { code: string; employeeId: string | null; message: string }) =>
         `${i.code}|${i.employeeId ?? ""}|${i.message}`;
@@ -666,6 +720,7 @@ function recordRow(
         sharePct: s.rate.operativeSharePct,
         monthlyGross: s.rate.monthlyGross,
         structure: s.rate.structure.name,
+        ...(s.hourly ? { hourly: true } : {}),
         gross: s.gross,
         clientBilling: s.clientBilling,
         managementShare: s.managementShare,
