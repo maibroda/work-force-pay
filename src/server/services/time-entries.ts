@@ -19,7 +19,8 @@ import { assertHourlyPayOn } from "./hourly-pay";
  * `attendance.record` (a supervisor only for their own sites); approving or rejecting is for the site's supervisor or someone with `payroll.inputs.approve`. Everything is for the caller's company only (another company's
  * entry, person or site is "not found"). Audit entries carry ids, times and numbers only, never the reasons typed.
  */
-const FROZEN = ["APPROVED", "LOCKED", "PAID", "CLOSED"] as const;
+/** Only a CLOSED pay period refuses time entries: while it is approved, locked or paid, a shift can still be captured, approved or corrected, and is paid by a supplementary payroll (the founder's H22, 2026-11-20). */
+const CLOSED_PERIOD = ["CLOSED"] as const;
 const LIVE = ["DRAFT", "SUBMITTED", "APPROVED"] as const;
 
 export interface CaptureInput {
@@ -58,12 +59,15 @@ async function loadEntry(ctx: Ctx, tx: Tx, id: string) {
   return e;
 }
 
-/** The pay periods that are approved or locked may not have time entries added, changed or approved in them: that goes through a supplementary payroll. */
+/**
+ * A closed pay period may not have time entries added, changed or approved in it. An approved, locked or paid one may (the founder's H22, 2026-11-20, which replaced the earlier rule that refused them): hours the locked
+ * payroll did not pay are paid by a supplementary payroll, and a correction pays only what is still owed (src/lib/payroll/hourly-late.ts). The locked payroll itself is never changed.
+ */
 async function assertDatesEditable(ctx: Ctx, tx: Tx, from: Date, to: Date | null) {
   const first = d(watDate(from));
   const last = d(watDate(new Date((to ?? from).getTime() - (to ? 60_000 : 0))));
-  const p = await tx.payrollPeriod.findFirst({ where: { organizationId: ctx.orgId, status: { in: [...FROZEN] }, startDate: { lte: last }, endDate: { gte: first } } });
-  if (p) throw new BusinessError(`Payroll for ${p.name} is ${p.status.toLowerCase()}: time entries for those dates cannot be changed. Use a supplementary payroll for corrections.`);
+  const p = await tx.payrollPeriod.findFirst({ where: { organizationId: ctx.orgId, status: { in: [...CLOSED_PERIOD] }, startDate: { lte: last }, endDate: { gte: first } } });
+  if (p) throw new BusinessError(`Payroll for ${p.name} is closed: time entries for those dates cannot be changed.`);
 }
 
 /** Only a person who is paid by the hour on the day has time entries (a person on a monthly salary is never paid from hours, so nothing can be double counted). */
@@ -306,5 +310,5 @@ export async function loadApprovedSegments(tx: Tx, orgId: string, from: Date, to
     include: { entry: { select: { employeeId: true, beatId: true, contractId: true, clientId: true } } },
     orderBy: [{ date: "asc" }, { id: "asc" }],
   });
-  return rows.map((r) => ({ entryId: r.entryId, employeeId: r.entry.employeeId, beatId: r.entry.beatId, contractId: r.entry.contractId, clientId: r.entry.clientId, date: iso(r.date), dayClass: r.dayClass, minutes: r.minutes }));
+  return rows.map((r) => ({ segmentId: r.id, entryId: r.entryId, employeeId: r.entry.employeeId, beatId: r.entry.beatId, contractId: r.entry.contractId, clientId: r.entry.clientId, date: iso(r.date), dayClass: r.dayClass, minutes: r.minutes }));
 }

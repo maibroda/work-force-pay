@@ -640,6 +640,7 @@ model Organization {
   timeEntries               TimeEntry[]
   timeEntrySegments         TimeEntrySegment[]
   hourlyPayLines            HourlyPayLine[]
+  hourlyPayPieces           HourlyPayPiece[]
   payrollPeriods            PayrollPeriod[]
   payrollRuns               PayrollRun[]
   payrollRecords            PayrollRecord[]
@@ -3732,6 +3733,7 @@ model PayrollRecord {
 
   allocations PayrollAllocation[]
   hourlyLines HourlyPayLine[]
+  hourlyPieces HourlyPayPiece[]
   paymentTxns PaymentTransaction[]
 
   @@unique([runId, employeeId])
@@ -8071,6 +8073,7 @@ model TimeEntrySegment {
   date           DateTime     @db.Date
   dayClass       DayClass
   minutes        Int
+  payPieces      HourlyPayPiece[]
 
   @@index([organizationId, date])
   @@index([entryId])
@@ -8104,6 +8107,34 @@ model HourlyPayLine {
 
   @@index([organizationId, runId])
   @@index([recordId])
+}
+
+enum HourlyPieceKind {
+  /// The piece of an approved shift was paid by this payroll.
+  PAID
+  /// The piece belonged to a shift that was paid and then replaced by a correction made after the payroll was locked: its pay has been set against what the correction owes.
+  CREDITED
+}
+
+/// Which approved pieces of shifts a payroll has dealt with (hourly pay, phase 4c, the founder's H22). A regular payroll marks every piece it pays; a supplementary payroll pays only the pieces no payroll has paid, and sets
+/// the pieces of shifts replaced by a later correction against what the correction owes. Replaced with the record when the payroll is calculated again.
+model HourlyPayPiece {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  runId          String
+  /// The person's payroll record the piece was paid on; none when the piece was only settled (a correction that nets to nothing or to an overpayment pays no one, so there is no record to put it on).
+  recordId       String?
+  record         PayrollRecord?   @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  employeeId     String
+  segmentId      String
+  segment        TimeEntrySegment @relation(fields: [segmentId], references: [id], onDelete: Restrict)
+  kind           HourlyPieceKind
+  createdAt      DateTime         @default(now())
+
+  @@index([organizationId, runId])
+  @@index([recordId])
+  @@index([segmentId])
 }
 
 /// The company's confirmation that its list of public holidays for a year is complete and right. A contract that excludes public holidays cannot be paid cleanly for a month in an unconfirmed year.

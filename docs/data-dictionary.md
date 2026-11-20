@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-281 tables and 211 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+282 tables and 212 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -83,6 +83,7 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | timeEntries | → TimeEntry[] |  |  |
 | timeEntrySegments | → TimeEntrySegment[] |  |  |
 | hourlyPayLines | → HourlyPayLine[] |  |  |
+| hourlyPayPieces | → HourlyPayPiece[] |  |  |
 | payrollPeriods | → PayrollPeriod[] |  |  |
 | payrollRuns | → PayrollRun[] |  |  |
 | payrollRecords | → PayrollRecord[] |  |  |
@@ -2687,6 +2688,7 @@ Operational source of truth for WHERE an employee worked on each day.
 | createdAt | DateTime |  |  |
 | allocations | → PayrollAllocation[] |  |  |
 | hourlyLines | → HourlyPayLine[] |  |  |
+| hourlyPieces | → HourlyPayPiece[] |  |  |
 | paymentTxns | → PaymentTransaction[] |  |  |
 
 ### PayrollAllocation
@@ -6055,6 +6057,7 @@ The paid minutes of an approved shift on one day, with that day's class as it wa
 | date | DateTime | yes |  |
 | dayClass | DayClass | yes |  |
 | minutes | Int | yes |  |
+| payPieces | → HourlyPayPiece[] |  |  |
 
 ### HourlyPayLine
 
@@ -6079,6 +6082,24 @@ How an hourly person's pay was made up (hourly pay, phase 4b of docs/plans/hourl
 | rate | Decimal | yes |  |
 | amount | Decimal | yes |  |
 | entryIds | String[] |  | The approved time entries this line was worked from. |
+| createdAt | DateTime |  |  |
+
+### HourlyPayPiece
+
+Which approved pieces of shifts a payroll has dealt with (hourly pay, phase 4c, the founder's H22). A regular payroll marks every piece it pays; a supplementary payroll pays only the pieces no payroll has paid, and sets the pieces of shifts replaced by a later correction against what the correction owes. Replaced with the record when the payroll is calculated again.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| runId | String | yes |  |
+| recordId | String |  | The person's payroll record the piece was paid on; none when the piece was only settled (a correction that nets to nothing or to an overpayment pays no one, so there is no record to put it on). |
+| record | → PayrollRecord |  |  |
+| employeeId | String | yes |  |
+| segmentId | String | yes |  |
+| segment | → TimeEntrySegment |  |  |
+| kind | HourlyPieceKind | yes |  |
 | createdAt | DateTime |  |  |
 
 ### HolidayCalendarYear
@@ -7754,6 +7775,10 @@ Whether an outbound message is a service message (about an active contract) or m
 ### DayClass
 
 `WEEKDAY`, `WEEKEND`, `HOLIDAY`
+
+### HourlyPieceKind
+
+`PAID`, `CREDITED`
 
 ### FeedbackKind
 

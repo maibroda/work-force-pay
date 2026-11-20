@@ -90,20 +90,43 @@ describe("who may capture a time entry, and for whom", () => {
     await expect(captureTimeEntry(w.ops, ask({ beatId: "nope" }))).rejects.toThrow(/not found/i);
   });
 
-  it("refuses a shift inside a payroll period that is approved or locked, and records the capture in the audit log by ids and times only", async () => {
+  it("refuses a shift inside a CLOSED payroll period (an approved, locked or paid one is allowed: see below), and records the capture in the audit log by ids and times only", async () => {
     const w = await world();
-    await db.payrollPeriod.create({ data: { organizationId: w.t.org.id, name: "October 2026", year: 2026, month: 10, startDate: day("2026-10-01"), endDate: day("2026-10-31"), status: "LOCKED" } });
+    await db.payrollPeriod.create({ data: { organizationId: w.t.org.id, name: "October 2026", year: 2026, month: 10, startDate: day("2026-10-01"), endDate: day("2026-10-31"), status: "CLOSED" } });
     await expect(captureTimeEntry(w.ops, { employeeId: w.emp.id, beatId: w.beat.id, clockIn: "2026-10-15T08:00", clockOut: "2026-10-15T16:00" })).rejects.toThrow(/Payroll for October 2026/);
-    // a shift that starts in the open month and ends in the locked one is refused too
+    // a shift that starts in an open month and ends in a closed one is refused too
     await db.payrollPeriod.create({ data: { organizationId: w.t.org.id, name: "December 2026", year: 2026, month: 12, startDate: day("2026-12-01"), endDate: day("2026-12-31"), status: "OPEN" } });
     await db.payrollPeriod.update({ where: { organizationId_year_month: { organizationId: w.t.org.id, year: 2026, month: 10 } }, data: { status: "OPEN" } });
-    await db.payrollPeriod.create({ data: { organizationId: w.t.org.id, name: "November 2026", year: 2026, month: 11, startDate: day("2026-11-01"), endDate: day("2026-11-30"), status: "APPROVED" } });
+    await db.payrollPeriod.create({ data: { organizationId: w.t.org.id, name: "November 2026", year: 2026, month: 11, startDate: day("2026-11-01"), endDate: day("2026-11-30"), status: "CLOSED" } });
     await expect(captureTimeEntry(w.ops, { employeeId: w.emp.id, beatId: w.beat.id, clockIn: "2026-10-31T19:00", clockOut: "2026-11-01T07:00" })).rejects.toThrow(/Payroll for November 2026/);
     const ok = await captureTimeEntry(w.ops, { employeeId: w.emp.id, beatId: w.beat.id, clockIn: "2026-12-05T08:00", clockOut: "2026-12-05T16:00", });
     const rows = await w.audit("TIME_ENTRY_CAPTURED");
     expect(rows).toHaveLength(1);
     expect(rows[0].newValue).toMatchObject({ employeeId: w.emp.id, beatId: w.beat.id, clockIn: "2026-12-05T07:00:00.000Z", clockOut: "2026-12-05T15:00:00.000Z" });
     expect(rows[0].entityId).toBe(ok.id);
+  });
+});
+
+describe("a shift in a month whose payroll is already approved, locked or paid (the founder's H22, 2026-11-20)", () => {
+  it("can still be captured, submitted and approved: it is paid by a supplementary payroll, and the locked payroll is never changed", async () => {
+    const w = await world();
+    for (const [month, status] of [[8, "APPROVED"], [9, "LOCKED"], [10, "PAID"]] as const)
+      await db.payrollPeriod.create({ data: { organizationId: w.t.org.id, name: `Month ${month} 2026`, year: 2026, month, startDate: day(`2026-${String(month).padStart(2, "0")}-01`), endDate: day(`2026-${String(month).padStart(2, "0")}-28`), status } });
+    for (const date of ["2026-08-10", "2026-09-10", "2026-10-10"]) {
+      const e = await captureTimeEntry(w.ops, { employeeId: w.emp.id, beatId: w.beat.id, clockIn: `${date}T08:00`, clockOut: `${date}T16:00` });
+      await submitTimeEntry(w.ops, e.id);
+      await expect(approveTimeEntry(w.sup, e.id, {}), date).resolves.toMatchObject({ status: "APPROVED", payableMinutes: 480 });
+    }
+  });
+
+  it("a correction to an approved shift in a locked month can be made and approved (it pays only what is still owed)", async () => {
+    const w = await world();
+    await db.payrollPeriod.create({ data: { organizationId: w.t.org.id, name: "November 2026", year: 2026, month: 11, startDate: day("2026-11-01"), endDate: day("2026-11-30"), status: "LOCKED" } });
+    const e = await w.submitted(w.emp.id, "2026-11-20T08:00", "2026-11-20T16:00");
+    const orig = await approveTimeEntry(w.sup, e.id, {});
+    const fix = await correctTimeEntry(w.ops, orig.id, { clockIn: "2026-11-20T08:00", clockOut: "2026-11-20T17:00", reason: "Stayed an hour longer" });
+    await submitTimeEntry(w.ops, fix.id);
+    await expect(approveTimeEntry(w.sup, fix.id, {})).resolves.toMatchObject({ status: "APPROVED", payableMinutes: 540 });
   });
 });
 
@@ -303,11 +326,11 @@ describe("corrections: an approved entry is never edited, a new entry replaces i
     await expect(approveTimeEntry(w.sup, fix.id, {})).resolves.toMatchObject({ status: "APPROVED" });
   });
 
-  it("is refused inside a payroll period that is approved or locked: that goes through a supplementary payroll", async () => {
+  it("is refused inside a CLOSED payroll period (a locked one is allowed, and is paid by a supplementary payroll)", async () => {
     const w = await world();
     const orig = await approved(w);
-    await db.payrollPeriod.create({ data: { organizationId: w.t.org.id, name: "November 2026", year: 2026, month: 11, startDate: day("2026-11-01"), endDate: day("2026-11-30"), status: "LOCKED" } });
-    await expect(correctTimeEntry(w.ops, orig.id, { clockIn: "2026-11-20T09:00", clockOut: "2026-11-20T17:00", reason: "The guard clocked in an hour late" })).rejects.toThrow(/supplementary payroll/i);
+    await db.payrollPeriod.create({ data: { organizationId: w.t.org.id, name: "November 2026", year: 2026, month: 11, startDate: day("2026-11-01"), endDate: day("2026-11-30"), status: "CLOSED" } });
+    await expect(correctTimeEntry(w.ops, orig.id, { clockIn: "2026-11-20T09:00", clockOut: "2026-11-20T17:00", reason: "The guard clocked in an hour late" })).rejects.toThrow(/is closed/i);
   });
 });
 

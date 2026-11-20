@@ -27,6 +27,11 @@ export interface ApprovedPiece {
   minutes: number;
   /** The approved time entry the piece belongs to, so a pay line can be traced to its shifts. */
   entryId?: string;
+  /** The approved piece itself (a time entry segment), so the pay run can mark it as paid. */
+  segmentId?: string;
+  /** For a piece made from several (the late hours of a supplementary payroll): all of them. These take the place of the single ids above. */
+  entryIds?: string[];
+  segmentIds?: string[];
 }
 
 export interface HourlyEarningsOptions {
@@ -91,12 +96,18 @@ export function buildHourlyEarnings(employeeId: string, pieces: readonly Approve
     if (p.date > site.to) site.to = p.date;
     const lineKey = `${p.dayClass}|${found.rateId}`;
     const line = site.lineMap.get(lineKey);
+    const entries = p.entryIds ?? (p.entryId ? [p.entryId] : []);
+    const segments = p.segmentIds ?? (p.segmentId ? [p.segmentId] : []);
     if (line) {
       line.minutes += p.minutes;
-      if (p.entryId && !line.entryIds?.includes(p.entryId)) line.entryIds = [...(line.entryIds ?? []), p.entryId];
+      const e = entries.filter((id) => !line.entryIds?.includes(id));
+      if (e.length) line.entryIds = [...(line.entryIds ?? []), ...e];
+      const s = segments.filter((id) => !line.segmentIds?.includes(id));
+      if (s.length) line.segmentIds = [...(line.segmentIds ?? []), ...s];
     } else {
       const l: HourlySiteInput["lines"][number] = { dayClass: p.dayClass, minutes: p.minutes, rateId: found.rateId, rate: found.rates[RATE_FIELD[p.dayClass]], amountKobo: 0 };
-      if (p.entryId) l.entryIds = [p.entryId];
+      if (entries.length) l.entryIds = [...entries];
+      if (segments.length) l.segmentIds = [...segments];
       site.lineMap.set(lineKey, l);
       site.lines.push(l);
     }
