@@ -1,0 +1,45 @@
+# Explain-back note: hourly pay, phase 4b (the pay run pays approved hours)
+
+Second piece of phase 4 (`hourly-payroll-phase4-plan.md`), started on the founder's "GO" of 2026-11-20, on the answers H8, H12, H19, H20, H21 and H22. It builds on phase 4a (the engine takes hourly earnings, #248). **One additive migration** (`20261228090000_hourly_pay_lines`, with `down.sql`, round-tripped up, down, up on a copy of the test database with no drift left). **This is the piece that makes hourly pay real: the pay run now pays an hourly person from their approved hours.** It only affects a person who has approved hourly shifts or is recorded as paid by the hour; every other employee is paid exactly as before, and nobody has hourly shifts until a company switches hourly pay on and approves some. Files: `src/server/services/payroll.ts` (critical, in CODEOWNERS), `src/server/services/rates.ts` (critical), `src/server/services/hourly-payroll.ts` (new, added to CODEOWNERS), the pure step and engine types from 4a, the migration, and `tests/integration/hourly-payroll-run.test.ts` (12 tests).
+
+## What it does, step by step
+
+1. **The pay run collects the hourly facts for the period** (`loadHourlyForPeriod`): the paid pieces of APPROVED shifts, the approved hourly rates, each person's record of how they are paid from which date, the shifts still waiting for approval, and the approved shifts whose class of day may be doubtful. All of it for the caller's company only (a test checks the loader reads one company).
+2. **A person is never paid monthly and hourly for the same day.** For a person recorded as paid by the hour, the days from the date it starts are dropped from the monthly days. That covers the work register (which saves a present day as 12 hours if nobody types the hours) and a personal monthly pay rate's "employment days". A person who is monthly for the first half of a month and hourly from the 16th is paid the first half by the days, as ever, and the second half from their approved hours; the hourly part never changes the divisor of the monthly days.
+3. **Hourly earnings are worked out** with the pure step of 4a: each approved piece is priced at the rate in force that day (the employee's own, then the contract and job role, then the job role), and each site's hours are divided by **the established salary structure for that site** (your H8; see "the structure lookup" below). Pension, NHF, PAYE, deductions and net pay are then exactly the monthly arithmetic (your H12). Each line is rounded half up to the kobo once.
+4. **Only approved hours are paid, and the findings say what is left out** (all appear in the payroll's findings; a **critical** finding stops the payroll being approved until Finance overrides it with a documented reason, the existing mechanism):
+   - shifts still waiting for approval, or drafts, or with no clock-out: **left out, critical** (your H21), with the number of shifts and the recorded hours;
+   - approved hours with **no approved hourly rate** for the person's job role: not paid, never priced as zero, **critical**;
+   - approved hours at a site with **no salary structure**: not paid, **critical**;
+   - a person paid by the hour who **still has a personal monthly pay rate**: **critical** (your H20); only the hourly pay is worked for the days they are paid by the hour, so they are never paid both;
+   - **two approved hourly rates in force at the same level** (the services prevent it; it could only come from data entered another way): the person's hourly hours are not paid and a critical finding says why. **One person's bad data never stops the company's payroll.**
+   - warnings (not blocking): approved shifts classed while the holiday list for the year was not confirmed, and shifts at a site with no recognised state (so only national holidays were applied).
+5. **The breakdown is stored** (the migration): for each payroll record, one row per class of day at each rate at each site (`HourlyPayLine`): the hours, the rate as used, the amount, the salary structure used, and the ids of the approved shifts it came from. The rows are replaced when the payroll is calculated again, so recalculating never doubles them. A later change to a rate cannot alter a payroll already worked, because the rate used is stored on the line.
+6. **What the record shows for an hourly person:** no monthly gross (they have no fixed salary: their hourly earnings are their gross); the distinct days worked; the site worked; the allocation to each site; and no client billing and no management share (your H15 and H19). The calculation trace marks which sites were hourly.
+
+## The structure lookup (your H8: "the established salary structure for the location")
+
+For hours at a site on a day, the structure is, in this order: (1) the structure on the contract's rate for the person's job role that day; (2) the contract's own default structure; (3) the company's default structure. I read your answer that way; the same order a monthly person's rate is found today (without a personal pay rate, which H20 does not allow with hourly pay). **Please say if you want a different order.** If none is found, the hours are not paid and the finding says so.
+
+## Where each rule comes from
+
+H8, H12, H19, H20, H21 and H15 are your answers of 2026-11-20; H9 (supervisor approval) and H10 (a missing clock-out is never paid) are phase 3. A shift is paid in the month it was worked, by the day each paid piece fell on (a Friday-to-Saturday shift over a month end is paid half in each month, a test checks nothing is lost or twice).
+
+## Worked example (invented rates: role weekday 1,000, weekend 1,500, holiday 2,000 an hour)
+
+In April a guard on hourly pay works Monday 8 hours and Saturday 8 hours, both approved: 8 x 1,000 + 8 x 1,500 = 20,000 gross. The site's structure divides it (Basic 10%, Housing 14%, Transport 15% pensionable: pension base 7,800), the pay run takes pension, PAYE and any deductions, and gives the net pay. The record shows two stored lines (weekday 8 hours at 1,000 = 8,000; weekend 8 hours at 1,500 = 12,000), each pointing at its shift. A third shift was submitted but not approved: it is not paid, and a critical finding says "2 shifts ... are not approved ... so they are not paid" until it is approved (and the payroll calculated again) or Finance overrides the finding with a reason.
+
+## What could go wrong, and what is NOT covered
+
+- **Hours approved after a payroll is locked** are not picked up by a later regular payroll (they belong to the locked month). **They are not paid until phase 4c (your H22: a supplementary payroll) is built**, and no finding yet warns of them: this is the most important thing still missing. Until 4c, do not lock a payroll while hourly shifts for that month are still waiting.
+- **The payslip does not yet show weekday, weekend and holiday hours and earnings** (the stored lines are ready); the payslip shows the gross as the usual earnings lines. That is the next piece.
+- **The minimum-pay warning (your H13)** is not built.
+- **The company's hourly switch is not read by the pay run:** an approved shift is money owed even if the switch is later turned off. The switch only governs the screens and the entering of new shifts.
+- **A job role is the person's current one**, as for the reports. A mid-month change of role is not split.
+- **Leave and sickness (H14)** are not paid to an hourly person; only approved hours are paid.
+- **Stored hourly lines have no database protection against editing** after a lock, like payroll records and allocations today (the pay run replaces them only on a calculation, which a locked payroll refuses).
+- **Performance:** one extra read of approved pieces, rates and shifts per payroll; the 3,000-hourly-people test (rule 12) is a later piece.
+
+## Tests that prove it
+
+`hourly-payroll-run.test.ts` runs real payrolls in the demo company for April and May 2037: the approved hours at the approved rates with the structure's split, pension base, no monthly gross, no billing, the stored lines with their shifts, and the allocation; recalculating replaces the lines and the pay does not change; a shift over the month end is paid half in each month; a submitted shift and a draft with no clock-out are left out with a critical finding (and an open critical finding is what blocks approval); a clean person has no hourly finding; a role with no rate is not paid and is named; work-register days on hourly days are not paid monthly; a person with a personal monthly pay rate gets the H20 finding and is never paid the monthly rate; monthly then hourly in one month; the structure lookup order; a rate conflict is a finding and the rest of the payroll is worked; a monthly person is paid exactly as before; another company's hours are never read. The existing payroll, golden, characterization, paid-days, payslip and engine tests (193 together locally) pass unchanged. I confirmed the new tests have teeth: with the day filter, the stored lines, the not-approved finding and the structure order removed, seven of them failed.

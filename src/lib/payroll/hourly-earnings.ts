@@ -25,6 +25,8 @@ export interface ApprovedPiece {
   date: string;
   dayClass: DayClass;
   minutes: number;
+  /** The approved time entry the piece belongs to, so a pay line can be traced to its shifts. */
+  entryId?: string;
 }
 
 export interface HourlyEarningsOptions {
@@ -89,9 +91,12 @@ export function buildHourlyEarnings(employeeId: string, pieces: readonly Approve
     if (p.date > site.to) site.to = p.date;
     const lineKey = `${p.dayClass}|${found.rateId}`;
     const line = site.lineMap.get(lineKey);
-    if (line) line.minutes += p.minutes;
-    else {
-      const l = { dayClass: p.dayClass, minutes: p.minutes, rateId: found.rateId, rate: found.rates[RATE_FIELD[p.dayClass]], amountKobo: 0 };
+    if (line) {
+      line.minutes += p.minutes;
+      if (p.entryId && !line.entryIds?.includes(p.entryId)) line.entryIds = [...(line.entryIds ?? []), p.entryId];
+    } else {
+      const l: HourlySiteInput["lines"][number] = { dayClass: p.dayClass, minutes: p.minutes, rateId: found.rateId, rate: found.rates[RATE_FIELD[p.dayClass]], amountKobo: 0 };
+      if (p.entryId) l.entryIds = [p.entryId];
       site.lineMap.set(lineKey, l);
       site.lines.push(l);
     }

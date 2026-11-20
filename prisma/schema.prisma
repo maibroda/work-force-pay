@@ -639,6 +639,7 @@ model Organization {
   workRegister              WorkRegister[]
   timeEntries               TimeEntry[]
   timeEntrySegments         TimeEntrySegment[]
+  hourlyPayLines            HourlyPayLine[]
   payrollPeriods            PayrollPeriod[]
   payrollRuns               PayrollRun[]
   payrollRecords            PayrollRecord[]
@@ -3730,6 +3731,7 @@ model PayrollRecord {
   createdAt                       DateTime     @default(now())
 
   allocations PayrollAllocation[]
+  hourlyLines HourlyPayLine[]
   paymentTxns PaymentTransaction[]
 
   @@unique([runId, employeeId])
@@ -8072,6 +8074,36 @@ model TimeEntrySegment {
 
   @@index([organizationId, date])
   @@index([entryId])
+}
+
+/// How an hourly person's pay was made up (hourly pay, phase 4b of docs/plans/hourly-payroll-phase4-plan.md): one row for each class of day at each rate within each site's piece of pay, kept with the payroll record it
+/// belongs to. It records the hours, the rate AS USED and the amount, so a later change of rate can never alter a payroll that was already worked, and `entryIds` say which approved shifts the line came from.
+/// Written when the payroll is calculated and replaced when it is calculated again; like the record it is never changed once the payroll is locked.
+model HourlyPayLine {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  runId          String
+  recordId       String
+  record         PayrollRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  employeeId     String
+  clientId       String?
+  contractId     String?
+  beatId         String?
+  /// The code of the salary structure that split this site's gross (the established structure for the location).
+  structureCode  String
+  dayClass       DayClass
+  minutes        Int
+  /// The HourlyRate row that applied (kept as an id, not a link: rates are history and never deleted).
+  rateId         String?
+  rate           Decimal       @db.Decimal(14, 2)
+  amount         Decimal       @db.Decimal(16, 2)
+  /// The approved time entries this line was worked from.
+  entryIds       String[]
+  createdAt      DateTime      @default(now())
+
+  @@index([organizationId, runId])
+  @@index([recordId])
 }
 
 /// The company's confirmation that its list of public holidays for a year is complete and right. A contract that excludes public holidays cannot be paid cleanly for a month in an unconfirmed year.

@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-280 tables and 211 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+281 tables and 211 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -82,6 +82,7 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | workRegister | → WorkRegister[] |  |  |
 | timeEntries | → TimeEntry[] |  |  |
 | timeEntrySegments | → TimeEntrySegment[] |  |  |
+| hourlyPayLines | → HourlyPayLine[] |  |  |
 | payrollPeriods | → PayrollPeriod[] |  |  |
 | payrollRuns | → PayrollRun[] |  |  |
 | payrollRecords | → PayrollRecord[] |  |  |
@@ -2685,6 +2686,7 @@ Operational source of truth for WHERE an employee worked on each day.
 | calcTrace | Json |  |  |
 | createdAt | DateTime |  |  |
 | allocations | → PayrollAllocation[] |  |  |
+| hourlyLines | → HourlyPayLine[] |  |  |
 | paymentTxns | → PaymentTransaction[] |  |  |
 
 ### PayrollAllocation
@@ -6053,6 +6055,31 @@ The paid minutes of an approved shift on one day, with that day's class as it wa
 | date | DateTime | yes |  |
 | dayClass | DayClass | yes |  |
 | minutes | Int | yes |  |
+
+### HourlyPayLine
+
+How an hourly person's pay was made up (hourly pay, phase 4b of docs/plans/hourly-payroll-phase4-plan.md): one row for each class of day at each rate within each site's piece of pay, kept with the payroll record it belongs to. It records the hours, the rate AS USED and the amount, so a later change of rate can never alter a payroll that was already worked, and `entryIds` say which approved shifts the line came from. Written when the payroll is calculated and replaced when it is calculated again; like the record it is never changed once the payroll is locked.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| runId | String | yes |  |
+| recordId | String | yes |  |
+| record | → PayrollRecord |  |  |
+| employeeId | String | yes |  |
+| clientId | String |  |  |
+| contractId | String |  |  |
+| beatId | String |  |  |
+| structureCode | String | yes | The code of the salary structure that split this site's gross (the established structure for the location). |
+| dayClass | DayClass | yes |  |
+| minutes | Int | yes |  |
+| rateId | String |  | The HourlyRate row that applied (kept as an id, not a link: rates are history and never deleted). |
+| rate | Decimal | yes |  |
+| amount | Decimal | yes |  |
+| entryIds | String[] |  | The approved time entries this line was worked from. |
+| createdAt | DateTime |  |  |
 
 ### HolidayCalendarYear
 
