@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Ctx } from "@/lib/auth/context";
 import { d } from "@/lib/dates";
 import { num } from "@/lib/money";
+import { toKobo } from "@/lib/money-exact";
 import { overlappingVersion, validateTiming } from "@/lib/paye-dates";
 import { NHF_STANDARD_RATE_PCT } from "@/lib/payroll/standard-rates";
 import type { TaxRuleDef } from "@/lib/payroll/paye";
@@ -97,6 +98,7 @@ export async function copyStatutoryRules(tx: Tx, fromOrgId: string, toOrgId: str
         requirePayeState: r.requirePayeState,
         nhfEmployeeRatePct: r.nhfEmployeeRatePct,
         minTakeHomePctOfGross: r.minTakeHomePctOfGross,
+        hourlyMinMonthlyPay: r.hourlyMinMonthlyPay,
         effectiveFrom: r.effectiveFrom,
         effectiveTo: r.effectiveTo,
       },
@@ -163,6 +165,8 @@ export async function payrollRuleFor(tx: Tx, orgId: string, date: Date) {
     requirePayeState: r.requirePayeState,
     nhfEmployeeRatePct: num(r.nhfEmployeeRatePct),
     minTakeHomePctOfGross: num(r.minTakeHomePctOfGross),
+    /** The minimum monthly pay for a person paid only by the hour, in whole kobo (0 = no check). */
+    hourlyMinMonthlyPayKobo: toKobo(r.hourlyMinMonthlyPay),
   };
 }
 
@@ -402,6 +406,8 @@ export const payrollRuleSchema = z.object({
   nhfEmployeeRatePct: z.coerce.number().min(0).max(100).default(NHF_STANDARD_RATE_PCT),
   /** The take-home floor, % of gross, for loan and salary-advance recoveries (0 = none). */
   minTakeHomePctOfGross: z.coerce.number().min(0).max(100).default(0),
+  /** The minimum monthly pay for a person paid only by the hour (H13), in naira and kobo: a warning only. 0 = no check. */
+  hourlyMinMonthlyPay: z.coerce.number().min(0).max(1_000_000_000).refine((n) => Math.abs(n * 100 - Math.round(n * 100)) < 0.001, "Use naira and kobo: at most two decimal places.").default(0),
   requirePayeState: z.preprocess((v) => v === true || v === "true" || v === "on", z.boolean()).default(false),
   effectiveFrom: z.string().min(10),
 });

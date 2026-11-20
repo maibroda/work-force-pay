@@ -4032,6 +4032,8 @@ model PayrollRule {
   nhfEmployeeRatePct       Decimal        @default(2.5) @db.Decimal(5, 3)
   /// The take-home floor, % of gross: loan and salary-advance recoveries may not take net pay below this share of gross; the part not taken is carried forward by the loan book. 0 (the default) = no floor, as pay has always been worked. A client-specific policy, not a statutory one.
   minTakeHomePctOfGross    Decimal        @default(0) @db.Decimal(5, 2)
+  /// The minimum monthly pay, in naira, for a person paid only by the hour (the founder's H13): a WARNING (never a block, never a change to pay) when what they earned from hours in the month is below it. A figure the company or its adviser enters; none is built in. 0 (the default) = no check.
+  hourlyMinMonthlyPay      Decimal        @default(0) @db.Decimal(14, 2)
   effectiveFrom            DateTime       @db.Date
   effectiveTo              DateTime?      @db.Date
   createdAt                DateTime       @default(now())
