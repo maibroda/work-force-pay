@@ -224,6 +224,8 @@ export const contractRateSchema = z.object({
   salaryStructureId: z.string().trim().optional().transform((v) => v || undefined),
   agreedRate: z.coerce.number().positive("Agreed rate must be greater than zero"),
   operativeSharePct: z.coerce.number().min(1).max(100).optional(),
+  /** The leave pay for staff paid by the hour on this contract (H14): blank = the company's percentage; 0 = none; at most two decimals. */
+  hourlyLeavePct: z.preprocess((v) => (v === "" || v === null ? undefined : v), z.coerce.number().min(0).max(100).refine((n) => Math.abs(n * 100 - Math.round(n * 100)) < 0.001, "Use a percentage with at most two decimal places.").optional()),
   effectiveFrom: z.string().min(10),
 });
 
@@ -268,6 +270,7 @@ export async function addContractRateRecord(ctx: Ctx, tx: Tx, v: z.output<typeof
       salaryStructureId: structureId,
       agreedRate: v.agreedRate,
       operativeSharePct: v.operativeSharePct ?? null,
+      hourlyLeavePct: v.hourlyLeavePct ?? null,
       effectiveFrom: from,
     },
   });

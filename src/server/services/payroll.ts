@@ -21,6 +21,7 @@ import {
   calculateEmployeePayroll,
   type AttendanceStatus,
   type EngineResult,
+  type HourlySiteInput,
   type PayrollLine,
   type WorkDay,
 } from "@/lib/payroll/engine";
@@ -248,6 +249,14 @@ async function assemble(
 
 type Assembled = Awaited<ReturnType<typeof assemble>>;
 
+/**
+ * The leave percentage for each of a person's hourly sites (H14): the contract rate's own percentage for their job role, in force on the LAST day worked at that site in the period, when it has one (0 = none on that contract);
+ * otherwise the company's percentage from the payroll rules.
+ */
+function leavePctOfSite(book: Assembled["book"], categoryId: string, companyPct: number) {
+  return (site: HourlySiteInput) => book.leavePctFor(site.contractId, categoryId, new Date(`${site.to}T00:00:00Z`)) ?? companyPct;
+}
+
 function workDaysFor(a: Assembled, employeeId: string): WorkDay[] {
   return a.work
     .filter((w) => w.employeeId === employeeId)
@@ -472,10 +481,10 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
           categoryOf: () => emp.categoryId,
           structureFor: (q) => a.book.structureFor(q.contractId, q.categoryId, new Date(`${q.date}T00:00:00Z`)),
           namesOf: (beatId) => a.hourly.names.get(beatId) ?? { clientName: "", beatName: "" },
-          ...(a.rules.hourlyLeavePct > 0 ? { leaveEligibleFrom: iso(addMonths(emp.employmentDate, a.leaveEligibilityMonths)) } : {}),
+          leaveEligibleFrom: iso(addMonths(emp.employmentDate, a.leaveEligibilityMonths)),
         });
-        // the leave pay: a percentage added to every hour worked from the day the service period for annual leave is complete (H14); 0 = none
-        if (a.rules.hourlyLeavePct > 0) he = { ...he, sites: addLeavePay(he.sites, a.rules.hourlyLeavePct) };
+        // the leave pay: a percentage added to every hour worked from the day the service period for annual leave is complete (H14); each site uses its contract rate's own percentage when it has one, else the company's; 0 = none
+        he = { ...he, sites: addLeavePay(he.sites, leavePctOfSite(a.book, emp.categoryId, a.rules.hourlyLeavePct)) };
       } catch (e) {
         // two approved rates in force at the same level (the services prevent it): this person's hourly hours are not paid and a blocking finding says why; the rest of the payroll is worked
         issues.push(hourlyRateConflict(emp.id, `${emp.employeeNumber} ${fullName(emp)}`, period.name, e instanceof Error ? e.message : ""));
@@ -1415,9 +1424,9 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
           categoryOf: () => emp.categoryId,
           structureFor: (q) => a.book.structureFor(q.contractId, q.categoryId, new Date(`${q.date}T00:00:00Z`)),
           namesOf: (beatId) => a.hourly.names.get(beatId) ?? { clientName: "", beatName: "" },
-          ...(a.rules.hourlyLeavePct > 0 ? { leaveEligibleFrom: iso(addMonths(emp.employmentDate, a.leaveEligibilityMonths)) } : {}),
+          leaveEligibleFrom: iso(addMonths(emp.employmentDate, a.leaveEligibilityMonths)),
         });
-        if (a.rules.hourlyLeavePct > 0) he = { ...he, sites: addLeavePay(he.sites, a.rules.hourlyLeavePct) };
+        he = { ...he, sites: addLeavePay(he.sites, leavePctOfSite(a.book, emp.categoryId, a.rules.hourlyLeavePct)) };
       } catch (e) {
         issues.push(hourlyRateConflict(emp.id, label, period.name, e instanceof Error ? e.message : ""));
       }
