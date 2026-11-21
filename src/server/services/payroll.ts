@@ -12,6 +12,7 @@ import { asKobo, koboToString, roundPlaces, sumKobo } from "@/lib/money-exact";
 import { missingStateSeverity, normaliseState } from "@/lib/nigeria-states";
 import { buildHourlyEarnings, valueOfMinutes } from "@/lib/payroll/hourly-earnings";
 import { addLeavePay } from "@/lib/payroll/hourly-leave-pay";
+import { mergeAllowanceSites } from "@/lib/payroll/sick-pay";
 import { minimumPayFinding } from "@/lib/payroll/hourly-minimum";
 import { hourlyLeaveDates, hourlyLeaveFinding } from "@/lib/payroll/hourly-leave";
 import { percentOfAmount, totalOf } from "@/lib/payroll/pay-inputs";
@@ -32,6 +33,7 @@ import { findDuplicates } from "./employees";
 import { recentBankChanges } from "./change-requests";
 import { CLIENT_MISMATCH, LOCATION_MISMATCH } from "./operations";
 import { submissionBlockers, varianceIssues } from "./payroll-controls";
+import { loadSickPay, sickDaysAlreadyPaid } from "./sick-pay";
 import { hourlyDecreaseFinding, hourlyFindings, hourlyRateConflict, isHourlyOn, loadHourlyForPeriod, loadLateHourly, loadPayslipAllowances, loadPayslipHourly, monthlyRateWhileHourly, saveHourlyPieces } from "./hourly-payroll";
 import { loadRateBook } from "./rates";
 import { employerCostRuleFor, payrollRuleFor, pensionRuleFor, taxRuleFor } from "./statutory";
@@ -225,6 +227,7 @@ async function assemble(
     holidaysConfirmed: holidayCtx.confirmed,
     leaveWorkingDaysPerWeek: leavePolicy.workingDaysPerWeek,
     leaveEligibilityMonths: leavePolicy.eligibilityMonths,
+    sickDaysPerYear: leavePolicy.sickDaysPerYear,
     unpaidLeave,
     annualLeave,
     book,
@@ -335,6 +338,7 @@ function hourlyRowsFor(orgId: string, runId: string, recordId: string, employeeI
         pct: x.pct ?? null,
         minutes: x.minutes ?? null,
         rate: x.rate ?? null,
+        dates: x.dates ?? [],
         amount: koboToString(asKobo(x.amountKobo)),
       });
   for (const seg of res.segments)
@@ -384,6 +388,18 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
   const rows: Row[] = [];
   let holidaysUnconfirmed = false;
 
+  // paid sick days (H14 piece 2): approved spells of sickness of people paid by the hour, at their average daily hours x the weekday rate
+  const sickPay = await loadSickPay(db, {
+    orgId: ctx.orgId,
+    period,
+    months: a.rules.hourlyAverageMonths,
+    sickDaysPerYear: a.sickDaysPerYear,
+    workingDaysPerWeek: a.leaveWorkingDaysPerWeek,
+    rates: a.hourly.rates,
+    structureFor: (q) => a.book.structureFor(q.contractId, q.categoryId, new Date(`${q.date}T00:00:00Z`)),
+    namesOf: (beatId) => a.hourly.names.get(beatId) ?? { clientName: "", beatName: "" },
+    people: new Map(a.employees.map((x) => [x.id, { categoryId: x.categoryId, label: `${x.employeeNumber} ${fullName(x)}` }])),
+  });
   const piecesByEmp = new Map<string, typeof a.hourly.pieces>();
   for (const p of a.hourly.pieces) {
     const own = piecesByEmp.get(p.employeeId);
@@ -451,6 +467,11 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
         // two approved rates in force at the same level (the services prevent it): this person's hourly hours are not paid and a blocking finding says why; the rest of the payroll is worked
         issues.push(hourlyRateConflict(emp.id, `${emp.employeeNumber} ${fullName(emp)}`, period.name, e instanceof Error ? e.message : ""));
       }
+    }
+    const sick = sickPay.get(emp.id);
+    if (sick) {
+      he = { ...he, sites: mergeAllowanceSites(he.sites, sick.sites) };
+      issues.push(...sick.findings);
     }
     for (const f of hourlyFindings({
       employeeId: emp.id,
@@ -1322,6 +1343,19 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
   const a = await assemble(ctx, period, { supplementary: true });
   const rows: Array<{ emp: Assembled["employees"][number]; res: EngineResult }> = [];
   const issues: Issue[] = [];
+  // sick days approved after the lock (H14 piece 2): paid here, never twice (the days the period's other payrolls paid are left out)
+  const sickPay = await loadSickPay(db, {
+    orgId: ctx.orgId,
+    period,
+    months: a.rules.hourlyAverageMonths,
+    sickDaysPerYear: a.sickDaysPerYear,
+    workingDaysPerWeek: a.leaveWorkingDaysPerWeek,
+    rates: a.hourly.rates,
+    structureFor: (q) => a.book.structureFor(q.contractId, q.categoryId, new Date(`${q.date}T00:00:00Z`)),
+    namesOf: (beatId) => a.hourly.names.get(beatId) ?? { clientName: "", beatName: "" },
+    people: new Map((await db.employee.findMany({ where: { organizationId: ctx.orgId }, select: { id: true, categoryId: true, employeeNumber: true, firstName: true, lastName: true } })).map((x) => [x.id, { categoryId: x.categoryId, label: `${x.employeeNumber} ${x.firstName} ${x.lastName}` }])),
+    alreadyPaid: await sickDaysAlreadyPaid(db, ctx.orgId, periodId),
+  });
   const late = a.late!; // a supplementary run always loads the late hours
   const allEmps = await db.employee.findMany({
     where: { organizationId: ctx.orgId },
@@ -1335,7 +1369,8 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
     const ot = a.overtime.filter((x) => x.employeeId === emp.id);
     const latePieces = late.pieces.filter((p) => p.employeeId === emp.id);
     const lateDecreases = late.decreases.filter((d) => d.employeeId === emp.id);
-    if (!arr.length && !oth.length && !ded.length && !ot.length && !latePieces.length && !lateDecreases.length) continue;
+    const sickHere = sickPay.get(emp.id);
+    if (!arr.length && !oth.length && !ded.length && !ot.length && !latePieces.length && !lateDecreases.length && !sickHere) continue;
     const label = `${emp.employeeNumber} ${fullName(emp)}`;
     // the hours that missed the locked payroll (H22): priced like a regular run's; what cannot be priced is not paid and is reported, and stays owed
     let he: ReturnType<typeof buildHourlyEarnings> = { sites: [], unresolved: [], totalMinutes: 0, pricedMinutes: 0 };
@@ -1364,6 +1399,10 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
           amount: valueOfMinutes(a.hourly.rates, { employeeId: emp.id, contractId: d.contractId, categoryId: emp.categoryId, date: new Date(`${d.date}T00:00:00Z`), dayClass: d.dayClass }, d.minutes),
         }),
       );
+    if (sickHere) {
+      he = { ...he, sites: mergeAllowanceSites(he.sites, sickHere.sites) };
+      issues.push(...sickHere.findings);
+    }
     // nothing to pay (the late hours could not be priced, or were an overpayment): the findings are all there is
     if (!arr.length && !oth.length && !ded.length && !ot.length && !he.sites.length) continue;
     const prev = locked.find((r) => r.employeeId === emp.id);

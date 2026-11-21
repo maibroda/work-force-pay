@@ -4042,6 +4042,8 @@ model PayrollRule {
   /// The leave pay for a person paid by the hour (the founder's H14, 2026-11-20): a percentage added to every hour worked, as their annual leave pay, from the day they complete the company's service period for annual leave
   /// (the leave policy, 12 months by default). A figure the company or its adviser enters; none is built in. 0 (the default) = no leave pay for staff paid by the hour.
   hourlyLeavePct           Decimal        @default(0) @db.Decimal(5, 2)
+  /// How many months of approved hours before a spell of sickness are averaged to pay a sick day or a public holiday not worked, for a person paid by the hour (the founder's H14; 3 as recommended). A company setting.
+  hourlyAverageMonths      Int            @default(3)
   effectiveFrom            DateTime       @db.Date
   effectiveTo              DateTime?      @db.Date
   createdAt                DateTime       @default(now())
@@ -8190,6 +8192,8 @@ model HourlyAllowanceLine {
   /// The day-based kinds: the minutes paid and the hourly rate used. Null for LEAVE_PERCENT.
   minutes        Int?
   rate           Decimal?              @db.Decimal(14, 2)
+  /// The day-based kinds: the days paid (YYYY-MM-DD), so a later (supplementary) payroll never pays the same day twice. Empty for LEAVE_PERCENT.
+  dates          String[]              @default([])
   amount         Decimal               @db.Decimal(16, 2)
   createdAt      DateTime              @default(now())
 
