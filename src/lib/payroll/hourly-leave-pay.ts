@@ -11,11 +11,20 @@
 import { MoneyError, koboFromNaira, mulDiv, mulPct, pctToRate, sumKobo } from "../money-exact";
 import type { HourlySiteInput } from "./engine";
 
-export function addLeavePay(sites: readonly HourlySiteInput[], pct: number): HourlySiteInput[] {
+/** One percentage for every site, or (the contract rate may set its own, H14) a function that gives each site its own. */
+export type LeavePct = number | ((site: HourlySiteInput) => number);
+
+function checked(pct: number): number {
   if (!Number.isFinite(pct) || pct < 0 || pct > 100) throw new MoneyError("The leave percentage must be from 0 to 100.");
-  if (pct === 0) return [...sites];
-  const rate = pctToRate(String(pct));
+  return pct;
+}
+
+export function addLeavePay(sites: readonly HourlySiteInput[], pctOf: LeavePct): HourlySiteInput[] {
+  if (typeof pctOf === "number" && checked(pctOf) === 0) return [...sites];
   return sites.map((site) => {
+    const pct = checked(typeof pctOf === "number" ? pctOf : pctOf(site));
+    if (pct === 0) return site;
+    const rate = pctToRate(String(pct));
     const base = sumKobo(site.lines.map((l) => mulDiv(koboFromNaira(l.rate, "An hourly rate"), l.eligibleMinutes ?? 0, 60)));
     const amount = mulPct(base, rate);
     if (amount <= 0) return site;

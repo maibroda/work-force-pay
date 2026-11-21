@@ -44,6 +44,14 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
+
+## Not yet merged (branch `hourly-contract-leave-pct`, one small migration)
+
+- **Hourly pay: the contract's own leave percentage** (the founder's message of 2026-11-21: the contract may set its own, the company's 2.5% is the default). A new optional box on each **agreed rate** (Contracts > Agreed rates): **blank = the company's percentage, 0 = no leave pay on this contract**, effective-dated with the rate row (a new row starts blank). The pay run gives each site its contract rate's percentage in force on the last day worked there in the month, else the company's; the percentage actually used is stored on the payroll record and shown on the payslip as before. Late hours (supplementary payroll) work the same. **A contract can now pay leave pay even while the company's percentage is 0.** Nothing changes for any company until a percentage is entered on a rate.
+- **Migration `20270104090000_contract_leave_pct`:** one optional column (`ContractRate.hourlyLeavePct`). With `down.sql`; round-tripped down and up on a copy with no drift left. Data dictionary regenerated.
+- **Assumption to confirm:** a rate change in the middle of a month applies to that month's hours at that site as a whole (the percentage in force on the last day worked there).
+- **Tests (written first):** `tests/integration/hourly-contract-leave-pct.test.ts` (8) and two in `tests/unit/hourly-leave-pay.test.ts`. Explain-back note: `docs/plans/hourly-payroll-contract-leave-pct-explain-back.md`.
+
 ## Merged in #262 (tests only)
 
 - **Hourly pay, H14 piece 4: the 3,000-person performance test with all the extra pay on** (the founder's "GO" of 2026-11-21). The test of rule 12 (payroll for 3,000 workers in 10 minutes or less) now runs with the leave percentage (10, a test figure), paid sick days (300 people ill on two days) and a paid public holiday not worked (nobody works it) all on: 3,000 people, 89,100 shifts in March 2041. It checks the first calculation and a recalculation each finish inside 10 minutes, and that every person is paid exactly the figure worked out in the test independently of the pay run (hours, leave pay, holiday, and for the 300 two sick days). **Measured on a laptop: first calculation 91.4 s, recalculation 65.8 s (limit 600 s); the whole test file 517 s, about 3 to 4 minutes longer than before, so every CI run is about that much longer.** A test change only: no code, no migration, no change to any amount. The test can append its timings to the file named by `WFP_PERF_REPORT`.

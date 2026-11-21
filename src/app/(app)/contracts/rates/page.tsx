@@ -63,6 +63,14 @@ export default async function RatesPage() {
                 max: 100,
                 help: "Blank = contract's ratio (70:30)",
               },
+              {
+                name: "hourlyLeavePct",
+                label: "Leave pay % for staff paid by the hour",
+                type: "number",
+                min: 0,
+                max: 100,
+                help: "Blank = the company's percentage from the payroll rules. 0 = no leave pay on this contract. A new rate row does not carry the old value.",
+              },
               { name: "effectiveFrom", label: "Effective from", type: "date", required: true },
             ]}
             action={addContractRateAction}
@@ -85,6 +93,7 @@ export default async function RatesPage() {
               <TH>Share</TH>
               <TH className="text-right">Operative gross</TH>
               <TH className="text-right">Management</TH>
+              <TH>Leave % (hourly)</TH>
               <TH>Effective</TH>
             </TR>
           </THead>
@@ -106,6 +115,7 @@ export default async function RatesPage() {
                     </TD>
                     <TD className="text-right">{naira(sp.operativeGross)}</TD>
                     <TD className="text-right">{naira(sp.managementShare)}</TD>
+                    <TD>{r.hourlyLeavePct != null ? `${num(r.hourlyLeavePct)}%` : <span className="text-muted-foreground">company</span>}</TD>
                     <TD>
                       {fmtDate(r.effectiveFrom)} →{" "}
                       {r.effectiveTo ? fmtDate(r.effectiveTo) : <Badge tone="green">current</Badge>}

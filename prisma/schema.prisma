@@ -3297,6 +3297,8 @@ model ContractRate {
   salaryStructure   SalaryStructure  @relation(fields: [salaryStructureId], references: [id])
   agreedRate        Decimal          @db.Decimal(14, 2) // amount billed to client per head per month
   operativeSharePct Decimal?         @db.Decimal(5, 2) // overrides contract share when set
+  /// The leave pay for staff paid by the hour on THIS contract for this job role (the founder, 2026-11-21): a percentage added to every hour worked at the contract's sites. Blank (null) = the company's percentage from the payroll rules; 0 = no leave pay on this contract. Effective-dated with the rate row; a new row does not carry the old value.
+  hourlyLeavePct    Decimal?         @db.Decimal(5, 2)
   effectiveFrom     DateTime         @db.Date
   effectiveTo       DateTime?        @db.Date
   createdAt         DateTime         @default(now())

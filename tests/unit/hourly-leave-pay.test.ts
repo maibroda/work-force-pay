@@ -64,6 +64,23 @@ describe("addLeavePay: the percentage of the pay for hours worked after the serv
   });
 });
 
+describe("addLeavePay: a percentage chosen per site (the contract rate may set its own)", () => {
+  it("takes the percentage for each site from a function, so two sites can have different percentages", () => {
+    const a = site([line(600, 1000, 1_000_000, 600)], { key: "b1|k1|std", contractId: "k1" });
+    const b = site([line(600, 1000, 1_000_000, 600)], { key: "b2|k2|std", contractId: "k2", beatId: "b2", beatName: "Site 2" });
+    const [x, y] = addLeavePay([a, b], (s) => (s.contractId === "k1" ? 5 : 10));
+    expect(x.allowances).toEqual([{ kind: "LEAVE_PERCENT", baseKobo: 1_000_000, pct: 5, amountKobo: 50_000 }]);
+    expect(y.allowances).toEqual([{ kind: "LEAVE_PERCENT", baseKobo: 1_000_000, pct: 10, amountKobo: 100_000 }]);
+  });
+
+  it("gives nothing to a site whose percentage is 0, and rejects a percentage outside 0 to 100 from the function too", () => {
+    const a = site([line(600, 1000, 1_000_000, 600)]);
+    expect(addLeavePay([a], () => 0)[0].allowances).toBeUndefined();
+    expect(() => addLeavePay([a], () => 101)).toThrow(MoneyError);
+    expect(() => addLeavePay([a], () => -1)).toThrow(MoneyError);
+  });
+});
+
 describe("the file keeps to the exact-money rules", () => {
   it("uses no floating-point rounding or parsing", () => {
     expect(readFileSync("src/lib/payroll/hourly-leave-pay.ts", "utf8")).not.toMatch(/toFixed|parseFloat|Math\.round/);

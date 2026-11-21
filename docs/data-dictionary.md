@@ -2288,6 +2288,7 @@ CLIENT → CONTRACT → EMPLOYEE CATEGORY → SALARY STRUCTURE → AGREED RATE (
 | salaryStructure | → SalaryStructure |  |  |
 | agreedRate | Decimal | yes |  |
 | operativeSharePct | Decimal |  |  |
+| hourlyLeavePct | Decimal |  | The leave pay for staff paid by the hour on THIS contract for this job role (the founder, 2026-11-21): a percentage added to every hour worked at the contract's sites. Blank (null) = the company's percentage from the payroll rules; 0 = no leave pay on this contract. Effective-dated with the rate row; a new row does not carry the old value. |
 | effectiveFrom | DateTime | yes |  |
 | effectiveTo | DateTime |  |  |
 | createdAt | DateTime |  |  |

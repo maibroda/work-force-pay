@@ -117,6 +117,14 @@ export async function loadRateBook(
     return defaultStructure ? (structMap.get(defaultStructure.id) ?? null) : null;
   }
 
+  /**
+   * The contract's own leave percentage for staff paid by the hour (H14), from the contract rate in force on the day for the job role: null when there is no rate or the rate leaves it blank (the caller then uses the company's percentage); 0 means none.
+   */
+  function leavePctFor(contractId: string | null, categoryId: string, date: Date): number | null {
+    const p = contractRate(contractId, categoryId, date)?.hourlyLeavePct;
+    return p === null || p === undefined ? null : num(p);
+  }
+
   /** Business line (guarding / outsourcing) of a contract — null for no contract (back-office pay). */
   function businessLineOf(contractId: string | null): "GUARDING" | "OUTSOURCING" | null {
     if (!contractId) return null;
@@ -128,6 +136,7 @@ export async function loadRateBook(
     contractRate,
     employeePayRate,
     structureFor,
+    leavePctFor,
     businessLineOf,
     defaultStructure: defaultStructure ? structMap.get(defaultStructure.id) : undefined,
   };
