@@ -101,6 +101,10 @@ export async function copyStatutoryRules(tx: Tx, fromOrgId: string, toOrgId: str
         hourlyMinMonthlyPay: r.hourlyMinMonthlyPay,
         hourlyLeavePct: r.hourlyLeavePct,
         hourlyAverageMonths: r.hourlyAverageMonths,
+        hourlyAverageBasis: r.hourlyAverageBasis,
+        hourlyAverageWeekday: r.hourlyAverageWeekday,
+        hourlyAverageWeekend: r.hourlyAverageWeekend,
+        hourlyAverageHoliday: r.hourlyAverageHoliday,
         effectiveFrom: r.effectiveFrom,
         effectiveTo: r.effectiveTo,
       },
@@ -173,6 +177,10 @@ export async function payrollRuleFor(tx: Tx, orgId: string, date: Date) {
     hourlyLeavePct: num(r.hourlyLeavePct),
     /** The months of approved hours before a spell of sickness averaged to pay a sick day (H14). */
     hourlyAverageMonths: r.hourlyAverageMonths,
+    /** How a paid sick day and a paid holiday not worked are valued: the average daily GROSS earnings (the default for a new version) or the first build's average hours times the weekday rate. */
+    hourlyAverageBasis: r.hourlyAverageBasis as "HOURS_AT_WEEKDAY_RATE" | "GROSS_EARNINGS",
+    /** The kinds of day that count towards the gross-earnings average. */
+    hourlyAverageCounted: ([["WEEKDAY", r.hourlyAverageWeekday], ["WEEKEND", r.hourlyAverageWeekend], ["HOLIDAY", r.hourlyAverageHoliday]] as const).filter(([, on]) => on).map(([k]) => k),
   };
 }
 
@@ -417,6 +425,12 @@ export const payrollRuleSchema = z.object({
   hourlyLeavePct: z.coerce.number().min(0).max(100).refine((n) => Math.abs(n * 100 - Math.round(n * 100)) < 0.001, "Use a percentage with at most two decimal places.").default(2.5),
   /** The months of approved hours before a spell of sickness that are averaged to pay a sick day or a public holiday not worked, for a person paid by the hour (H14): 1 to 24, 3 as recommended. */
   hourlyAverageMonths: z.coerce.number().int().min(1).max(24).default(3),
+  /** How a paid sick day and a paid holiday not worked are valued (the founder's decision): the average daily GROSS earnings (the default for a new version) or the first build's average hours times the weekday rate. */
+  hourlyAverageBasis: z.enum(["GROSS_EARNINGS", "HOURS_AT_WEEKDAY_RATE"]).default("GROSS_EARNINGS"),
+  /** Which kinds of day count towards the gross-earnings average (all by default; at least one). */
+  hourlyAverageWeekday: z.preprocess((v) => v === undefined || v === true || v === "true" || v === "on", z.boolean()),
+  hourlyAverageWeekend: z.preprocess((v) => v === undefined || v === true || v === "true" || v === "on", z.boolean()),
+  hourlyAverageHoliday: z.preprocess((v) => v === undefined || v === true || v === "true" || v === "on", z.boolean()),
   hourlyMinMonthlyPay: z.coerce.number().min(0).max(1_000_000_000).refine((n) => Math.abs(n * 100 - Math.round(n * 100)) < 0.001, "Use naira and kobo: at most two decimal places.").default(0),
   requirePayeState: z.preprocess((v) => v === true || v === "true" || v === "on", z.boolean()).default(false),
   effectiveFrom: z.string().min(10),
@@ -425,6 +439,7 @@ export const payrollRuleSchema = z.object({
 export async function createPayrollRule(ctx: Ctx, raw: z.input<typeof payrollRuleSchema>) {
   assertCan(ctx, "settings.manage");
   const v = payrollRuleSchema.parse(raw);
+  if (!v.hourlyAverageWeekday && !v.hourlyAverageWeekend && !v.hourlyAverageHoliday) throw new BusinessError("At least one kind of day (weekday, weekend, public holiday) must count towards the average of earnings.");
   const from = d(v.effectiveFrom);
   return db.$transaction(async (tx) => {
     const open = await tx.payrollRule.findMany({ where: { organizationId: ctx.orgId, effectiveTo: null } });

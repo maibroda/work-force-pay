@@ -57,7 +57,7 @@ export default async function PayrollRulesPage() {
                 <TD>{num(x.minTakeHomePctOfGross) > 0 ? `${num(x.minTakeHomePctOfGross)}% of gross` : <span className="text-muted-foreground text-xs">no floor</span>}</TD>
                 <TD>{num(x.hourlyMinMonthlyPay) > 0 ? naira(x.hourlyMinMonthlyPay) : <span className="text-muted-foreground text-xs">no check</span>}</TD>
                 <TD>{num(x.hourlyLeavePct) > 0 ? `${num(x.hourlyLeavePct)}% of hours worked` : <span className="text-muted-foreground text-xs">none</span>}</TD>
-                <TD>{x.hourlyAverageMonths}</TD>
+                <TD>{x.hourlyAverageMonths} <span className="text-muted-foreground text-xs">({x.hourlyAverageBasis === "GROSS_EARNINGS" ? "gross earnings" : "hours x weekday rate"})</span></TD>
                 <TD>{x.requirePayeState ? <Badge tone="amber">required to approve</Badge> : <span className="text-muted-foreground text-xs">warning only</span>}</TD>
                 <TD>
                   {fmtDate(x.effectiveFrom)} →{" "}
@@ -178,6 +178,22 @@ export default async function PayrollRulesPage() {
                 help: "A paid sick day is paid at the person's average daily hours (their approved hours in this many months before the spell, divided by the days they worked) at their weekday rate. 3 is recommended. Only days of the week they worked in that period are paid.",
                 span: 3,
               },
+              {
+                name: "hourlyAverageBasis",
+                label: "How a paid sick day or a paid holiday not worked is valued (staff paid by the hour)",
+                type: "select",
+                required: true,
+                options: [
+                  { value: "GROSS_EARNINGS", label: "The average daily GROSS earnings of those months" },
+                  { value: "HOURS_AT_WEEKDAY_RATE", label: "The average daily hours at the weekday rate (the first build)" },
+                ],
+                defaultValue: r.hourlyAverageBasis,
+                help: "The founder's decision is the gross earnings: the gross pay for the hours worked in those months (each shift at the approved rate of its own day, so a rate change counts from its date; leave, sick and holiday pay are never in it) divided by the days worked. A version made before that decision keeps the first method, so no past or open payroll changes. Subject to the legal and payroll-tax review before production use.",
+                span: 3,
+              },
+              { name: "hourlyAverageWeekday", label: "Gross average counts weekday hours", type: "checkbox", defaultValue: r.hourlyAverageWeekday },
+              { name: "hourlyAverageWeekend", label: "Gross average counts weekend hours", type: "checkbox", defaultValue: r.hourlyAverageWeekend },
+              { name: "hourlyAverageHoliday", label: "Gross average counts public holiday hours", type: "checkbox", defaultValue: r.hourlyAverageHoliday },
               {
                 name: "requirePayeState",
                 label: "Require every taxed worker to have a state of residence before approval",
