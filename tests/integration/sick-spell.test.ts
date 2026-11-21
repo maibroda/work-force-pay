@@ -36,6 +36,7 @@ describe("recording a spell of sickness", () => {
     const hr = await w.actor("HR_ADMIN");
     const e = await w.person("Ada");
     const d = await w.doc(e.id);
+    await w.policy(0); // a new company's policy starts at 5 paid sick days (the founder's figure of 2026-11-21): this company has chosen 0
     await expect(recordSickSpell(hr, { employeeId: e.id, startDate: "2043-06-01", endDate: "2043-06-02", certificateDocumentId: d.id })).rejects.toThrow(/not set up/i);
     await updateLeavePolicy(hr, { annualDays: 10, eligibilityMonths: 12, workingDaysPerWeek: 5, sickDaysPerYear: 5 } as never);
     expect((await db.leavePolicy.findUniqueOrThrow({ where: { organizationId: w.t.org.id } })).sickDaysPerYear).toBe(5);

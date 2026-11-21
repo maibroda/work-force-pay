@@ -78,17 +78,20 @@ describe("the leave percentage on the payroll rule", () => {
     const admin = { userId: u.id, orgId: t.org.id, role: "COMPANY_ADMIN" as const, name: u.name, email: u.email, employeeId: null };
     const base = { prorationBasis: "CALENDAR_DAYS", defaultOperativeSharePct: 70, standardHoursPerDay: 12, overtimeMultiplier: 1.5, maxOvertimeHoursPerMonth: 60, maxDeductionPctOfGross: 33.33, backOfficeChargePct: 15 };
     const none = await createPayrollRule(admin, { ...base, version: "a", effectiveFrom: "2027-01-01" } as never);
-    expect(num(none.hourlyLeavePct)).toBe(0);
+    expect(num(none.hourlyLeavePct)).toBe(2.5); // a new version created without a figure starts at 2.5 (the founder's default of 2026-11-21)
+    const zero = await createPayrollRule(admin, { ...base, version: "a0", effectiveFrom: "2027-06-01", hourlyLeavePct: 0 } as never);
+    expect(num(zero.hourlyLeavePct)).toBe(0);
     const on = await createPayrollRule(admin, { ...base, version: "b", effectiveFrom: "2028-01-01", hourlyLeavePct: 8.33 } as never);
     expect(num(on.hourlyLeavePct)).toBe(8.33);
     await expect(createPayrollRule(admin, { ...base, version: "c", effectiveFrom: "2029-01-01", hourlyLeavePct: -1 } as never)).rejects.toThrow();
     await expect(createPayrollRule(admin, { ...base, version: "d", effectiveFrom: "2029-01-01", hourlyLeavePct: 100.5 } as never)).rejects.toThrow();
     await expect(createPayrollRule(admin, { ...base, version: "e", effectiveFrom: "2029-01-01", hourlyLeavePct: 8.333 } as never)).rejects.toThrow(/two decimal places/i);
-    expect((await payrollRuleFor(db, t.org.id, day("2027-06-01"))).hourlyLeavePct).toBe(0);
+    expect((await payrollRuleFor(db, t.org.id, day("2027-03-01"))).hourlyLeavePct).toBe(2.5);
+    expect((await payrollRuleFor(db, t.org.id, day("2027-08-01"))).hourlyLeavePct).toBe(0);
     expect((await payrollRuleFor(db, t.org.id, day("2028-06-01"))).hourlyLeavePct).toBe(8.33);
     const other = await isolatedOrg();
     await db.$transaction((tx) => copyStatutoryRules(tx, t.org.id, other.org.id));
-    expect((await db.payrollRule.findMany({ where: { organizationId: other.org.id }, orderBy: { effectiveFrom: "asc" } })).map((r) => num(r.hourlyLeavePct))).toEqual([0, 8.33]);
+    expect((await db.payrollRule.findMany({ where: { organizationId: other.org.id }, orderBy: { effectiveFrom: "asc" } })).map((r) => num(r.hourlyLeavePct))).toEqual([2.5, 0, 8.33]);
   });
 });
 

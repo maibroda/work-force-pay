@@ -44,6 +44,13 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
+## Not yet merged (branch `hourly-leave-defaults`, one tiny migration; builds on #262)
+
+- **Hourly pay: the founder's figures as defaults for NEW settings** (his message of 2026-11-21: leave pay 2.5% by default, a contract may set its own; 5 paid sick days; 3 months averaged). **A payroll rule version created without a figure now starts at 2.5% leave pay** (0 still means none), and **a company with no leave policy yet starts with 5 paid sick days**; the 3 months averaged was already the default. **Every existing payroll rule version and leave policy keeps the value it has, so no past or open payroll changes**: to switch leave pay on, create a new payroll rule version dated from the day you want; the forms show the current values. The demonstration company's rule is made explicitly 0 so its figures are unchanged. A new company copies the bureau's master rules, so enter 2.5 on the master rule for new companies to start with it.
+- **Migration `20270103090000_leave_defaults`:** two column defaults (`PayrollRule.hourlyLeavePct` 2.5, `LeavePolicy.sickDaysPerYear` 5) for NEW rows; no stored value changes. With `down.sql`; round-tripped down and up on a copy with no drift left. Data dictionary regenerated.
+- **Not yet built (stated plainly):** the contract's own leave percentage, which the founder chose to put **on the contract's rate** for a job role (effective-dated, blank = the company default): the next step.
+- **Tests (written first):** `tests/integration/leave-defaults.test.ts` (4); two existing tests updated for the new defaults. Explain-back note: `docs/plans/hourly-payroll-leave-defaults-explain-back.md`.
+
 ## Merged in #262 (tests only)
 
 - **Hourly pay, H14 piece 4: the 3,000-person performance test with all the extra pay on** (the founder's "GO" of 2026-11-21). The test of rule 12 (payroll for 3,000 workers in 10 minutes or less) now runs with the leave percentage (10, a test figure), paid sick days (300 people ill on two days) and a paid public holiday not worked (nobody works it) all on: 3,000 people, 89,100 shifts in March 2041. It checks the first calculation and a recalculation each finish inside 10 minutes, and that every person is paid exactly the figure worked out in the test independently of the pay run (hours, leave pay, holiday, and for the 300 two sick days). **Measured on a laptop: first calculation 91.4 s, recalculation 65.8 s (limit 600 s); the whole test file 517 s, about 3 to 4 minutes longer than before, so every CI run is about that much longer.** A test change only: no code, no migration, no change to any amount. The test can append its timings to the file named by `WFP_PERF_REPORT`.
