@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { getLeavePolicy, listLeave } from "@/server/services/leave";
+import { listMedicalCertificates, listSickSpells } from "@/server/services/sick-leave";
 import { options } from "@/server/options";
 import { fmtDate, iso } from "@/lib/dates";
 import { fullName } from "@/lib/utils";
@@ -23,8 +24,12 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import {
   applyLeaveForAction,
   approveLeaveAction,
+  approveSickSpellAction,
   cancelLeaveForAction,
+  cancelSickSpellForAction,
+  recordSickSpellForAction,
   rejectLeaveAction,
+  rejectSickSpellAction,
 } from "@/app/actions/leave";
 
 type Row = Awaited<ReturnType<typeof listLeave>>[number];
@@ -47,7 +52,15 @@ export default async function LeavePage({
     (r) => r.status === "APPROVED" && iso(r.startDate) <= today && iso(r.endDate) >= today,
   );
   const o = can(ctx.role, "leave.manage") ? await options(ctx) : null;
-
+  // paid sick leave for staff paid by the hour (H14): HR only (a supervisor never sees sickness)
+  const sickSpells = can(ctx.role, "leave.manage") ? await listSickSpells(ctx, {}) : [];
+  const certificates = can(ctx.role, "leave.manage") ? await listMedicalCertificates(ctx) : [];
+  const sickWaiting = sickSpells.filter((s) => s.status === "PENDING");
+  const sickWho = (s: (typeof sickSpells)[number]) => (
+    <>
+      {s.employee.employeeNumber} — {s.employee.firstName} {s.employee.lastName}
+    </>
+  );
   const who = (r: Row) => (
     <>
       {r.employee.employeeNumber} — {fullName(r.employee)}
@@ -149,6 +162,93 @@ export default async function LeavePage({
           <Empty>Nothing is waiting for approval.</Empty>
         )}
       </Section>
+
+      {can(ctx.role, "leave.manage") && (
+        <>
+          <Section
+            title={`Sickness: staff paid by the hour (${sickWaiting.length} awaiting approval)`}
+            description={policy.sickDaysPerYear > 0 ? `Paid sick leave: ${policy.sickDaysPerYear} working days a year, in the same leave year as annual leave. A medical certificate is needed, and HR approves a spell: never the person who recorded it. Only the dates and the certificate are kept, never the illness.` : undefined}
+            flush
+          >
+            {policy.sickDaysPerYear > 0 ? (
+              <>
+                <div className="px-4 pt-4">
+                  {certificates.length ? (
+                    <SmartForm
+                      columns={3}
+                      submitLabel="Record spell of sickness"
+                      action={recordSickSpellForAction}
+                      fields={[
+                        { name: "certificateDocumentId", label: "Medical certificate (says whose it is)", type: "select", required: true, options: certificates.map((c) => ({ value: c.id, label: `${c.employeeNumber} ${c.employeeName}: ${c.typeName}, added ${fmtDate(c.createdAt)}` })), span: 3 },
+                        { name: "startDate", label: "First day", type: "date", required: true, defaultValue: today },
+                        { name: "endDate", label: "Last day", type: "date", required: true },
+                      ]}
+                    />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">To record a spell of sickness, first add the employee&apos;s medical certificate to their documents (a document in the medical category).</p>
+                  )}
+                </div>
+                {sickSpells.length ? (
+                  <Table>
+                    <THead>
+                      <TR>
+                        <TH>Employee</TH>
+                        <TH>Sickness</TH>
+                        <TH className="text-right">Working days</TH>
+                        <TH>Status</TH>
+                        <TH>Recorded / decided by</TH>
+                        <TH />
+                      </TR>
+                    </THead>
+                    <TBody>
+                      {sickSpells.slice(0, 100).map((s) => (
+                        <TR key={s.id}>
+                          <TD>{sickWho(s)}</TD>
+                          <TD className="whitespace-nowrap">
+                            {fmtDate(s.startDate)} – {fmtDate(s.endDate)}
+                          </TD>
+                          <TD className="text-right">{s.workingDays}</TD>
+                          <TD>
+                            <StatusBadge status={s.status} />
+                          </TD>
+                          <TD className="text-xs">
+                            {s.recordedBy}
+                            {s.decidedBy && <div className="text-muted-foreground">{s.status === "REJECTED" ? "Rejected" : "Approved"} by {s.decidedBy}{s.decisionNote ? ` — “${s.decisionNote}”` : ""}</div>}
+                          </TD>
+                          <TD className="space-x-1 whitespace-nowrap">
+                            {s.status === "PENDING" &&
+                              (s.recordedByUserId === ctx.userId || s.employeeId === ctx.employeeId ? (
+                                <span className="text-xs text-muted-foreground">Needs another approver</span>
+                              ) : (
+                                <>
+                                  <ActionButton action={approveSickSpellAction.bind(null, s.id)} variant="success">
+                                    Approve
+                                  </ActionButton>
+                                  <ActionButton action={rejectSickSpellAction.bind(null, s.id)} reason variant="outline">
+                                    Reject
+                                  </ActionButton>
+                                </>
+                              ))}
+                            {s.status === "PENDING" && (
+                              <ActionButton action={cancelSickSpellForAction.bind(null, s.id)} variant="outline" confirm="Cancel this spell of sickness?">
+                                Cancel
+                              </ActionButton>
+                            )}
+                          </TD>
+                        </TR>
+                      ))}
+                    </TBody>
+                  </Table>
+                ) : (
+                  <Empty>No spells of sickness recorded.</Empty>
+                )}
+              </>
+            ) : (
+              <Empty>Paid sick leave is not set up: set the paid sick days a year in the Leave policy.</Empty>
+            )}
+          </Section>
+        </>
+      )}
 
       <Section title="All requests" flush>
         <div className="px-4 pt-4">

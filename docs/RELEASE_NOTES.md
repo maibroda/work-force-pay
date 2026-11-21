@@ -42,7 +42,14 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `hourly-sickness-record`, one additive migration; builds on #257)
+
+## Not yet merged (branch `hourly-sickness-screens`, no migration; builds on #258)
+
+- **Hourly pay, H14 piece 2, step 2c: the screens for paid sick leave** (the founder's "CONTINUE" of 2026-11-21). The services of step 2a get screens, as **sections of the two leave pages that already exist** (no new page, so navigation, page permissions and module switches are unchanged), shown only when paid sick days are set up in the leave policy. **My leave** (for a person paid by the hour): their paid sick days left in the leave year, a form to record a spell of sickness with the medical certificate chosen from their own medical documents (or a link to add it under My documents), and their spells with Cancel while one waits. **Leave management** (HR only): record a spell by choosing the certificate (which says whose it is), and every spell with Approve, Reject (a reason is required) and Cancel; the recorder and the person it is about are shown "Needs another approver" instead. A supervisor sees none of it. No migration and no pay changes.
+- **Not yet built (stated plainly):** the pay for sick days is step 2b (#259, not merged); paid public holidays not worked (piece 3) and the performance test with these on (piece 4). **The screens have not been viewed in a browser.**
+- **Tests (written first):** `tests/integration/sick-spell-screens.test.ts` (5). Explain-back note: `docs/plans/hourly-payroll-h14-piece2c-explain-back.md`.
+
+## Merged in #258 (one additive migration)
 
 - **Hourly pay, H14 piece 2, step 2a: recording and approving a spell of sickness** (the founder's "CONTINUE" of 2026-11-21, on his answers of 2026-11-20 and 2026-11-21). Piece 2 (paid sickness) is done in three steps: 2a (this one, **no pay changes**), 2b (the pay) and 2c (the screens). A new leave-policy setting, "Paid sick days a year (staff paid by the hour)" (0 = paid sick leave is not set up and no spell can be recorded). A person paid by the hour can have a spell of sickness recorded (by themselves or by HR) with a **medical certificate** (a document of theirs in the medical category), charged to the leave year that contains its first day (the same leave years and service period as annual leave); **HR approves or rejects, never the person who recorded it nor the person it is about**; a spell can be cancelled while it waits. It holds only dates, working days and the certificate's id: **never a diagnosis**; the audit log holds ids and numbers only. The days of entitlement are counted, and a spell beyond them is recorded, not refused (those days will not be paid). HR sees every spell; a person sees their own; nobody else does.
 - **Migration `20270101090000_sick_spells`:** one column on `LeavePolicy` (`sickDaysPerYear`, default 0) and a new table `SickSpell`. Additive; with `down.sql` (the spells recorded are lost on rollback; the certificates are documents and are not touched); round-tripped down and up on a copy with no drift left. Data dictionary regenerated.
