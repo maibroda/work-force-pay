@@ -69,6 +69,7 @@ function allowanceLabel(a: AllowanceLineInput): string {
   const name = KIND_LABEL[a.kind];
   if (a.kind === "LEAVE_PERCENT" && a.pct !== null && a.baseAmount !== null) return `${name} (${plainPct(a.pct)}% of ${naira(toKobo(a.baseAmount))})`;
   const n = a.dates?.length ?? 0;
+  if (a.kind === "HOLIDAY_NOT_WORKED" && n === 1) return `${name} (${a.dates![0]})`;
   return n > 0 ? `${name} (${n} ${n === 1 ? "day" : "days"})` : name;
 }
 

@@ -33,7 +33,8 @@ import { findDuplicates } from "./employees";
 import { recentBankChanges } from "./change-requests";
 import { CLIENT_MISMATCH, LOCATION_MISMATCH } from "./operations";
 import { submissionBlockers, varianceIssues } from "./payroll-controls";
-import { loadSickPay, sickDaysAlreadyPaid } from "./sick-pay";
+import { loadSickPay, sickDaysAlreadyPaid, allowanceDaysAlreadyPaid } from "./sick-pay";
+import { loadHolidayPay } from "./holiday-pay";
 import { hourlyDecreaseFinding, hourlyFindings, hourlyRateConflict, isHourlyOn, loadHourlyForPeriod, loadLateHourly, loadPayslipAllowances, loadPayslipHourly, monthlyRateWhileHourly, saveHourlyPieces } from "./hourly-payroll";
 import { loadRateBook } from "./rates";
 import { employerCostRuleFor, payrollRuleFor, pensionRuleFor, taxRuleFor } from "./statutory";
@@ -400,6 +401,18 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
     namesOf: (beatId) => a.hourly.names.get(beatId) ?? { clientName: "", beatName: "" },
     people: new Map(a.employees.map((x) => [x.id, { categoryId: x.categoryId, label: `${x.employeeNumber} ${fullName(x)}` }])),
   });
+  // paid public holidays not worked (H14 piece 3): at the average daily hours x the weekday rate, for people paid by the hour
+  const holidayPay = await loadHolidayPay(db, {
+    orgId: ctx.orgId,
+    period,
+    months: a.rules.hourlyAverageMonths,
+    workingDaysPerWeek: a.leaveWorkingDaysPerWeek,
+    eligibilityMonths: a.leaveEligibilityMonths,
+    rates: a.hourly.rates,
+    structureFor: (q) => a.book.structureFor(q.contractId, q.categoryId, new Date(`${q.date}T00:00:00Z`)),
+    namesOf: (beatId) => a.hourly.names.get(beatId) ?? { clientName: "", beatName: "" },
+    people: new Map(a.employees.filter((x) => a.hourly.compByEmp.has(x.id)).map((x) => [x.id, { categoryId: x.categoryId, label: `${x.employeeNumber} ${fullName(x)}`, employmentDate: x.employmentDate, exitDate: x.exitDate, comp: a.hourly.compByEmp.get(x.id)! }])),
+  });
   const piecesByEmp = new Map<string, typeof a.hourly.pieces>();
   for (const p of a.hourly.pieces) {
     const own = piecesByEmp.get(p.employeeId);
@@ -472,6 +485,11 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
     if (sick) {
       he = { ...he, sites: mergeAllowanceSites(he.sites, sick.sites) };
       issues.push(...sick.findings);
+    }
+    const holiday = holidayPay.get(emp.id);
+    if (holiday) {
+      he = { ...he, sites: mergeAllowanceSites(he.sites, holiday.sites) };
+      issues.push(...holiday.findings);
     }
     for (const f of hourlyFindings({
       employeeId: emp.id,
@@ -564,6 +582,9 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
       code: "HOLIDAYS_UNCONFIRMED",
       message: `A contract that excludes public holidays is being paid for ${period.name}, but the company's public holidays for ${period.year} have not been confirmed. Confirm them (Payroll > Pay setup > Public holidays) and recalculate.`,
     });
+  // paid holidays not worked depend on the company's list of public holidays: say so once when the year's list is not confirmed and people are paid by the hour
+  if (!a.holidaysConfirmed && a.hourly.compByEmp.size > 0)
+    issues.push({ employeeId: null, category: "ATTENDANCE", severity: "WARNING", code: "HOURLY_HOLIDAY_PAY_UNCONFIRMED", message: `The company's public holidays for ${period.year} have not been confirmed, so pay for public holidays not worked, for staff paid by the hour, may be missing from ${period.name}. Confirm them (Payroll > Pay setup > Public holidays) and calculate again.` });
   issues.push(...(await validate(ctx, period, a, rows)));
 
   const totals = summarize(rows.map((r) => r.res));
@@ -1356,6 +1377,19 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
     people: new Map((await db.employee.findMany({ where: { organizationId: ctx.orgId }, select: { id: true, categoryId: true, employeeNumber: true, firstName: true, lastName: true } })).map((x) => [x.id, { categoryId: x.categoryId, label: `${x.employeeNumber} ${x.firstName} ${x.lastName}` }])),
     alreadyPaid: await sickDaysAlreadyPaid(db, ctx.orgId, periodId),
   });
+  // paid holidays not worked (H14 piece 3): never twice (the days the period's other payrolls already paid are left out)
+  const holidayPay = await loadHolidayPay(db, {
+    orgId: ctx.orgId,
+    period,
+    months: a.rules.hourlyAverageMonths,
+    workingDaysPerWeek: a.leaveWorkingDaysPerWeek,
+    eligibilityMonths: a.leaveEligibilityMonths,
+    rates: a.hourly.rates,
+    structureFor: (q) => a.book.structureFor(q.contractId, q.categoryId, new Date(`${q.date}T00:00:00Z`)),
+    namesOf: (beatId) => a.hourly.names.get(beatId) ?? { clientName: "", beatName: "" },
+    people: new Map((await db.employee.findMany({ where: { organizationId: ctx.orgId, id: { in: [...a.hourly.compByEmp.keys()] } }, select: { id: true, categoryId: true, employeeNumber: true, firstName: true, lastName: true, employmentDate: true, exitDate: true } })).map((x) => [x.id, { categoryId: x.categoryId, label: `${x.employeeNumber} ${x.firstName} ${x.lastName}`, employmentDate: x.employmentDate, exitDate: x.exitDate, comp: a.hourly.compByEmp.get(x.id)! }])),
+    alreadyPaid: await allowanceDaysAlreadyPaid(db, ctx.orgId, periodId, "HOLIDAY_NOT_WORKED"),
+  });
   const late = a.late!; // a supplementary run always loads the late hours
   const allEmps = await db.employee.findMany({
     where: { organizationId: ctx.orgId },
@@ -1370,7 +1404,8 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
     const latePieces = late.pieces.filter((p) => p.employeeId === emp.id);
     const lateDecreases = late.decreases.filter((d) => d.employeeId === emp.id);
     const sickHere = sickPay.get(emp.id);
-    if (!arr.length && !oth.length && !ded.length && !ot.length && !latePieces.length && !lateDecreases.length && !sickHere) continue;
+    const holidayHere = holidayPay.get(emp.id);
+    if (!arr.length && !oth.length && !ded.length && !ot.length && !latePieces.length && !lateDecreases.length && !sickHere && !holidayHere) continue;
     const label = `${emp.employeeNumber} ${fullName(emp)}`;
     // the hours that missed the locked payroll (H22): priced like a regular run's; what cannot be priced is not paid and is reported, and stays owed
     let he: ReturnType<typeof buildHourlyEarnings> = { sites: [], unresolved: [], totalMinutes: 0, pricedMinutes: 0 };
@@ -1402,6 +1437,10 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
     if (sickHere) {
       he = { ...he, sites: mergeAllowanceSites(he.sites, sickHere.sites) };
       issues.push(...sickHere.findings);
+    }
+    if (holidayHere) {
+      he = { ...he, sites: mergeAllowanceSites(he.sites, holidayHere.sites) };
+      issues.push(...holidayHere.findings);
     }
     // nothing to pay (the late hours could not be priced, or were an overpayment): the findings are all there is
     if (!arr.length && !oth.length && !ded.length && !ot.length && !he.sites.length) continue;
