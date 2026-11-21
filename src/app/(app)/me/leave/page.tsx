@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
 import { myLeave } from "@/server/services/leave";
+import { mySickLeave } from "@/server/services/sick-leave";
 import { fmtDate, iso } from "@/lib/dates";
 import { Empty } from "@/components/page";
 import { ActionButton } from "@/components/action-button";
 import { SmartForm } from "@/components/smart-form";
 import { Card } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/badge";
-import { applyLeaveAction, cancelLeaveAction } from "@/app/actions/leave";
+import { applyLeaveAction, cancelLeaveAction, cancelSickSpellAction, recordSickSpellAction } from "@/app/actions/leave";
 
 /** Mobile-first: an employee's annual-leave balance, application form and request history. */
 export default async function MyLeavePage() {
@@ -15,6 +16,7 @@ export default async function MyLeavePage() {
   const data = await myLeave(ctx);
   if (!data) return <Empty>Your user account is not linked to an employee record.</Empty>;
   const { balance: b, policy, requests } = data;
+  const sick = await mySickLeave(ctx); // paid sick leave, only for a person paid by the hour once the company has set it up (H14)
   const today = iso(new Date());
   return (
     <div className="mx-auto max-w-lg space-y-4">
@@ -97,6 +99,67 @@ export default async function MyLeavePage() {
       {b.due && b.remaining === 0 && (
         <Card className="p-4 text-sm text-muted-foreground">
           You have used or requested all {b.entitled} days for this leave year.
+        </Card>
+      )}
+
+      {sick?.show && (
+        <Card className="space-y-3 p-4">
+          <p className="text-sm font-semibold">Paid sick leave</p>
+          {sick.balance?.due && sick.balance.cycle ? (
+            <p className="text-xs text-muted-foreground">
+              {sick.balance.remaining} of {sick.entitled} paid sick days left in your leave year {fmtDate(sick.balance.cycle.start)} – {fmtDate(sick.balance.cycle.end)} ({sick.balance.approved} approved, {sick.balance.pending} waiting).
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Paid sick leave ({sick.entitled} days a year) falls due after {policy.eligibilityMonths} months&apos; service, on {fmtDate(sick.balance?.nextDueDate ?? new Date())}.
+            </p>
+          )}
+          {sick.certificates.length ? (
+            <SmartForm
+              columns={1}
+              submitLabel="Record my sickness"
+              action={recordSickSpellAction}
+              fields={[
+                { name: "startDate", label: "First day of sickness", type: "date", required: true, defaultValue: today },
+                { name: "endDate", label: "Last day of sickness", type: "date", required: true, help: `Working days only are counted (${policy.workingDaysPerWeek}-day week). HR approves it; the days are paid only up to your paid sick days.` },
+                { name: "certificateDocumentId", label: "Medical certificate", type: "select", required: true, options: sick.certificates.map((c) => ({ value: c.id, label: `${c.typeName}, added ${fmtDate(c.createdAt)}` })) },
+              ]}
+            />
+          ) : (
+            <p className="text-sm">
+              To record a spell of sickness you need a medical certificate in your documents.{" "}
+              <Link href="/me/documents" className="text-primary underline">
+                Add it under My documents
+              </Link>{" "}
+              first, then come back.
+            </p>
+          )}
+          {sick.spells.length > 0 && (
+            <ul className="divide-y">
+              {sick.spells.map((s) => (
+                <li key={s.id} className="space-y-1 py-2 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium">
+                      {fmtDate(s.startDate)} – {fmtDate(s.endDate)}
+                    </span>
+                    <StatusBadge status={s.status} />
+                  </div>
+                  <p className="text-xs text-muted-foreground">{s.workingDays} working day(s)</p>
+                  {s.decidedBy && (
+                    <p className="text-xs text-muted-foreground">
+                      {s.status === "REJECTED" ? "Rejected" : "Approved"} by {s.decidedBy}
+                      {s.decisionNote ? ` — “${s.decisionNote}”` : ""}
+                    </p>
+                  )}
+                  {s.status === "PENDING" && s.recordedByUserId === ctx.userId && (
+                    <ActionButton action={cancelSickSpellAction.bind(null, s.id)} variant="outline" confirm="Cancel this spell of sickness?">
+                      Cancel
+                    </ActionButton>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       )}
 
