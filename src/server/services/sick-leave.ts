@@ -124,9 +124,10 @@ export async function cancelSickSpell(ctx: Ctx, id: string) {
 /** HR sees every spell of the company; a person sees their own; nobody else sees any. */
 export async function listSickSpells(ctx: Ctx, filter: { employeeId?: string; status?: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED" } = {}) {
   const base: Prisma.SickSpellWhereInput = { organizationId: ctx.orgId, ...(filter.status ? { status: filter.status } : {}) };
-  if (can(ctx.role, "leave.manage")) return db.sickSpell.findMany({ where: { ...base, ...(filter.employeeId ? { employeeId: filter.employeeId } : {}) }, orderBy: [{ startDate: "desc" }, { id: "asc" }] });
+  const include = { employee: { select: { employeeNumber: true, firstName: true, lastName: true } } } as const;
+  if (can(ctx.role, "leave.manage")) return db.sickSpell.findMany({ where: { ...base, ...(filter.employeeId ? { employeeId: filter.employeeId } : {}) }, include, orderBy: [{ startDate: "desc" }, { id: "asc" }] });
   if (!ctx.employeeId) return [];
-  return db.sickSpell.findMany({ where: { ...base, employeeId: ctx.employeeId }, orderBy: [{ startDate: "desc" }, { id: "asc" }] });
+  return db.sickSpell.findMany({ where: { ...base, employeeId: ctx.employeeId }, include, orderBy: [{ startDate: "desc" }, { id: "asc" }] });
 }
 
 /** The days of paid sick leave in the leave year that contains `onDate` (today when left out): entitled, approved, waiting and left. */
@@ -140,4 +141,47 @@ export async function sickLeaveBalance(ctx: Ctx, employeeId: string, onDate?: st
   if (!cycle) return { due: false, cycle: null, nextDueDate, entitled: 0, approved: 0, pending: 0, remaining: 0 };
   const spells = await db.sickSpell.findMany({ where: { organizationId: ctx.orgId, employeeId }, select: { cycleStart: true, status: true, workingDays: true } });
   return { due: true, cycle, nextDueDate, ...sickBalance(policy.sickDaysPerYear, spells, cycle.start) };
+}
+
+// ───────────────────────────── For the screens (step 2c) ─────────────────────────────
+
+/**
+ * The medical documents that can be attached to a spell as its certificate: HR sees the company's (newest first, at most 300) with whose they are; a person sees their own; nobody else sees any. Archived documents and
+ * documents that are not in the medical category are left out. Only the document's kind and date are shown, never its contents.
+ */
+export async function listMedicalCertificates(ctx: Ctx) {
+  const hr = can(ctx.role, "leave.manage");
+  if (!hr && !ctx.employeeId) return [];
+  const rows = await db.employeeDocument.findMany({
+    where: { organizationId: ctx.orgId, archivedAt: null, type: { category: "MEDICAL" }, ...(hr ? {} : { employeeId: ctx.employeeId! }) },
+    select: { id: true, employeeId: true, createdAt: true, type: { select: { name: true } }, employee: { select: { employeeNumber: true, firstName: true, lastName: true } } },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+    take: 300,
+  });
+  return rows.map((r) => ({ id: r.id, employeeId: r.employeeId, employeeNumber: r.employee.employeeNumber, employeeName: `${r.employee.firstName} ${r.employee.lastName}`, typeName: r.type?.name ?? "Medical document", createdAt: r.createdAt }));
+}
+
+/** HR records a spell by choosing the certificate, which says whose it is (the employee is taken from it). Everything else is as in `recordSickSpell`. */
+export async function recordSickSpellFromCertificate(ctx: Ctx, raw: { certificateDocumentId: string; startDate: string; endDate: string }) {
+  assertCan(ctx, "leave.manage");
+  const doc = await db.employeeDocument.findFirst({ where: { id: raw.certificateDocumentId, organizationId: ctx.orgId, archivedAt: null }, select: { employeeId: true } });
+  if (!doc) throw new BusinessError("The medical certificate was not found.");
+  return recordSickSpell(ctx, { employeeId: doc.employeeId, startDate: raw.startDate, endDate: raw.endDate, certificateDocumentId: raw.certificateDocumentId });
+}
+
+/**
+ * What My leave shows a person about sickness: nothing (`show` false) while paid sick leave is not set up or when the person is paid monthly; for a person paid by the hour, the days of the leave year, their own spells and
+ * their own medical certificates. Null for an account with no employee record. Their own data only.
+ */
+export async function mySickLeave(ctx: Ctx) {
+  if (!ctx.employeeId) return null;
+  const emp = await db.employee.findFirst({ where: { id: ctx.employeeId, organizationId: ctx.orgId }, select: { id: true } });
+  if (!emp) return null;
+  const policy = await getLeavePolicy(ctx.orgId);
+  const today = d(iso(new Date()));
+  const comp = await db.employeeCompensationType.findMany({ where: { organizationId: ctx.orgId, employeeId: emp.id, status: "APPROVED", effectiveFrom: { lte: today } }, select: { type: true, effectiveFrom: true, status: true } });
+  const none = { show: false, entitled: policy.sickDaysPerYear, balance: null, spells: [] as Awaited<ReturnType<typeof listSickSpells>>, certificates: [] as Awaited<ReturnType<typeof listMedicalCertificates>> };
+  if (policy.sickDaysPerYear <= 0 || compensationTypeOn(comp, today) !== "HOURLY") return none;
+  const [balance, spells, certificates] = await Promise.all([sickLeaveBalance(ctx, emp.id), listSickSpells(ctx, {}), listMedicalCertificates(ctx)]);
+  return { show: true, entitled: policy.sickDaysPerYear, balance, spells, certificates };
 }
