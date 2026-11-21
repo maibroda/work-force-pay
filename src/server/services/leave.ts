@@ -30,6 +30,8 @@ export const policySchema = z.object({
     .number()
     .int()
     .refine((n) => [5, 6, 7].includes(n), "Must be 5, 6 or 7"),
+  /** Paid sick days a year for staff paid by the hour (H14), in the same leave year as annual leave. 0 = paid sick leave is not set up. Left out: unchanged. */
+  sickDaysPerYear: z.coerce.number().int().min(0).max(60).optional(),
   /** Whether an employee may ask for UNPAID leave. Left out: unchanged. */
   unpaidLeaveEnabled: z.preprocess((v) => (v === undefined ? undefined : v === true || v === "true" || v === "on"), z.boolean().optional()),
 });
