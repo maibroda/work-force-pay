@@ -39,6 +39,13 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
+
+## Not yet merged (branch `hourly-leave-safeguard`, no migration; builds on #255)
+
+- **Hourly pay, H14 piece 0: a safeguard for annual leave.** Annual leave approved for a person paid by the hour was silently unpaid (hourly pay is for approved hours only, and the pay run drops their work-register days). Now: the payroll shows a **warning** (never blocking, nothing to explain) for a person paid by the hour with approved annual leave in the month, even when they have no hours; and the message shown when annual leave is requested or approved ends with a note when some of the days are days the person is paid by the hour. Nothing is refused and no amount changes; a person paid monthly sees nothing new. What pays leave for hourly staff (a percentage added to every hour worked, from 12 months' service, the founder's answers of 2026-11-20 and "your choices" of 2026-11-21) is piece 1.
+- **Recorded:** the founder's H14 decisions are in `docs/plans/decision-register.md` and at the end of `docs/plans/hourly-payroll-h14-build-plan.md` (the choices for questions 2 to 8 are my recommendations, for the founder to correct).
+- **Tests (written first):** `tests/unit/hourly-leave.test.ts` (9), `tests/integration/hourly-leave-safeguard.test.ts` (5, real payrolls in the demo company for March 2042). Explain-back note: `docs/plans/hourly-payroll-h14-piece0-explain-back.md`. No data dictionary change (no schema change).
+
 ## Not yet merged (branch `hourly-late-nhf-amount`, no migration; builds on #252)
 
 - **Hourly pay, late hours: NHF and the overpayment amount** (the founder's answers of 2026-11-20). In a supplementary payroll, a person paid by the hour who has chosen the voluntary NHF now has it taken from their late pay as its own deduction line (the payroll rule's rate of the Basic part, as the regular payroll does); a person who has not chosen it has none; arrears, overtime and other adjustments are unchanged. The blocking finding for an overpayment found after a correction now also shows what the overpaid hours are worth at the approved rate in force that day (never shown as zero when no rate applies); it is still a finding only, with no negative pay.
