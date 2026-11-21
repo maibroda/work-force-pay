@@ -640,6 +640,7 @@ model Organization {
   timeEntries               TimeEntry[]
   timeEntrySegments         TimeEntrySegment[]
   hourlyPayLines            HourlyPayLine[]
+  hourlyAllowanceLines      HourlyAllowanceLine[]
   hourlyPayPieces           HourlyPayPiece[]
   payrollPeriods            PayrollPeriod[]
   payrollRuns               PayrollRun[]
@@ -3733,6 +3734,7 @@ model PayrollRecord {
 
   allocations PayrollAllocation[]
   hourlyLines HourlyPayLine[]
+  hourlyAllowances HourlyAllowanceLine[]
   hourlyPieces HourlyPayPiece[]
   paymentTxns PaymentTransaction[]
 
@@ -4034,6 +4036,9 @@ model PayrollRule {
   minTakeHomePctOfGross    Decimal        @default(0) @db.Decimal(5, 2)
   /// The minimum monthly pay, in naira, for a person paid only by the hour (the founder's H13): a WARNING (never a block, never a change to pay) when what they earned from hours in the month is below it. A figure the company or its adviser enters; none is built in. 0 (the default) = no check.
   hourlyMinMonthlyPay      Decimal        @default(0) @db.Decimal(14, 2)
+  /// The leave pay for a person paid by the hour (the founder's H14, 2026-11-20): a percentage added to every hour worked, as their annual leave pay, from the day they complete the company's service period for annual leave
+  /// (the leave policy, 12 months by default). A figure the company or its adviser enters; none is built in. 0 (the default) = no leave pay for staff paid by the hour.
+  hourlyLeavePct           Decimal        @default(0) @db.Decimal(5, 2)
   effectiveFrom            DateTime       @db.Date
   effectiveTo              DateTime?      @db.Date
   createdAt                DateTime       @default(now())
@@ -8106,6 +8111,47 @@ model HourlyPayLine {
   /// The approved time entries this line was worked from.
   entryIds       String[]
   createdAt      DateTime      @default(now())
+
+  @@index([organizationId, runId])
+  @@index([recordId])
+}
+
+/// What an hourly person is paid besides the hours they worked (the founder's H14, docs/plans/hourly-payroll-h14-build-plan.md).
+enum HourlyAllowanceKind {
+  /// Annual leave pay: a percentage added to every hour worked (piece 1).
+  LEAVE_PERCENT
+  /// A paid sick day: average daily hours at the weekday rate (a later piece).
+  SICK_DAY
+  /// A paid public holiday not worked: average daily hours at the weekday rate (a later piece).
+  HOLIDAY_NOT_WORKED
+}
+
+/// How an hourly person's extra pay was made up (hourly pay, H14): one row for each kind of extra pay within each site's piece of pay, kept with the payroll record it belongs to. For the leave percentage it records
+/// the pay for hours worked the percentage was worked on (`baseAmount`), the percentage AS USED and the amount; for the day-based kinds (later pieces) the minutes, the rate and the amount. So a later change of the
+/// setting can never alter a payroll already worked. Written when the payroll is calculated and replaced when it is calculated again; like the record it is never changed once the payroll is locked.
+model HourlyAllowanceLine {
+  id             String                @id @default(cuid())
+  organizationId String
+  organization   Organization          @relation(fields: [organizationId], references: [id])
+  runId          String
+  recordId       String
+  record         PayrollRecord         @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  employeeId     String
+  kind           HourlyAllowanceKind
+  clientId       String?
+  contractId     String?
+  beatId         String?
+  /// The code of the salary structure that split this site's gross, this extra pay included.
+  structureCode  String
+  /// LEAVE_PERCENT: the pay for hours worked (after the service period) the percentage was worked on. Null for the day-based kinds.
+  baseAmount     Decimal?              @db.Decimal(16, 2)
+  /// LEAVE_PERCENT: the percentage used. Null for the day-based kinds.
+  pct            Decimal?              @db.Decimal(5, 2)
+  /// The day-based kinds: the minutes paid and the hourly rate used. Null for LEAVE_PERCENT.
+  minutes        Int?
+  rate           Decimal?              @db.Decimal(14, 2)
+  amount         Decimal               @db.Decimal(16, 2)
+  createdAt      DateTime              @default(now())
 
   @@index([organizationId, runId])
   @@index([recordId])

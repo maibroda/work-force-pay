@@ -7,7 +7,7 @@
  * Amounts are written "NGN 1,234.56": the standard PDF fonts have no naira sign, and a missing glyph on a payslip is worse than a letter code.
  */
 import { PDFDocument, StandardFonts, rgb, type PDFFont } from "pdf-lib";
-import { hourlyPayslip, type HourlyLineInput } from "./payroll/payslip-hourly";
+import { hourlyPayslip, type AllowanceLineInput, type HourlyLineInput } from "./payroll/payslip-hourly";
 
 export type PayslipLine = { type: string; code: string; name: string; amount: number };
 
@@ -39,6 +39,8 @@ export type PayslipInput = {
   locations: { clientName: string; beatName: string; days: number }[];
   /** The stored hourly pay lines of the record (phase 4c), with the site's name; none for a person paid monthly. */
   hourly?: HourlyLineInput[];
+  /** The extra pay lines of the record (the leave percentage, H14), shown with the hours. */
+  allowances?: AllowanceLineInput[];
   periodName: string;
   periodStart: string;
   periodEnd: string;
@@ -86,7 +88,7 @@ export type PayslipModel = {
 const amt = (s: string) => Number(s).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export function payslipModel(p: PayslipInput): PayslipModel {
-  const hs = hourlyPayslip(p.hourly ?? []);
+  const hs = hourlyPayslip(p.hourly ?? [], p.allowances ?? []);
   // a person paid only by the hour has no contractual monthly gross, and their days are not compared with the month's
   const hourlyOnly = hs !== null && p.monthlyGross === 0;
   const own = p.lines.filter((l) => l.type === "EARNING" || l.type === "DEDUCTION");
@@ -114,7 +116,7 @@ export function payslipModel(p: PayslipInput): PayslipModel {
     locations: [...byPlace.entries()].map(([k, days]) => `${k}: ${days} day(s)`),
     hourly: hs && {
       columns: ["Site", "Day type", "Hours", "Rate / hour (NGN)", "Amount (NGN)"],
-      rows: hs.rows.map((r) => [r.site, r.dayLabel, r.duration, amt(r.rate), amt(r.amount)]),
+      rows: hs.rows.map((r) => [r.site, r.dayLabel, r.duration, r.rate === "" ? "" : amt(r.rate), amt(r.amount)]),
       total: ["Total", "", hs.totalDuration, "", amt(hs.totalAmount)],
     },
     attendance: hourlyOnly ? `Days worked ${p.daysWorked}; absent ${p.daysAbsent}; overtime ${p.overtimeHours} hour(s)` : `Days worked ${p.daysWorked} of ${p.basisDays}; absent ${p.daysAbsent}; overtime ${p.overtimeHours} hour(s)`,

@@ -87,6 +87,12 @@ describe("the payslip", () => {
       expect(out).toContain("Monthly gross (contractual)");
       expect(out).toContain("Hours worked and pay");
     });
+    it("shows the leave pay as its own line after the hours, counted in the total, with no rate", () => {
+      const out = hourlyHtml({ hourlyAllowances: [{ kind: "LEAVE_PERCENT" as const, siteName: "Victoria Island", baseAmount: "28750.00", pct: "10.00", amount: "2875.00" }] });
+      expect(out).toContain("Leave pay (10% of 28,750.00)");
+      expect(out).toContain("2,875.00");
+      expect(out).toContain("31,625.00"); // the total: 28,750.00 of hours and 2,875.00 of leave pay
+    });
     it("an old record with no hourly lines at all renders as before", () => {
       expect(renderToStaticMarkup(createElement(Payslip, { rec: { ...rec, hourly: [] }, orgName: "Demo" }))).not.toContain("Hours worked and pay");
     });

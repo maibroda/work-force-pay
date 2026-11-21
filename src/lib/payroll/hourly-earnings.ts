@@ -40,6 +40,8 @@ export interface HourlyEarningsOptions {
   /** The established salary structure for a contract and job role on a day (the contract rate's, then the contract's default, then the company's); null when there is none. */
   structureFor: (q: { contractId: string; categoryId: string; date: string }) => StructureDef | null;
   namesOf: (beatId: string) => { clientName: string; beatName: string };
+  /** The day (YYYY-MM-DD) the person completes the company's service period for annual leave: the minutes worked on or after it are marked `eligibleMinutes` on their line, for the leave percentage (H14). Left out: no marks. */
+  leaveEligibleFrom?: string;
 }
 
 export interface UnresolvedPiece {
@@ -98,8 +100,10 @@ export function buildHourlyEarnings(employeeId: string, pieces: readonly Approve
     const line = site.lineMap.get(lineKey);
     const entries = p.entryIds ?? (p.entryId ? [p.entryId] : []);
     const segments = p.segmentIds ?? (p.segmentId ? [p.segmentId] : []);
+    const eligible = opts.leaveEligibleFrom !== undefined && p.date >= opts.leaveEligibleFrom ? p.minutes : 0;
     if (line) {
       line.minutes += p.minutes;
+      if (eligible) line.eligibleMinutes = (line.eligibleMinutes ?? 0) + eligible;
       const e = entries.filter((id) => !line.entryIds?.includes(id));
       if (e.length) line.entryIds = [...(line.entryIds ?? []), ...e];
       const s = segments.filter((id) => !line.segmentIds?.includes(id));
@@ -108,6 +112,7 @@ export function buildHourlyEarnings(employeeId: string, pieces: readonly Approve
       const l: HourlySiteInput["lines"][number] = { dayClass: p.dayClass, minutes: p.minutes, rateId: found.rateId, rate: found.rates[RATE_FIELD[p.dayClass]], amountKobo: 0 };
       if (entries.length) l.entryIds = [...entries];
       if (segments.length) l.segmentIds = [...segments];
+      if (eligible) l.eligibleMinutes = eligible;
       site.lineMap.set(lineKey, l);
       site.lines.push(l);
     }

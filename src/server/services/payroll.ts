@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import type { Ctx } from "@/lib/auth/context";
 import { daysInMonth, eachDay, iso, monthEnd, monthStart, periodName } from "@/lib/dates";
 import { employeeProration, monthProration, type BasisRow } from "@/lib/paid-days";
-import { workingDatesBetween } from "@/lib/leave";
+import { addMonths, workingDatesBetween } from "@/lib/leave";
 import { loadApprovedBases } from "./pay-basis";
 import { holidayContext } from "./holidays";
 import { getLeavePolicy } from "./leave";
@@ -11,6 +11,7 @@ import { num } from "@/lib/money";
 import { asKobo, koboToString, roundPlaces, sumKobo } from "@/lib/money-exact";
 import { missingStateSeverity, normaliseState } from "@/lib/nigeria-states";
 import { buildHourlyEarnings, valueOfMinutes } from "@/lib/payroll/hourly-earnings";
+import { addLeavePay } from "@/lib/payroll/hourly-leave-pay";
 import { minimumPayFinding } from "@/lib/payroll/hourly-minimum";
 import { hourlyLeaveDates, hourlyLeaveFinding } from "@/lib/payroll/hourly-leave";
 import { percentOfAmount, totalOf } from "@/lib/payroll/pay-inputs";
@@ -31,7 +32,7 @@ import { findDuplicates } from "./employees";
 import { recentBankChanges } from "./change-requests";
 import { CLIENT_MISMATCH, LOCATION_MISMATCH } from "./operations";
 import { submissionBlockers, varianceIssues } from "./payroll-controls";
-import { hourlyDecreaseFinding, hourlyFindings, hourlyRateConflict, isHourlyOn, loadHourlyForPeriod, loadLateHourly, loadPayslipHourly, monthlyRateWhileHourly, saveHourlyPieces } from "./hourly-payroll";
+import { hourlyDecreaseFinding, hourlyFindings, hourlyRateConflict, isHourlyOn, loadHourlyForPeriod, loadLateHourly, loadPayslipAllowances, loadPayslipHourly, monthlyRateWhileHourly, saveHourlyPieces } from "./hourly-payroll";
 import { loadRateBook } from "./rates";
 import { employerCostRuleFor, payrollRuleFor, pensionRuleFor, taxRuleFor } from "./statutory";
 import { enforceVerifiedRules } from "./statutory-verification";
@@ -223,6 +224,7 @@ async function assemble(
     holidays: holidayCtx.holidays,
     holidaysConfirmed: holidayCtx.confirmed,
     leaveWorkingDaysPerWeek: leavePolicy.workingDaysPerWeek,
+    leaveEligibilityMonths: leavePolicy.eligibilityMonths,
     unpaidLeave,
     annualLeave,
     book,
@@ -316,6 +318,25 @@ function overridesFor(a: Assembled, employeeId: string): ComponentOverride[] {
 function hourlyRowsFor(orgId: string, runId: string, recordId: string, employeeId: string, res: EngineResult) {
   const lines: Prisma.HourlyPayLineCreateManyInput[] = [];
   const pieces: Prisma.HourlyPayPieceCreateManyInput[] = [];
+  const allowances: Prisma.HourlyAllowanceLineCreateManyInput[] = [];
+  for (const seg of res.segments)
+    for (const x of seg.hourly?.allowances ?? [])
+      allowances.push({
+        organizationId: orgId,
+        runId,
+        recordId,
+        employeeId,
+        kind: x.kind,
+        clientId: seg.clientId,
+        contractId: seg.contractId,
+        beatId: seg.beatId,
+        structureCode: seg.rate.structure.code,
+        baseAmount: x.baseKobo === undefined ? null : koboToString(asKobo(x.baseKobo)),
+        pct: x.pct ?? null,
+        minutes: x.minutes ?? null,
+        rate: x.rate ?? null,
+        amount: koboToString(asKobo(x.amountKobo)),
+      });
   for (const seg of res.segments)
     for (const l of seg.hourly?.lines ?? []) {
       lines.push({
@@ -336,7 +357,7 @@ function hourlyRowsFor(orgId: string, runId: string, recordId: string, employeeI
       });
       for (const segmentId of l.segmentIds ?? []) pieces.push({ organizationId: orgId, runId, recordId, employeeId, segmentId, kind: "PAID" });
     }
-  return { lines, pieces };
+  return { lines, pieces, allowances };
 }
 
 // ───────────────────────────── Run payroll ─────────────────────────────
@@ -422,7 +443,10 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
           categoryOf: () => emp.categoryId,
           structureFor: (q) => a.book.structureFor(q.contractId, q.categoryId, new Date(`${q.date}T00:00:00Z`)),
           namesOf: (beatId) => a.hourly.names.get(beatId) ?? { clientName: "", beatName: "" },
+          ...(a.rules.hourlyLeavePct > 0 ? { leaveEligibleFrom: iso(addMonths(emp.employmentDate, a.leaveEligibilityMonths)) } : {}),
         });
+        // the leave pay: a percentage added to every hour worked from the day the service period for annual leave is complete (H14); 0 = none
+        if (a.rules.hourlyLeavePct > 0) he = { ...he, sites: addLeavePay(he.sites, a.rules.hourlyLeavePct) };
       } catch (e) {
         // two approved rates in force at the same level (the services prevent it): this person's hourly hours are not paid and a blocking finding says why; the rest of the payroll is worked
         issues.push(hourlyRateConflict(emp.id, `${emp.employeeNumber} ${fullName(emp)}`, period.name, e instanceof Error ? e.message : ""));
@@ -439,7 +463,7 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
     }))
       issues.push(f);
     // approved annual leave on days they are paid by the hour is not paid: a warning, so nobody is surprised on pay day (H14 piece 0)
-    const leaveFinding = hourlyLeaveFinding({ employeeId: emp.id, label: `${emp.employeeNumber} ${fullName(emp)}`, periodName: period.name, dates: hourlyLeaveDates(hourlyComp, a.annualLeave.filter((r) => r.employeeId === emp.id), a.leaveWorkingDaysPerWeek, { from: period.startDate, to: period.endDate }) });
+    const leaveFinding = hourlyLeaveFinding({ employeeId: emp.id, label: `${emp.employeeNumber} ${fullName(emp)}`, periodName: period.name, leavePct: a.rules.hourlyLeavePct, dates: hourlyLeaveDates(hourlyComp, a.annualLeave.filter((r) => r.employeeId === emp.id), a.leaveWorkingDaysPerWeek, { from: period.startDate, to: period.endDate }) });
     if (leaveFinding) issues.push(leaveFinding);
     const ot = a.overtime.filter((o) => o.employeeId === emp.id);
     const arr = a.arrears.filter((x) => x.employeeId === emp.id);
@@ -505,7 +529,7 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
     if (recurring.length) res = calculateEmployeePayroll(buildInput([...adHocDeductions, ...recurring]));
     // the minimum-pay warning (H13): a person paid only by the hour who earned less from hours than the figure in the payroll rules (0 = no check). A warning only: pay is not blocked and not changed.
     if (a.rules.hourlyMinMonthlyPayKobo > 0 && he.sites.length && res.monthlyGross === 0) {
-      const f = minimumPayFinding({ employeeId: emp.id, label: `${emp.employeeNumber} ${fullName(emp)}`, periodName: period.name, hourlyGross: sumKobo(he.sites.flatMap((s) => s.lines.map((l) => asKobo(l.amountKobo)))), minimum: a.rules.hourlyMinMonthlyPayKobo });
+      const f = minimumPayFinding({ employeeId: emp.id, label: `${emp.employeeNumber} ${fullName(emp)}`, periodName: period.name, hourlyGross: sumKobo(he.sites.flatMap((s) => [...s.lines.map((l) => asKobo(l.amountKobo)), ...(s.allowances ?? []).map((x) => asKobo(x.amountKobo))])), minimum: a.rules.hourlyMinMonthlyPayKobo });
       if (f) issues.push(f);
     }
     rows.push({ emp, res });
@@ -546,6 +570,7 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
       const recordData: Prisma.PayrollRecordCreateManyInput[] = [];
       const allocData: Prisma.PayrollAllocationCreateManyInput[] = [];
       const hourlyData: Prisma.HourlyPayLineCreateManyInput[] = [];
+      const allowanceData: Prisma.HourlyAllowanceLineCreateManyInput[] = [];
       const pieceData: Prisma.HourlyPayPieceCreateManyInput[] = [];
       for (const { emp, res } of rows) {
         const id = randomUUID();
@@ -553,6 +578,7 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
         // the hourly pay lines, and which approved pieces of shifts this payroll paid, so a supplementary payroll pays only what it did not (H22)
         const hr = hourlyRowsFor(ctx.orgId, runId, id, emp.id, res);
         hourlyData.push(...hr.lines);
+        allowanceData.push(...hr.allowances);
         pieceData.push(...hr.pieces);
         for (const al of res.allocations)
           allocData.push({
@@ -585,6 +611,7 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
       if (recordData.length) await tx.payrollRecord.createMany({ data: recordData });
       if (allocData.length) await tx.payrollAllocation.createMany({ data: allocData });
       if (hourlyData.length) await tx.hourlyPayLine.createMany({ data: hourlyData });
+      if (allowanceData.length) await tx.hourlyAllowanceLine.createMany({ data: allowanceData });
       await tx.hourlyPayPiece.deleteMany({ where: { runId } }); // a recalculation starts again (the records above were deleted, and their marks with them; any that had no record go too)
       await saveHourlyPieces(tx, pieceData);
 
@@ -1318,7 +1345,9 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
           categoryOf: () => emp.categoryId,
           structureFor: (q) => a.book.structureFor(q.contractId, q.categoryId, new Date(`${q.date}T00:00:00Z`)),
           namesOf: (beatId) => a.hourly.names.get(beatId) ?? { clientName: "", beatName: "" },
+          ...(a.rules.hourlyLeavePct > 0 ? { leaveEligibleFrom: iso(addMonths(emp.employmentDate, a.leaveEligibilityMonths)) } : {}),
         });
+        if (a.rules.hourlyLeavePct > 0) he = { ...he, sites: addLeavePay(he.sites, a.rules.hourlyLeavePct) };
       } catch (e) {
         issues.push(hourlyRateConflict(emp.id, label, period.name, e instanceof Error ? e.message : ""));
       }
@@ -1438,6 +1467,7 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
       // the hours paid here: their pay lines, and the marks that make sure they are never paid twice; the pieces of a shift that a correction replaced are marked as credited once their pay has been set against what is owed
       const hr = hourlyRowsFor(ctx.orgId, run.id, id, emp.id, res);
       if (hr.lines.length) await tx.hourlyPayLine.createMany({ data: hr.lines });
+      if (hr.allowances.length) await tx.hourlyAllowanceLine.createMany({ data: hr.allowances });
       const priced = new Set(hr.pieces.map((p) => p.segmentId));
       const credits = late.pieces.filter((p) => p.employeeId === emp.id && (p.segmentIds ?? []).every((s) => priced.has(s))).flatMap((p) => p.creditSegmentIds);
       const marks: Prisma.HourlyPayPieceCreateManyInput[] = [...hr.pieces, ...credits.map((segmentId) => ({ organizationId: ctx.orgId, runId: run.id, recordId: id, employeeId: emp.id, segmentId, kind: "CREDITED" as const }))];
@@ -1528,7 +1558,7 @@ export async function getPayslip(ctx: Ctx, recordId: string) {
   });
   if (!rec) return null;
   // the hours worked and the pay for them, for a person paid by the hour (none for a person paid monthly)
-  return { ...rec, hourly: await loadPayslipHourly(db, ctx.orgId, rec.id) };
+  return { ...rec, hourly: await loadPayslipHourly(db, ctx.orgId, rec.id), hourlyAllowances: await loadPayslipAllowances(db, ctx.orgId, rec.id) };
 }
 
 export async function employeePayslips(ctx: Ctx, employeeId: string) {

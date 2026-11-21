@@ -39,22 +39,24 @@ export function hourlyLeaveDates(comp: readonly CompensationRow[] | undefined, l
 }
 
 const SHOWN = 6;
+/** Why the days are not paid: no leave pay is set up, or leave pay is the percentage added to every hour worked (H14 piece 1). */
+const reason = (pct?: number) => (pct && pct > 0 ? `their leave pay is the ${pct}% added to every hour they work, not a payment for the days` : "pay for their leave is not set up yet");
 const listed = (dates: readonly string[]) => (dates.length > SHOWN ? `${dates.slice(0, SHOWN).join(", ")} and ${dates.length - SHOWN} more` : dates.join(", "));
 
 /** The payroll finding: a WARNING (never blocking, nothing to explain) when a person paid by the hour has approved annual leave in the month. */
-export function hourlyLeaveFinding(a: { employeeId: string; label: string; periodName: string; dates: readonly string[] }): HourlyLeaveFinding | null {
+export function hourlyLeaveFinding(a: { employeeId: string; label: string; periodName: string; dates: readonly string[]; /** The leave percentage in force (0 or left out: none is set up). */ leavePct?: number }): HourlyLeaveFinding | null {
   if (a.dates.length === 0) return null;
   return {
     employeeId: a.employeeId,
     category: "ATTENDANCE",
     severity: "WARNING",
     code: "HOURLY_LEAVE_NOT_PAID",
-    message: `${a.label} has ${a.dates.length} approved annual leave day(s) in ${a.periodName} while paid by the hour (${listed(a.dates)}). Pay for staff paid by the hour is for approved hours only and pay for their leave is not set up yet, so those days are not paid. This is a warning only: nothing is blocked or changed.`,
+    message: `${a.label} has ${a.dates.length} approved annual leave day(s) in ${a.periodName} while paid by the hour (${listed(a.dates)}). Pay for staff paid by the hour is for approved hours only, and ${reason(a.leavePct)}, so those days are not paid. This is a warning only: nothing is blocked or changed.`,
   };
 }
 
 /** The notice shown when annual leave is asked for or approved on days a person is paid by the hour. */
-export function hourlyLeaveNotice(dates: readonly string[]): string | null {
+export function hourlyLeaveNotice(dates: readonly string[], leavePct?: number): string | null {
   if (dates.length === 0) return null;
-  return `Note: this person is paid by the hour on ${dates.length} of these leave day(s) (${listed(dates)}), and pay for their leave is not set up yet, so those days are not paid.`;
+  return `Note: this person is paid by the hour on ${dates.length} of these leave day(s) (${listed(dates)}), and ${reason(leavePct)}, so those days are not paid.`;
 }

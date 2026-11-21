@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { durationOf, hourlyPayslip, type HourlyLineInput } from "@/lib/payroll/payslip-hourly";
+import { durationOf, hourlyPayslip, type AllowanceLineInput, type HourlyLineInput } from "@/lib/payroll/payslip-hourly";
 
 /**
  * Hourly pay, phase 4c (payslip): what an hourly person's payslip shows beside the usual earnings: the hours worked and the pay for them, by site and by kind of day (weekday, weekend, public holiday), with the
@@ -70,6 +70,34 @@ describe("hourlyPayslip: the hours and pay of one payslip", () => {
 
   it("a site with no name is shown as 'Site not recorded' rather than blank", () => {
     expect(hourlyPayslip([line({ siteName: "" })])!.rows[0].site).toBe("Site not recorded");
+  });
+});
+
+describe("hourlyPayslip: the leave pay line (H14 piece 1)", () => {
+  const leave = (over: Partial<AllowanceLineInput> = {}): AllowanceLineInput => ({ kind: "LEAVE_PERCENT", siteName: "Site A", baseAmount: "8000.00", pct: "10.00", amount: "800.00", ...over });
+  it("is shown after the hours of its site, named with the percentage and what it was worked on, with no hours or rate", () => {
+    const h = hourlyPayslip([line(), line({ siteName: "Site B", dayClass: "WEEKEND", minutes: 60, rate: "1500.00", amount: "1500.00" })], [leave()])!;
+    expect(h.rows.map((r) => [r.site, r.dayLabel, r.duration, r.rate, r.amount])).toEqual([
+      ["Site A", "Weekday", "8 h", "1000.00", "8000.00"],
+      ["Site A", "Leave pay (10% of 8,000.00)", "", "", "800.00"],
+      ["Site B", "Weekend", "1 h", "1500.00", "1500.00"],
+    ]);
+  });
+  it("is counted in the total, listed in the summary by kind, and does not change the hours", () => {
+    const h = hourlyPayslip([line()], [leave()])!;
+    expect(h.totalAmount).toBe("8800.00");
+    expect(h.totalDuration).toBe("8 h");
+    expect(h.byClass.map((c) => [c.dayLabel, c.amount])).toEqual([["Weekday", "8000.00"], ["Leave pay", "800.00"]]);
+  });
+  it("writes the percentage plainly: 10, 8.33, 8.3", () => {
+    expect(hourlyPayslip([line()], [leave({ pct: "10.00" })])!.rows[1].dayLabel).toContain("(10% of");
+    expect(hourlyPayslip([line()], [leave({ pct: "8.33" })])!.rows[1].dayLabel).toContain("(8.33% of");
+    expect(hourlyPayslip([line()], [leave({ pct: "8.30" })])!.rows[1].dayLabel).toContain("(8.3% of");
+    expect(hourlyPayslip([line()], [leave({ pct: "100.00" })])!.rows[1].dayLabel).toContain("(100% of");
+  });
+  it("is nothing extra for a person with no leave pay", () => {
+    expect(hourlyPayslip([line()], [])!.rows).toHaveLength(1);
+    expect(hourlyPayslip([line()])!.totalAmount).toBe("8000.00");
   });
 });
 

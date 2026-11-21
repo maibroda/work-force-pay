@@ -3,7 +3,7 @@ import { compensationTypeOn, type CompensationRow, type HourlyRateRow } from "@/
 import type { ApprovedPiece, UnresolvedPiece } from "@/lib/payroll/hourly-earnings";
 import { hoursOf } from "@/lib/payroll/hourly-report";
 import { netLatePieces, type Decrease, type LateNet, type SegRef } from "@/lib/payroll/hourly-late";
-import type { HourlyLineInput } from "@/lib/payroll/payslip-hourly";
+import type { AllowanceLineInput, HourlyLineInput } from "@/lib/payroll/payslip-hourly";
 import { naira } from "@/lib/payroll/hourly-minimum";
 import type { Kobo } from "@/lib/money-exact";
 import { parseWatLocal } from "@/lib/payroll/time-entry";
@@ -148,6 +148,16 @@ export async function loadPayslipHourly(tx: Tx, orgId: string, recordId: string)
   const beats = beatIds.length ? await tx.beat.findMany({ where: { organizationId: orgId, id: { in: beatIds } }, select: { id: true, name: true } }) : [];
   const names = new Map(beats.map((b) => [b.id, b.name]));
   return lines.map((l) => ({ siteName: (l.beatId && names.get(l.beatId)) || "", dayClass: l.dayClass, minutes: l.minutes, rate: l.rate.toString(), amount: l.amount.toString() }));
+}
+
+/** The extra pay lines of one payroll record for its payslip (H14): the leave percentage as stored, with the name of the site. None for a person with no leave pay. Read for ONE company. */
+export async function loadPayslipAllowances(tx: Tx, orgId: string, recordId: string): Promise<AllowanceLineInput[]> {
+  const lines = await tx.hourlyAllowanceLine.findMany({ where: { organizationId: orgId, recordId }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+  if (!lines.length) return [];
+  const beatIds = [...new Set(lines.flatMap((l) => (l.beatId ? [l.beatId] : [])))];
+  const beats = beatIds.length ? await tx.beat.findMany({ where: { organizationId: orgId, id: { in: beatIds } }, select: { id: true, name: true } }) : [];
+  const names = new Map(beats.map((b) => [b.id, b.name]));
+  return lines.map((l) => ({ kind: l.kind, siteName: (l.beatId && names.get(l.beatId)) || "", baseAmount: l.baseAmount === null ? null : l.baseAmount.toString(), pct: l.pct === null ? null : l.pct.toString(), amount: l.amount.toString() }));
 }
 
 /** The finding for an overpayment after a correction made once the payroll was locked: no negative pay is made, so someone enters a deduction (or the approver overrides it, with a reason). */

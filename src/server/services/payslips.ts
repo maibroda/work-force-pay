@@ -55,6 +55,7 @@ function inputFrom(rec: Rec, c: { orgName: string; bureauName: string | null }):
     lines: rec.lines as PayslipLine[],
     locations: (rec.locations as { clientName: string; beatName: string; days: number }[]) ?? [],
     hourly: rec.hourly,
+    allowances: rec.hourlyAllowances,
     periodName: rec.run.period.name,
     periodStart: iso(rec.run.period.startDate),
     periodEnd: iso(rec.run.period.endDate),

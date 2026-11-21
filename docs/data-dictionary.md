@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-282 tables and 212 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+283 tables and 213 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -83,6 +83,7 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | timeEntries | → TimeEntry[] |  |  |
 | timeEntrySegments | → TimeEntrySegment[] |  |  |
 | hourlyPayLines | → HourlyPayLine[] |  |  |
+| hourlyAllowanceLines | → HourlyAllowanceLine[] |  |  |
 | hourlyPayPieces | → HourlyPayPiece[] |  |  |
 | payrollPeriods | → PayrollPeriod[] |  |  |
 | payrollRuns | → PayrollRun[] |  |  |
@@ -2688,6 +2689,7 @@ Operational source of truth for WHERE an employee worked on each day.
 | createdAt | DateTime |  |  |
 | allocations | → PayrollAllocation[] |  |  |
 | hourlyLines | → HourlyPayLine[] |  |  |
+| hourlyAllowances | → HourlyAllowanceLine[] |  |  |
 | hourlyPieces | → HourlyPayPiece[] |  |  |
 | paymentTxns | → PaymentTransaction[] |  |  |
 
@@ -2975,6 +2977,7 @@ Recurring payroll deductions applied automatically on every REGULAR run — dist
 | nhfEmployeeRatePct | Decimal |  | The rate of the VOLUNTARY NHF (National Housing Fund) contribution, as a % of BASIC pay: 2.5 by the founder's rule (the tax adviser confirms it). It is taken only from employees who have chosen to contribute (Employee.nhfContributes), as its own deduction line, and is allowed against PAYE at the amount taken. 0 = none. |
 | minTakeHomePctOfGross | Decimal |  | The take-home floor, % of gross: loan and salary-advance recoveries may not take net pay below this share of gross; the part not taken is carried forward by the loan book. 0 (the default) = no floor, as pay has always been worked. A client-specific policy, not a statutory one. |
 | hourlyMinMonthlyPay | Decimal |  | The minimum monthly pay, in naira, for a person paid only by the hour (the founder's H13): a WARNING (never a block, never a change to pay) when what they earned from hours in the month is below it. A figure the company or its adviser enters; none is built in. 0 (the default) = no check. |
+| hourlyLeavePct | Decimal |  | The leave pay for a person paid by the hour (the founder's H14, 2026-11-20): a percentage added to every hour worked, as their annual leave pay, from the day they complete the company's service period for annual leave (the leave policy, 12 months by default). A figure the company or its adviser enters; none is built in. 0 (the default) = no leave pay for staff paid by the hour. |
 | effectiveFrom | DateTime | yes |  |
 | effectiveTo | DateTime |  |  |
 | createdAt | DateTime |  |  |
@@ -6085,6 +6088,31 @@ How an hourly person's pay was made up (hourly pay, phase 4b of docs/plans/hourl
 | entryIds | String[] |  | The approved time entries this line was worked from. |
 | createdAt | DateTime |  |  |
 
+### HourlyAllowanceLine
+
+How an hourly person's extra pay was made up (hourly pay, H14): one row for each kind of extra pay within each site's piece of pay, kept with the payroll record it belongs to. For the leave percentage it records the pay for hours worked the percentage was worked on (`baseAmount`), the percentage AS USED and the amount; for the day-based kinds (later pieces) the minutes, the rate and the amount. So a later change of the setting can never alter a payroll already worked. Written when the payroll is calculated and replaced when it is calculated again; like the record it is never changed once the payroll is locked.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| runId | String | yes |  |
+| recordId | String | yes |  |
+| record | → PayrollRecord |  |  |
+| employeeId | String | yes |  |
+| kind | HourlyAllowanceKind | yes |  |
+| clientId | String |  |  |
+| contractId | String |  |  |
+| beatId | String |  |  |
+| structureCode | String | yes | The code of the salary structure that split this site's gross, this extra pay included. |
+| baseAmount | Decimal |  | LEAVE_PERCENT: the pay for hours worked (after the service period) the percentage was worked on. Null for the day-based kinds. |
+| pct | Decimal |  | LEAVE_PERCENT: the percentage used. Null for the day-based kinds. |
+| minutes | Int |  | The day-based kinds: the minutes paid and the hourly rate used. Null for LEAVE_PERCENT. |
+| rate | Decimal |  |  |
+| amount | Decimal | yes |  |
+| createdAt | DateTime |  |  |
+
 ### HourlyPayPiece
 
 Which approved pieces of shifts a payroll has dealt with (hourly pay, phase 4c, the founder's H22). A regular payroll marks every piece it pays; a supplementary payroll pays only the pieces no payroll has paid, and sets the pieces of shifts replaced by a later correction against what the correction owes. Replaced with the record when the payroll is calculated again.
@@ -7776,6 +7804,12 @@ Whether an outbound message is a service message (about an active contract) or m
 ### DayClass
 
 `WEEKDAY`, `WEEKEND`, `HOLIDAY`
+
+### HourlyAllowanceKind
+
+What an hourly person is paid besides the hours they worked (the founder's H14, docs/plans/hourly-payroll-h14-build-plan.md).
+
+`LEAVE_PERCENT`, `SICK_DAY`, `HOLIDAY_NOT_WORKED`
 
 ### HourlyPieceKind
 
