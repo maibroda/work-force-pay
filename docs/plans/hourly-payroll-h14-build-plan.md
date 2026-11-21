@@ -52,3 +52,17 @@ Each piece is its own pull request, in this order (1 before 2 and 3, since they 
 ## 6. Not in this plan
 
 Overtime and night premiums (H4), hourly client billing (H15), notice and end-of-service pay for hourly staff, and the legal question itself.
+
+## 7. Your choices, recorded 2026-11-21
+
+You answered "your choices" to questions 2 to 8, so I will build **my recommendations**; correct any of them before the piece that uses it:
+
+- **Q2** the percentage is a percentage of all pay for hours worked (weekday, weekend and holiday), from the day the person completes 12 months' service; not added on sick days or holidays not worked.
+- **Q3** average daily hours = approved hours over the 3 months before the day (a company setting), divided by the days they worked; fewer months of history uses what exists; no hours in the period means nothing is paid and a finding says so.
+- **Q4** a day counts as one of a person's usual days when they worked that day of the week at least once in the same period.
+- **Q5** a paid holiday not worked: applies to the person's work location state, on a date they were employed and paid by the hour, and not a day they worked.
+- **Q6** the 5 sick days run in the same leave year as annual leave; days beyond 5 are unpaid.
+- **Q7** the percentage, sick pay and holiday pay are part of gross (PAYE and pension as for hourly pay), divided by the salary structure of the person's site (the site where they last worked when a month has no hours), each shown on the payslip as its own line.
+- **Q8** HR approves a sick spell and not the person who recorded it; the certificate is a medical document in the existing store; the leave record holds dates and days, never a diagnosis.
+
+**Piece 0** (the safeguard) is built on your go of 2026-11-21: `hourly-payroll-h14-piece0-explain-back.md`. Pieces 1 to 4 each wait for your separate go (piece 1 has a migration).

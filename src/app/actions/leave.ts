@@ -13,8 +13,9 @@ export async function applyLeaveAction(v: V) {
     "leave.apply",
     async (ctx) => {
       const r = await lv.applyForLeave(ctx, v as never);
+      const note = r.unpaid ? null : await lv.leaveNotPaidNotice(ctx, r.employeeId, r.startDate, r.endDate); // a person paid by the hour is not paid for annual leave (H14 piece 0)
       return {
-        message: `Leave request submitted — ${r.workingDays} working day(s), awaiting supervisor approval.`,
+        message: `Leave request submitted — ${r.workingDays} working day(s), awaiting supervisor approval.${note ? ` ${note}` : ""}`,
       };
     },
     PATHS,
@@ -27,8 +28,9 @@ export async function applyLeaveForAction(v: V) {
     "leave.manage",
     async (ctx) => {
       const r = await lv.applyForLeave(ctx, v as never);
+      const note = r.unpaid ? null : await lv.leaveNotPaidNotice(ctx, r.employeeId, r.startDate, r.endDate); // a person paid by the hour is not paid for annual leave (H14 piece 0)
       return {
-        message: `Leave request submitted — ${r.workingDays} working day(s), awaiting supervisor approval.`,
+        message: `Leave request submitted — ${r.workingDays} working day(s), awaiting supervisor approval.${note ? ` ${note}` : ""}`,
       };
     },
     PATHS,
@@ -40,8 +42,9 @@ export async function approveLeaveAction(id: string) {
     "leave.approve",
     async (ctx) => {
       const r = await lv.decideLeave(ctx, id, "APPROVED");
+      const note = r.request.unpaid ? null : await lv.leaveNotPaidNotice(ctx, r.request.employeeId, r.request.startDate, r.request.endDate); // a person paid by the hour is not paid for annual leave (H14 piece 0)
       return {
-        message: `Leave approved. ${r.marked} day(s) marked as leave in the work register${r.skipped.length ? ` — skipped: ${r.skipped.join(", ")}` : ""}.`,
+        message: `Leave approved. ${r.marked} day(s) marked as leave in the work register${r.skipped.length ? ` — skipped: ${r.skipped.join(", ")}` : ""}.${note ? ` ${note}` : ""}`,
       };
     },
     PATHS,

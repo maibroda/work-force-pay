@@ -4,6 +4,7 @@ import type { Ctx } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { d, fmtDate, iso } from "@/lib/dates";
 import { leaveEligibility, workingDatesBetween, type LeaveCycle } from "@/lib/leave";
+import { hourlyLeaveDates, hourlyLeaveNotice } from "@/lib/payroll/hourly-leave";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
 import { assertPeriodEditable, deploymentOn } from "./operations";
@@ -392,6 +393,25 @@ export async function decideLeave(ctx: Ctx, id: string, decision: "APPROVED" | "
     );
     return { request: updated, marked, skipped };
   });
+}
+
+// ───────────────────────────── A notice for staff paid by the hour ─────────────────────────────
+
+/**
+ * H14 piece 0 (docs/plans/hourly-payroll-h14-build-plan.md): annual leave on days a person is paid by the hour is not paid (hourly pay is for approved hours only), and nothing said so. This gives the notice to show
+ * when such leave is asked for or approved, or null when none of the days is one on which the person is paid by the hour (a person paid monthly gets null). Read for the caller's company only; another company's
+ * person is not found. It changes nothing.
+ */
+export async function leaveNotPaidNotice(ctx: Ctx, employeeId: string, startDate: string | Date, endDate: string | Date): Promise<string | null> {
+  const start = typeof startDate === "string" ? d(startDate) : startDate;
+  const end = typeof endDate === "string" ? d(endDate) : endDate;
+  const emp = await db.employee.findFirst({ where: { id: employeeId, organizationId: ctx.orgId }, select: { id: true } });
+  if (!emp) return null;
+  const [policy, comp] = await Promise.all([
+    getLeavePolicy(ctx.orgId),
+    db.employeeCompensationType.findMany({ where: { organizationId: ctx.orgId, employeeId, status: "APPROVED", effectiveFrom: { lte: end } }, select: { type: true, effectiveFrom: true, status: true } }),
+  ]);
+  return hourlyLeaveNotice(hourlyLeaveDates(comp, [{ startDate: start, endDate: end }], policy.workingDaysPerWeek, { from: start, to: end }));
 }
 
 // ───────────────────────────── Cancel ─────────────────────────────

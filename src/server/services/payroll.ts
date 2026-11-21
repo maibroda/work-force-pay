@@ -12,6 +12,7 @@ import { asKobo, koboToString, roundPlaces, sumKobo } from "@/lib/money-exact";
 import { missingStateSeverity, normaliseState } from "@/lib/nigeria-states";
 import { buildHourlyEarnings, valueOfMinutes } from "@/lib/payroll/hourly-earnings";
 import { minimumPayFinding } from "@/lib/payroll/hourly-minimum";
+import { hourlyLeaveDates, hourlyLeaveFinding } from "@/lib/payroll/hourly-leave";
 import { percentOfAmount, totalOf } from "@/lib/payroll/pay-inputs";
 import { fullName } from "@/lib/utils";
 import {
@@ -116,11 +117,13 @@ async function assemble(
   ]);
   const basisDays = rules.prorationBasis === "FIXED_30" ? 30 : daysInMonth(period.year, period.month);
   // the paid-days basis agreed per contract, the company's holidays, and unpaid leave (docs/plans/paid-days-basis.md): a contract with no approved setting keeps the company's rule above
-  const [payBases, holidayCtx, leavePolicy, unpaidLeave] = await Promise.all([
+  const [payBases, holidayCtx, leavePolicy, unpaidLeave, annualLeave] = await Promise.all([
     loadApprovedBases(db, ctx.orgId, period.startDate, period.endDate),
     holidayContext(db, ctx.orgId, period.year),
     getLeavePolicy(ctx.orgId),
     db.leaveRequest.findMany({ where: { organizationId: ctx.orgId, unpaid: true, status: "APPROVED", startDate: { lte: period.endDate }, endDate: { gte: period.startDate } }, select: { employeeId: true, startDate: true, endDate: true } }),
+    // approved ANNUAL leave in the period: for a person paid by the hour it is not paid, and the payroll says so (H14 piece 0)
+    db.leaveRequest.findMany({ where: { organizationId: ctx.orgId, unpaid: false, status: "APPROVED", startDate: { lte: period.endDate }, endDate: { gte: period.startDate } }, select: { employeeId: true, startDate: true, endDate: true } }),
   ]);
   const book = await loadRateBook(
     db,
@@ -221,6 +224,7 @@ async function assemble(
     holidaysConfirmed: holidayCtx.confirmed,
     leaveWorkingDaysPerWeek: leavePolicy.workingDaysPerWeek,
     unpaidLeave,
+    annualLeave,
     book,
     hourly,
     late,
@@ -434,6 +438,9 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
       monthlyRateWhileHourly: monthlyRateWhileHourly(hourlyComp, (day) => Boolean(a.book.employeePayRate(emp.id, day)), period.startDate, period.endDate),
     }))
       issues.push(f);
+    // approved annual leave on days they are paid by the hour is not paid: a warning, so nobody is surprised on pay day (H14 piece 0)
+    const leaveFinding = hourlyLeaveFinding({ employeeId: emp.id, label: `${emp.employeeNumber} ${fullName(emp)}`, periodName: period.name, dates: hourlyLeaveDates(hourlyComp, a.annualLeave.filter((r) => r.employeeId === emp.id), a.leaveWorkingDaysPerWeek, { from: period.startDate, to: period.endDate }) });
+    if (leaveFinding) issues.push(leaveFinding);
     const ot = a.overtime.filter((o) => o.employeeId === emp.id);
     const arr = a.arrears.filter((x) => x.employeeId === emp.id);
     const oth = a.others.filter((x) => x.employeeId === emp.id);
