@@ -6,7 +6,7 @@
  * the file may be forwarded or emailed. The document is first laid out as plain text lines (testable without a PDF reader), then drawn.
  * Amounts are written "NGN 1,234.56": the standard PDF fonts have no naira sign, and a missing glyph on a payslip is worse than a letter code.
  */
-import { PDFDocument, StandardFonts, rgb, type PDFFont } from "pdf-lib";
+import { PDFDocument, type PDFPage, StandardFonts, rgb, type PDFFont } from "pdf-lib";
 import { hourlyPayslip, type AllowanceLineInput, type HourlyLineInput } from "./payroll/payslip-hourly";
 
 export type PayslipLine = { type: string; code: string; name: string; amount: number };
@@ -147,7 +147,7 @@ export async function renderPayslipsPdf(models: PayslipModel[]): Promise<Uint8Ar
 }
 
 async function drawPayslip(doc: PDFDocument, m: PayslipModel) {
-  const page = doc.addPage([595.28, 841.89]);
+  let page = doc.addPage([595.28, 841.89]);
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   const left = 48;
@@ -169,6 +169,38 @@ async function drawPayslip(doc: PDFDocument, m: PayslipModel) {
     while (t.length > 1 && f.widthOfTextAtSize(t, size) > max) t = t.slice(0, -2);
     return t === pdfSafe(s) ? t : `${t}...`;
   };
+
+  // the footer, wrapped to the page, is drawn on EVERY page; a line is never drawn below the line above it (the floor), a new page is started instead (nothing is ever left out)
+  const words = pdfSafe(m.footer).split(" ");
+  const footerLines: string[] = [];
+  let cur = "";
+  for (const w of words) {
+    const next = cur ? `${cur} ${w}` : w;
+    if (font.widthOfTextAtSize(next, 8) > right - left) {
+      footerLines.push(cur);
+      cur = w;
+    } else cur = next;
+  }
+  if (cur) footerLines.push(cur);
+  const floor = 56 + footerLines.length * 11 + 8 + 14;
+  const drawFooter = (p: PDFPage) => {
+    let fy = 56 + footerLines.length * 11;
+    for (const l of footerLines) {
+      p.drawText(l, { x: left, y: fy, size: 8, font, color: MUTED });
+      fy -= 11;
+    }
+    p.drawLine({ start: { x: left, y: 56 + footerLines.length * 11 + 8 }, end: { x: right, y: 56 + footerLines.length * 11 + 8 }, thickness: 0.5, color: RULE });
+  };
+  const newPage = () => {
+    page = doc.addPage([595.28, 841.89]);
+    drawFooter(page);
+    y = 841.89 - 56;
+  };
+  /** Starts a new page unless `height` points still fit above the footer. */
+  const ensure = (height: number) => {
+    if (y - height < floor) newPage();
+  };
+  drawFooter(page);
 
   text(m.heading, left, 16, bold);
   rightText("PAYSLIP", right, 11, bold);
@@ -221,60 +253,51 @@ async function drawPayslip(doc: PDFDocument, m: PayslipModel) {
   y -= 34;
 
   if (m.hourly) {
-    text("HOURS WORKED AND PAY", left, 8.5, bold, MUTED);
-    y -= 14;
+    const hourly = m.hourly;
     const xs = [left, left + 190, left + 290, right - 110, right]; // site, day type, hours, rate (right edge at xs[3]), amount (right edge at xs[4])
     const cell = (s: string, i: number, f: PDFFont, color = INK) => {
       const t = i < 3 ? clip(s, f, 9, (i === 0 ? 180 : 95)) : pdfSafe(s);
       page.drawText(t, { x: i < 3 ? xs[i] : xs[i] - f.widthOfTextAtSize(t, 9), y, size: 9, font: f, color });
     };
-    m.hourly.columns.forEach((c, i) => cell(c, i, bold, MUTED));
-    y -= 13;
-    const shown = m.hourly.rows.slice(0, 9);
-    for (const r of shown) {
+    const heading = (title: string) => {
+      text(title, left, 8.5, bold, MUTED);
+      y -= 14;
+      hourly.columns.forEach((c, i) => cell(c, i, bold, MUTED));
+      y -= 13;
+    };
+    ensure(14 + 13 + 12 + 30); // the heading, the first line and the totals stay together
+    heading("HOURS WORKED AND PAY");
+    // every line is shown: when they do not fit, they carry on to the next page under the same headings
+    for (const r of hourly.rows) {
+      if (y - 12 < floor) {
+        newPage();
+        heading("HOURS WORKED AND PAY (continued)");
+      }
       r.forEach((c, i) => cell(c, i, font));
       y -= 12;
     }
-    if (m.hourly.rows.length > shown.length) {
-      text(`... and ${m.hourly.rows.length - shown.length} more line(s), included in the total`, left, 8.5, font, MUTED);
-      y -= 12;
-    }
+    ensure(30);
     page.drawLine({ start: { x: left, y: y + 9 }, end: { x: right, y: y + 9 }, thickness: 0.5, color: RULE });
-    m.hourly.total.forEach((c, i) => cell(c, i, bold));
+    hourly.total.forEach((c, i) => cell(c, i, bold));
     y -= 20;
   }
   if (m.locations.length) {
+    ensure(14 + 13);
     text("WORK LOCATIONS", left, 8.5, bold, MUTED);
     y -= 14;
-    for (const l of m.locations.slice(0, 8)) {
+    for (const l of m.locations) {
+      ensure(13);
       text(l, left);
       y -= 13;
     }
     y -= 4;
   }
+  ensure(14);
   text(m.attendance, left, 9, font, MUTED);
   y -= 14;
   for (const n of m.notes) {
+    ensure(12);
     text(n, left, 8.5, font, MUTED);
     y -= 12;
   }
-
-  // footer, wrapped to the page
-  const words = pdfSafe(m.footer).split(" ");
-  const lines: string[] = [];
-  let cur = "";
-  for (const w of words) {
-    const next = cur ? `${cur} ${w}` : w;
-    if (font.widthOfTextAtSize(next, 8) > right - left) {
-      lines.push(cur);
-      cur = w;
-    } else cur = next;
-  }
-  if (cur) lines.push(cur);
-  let fy = 56 + lines.length * 11;
-  for (const l of lines) {
-    page.drawText(l, { x: left, y: fy, size: 8, font, color: MUTED });
-    fy -= 11;
-  }
-  page.drawLine({ start: { x: left, y: 56 + lines.length * 11 + 8 }, end: { x: right, y: 56 + lines.length * 11 + 8 }, thickness: 0.5, color: RULE });
 }

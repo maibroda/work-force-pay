@@ -1,3 +1,4 @@
+import { inflateSync } from "node:zlib";
 import { PDFDocument } from "pdf-lib";
 import { describe, expect, it } from "vitest";
 import { mask, money, payslipModel, pdfSafe, renderPayslipPdf, renderPayslipsPdf, type PayslipInput } from "@/lib/payslip-pdf";
@@ -93,6 +94,71 @@ describe("the hours section of an hourly person's payslip (phase 4c)", () => {
   });
 });
 
+/**
+ * What the pages of a PDF say, read back from the drawn text (the content of a page is plain, with each string written in hex): the text of each page, and where (the height) each piece of text sits. Used to prove that every
+ * line is on the payslip and nothing is drawn over the footer.
+ */
+function pagesOf(bytes: Uint8Array): Promise<Array<Array<{ text: string; y: number }>>> {
+  return PDFDocument.load(bytes).then((doc) =>
+    doc.getPages().map((page) => {
+      const contents = page.node.Contents() as unknown as { asArray?: () => unknown[] };
+      const refs = contents.asArray?.() ?? [contents];
+      const out: Array<{ text: string; y: number }> = [];
+      for (const ref of refs) {
+        const s = doc.context.lookup(ref as never) as unknown as { getContents(): Uint8Array };
+        let raw = Buffer.from(s.getContents());
+        try {
+          raw = inflateSync(raw); // the page content is compressed
+        } catch {
+          /* not compressed */
+        }
+        const src = raw.toString("latin1");
+        for (const m of src.matchAll(/1 0 0 1 ([\d.-]+) ([\d.-]+) Tm\s+<([0-9A-Fa-f]*)> Tj/g)) out.push({ y: Number(m[2]), text: Buffer.from(m[3], "hex").toString("latin1") });
+      }
+      return out;
+    }),
+  );
+}
+
+describe("every hourly line is on the payslip, on as many pages as it takes (nothing is hidden)", () => {
+  const rows = (n: number) => Array.from({ length: n }, (_, i) => ({ siteName: `Row${String(i).padStart(3, "0")} site`, dayClass: "WEEKDAY" as const, minutes: 60 * (i + 1), rate: "1000.00", amount: `${1000 * (i + 1)}.00` }));
+  const render = (n: number) => renderPayslipPdf(payslipModel(base({ monthlyGross: 0, hourly: rows(n) })));
+
+  it("shows all 14 lines (the old limit hid every line after the ninth) and never says that lines are left out", async () => {
+    const pages = await pagesOf(await render(14));
+    const all = pages.flat().map((t) => t.text);
+    for (let i = 0; i < 14; i++) expect(all.filter((t) => t.startsWith(`Row${String(i).padStart(3, "0")} site`))).toHaveLength(1);
+    expect(all.join("\n")).not.toMatch(/more line/);
+  });
+
+  it("carries on to further pages when the lines do not fit: every line once, in order, a 'continued' heading, the totals once at the end, the footer on every page", async () => {
+    const bytes = await render(80);
+    const doc = await PDFDocument.load(bytes);
+    expect(doc.getPageCount()).toBeGreaterThanOrEqual(2);
+    const pages = await pagesOf(bytes);
+    const order = pages.flatMap((p) => p.map((t) => t.text)).filter((t) => /^Row\d{3} site/.test(t)).map((t) => Number(t.slice(3, 6)));
+    expect(order).toEqual(Array.from({ length: 80 }, (_, i) => i)); // every line once, in order
+    expect(pages[1].some((t) => /continued/i.test(t.text))).toBe(true);
+    expect(pages.flat().filter((t) => t.text === "Total")).toHaveLength(1);
+    expect(pages[pages.length - 1].some((t) => t.text === "Total")).toBe(true);
+    for (const p of pages) expect(p.some((t) => /Confidential|Generated/.test(t.text) && t.y < 120)).toBe(true); // the footer is on every page
+    expect(pages.flat().map((t) => t.text).join("\n")).not.toMatch(/more line/);
+  });
+
+  it("never draws a line over the footer", async () => {
+    const pages = await pagesOf(await render(80));
+    for (const p of pages) for (const t of p) if (/^Row\d{3} site/.test(t.text)) expect(t.y).toBeGreaterThan(100);
+  });
+
+  it("a payslip with no hourly lines is still one page, and several payslips each start on a new page", async () => {
+    expect((await PDFDocument.load(await renderPayslipPdf(payslipModel(base())))).getPageCount()).toBe(1);
+    const two = await renderPayslipsPdf([payslipModel(base({ monthlyGross: 0, hourly: rows(80) })), payslipModel(base({ employeeNumber: "EMP-000002" }))]);
+    const pages = await pagesOf(two);
+    expect(pages[pages.length - 1].some((t) => t.text.includes("EMP-000002"))).toBe(true);
+    expect(pages.slice(0, -1).some((p) => p.some((t) => t.text.includes("EMP-000002")))).toBe(false);
+  });
+});
+
 describe("text a PDF can draw", () => {
   it("removes accents, straightens quotes and replaces what the font cannot draw", () => {
     expect(pdfSafe("Ọlá Adéwálé")).toBe("Ola Adewale");
@@ -122,7 +188,12 @@ describe("the PDF", () => {
       }),
     );
     const bytes = await renderPayslipPdf(m);
-    expect((await PDFDocument.load(bytes)).getPageCount()).toBe(1);
+    // all 12 work locations are drawn (the old limit of 8 hid four of them and kept this to one page); that much content needs a second page, and nothing is drawn over the footer
+    expect((await PDFDocument.load(bytes)).getPageCount()).toBe(2);
+    const pages = await pagesOf(bytes);
+    const all = pages.flat();
+    for (let i = 0; i < 12; i++) expect(all.some((t) => t.text.includes(`Site ${i}`))).toBe(true);
+    for (const t of all) if (t.y < 100) expect(m.footer).toContain(t.text.trim()); // below that height only the (wrapped) footer
   });
 
   it("puts several payslips in one PDF, a page each", async () => {

@@ -45,7 +45,14 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `hourly-sick-spell-correction`, one small migration)
+
+## Not yet merged (branch `hourly-payslip-lines`, no migration)
+
+- **The payslip PDF no longer hides hourly lines.** It listed at most 9 hours-and-pay lines and then said "... and N more line(s), included in the total", which could hide leave pay, sick pay and holiday pay lines for a person at several sites. **Every line is now drawn**; when they do not fit they carry on to a second page under the same headings ("HOURS WORKED AND PAY (continued)"), the totals line closes the table once, and the **footer is on every page**. Work locations (limit of eight) and the notes follow the same rule. A payslip that fits on one page is drawn as before.
+- **Layout only:** no pay figure, rule or setting changes, and no migration. The on-screen payslip already showed every line.
+- **Tests (written first):** four new tests in `tests/unit/payslip-pdf.test.ts` that read the text back from the drawn pages. Explain-back note: `docs/plans/hourly-payslip-lines-explain-back.md`.
+
+## Merged in #266 (one small migration)
 
 - **Hourly pay: an approved spell of sickness can now be cancelled** (the founder's "CONTINUE" after the plan `hourly-sick-spell-correction-plan.md`, with its defaults). Only HR, never the person it is about, with a reason of a few words (kept on the spell, never in the audit log). To correct a spell, cancel it and record a new one: nothing is edited in place. The cancelled spell frees its days of the five-day entitlement and its dates.
 - **If the days were already paid by a final payroll, no negative pay is made:** the next payroll (regular or supplementary) raises **one critical finding** naming the person, the days and the amount paid (from the stored line) for Payroll to enter a deduction if it is to be recovered; it is not repeated by later payrolls. A replacement spell for the same days raises no finding and is not paid twice. If the days were not yet paid, they simply drop out of the next calculation.
