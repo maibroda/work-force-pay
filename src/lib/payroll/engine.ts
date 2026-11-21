@@ -111,6 +111,8 @@ export interface HourlyAllowanceInput {
   /** The day-based kinds: the minutes paid and the hourly rate used (naira). */
   minutes?: number;
   rate?: number;
+  /** The day-based kinds: the days paid (YYYY-MM-DD), kept so a later payroll never pays the same day twice. */
+  dates?: string[];
 }
 
 /**

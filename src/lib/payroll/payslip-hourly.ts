@@ -28,6 +28,10 @@ export interface AllowanceLineInput {
   /** LEAVE_PERCENT: the percentage used, as stored ("10.00"). */
   pct: string | null;
   amount: string;
+  /** The day-based kinds (sick pay): the minutes paid, the hourly rate used ("1000.00") and the days paid. */
+  minutes?: number | null;
+  rate?: string | null;
+  dates?: string[];
 }
 
 export interface HourlyPayslipRow {
@@ -63,11 +67,14 @@ const plainPct = (p: string) => (p.includes(".") ? p.replace(/\.?0+$/, "") : p);
 /** The label of an extra pay line: "Leave pay (10% of 4,000.00)". */
 function allowanceLabel(a: AllowanceLineInput): string {
   const name = KIND_LABEL[a.kind];
-  return a.kind === "LEAVE_PERCENT" && a.pct !== null && a.baseAmount !== null ? `${name} (${plainPct(a.pct)}% of ${naira(toKobo(a.baseAmount))})` : name;
+  if (a.kind === "LEAVE_PERCENT" && a.pct !== null && a.baseAmount !== null) return `${name} (${plainPct(a.pct)}% of ${naira(toKobo(a.baseAmount))})`;
+  const n = a.dates?.length ?? 0;
+  if (a.kind === "HOLIDAY_NOT_WORKED" && n === 1) return `${name} (${a.dates![0]})`;
+  return n > 0 ? `${name} (${n} ${n === 1 ? "day" : "days"})` : name;
 }
 
 export function hourlyPayslip(lines: readonly HourlyLineInput[], allowances: readonly AllowanceLineInput[] = []): HourlyPayslip | null {
-  if (lines.length === 0) return null;
+  if (lines.length === 0 && allowances.length === 0) return null;
   // one row per site, kind of day and rate (the pieces of a supplementary payroll's one line are shown as one)
   const rows = new Map<string, { site: string; dayClass: DayClass; rate: Kobo; minutes: number; amounts: Kobo[] }>();
   for (const l of lines) {
@@ -85,20 +92,21 @@ export function hourlyPayslip(lines: readonly HourlyLineInput[], allowances: rea
     if (!mine.length) return [];
     return [{ dayLabel: LABEL[c], duration: durationOf(mine.reduce((s, r) => s + r.minutes, 0)), amount: koboToString(sumKobo(mine.flatMap((r) => r.amounts))) }];
   });
-  const extra = allowances.map((a) => ({ site: a.siteName.trim() || "Site not recorded", label: allowanceLabel(a), kind: a.kind, amount: toKobo(a.amount) }));
+  const extra = allowances.map((a) => ({ site: a.siteName.trim() || "Site not recorded", label: allowanceLabel(a), kind: a.kind, amount: toKobo(a.amount), minutes: a.minutes ?? 0, rate: a.rate ? koboToString(toKobo(a.rate)) : "" }));
   const shown: HourlyPayslipRow[] = [];
   for (const site of [...new Set(sorted.map((r) => r.site)), ...extra.map((x) => x.site).filter((s) => !sorted.some((r) => r.site === s))].filter((s, i, all) => all.indexOf(s) === i)) {
     for (const r of sorted.filter((x) => x.site === site)) shown.push({ site: r.site, dayLabel: LABEL[r.dayClass], duration: durationOf(r.minutes), rate: koboToString(r.rate), amount: koboToString(sumKobo(r.amounts)) });
-    for (const x of extra.filter((y) => y.site === site)) shown.push({ site, dayLabel: x.label, duration: "", rate: "", amount: koboToString(x.amount) });
+    for (const x of extra.filter((y) => y.site === site)) shown.push({ site, dayLabel: x.label, duration: x.minutes > 0 ? durationOf(x.minutes) : "", rate: x.rate, amount: koboToString(x.amount) });
   }
   const byKind = (Object.keys(KIND_LABEL) as Array<AllowanceLineInput["kind"]>).flatMap((k) => {
     const mine = extra.filter((x) => x.kind === k);
-    return mine.length ? [{ dayLabel: KIND_LABEL[k], duration: "", amount: koboToString(sumKobo(mine.map((x) => x.amount))) }] : [];
+    const mins = mine.reduce((s, x) => s + x.minutes, 0);
+    return mine.length ? [{ dayLabel: KIND_LABEL[k], duration: mins > 0 ? durationOf(mins) : "", amount: koboToString(sumKobo(mine.map((x) => x.amount))) }] : [];
   });
   return {
     rows: shown,
     byClass: [...byClass, ...byKind],
-    totalDuration: durationOf(sorted.reduce((s, r) => s + r.minutes, 0)),
+    totalDuration: durationOf(sorted.reduce((s, r) => s + r.minutes, 0) + extra.reduce((s, x) => s + x.minutes, 0)),
     totalAmount: koboToString(sumKobo([...sorted.flatMap((r) => r.amounts), ...extra.map((x) => x.amount)])),
   };
 }
