@@ -101,6 +101,23 @@ describe("hourlyPayslip: the leave pay line (H14 piece 1)", () => {
   });
 });
 
+describe("hourlyPayslip: paid sick days (H14 piece 2, step 2b)", () => {
+  const sick = (over: Partial<AllowanceLineInput> = {}): AllowanceLineInput => ({ kind: "SICK_DAY", siteName: "Site A", baseAmount: null, pct: null, amount: "16000.00", minutes: 960, rate: "1000.00", dates: ["2043-06-01", "2043-06-02"], ...over });
+  it("is shown with the days, the hours and the rate, and the hours count in the total", () => {
+    const h = hourlyPayslip([line({ minutes: 480, amount: "8000.00" })], [sick()])!;
+    expect(h.rows.map((r) => [r.dayLabel, r.duration, r.rate, r.amount])).toEqual([["Weekday", "8 h", "1000.00", "8000.00"], ["Sick pay (2 days)", "16 h", "1000.00", "16000.00"]]);
+    expect(h.totalDuration).toBe("24 h");
+    expect(h.totalAmount).toBe("24000.00");
+  });
+  it("says 1 day for one day, and a person with sick pay and no hours still has a section", () => {
+    const h = hourlyPayslip([], [sick({ dates: ["2043-06-01"], minutes: 480, amount: "8000.00" })])!;
+    expect(h.rows).toHaveLength(1);
+    expect(h.rows[0].dayLabel).toBe("Sick pay (1 day)");
+    expect(h.totalAmount).toBe("8000.00");
+    expect(hourlyPayslip([], [])).toBeNull();
+  });
+});
+
 describe("the file keeps to the exact-money rules", () => {
   it("uses no floating-point rounding or parsing", () => {
     expect(readFileSync("src/lib/payroll/payslip-hourly.ts", "utf8")).not.toMatch(/toFixed|parseFloat|Math\.round/);

@@ -35,6 +35,7 @@ export default async function PayrollRulesPage() {
               <TH>Take-home floor</TH>
               <TH>Hourly minimum pay</TH>
               <TH>Hourly leave pay</TH>
+              <TH>Months averaged for sick pay</TH>
               <TH>State of residence</TH>
               <TH>Effective</TH>
             </TR>
@@ -56,6 +57,7 @@ export default async function PayrollRulesPage() {
                 <TD>{num(x.minTakeHomePctOfGross) > 0 ? `${num(x.minTakeHomePctOfGross)}% of gross` : <span className="text-muted-foreground text-xs">no floor</span>}</TD>
                 <TD>{num(x.hourlyMinMonthlyPay) > 0 ? naira(x.hourlyMinMonthlyPay) : <span className="text-muted-foreground text-xs">no check</span>}</TD>
                 <TD>{num(x.hourlyLeavePct) > 0 ? `${num(x.hourlyLeavePct)}% of hours worked` : <span className="text-muted-foreground text-xs">none</span>}</TD>
+                <TD>{x.hourlyAverageMonths}</TD>
                 <TD>{x.requirePayeState ? <Badge tone="amber">required to approve</Badge> : <span className="text-muted-foreground text-xs">warning only</span>}</TD>
                 <TD>
                   {fmtDate(x.effectiveFrom)} →{" "}
@@ -163,6 +165,17 @@ export default async function PayrollRulesPage() {
                 max: 100,
                 defaultValue: num(r.hourlyLeavePct),
                 help: "0 = none. A figure you or your adviser enter: no figure is built in. Above 0, a person paid by the hour is paid this percentage of the pay for every hour they work, as their annual leave pay, from the day they complete the annual-leave service period in the leave policy (12 months as shipped). It is part of their gross, and shown on the payslip as Leave pay.",
+                span: 3,
+              },
+              {
+                name: "hourlyAverageMonths",
+                label: "Months of hours averaged to pay a sick day (staff paid by the hour)",
+                type: "number",
+                required: true,
+                min: 1,
+                max: 24,
+                defaultValue: r.hourlyAverageMonths,
+                help: "A paid sick day is paid at the person's average daily hours (their approved hours in this many months before the spell, divided by the days they worked) at their weekday rate. 3 is recommended. Only days of the week they worked in that period are paid.",
                 span: 3,
               },
               {

@@ -2981,6 +2981,7 @@ Recurring payroll deductions applied automatically on every REGULAR run — dist
 | minTakeHomePctOfGross | Decimal |  | The take-home floor, % of gross: loan and salary-advance recoveries may not take net pay below this share of gross; the part not taken is carried forward by the loan book. 0 (the default) = no floor, as pay has always been worked. A client-specific policy, not a statutory one. |
 | hourlyMinMonthlyPay | Decimal |  | The minimum monthly pay, in naira, for a person paid only by the hour (the founder's H13): a WARNING (never a block, never a change to pay) when what they earned from hours in the month is below it. A figure the company or its adviser enters; none is built in. 0 (the default) = no check. |
 | hourlyLeavePct | Decimal |  | The leave pay for a person paid by the hour (the founder's H14, 2026-11-20): a percentage added to every hour worked, as their annual leave pay, from the day they complete the company's service period for annual leave (the leave policy, 12 months by default). A figure the company or its adviser enters; none is built in. 0 (the default) = no leave pay for staff paid by the hour. |
+| hourlyAverageMonths | Int |  | How many months of approved hours before a spell of sickness are averaged to pay a sick day or a public holiday not worked, for a person paid by the hour (the founder's H14; 3 as recommended). A company setting. |
 | effectiveFrom | DateTime | yes |  |
 | effectiveTo | DateTime |  |  |
 | createdAt | DateTime |  |  |
@@ -6142,6 +6143,7 @@ How an hourly person's extra pay was made up (hourly pay, H14): one row for each
 | pct | Decimal |  | LEAVE_PERCENT: the percentage used. Null for the day-based kinds. |
 | minutes | Int |  | The day-based kinds: the minutes paid and the hourly rate used. Null for LEAVE_PERCENT. |
 | rate | Decimal |  |  |
+| dates | String[] |  | The day-based kinds: the days paid (YYYY-MM-DD), so a later (supplementary) payroll never pays the same day twice. Empty for LEAVE_PERCENT. |
 | amount | Decimal | yes |  |
 | createdAt | DateTime |  |  |
 
