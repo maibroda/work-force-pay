@@ -666,6 +666,7 @@ model Organization {
   auditSeals                AuditSeal[]
   leavePolicy               LeavePolicy?
   leaveRequests             LeaveRequest[]
+  sickSpells                SickSpell[]
   glAccounts                GlAccount[]
   glMappings                PayrollGlMapping[]
   journalEntries            JournalEntry[]
@@ -2149,6 +2150,7 @@ model Employee {
   validationIssues        PayrollValidationIssue[]
   paymentTxns             PaymentTransaction[]
   leaveRequests           LeaveRequest[]
+  sickSpells              SickSpell[]
   directReports           Employee[]               @relation("ReportingLine")
   feedbackReceived        PerformanceFeedback[]
   probationDecisions      ProbationDecision[]
@@ -2235,6 +2237,7 @@ model EmployeeDocument {
   reviewNote        String?
 
   versions EmployeeDocumentVersion[]
+  sickSpells SickSpell[]
   onboardingTasks OnboardingTask[]
   exitTasks       ExitTask[]
 
@@ -4695,6 +4698,8 @@ model LeavePolicy {
   workingDaysPerWeek Int          @default(5) // 5 = Mon–Fri, 6 = Mon–Sat, 7 = every day
   /// Whether an employee may ask for UNPAID leave (off until the company switches it on). Unpaid leave days are not paid days and do not use up annual leave.
   unpaidLeaveEnabled Boolean      @default(false)
+  /// Paid sick days a year for staff paid by the hour (the founder's H14, 2026-11-20: 5), in the same leave year as annual leave. 0 (the default) = paid sick leave is not set up and no sick spell can be recorded.
+  sickDaysPerYear    Int          @default(0)
   updatedAt          DateTime     @updatedAt
 }
 
@@ -4723,6 +4728,41 @@ model LeaveRequest {
 
   @@index([organizationId, employeeId])
   @@index([organizationId, status])
+}
+
+/// A spell of sickness of a person paid by the hour (the founder's H14, docs/plans/hourly-payroll-h14-build-plan.md): paid sick leave, a set number of days a year (the leave policy), with a medical certificate, approved by HR and
+/// never by the person who recorded it. It holds ONLY dates, working days and the certificate's id: never a diagnosis or any other health detail (the certificate itself is a medical document, which the document store
+/// already restricts to people with sensitive access), and the audit log holds ids and numbers only. The pay for the days is a later piece.
+model SickSpell {
+  id                    String           @id @default(cuid())
+  organizationId        String
+  organization          Organization     @relation(fields: [organizationId], references: [id])
+  employeeId            String
+  employee              Employee         @relation(fields: [employeeId], references: [id])
+  /// The leave year the days are charged to: the one that contains the first day (the same leave years as annual leave).
+  cycleStart            DateTime         @db.Date
+  cycleEnd              DateTime         @db.Date
+  startDate             DateTime         @db.Date
+  endDate               DateTime         @db.Date
+  /// The working days of the company's leave week from the first day to the last.
+  workingDays           Int
+  /// The medical certificate, a document of the employee's in the medical category.
+  certificateDocumentId String
+  certificate           EmployeeDocument @relation(fields: [certificateDocumentId], references: [id], onDelete: Restrict)
+  status                LeaveStatus      @default(PENDING)
+  recordedBy            String
+  recordedByUserId      String
+  decidedBy             String?
+  decidedByUserId       String?
+  decidedAt             DateTime?
+  /// The reason for a rejection (words kept here, never in the audit log).
+  decisionNote          String?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  @@index([organizationId, employeeId])
+  @@index([organizationId, status])
+  @@index([certificateDocumentId])
 }
 
 // ─────────────────────────── GENERAL LEDGER ───────────────────────────

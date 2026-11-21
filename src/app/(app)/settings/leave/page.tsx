@@ -55,6 +55,16 @@ export default async function LeavePolicyPage() {
               help: "Which days count against the leave balance. It is also the working week for a contract on the working-days basis that sets none of its own.",
             },
             {
+              name: "sickDaysPerYear",
+              label: "Paid sick days a year (staff paid by the hour)",
+              type: "number",
+              min: 0,
+              max: 60,
+              defaultValue: p.sickDaysPerYear,
+              help: "0 = paid sick leave is not set up and no spell of sickness can be recorded. Above 0, a person paid by the hour can have a spell of sickness recorded, with a medical certificate, approved by HR (never by the person who recorded it), up to this many working days in each leave year (the same leave year and the same service period as annual leave). Days beyond it are recorded but not paid.",
+              span: 3,
+            },
+            {
               name: "unpaidLeaveEnabled",
               label: "Allow unpaid leave",
               type: "checkbox",

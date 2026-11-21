@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-283 tables and 213 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+284 tables and 213 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -109,6 +109,7 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | auditSeals | → AuditSeal[] |  |  |
 | leavePolicy | → LeavePolicy |  |  |
 | leaveRequests | → LeaveRequest[] |  |  |
+| sickSpells | → SickSpell[] |  |  |
 | glAccounts | → GlAccount[] |  |  |
 | glMappings | → PayrollGlMapping[] |  |  |
 | journalEntries | → JournalEntry[] |  |  |
@@ -1341,6 +1342,7 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | validationIssues | → PayrollValidationIssue[] |  |  |
 | paymentTxns | → PaymentTransaction[] |  |  |
 | leaveRequests | → LeaveRequest[] |  |  |
+| sickSpells | → SickSpell[] |  |  |
 | directReports | → Employee[] |  |  |
 | feedbackReceived | → PerformanceFeedback[] |  |  |
 | probationDecisions | → ProbationDecision[] |  |  |
@@ -1418,6 +1420,7 @@ Employee documents (ID, licenses, contracts, certificates). Metadata-only — fi
 | reviewedAt | DateTime |  |  |
 | reviewNote | String |  | The reason for a rejection, or the approver's note. |
 | versions | → EmployeeDocumentVersion[] |  |  |
+| sickSpells | → SickSpell[] |  |  |
 | onboardingTasks | → OnboardingTask[] |  |  |
 | exitTasks | → ExitTask[] |  |  |
 
@@ -3528,6 +3531,7 @@ One policy per organization. Defaults: 10 working days a year, due after 12 mont
 | eligibilityMonths | Int |  |  |
 | workingDaysPerWeek | Int |  |  |
 | unpaidLeaveEnabled | Boolean |  | Whether an employee may ask for UNPAID leave (off until the company switches it on). Unpaid leave days are not paid days and do not use up annual leave. |
+| sickDaysPerYear | Int |  | Paid sick days a year for staff paid by the hour (the founder's H14, 2026-11-20: 5), in the same leave year as annual leave. 0 (the default) = paid sick leave is not set up and no sick spell can be recorded. |
 | updatedAt | DateTime |  |  |
 
 ### LeaveRequest
@@ -3552,6 +3556,34 @@ One policy per organization. Defaults: 10 working days a year, due after 12 mont
 | decidedById | String |  |  |
 | decidedAt | DateTime |  |  |
 | decisionNote | String |  |  |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+
+### SickSpell
+
+A spell of sickness of a person paid by the hour (the founder's H14, docs/plans/hourly-payroll-h14-build-plan.md): paid sick leave, a set number of days a year (the leave policy), with a medical certificate, approved by HR and never by the person who recorded it. It holds ONLY dates, working days and the certificate's id: never a diagnosis or any other health detail (the certificate itself is a medical document, which the document store already restricts to people with sensitive access), and the audit log holds ids and numbers only. The pay for the days is a later piece.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| employeeId | String | yes |  |
+| employee | → Employee |  |  |
+| cycleStart | DateTime | yes | The leave year the days are charged to: the one that contains the first day (the same leave years as annual leave). |
+| cycleEnd | DateTime | yes |  |
+| startDate | DateTime | yes |  |
+| endDate | DateTime | yes |  |
+| workingDays | Int | yes | The working days of the company's leave week from the first day to the last. |
+| certificateDocumentId | String | yes | The medical certificate, a document of the employee's in the medical category. |
+| certificate | → EmployeeDocument |  |  |
+| status | LeaveStatus |  |  |
+| recordedBy | String | yes |  |
+| recordedByUserId | String | yes |  |
+| decidedBy | String |  |  |
+| decidedByUserId | String |  |  |
+| decidedAt | DateTime |  |  |
+| decisionNote | String |  | The reason for a rejection (words kept here, never in the audit log). |
 | createdAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |
 
