@@ -44,6 +44,14 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
+
+## Not yet merged (branch `hourly-leave-defaults`, one tiny migration; builds on #260)
+
+- **Hourly pay: the founder's figures as defaults for NEW settings** (his message of 2026-11-21: leave pay 2.5% by default, a contract may set its own; 5 paid sick days; 3 months averaged). **A payroll rule version created without a figure now starts at 2.5% leave pay** (0 still means none), and **a company with no leave policy yet starts with 5 paid sick days**; the 3 months averaged was already the default. **Every existing payroll rule version and leave policy keeps the value it has, so no past or open payroll changes**: to switch leave pay on, create a new payroll rule version dated from the day you want; the forms show the current values. The demonstration company's rule is made explicitly 0 so its figures are unchanged. A new company copies the bureau's master rules, so enter 2.5 on the master rule for new companies to start with it.
+- **Migration `20270103090000_leave_defaults`:** two column defaults (`PayrollRule.hourlyLeavePct` 2.5, `LeavePolicy.sickDaysPerYear` 5) for NEW rows; no stored value changes. With `down.sql`; round-tripped down and up on a copy with no drift left. Data dictionary regenerated.
+- **Not yet built (stated plainly):** the contract's own leave percentage, which the founder chose to put **on the contract's rate** for a job role (effective-dated, blank = the company default): the next step.
+- **Tests (written first):** `tests/integration/leave-defaults.test.ts` (4); two existing tests updated for the new defaults. Explain-back note: `docs/plans/hourly-payroll-leave-defaults-explain-back.md`.
+
 ## Merged in #260 (no migration)
 
 - **Hourly pay, H14 piece 2, step 2c: the screens for paid sick leave** (the founder's "CONTINUE" of 2026-11-21). The services of step 2a get screens, as **sections of the two leave pages that already exist** (no new page, so navigation, page permissions and module switches are unchanged), shown only when paid sick days are set up in the leave policy. **My leave** (for a person paid by the hour): their paid sick days left in the leave year, a form to record a spell of sickness with the medical certificate chosen from their own medical documents (or a link to add it under My documents), and their spells with Cancel while one waits. **Leave management** (HR only): record a spell by choosing the certificate (which says whose it is), and every spell with Approve, Reject (a reason is required) and Cancel; the recorder and the person it is about are shown "Needs another approver" instead. A supervisor sees none of it. No migration and no pay changes.

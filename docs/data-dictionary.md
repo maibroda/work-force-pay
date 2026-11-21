@@ -2980,7 +2980,7 @@ Recurring payroll deductions applied automatically on every REGULAR run — dist
 | nhfEmployeeRatePct | Decimal |  | The rate of the VOLUNTARY NHF (National Housing Fund) contribution, as a % of BASIC pay: 2.5 by the founder's rule (the tax adviser confirms it). It is taken only from employees who have chosen to contribute (Employee.nhfContributes), as its own deduction line, and is allowed against PAYE at the amount taken. 0 = none. |
 | minTakeHomePctOfGross | Decimal |  | The take-home floor, % of gross: loan and salary-advance recoveries may not take net pay below this share of gross; the part not taken is carried forward by the loan book. 0 (the default) = no floor, as pay has always been worked. A client-specific policy, not a statutory one. |
 | hourlyMinMonthlyPay | Decimal |  | The minimum monthly pay, in naira, for a person paid only by the hour (the founder's H13): a WARNING (never a block, never a change to pay) when what they earned from hours in the month is below it. A figure the company or its adviser enters; none is built in. 0 (the default) = no check. |
-| hourlyLeavePct | Decimal |  | The leave pay for a person paid by the hour (the founder's H14, 2026-11-20): a percentage added to every hour worked, as their annual leave pay, from the day they complete the company's service period for annual leave (the leave policy, 12 months by default). A figure the company or its adviser enters; none is built in. 0 (the default) = no leave pay for staff paid by the hour. |
+| hourlyLeavePct | Decimal |  | The leave pay for a person paid by the hour (the founder's H14, 2026-11-20): a percentage added to every hour worked, as their annual leave pay, from the day they complete the company's service period for annual leave (the leave policy, 12 months by default). The founder's figure of 2026-11-21 is 2.5, the default for a NEW rule version (a contract rate may set its own); every existing version keeps the value it has. 0 = no leave pay. |
 | hourlyAverageMonths | Int |  | How many months of approved hours before a spell of sickness are averaged to pay a sick day or a public holiday not worked, for a person paid by the hour (the founder's H14; 3 as recommended). A company setting. |
 | effectiveFrom | DateTime | yes |  |
 | effectiveTo | DateTime |  |  |
@@ -3532,7 +3532,7 @@ One policy per organization. Defaults: 10 working days a year, due after 12 mont
 | eligibilityMonths | Int |  |  |
 | workingDaysPerWeek | Int |  |  |
 | unpaidLeaveEnabled | Boolean |  | Whether an employee may ask for UNPAID leave (off until the company switches it on). Unpaid leave days are not paid days and do not use up annual leave. |
-| sickDaysPerYear | Int |  | Paid sick days a year for staff paid by the hour (the founder's H14, 2026-11-20: 5), in the same leave year as annual leave. 0 (the default) = paid sick leave is not set up and no sick spell can be recorded. |
+| sickDaysPerYear | Int |  | Paid sick days a year for staff paid by the hour (the founder's H14: 5), in the same leave year as annual leave. 5 is the default for a NEW policy (a company with none yet); every existing policy keeps the value it has. 0 = paid sick leave is not set up and no sick spell can be recorded. |
 | updatedAt | DateTime |  |  |
 
 ### LeaveRequest
