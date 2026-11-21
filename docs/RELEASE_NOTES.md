@@ -53,7 +53,13 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 - **Migration `20270105090000_sick_spell_cancel`:** five optional columns on the sick spell. With `down.sql`; round-tripped down and up on a copy with no drift left. Data dictionary regenerated.
 - **Tests (written first):** `tests/integration/sick-spell-cancel-pay.test.ts` (3) and three new tests (one changed) in `tests/integration/sick-spell.test.ts`. Explain-back note: `docs/plans/hourly-sick-spell-correction-explain-back.md`.
 
-## Not yet merged (branch `hourly-contract-leave-pct`, one small migration)
+## Merged in #265 (no migration)
+
+- **Hourly reports now show leave pay, sick pay and holiday pay not worked** (the founder's "CONTINUE" after the plan `hourly-reports-allowances-plan.md`: option A, its defaults). The three cost reports (by employee, by client and contract, month by month) gain four columns: **Leave pay (payroll), Sick pay (payroll), Holiday pay not worked (payroll), Total with extra pay**, read from the lines the pay run stored (no second calculation) for each whole payroll month the dates touch; superseded runs are ignored, supplementary runs count once. **"Total cost" keeps its meaning** (approved hours at approved rates, indicative). The month-by-month report also shows the payroll's state for the month, and a month with hours but no calculated payroll shows 0 and is named in the description. The hours-only status report is unchanged. A stale line in the report descriptions ("the pay run does not read hours yet") is corrected.
+- **Reports only:** no pay figure, payslip, payroll run or setting changes, and no migration.
+- **Tests (written first):** `tests/integration/hourly-reports-allowances.test.ts` (5) and `tests/unit/hourly-allowance-report.test.ts` (5). Explain-back note: `docs/plans/hourly-reports-allowances-explain-back.md`.
+
+## Merged in #264 (one small migration)
 
 - **Hourly pay: the contract's own leave percentage** (the founder's message of 2026-11-21: the contract may set its own, the company's 2.5% is the default). A new optional box on each **agreed rate** (Contracts > Agreed rates): **blank = the company's percentage, 0 = no leave pay on this contract**, effective-dated with the rate row (a new row starts blank). The pay run gives each site its contract rate's percentage in force on the last day worked there in the month, else the company's; the percentage actually used is stored on the payroll record and shown on the payslip as before. Late hours (supplementary payroll) work the same. **A contract can now pay leave pay even while the company's percentage is 0.** Nothing changes for any company until a percentage is entered on a rate.
 - **Migration `20270104090000_contract_leave_pct`:** one optional column (`ContractRate.hourlyLeavePct`). With `down.sql`; round-tripped down and up on a copy with no drift left. Data dictionary regenerated.

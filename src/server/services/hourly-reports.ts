@@ -1,7 +1,8 @@
 import type { Ctx } from "@/lib/auth/context";
 import { d, iso } from "@/lib/dates";
-import { koboToNumber, subKobo, type Kobo } from "@/lib/money-exact";
+import { addKobo, koboToNumber, subKobo, toKobo, type Kobo } from "@/lib/money-exact";
 import { isIsoDate } from "@/lib/pay-rate";
+import { groupAllowances, rollupAllowances, type AllowanceRollup, type AllowanceRow } from "@/lib/payroll/hourly-allowance-report";
 import { groupLines, hoursOf, priceLines, rollup, type Line, type Rollup } from "@/lib/payroll/hourly-report";
 import { parseWatLocal } from "@/lib/payroll/time-entry";
 import { fullName } from "@/lib/utils";
@@ -62,6 +63,51 @@ const hoursCols = (r: Rollup) => ({
   unpricedHours: hoursOf(r.unpricedMinutes),
 });
 
+/**
+ * The three extra pays (leave pay, sick pay, holiday pay not worked) as payroll calculated them, read from the stored payroll lines (the plan's option A): for each WHOLE payroll month the dates touch, from every payroll run of
+ * the month that is not superseded (a supplementary run's lines count too; a recalculation replaced the lines of its run, so nothing is counted twice). Also the payroll's state for each month, so a month with no calculated payroll is plain.
+ */
+const STATE_ORDER = ["DRAFT", "CALCULATED", "PENDING_APPROVAL", "APPROVED", "LOCKED", "PAID"];
+const STATE_LABEL: Record<string, string> = { DRAFT: "Calculated", CALCULATED: "Calculated", PENDING_APPROVAL: "Waiting for approval", APPROVED: "Approved", LOCKED: "Locked", PAID: "Paid" };
+const monthKey = (year: number, month: number) => `${year}-${String(month).padStart(2, "0")}`;
+
+async function allowanceLines(ctx: Ctx, from: string, to: string, p: Params): Promise<{ rows: AllowanceRow[]; states: Map<string, string> }> {
+  const months = monthsBetween(from, to);
+  const runs = await db.payrollRun.findMany({
+    where: { organizationId: ctx.orgId, status: { not: "SUPERSEDED" }, period: { OR: months.map((m) => ({ year: Number(m.slice(0, 4)), month: Number(m.slice(5, 7)) })) } },
+    select: { id: true, status: true, period: { select: { year: true, month: true } } },
+  });
+  const monthOf = new Map(runs.map((r) => [r.id, monthKey(r.period.year, r.period.month)]));
+  const rank = new Map<string, number>();
+  const states = new Map<string, string>();
+  for (const r of runs) {
+    const m = monthOf.get(r.id)!;
+    const k = STATE_ORDER.indexOf(r.status);
+    if (k >= (rank.get(m) ?? -1)) {
+      rank.set(m, k);
+      states.set(m, STATE_LABEL[r.status] ?? r.status);
+    }
+  }
+  const found = runs.length
+    ? await db.hourlyAllowanceLine.findMany({
+        where: { organizationId: ctx.orgId, runId: { in: runs.map((r) => r.id) }, ...(p.clientId ? { clientId: p.clientId } : {}), ...(p.employeeId ? { employeeId: p.employeeId } : {}) },
+        select: { runId: true, employeeId: true, contractId: true, clientId: true, kind: true, amount: true },
+      })
+    : [];
+  const rows: AllowanceRow[] = found.map((l) => ({ employeeId: l.employeeId, contractId: l.contractId, clientId: l.clientId, month: monthOf.get(l.runId)!, kind: l.kind, amountKobo: toKobo(l.amount) }));
+  return { rows, states };
+}
+
+/** The extra-pay columns of one row: each extra pay, and the hours cost plus all three. */
+const extraCols = (hours: Rollup, extra: AllowanceRollup) => ({
+  leavePay: koboToNumber(extra.leaveKobo as Kobo),
+  sickPay: koboToNumber(extra.sickKobo as Kobo),
+  holidayPay: koboToNumber(extra.holidayKobo as Kobo),
+  totalWithExtra: koboToNumber(addKobo(hours.totalKobo as Kobo, extra.totalKobo as Kobo)),
+});
+
+const EXTRA_NOTE = "Leave pay, sick pay and holiday pay are the amounts payroll calculated (the stored payroll lines), for each whole payroll month the dates touch; a month with no calculated payroll shows 0 for them. Total with extra pay = the indicative hours cost plus those three.";
+
 const CLASS_COLS: Col[] = [
   HOURS("weekdayHours", "Weekday hours"),
   HOURS("weekendHours", "Weekend hours"),
@@ -72,9 +118,13 @@ const CLASS_COLS: Col[] = [
   MONEY("holidayAmount", "Public holiday cost"),
   MONEY("totalAmount", "Total cost"),
   HOURS("unpricedHours", "Hours with no approved rate"),
+  MONEY("leavePay", "Leave pay (payroll)"),
+  MONEY("sickPay", "Sick pay (payroll)"),
+  MONEY("holidayPay", "Holiday pay not worked (payroll)"),
+  MONEY("totalWithExtra", "Total with extra pay"),
 ];
 
-const INDICATIVE = "The cost is indicative: approved hours at the approved hourly rates, not payroll (the pay run does not read hours yet). Only approved shifts count. Hours with no approved rate are shown apart and are not in the cost.";
+const INDICATIVE = "The cost is indicative: approved hours at the approved hourly rates, not payroll. Only approved shifts count. Hours with no approved rate are shown apart and are not in the cost.";
 
 const off = (title: string, columns: Col[], filters: Report["filters"]): Report => ({ title, description: "Hourly pay is not switched on for this company.", usesRun: false, filters, columns, rows: [] });
 
@@ -86,27 +136,47 @@ export async function buildHourlyReport(ctx: Ctx, type: HourlyReportType, p: Par
     case "hourly-summary": {
       const columns: Col[] = [{ key: "employeeNumber", label: "Emp. No." }, { key: "employeeName", label: "Name" }, { key: "category", label: "Job role" }, ...CLASS_COLS];
       if (!enabled) return off("Hourly pay: by employee", columns, ["dateRange", "client", "employee"]);
-      const { lines, emps } = await pricedLines(ctx, from, to, p);
-      const rows: Row[] = [...groupLines(lines, (l) => l.employeeId).entries()]
-        .map(([id, group]) => ({ e: emps.get(id), group }))
+      const { lines } = await pricedLines(ctx, from, to, p);
+      const extra = await allowanceLines(ctx, from, to, p);
+      const hoursBy = groupLines(lines, (l) => l.employeeId);
+      const extraBy = groupAllowances(extra.rows, (r) => r.employeeId);
+      const ids = [...new Set([...hoursBy.keys(), ...extraBy.keys()])];
+      const emps = await people(ctx, ids);
+      const rows: Row[] = ids
+        .map((id) => ({ e: emps.get(id), id }))
         .filter((x) => x.e)
         .sort((a, b) => a.e!.employeeNumber.localeCompare(b.e!.employeeNumber))
-        .map(({ e, group }) => ({ employeeNumber: e!.employeeNumber, employeeName: fullName(e!), category: e!.category.name, ...hoursCols(rollup(group)) }));
-      return { title: "Hourly pay: by employee", description: `Approved hours and the indicative cost for each person paid by the hour, from ${from} to ${to}. ${INDICATIVE}`, usesRun: false, filters: ["dateRange", "client", "employee"], columns, rows, totals: hoursCols(rollup(lines)) };
+        .map(({ e, id }) => {
+          const hours = rollup(hoursBy.get(id) ?? []);
+          return { employeeNumber: e!.employeeNumber, employeeName: fullName(e!), category: e!.category.name, ...hoursCols(hours), ...extraCols(hours, rollupAllowances(extraBy.get(id) ?? [])) };
+        });
+      return { title: "Hourly pay: by employee", description: `Approved hours and the indicative cost for each person paid by the hour, from ${from} to ${to}. ${INDICATIVE} ${EXTRA_NOTE}`, usesRun: false, filters: ["dateRange", "client", "employee"], columns, rows, totals: { ...hoursCols(rollup(lines)), ...extraCols(rollup(lines), rollupAllowances(extra.rows)) } };
     }
     case "hourly-by-client": {
       const columns: Col[] = [{ key: "client", label: "Client" }, { key: "contract", label: "Contract" }, HOURS("people", "People"), ...CLASS_COLS];
       if (!enabled) return off("Hourly pay: by client and contract", columns, ["dateRange", "client"]);
       const { lines } = await pricedLines(ctx, from, to, p);
-      const contracts = await db.contract.findMany({ where: { organizationId: ctx.orgId, id: { in: [...new Set(lines.map((l) => l.contractId))] } }, select: { id: true, contractNumber: true, name: true, client: { select: { name: true } } } });
+      const extra = await allowanceLines(ctx, from, to, p);
+      const hoursBy = groupLines(lines, (l) => l.contractId);
+      const extraBy = groupAllowances(extra.rows, (r) => r.contractId ?? "");
+      const contractIds = [...new Set([...hoursBy.keys(), ...extraBy.keys()])].filter(Boolean);
+      const contracts = await db.contract.findMany({ where: { organizationId: ctx.orgId, id: { in: contractIds } }, select: { id: true, contractNumber: true, name: true, client: { select: { name: true } } } });
       const byId = new Map(contracts.map((c) => [c.id, c]));
-      const rows: Row[] = [...groupLines(lines, (l) => l.contractId).entries()]
-        .map(([id, group]) => ({ c: byId.get(id), group }))
+      const rows: Row[] = contractIds
+        .map((id) => ({ c: byId.get(id), id }))
         .filter((x) => x.c)
         .sort((a, b) => a.c!.client.name.localeCompare(b.c!.client.name) || a.c!.contractNumber.localeCompare(b.c!.contractNumber))
-        .map(({ c, group }) => ({ client: c!.client.name, contract: `${c!.contractNumber} — ${c!.name}`, people: new Set(group.map((l) => l.employeeId)).size, ...hoursCols(rollup(group)) }));
-      const totals = { people: new Set(lines.map((l) => l.employeeId)).size, ...hoursCols(rollup(lines)) };
-      return { title: "Hourly pay: by client and contract", description: `Approved hours and the indicative cost for each client and contract, from ${from} to ${to}. The total is the same as the by-employee report. ${INDICATIVE}`, usesRun: false, filters: ["dateRange", "client"], columns, rows, totals };
+        .map(({ c, id }) => {
+          const group = hoursBy.get(id) ?? [];
+          const ex = extraBy.get(id) ?? [];
+          const hours = rollup(group);
+          return { client: c!.client.name, contract: `${c!.contractNumber} — ${c!.name}`, people: new Set([...group.map((l) => l.employeeId), ...ex.map((r) => r.employeeId)]).size, ...hoursCols(hours), ...extraCols(hours, rollupAllowances(ex)) };
+        });
+      // extra pay with no contract recorded (not expected) is kept in a row of its own, so the total is never short of the by-employee total
+      const orphan = extraBy.get("") ?? [];
+      if (orphan.length) rows.push({ client: "—", contract: "No contract recorded", people: new Set(orphan.map((r) => r.employeeId)).size, ...hoursCols(rollup([])), ...extraCols(rollup([]), rollupAllowances(orphan)) });
+      const totals = { people: new Set([...lines.map((l) => l.employeeId), ...extra.rows.map((r) => r.employeeId)]).size, ...hoursCols(rollup(lines)), ...extraCols(rollup(lines), rollupAllowances(extra.rows)) };
+      return { title: "Hourly pay: by client and contract", description: `Approved hours and the indicative cost for each client and contract, from ${from} to ${to}. The total is the same as the by-employee report. ${INDICATIVE} ${EXTRA_NOTE}`, usesRun: false, filters: ["dateRange", "client"], columns, rows, totals };
     }
     case "hourly-monthly": {
       const columns: Col[] = [
@@ -118,6 +188,11 @@ export async function buildHourlyReport(ctx: Ctx, type: HourlyReportType, p: Par
         HOURS("totalHours", "Total hours"),
         MONEY("totalAmount", "Total cost"),
         HOURS("unpricedHours", "Hours with no approved rate"),
+        MONEY("leavePay", "Leave pay (payroll)"),
+        MONEY("sickPay", "Sick pay (payroll)"),
+        MONEY("holidayPay", "Holiday pay not worked (payroll)"),
+        MONEY("totalWithExtra", "Total with extra pay"),
+        { key: "payrollState", label: "Payroll" },
         HOURS("hoursChange", "Hours change on the month before"),
         MONEY("amountChange", "Cost change on the month before"),
       ];
@@ -127,6 +202,8 @@ export async function buildHourlyReport(ctx: Ctx, type: HourlyReportType, p: Par
       const start = p.from && isIsoDate(p.from) ? p.from : monthsBefore(end, 5);
       const { lines } = await pricedLines(ctx, start, end, p);
       const byMonth = groupLines(lines, (l) => l.month);
+      const extra = await allowanceLines(ctx, start, end, p);
+      const extraByMonth = groupAllowances(extra.rows, (r) => r.month);
       const rows: Row[] = [];
       let prev: Rollup | null = null;
       for (const month of monthsBetween(start, end)) {
@@ -142,20 +219,24 @@ export async function buildHourlyReport(ctx: Ctx, type: HourlyReportType, p: Par
           totalHours: h.totalHours,
           totalAmount: h.totalAmount,
           unpricedHours: h.unpricedHours,
+          ...extraCols(r, rollupAllowances(extraByMonth.get(month) ?? [])),
+          payrollState: extra.states.get(month) ?? "Not calculated",
           hoursChange: prev ? signedHours(r.totalMinutes - prev.totalMinutes) : null,
           amountChange: prev ? koboToNumber(subKobo(r.totalKobo as Kobo, prev.totalKobo as Kobo)) : null,
         });
         prev = r;
       }
       const all = hoursCols(rollup(lines));
+      const allExtra = extraCols(rollup(lines), rollupAllowances(extra.rows));
+      const notCalculated = [...byMonth.entries()].filter(([m, g]) => g.length && !extra.states.has(m)).map(([m]) => m).sort();
       return {
         title: "Hourly pay: month by month",
-        description: `Approved hours and the indicative cost for each month from ${start} to ${end}, with the change on the month before. A shift over a month end is split between the two months. ${INDICATIVE}`,
+        description: `Approved hours and the indicative cost for each month from ${start} to ${end}, with the change on the month before. A shift over a month end is split between the two months. ${INDICATIVE} ${EXTRA_NOTE}${notCalculated.length ? ` Not yet calculated (no payroll for the month): ${notCalculated.join(", ")}.` : ""}`,
         usesRun: false,
         filters: ["dateRange", "client"],
         columns,
         rows,
-        totals: { totalHours: all.totalHours, totalAmount: all.totalAmount, unpricedHours: all.unpricedHours, weekdayHours: all.weekdayHours, weekendHours: all.weekendHours, holidayHours: all.holidayHours },
+        totals: { totalHours: all.totalHours, totalAmount: all.totalAmount, unpricedHours: all.unpricedHours, weekdayHours: all.weekdayHours, weekendHours: all.weekendHours, holidayHours: all.holidayHours, ...allExtra },
       };
     }
     case "hourly-status": {
