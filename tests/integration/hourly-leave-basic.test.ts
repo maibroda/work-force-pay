@@ -61,10 +61,7 @@ async function world(opts: { leavePct?: string | null; tag?: string; noBasic?: b
   };
   const record = (runId: string, employeeId: string) => db.payrollRecord.findFirstOrThrow({ where: { runId, employeeId } });
   const allowances = (recordId: string) => db.hourlyAllowanceLine.findMany({ where: { recordId } });
-  /** Sets a new rate row through the same service the screen uses (closes the old one the day before). */
-  const setRate = (input: Record<string, unknown>) =>
-    db.$transaction((tx) => addContractRateRecord(payroll, tx, contractRateSchema.parse({ contractId: contract.id, categoryId: cat.id, salaryStructureId: structure.id, agreedRate: 200000, ...input })));
-  return { payroll, org, cat, contract, rate, person, shift, site, ruleFor, record, allowances, setRate, beat, tag };
+  return { payroll, org, cat, contract, rate, person, shift, site, ruleFor, record, allowances, beat, tag };
 }
 
 
