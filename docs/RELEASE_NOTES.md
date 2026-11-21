@@ -44,6 +44,11 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
+## Merged in #262 (tests only)
+
+- **Hourly pay, H14 piece 4: the 3,000-person performance test with all the extra pay on** (the founder's "GO" of 2026-11-21). The test of rule 12 (payroll for 3,000 workers in 10 minutes or less) now runs with the leave percentage (10, a test figure), paid sick days (300 people ill on two days) and a paid public holiday not worked (nobody works it) all on: 3,000 people, 89,100 shifts in March 2041. It checks the first calculation and a recalculation each finish inside 10 minutes, and that every person is paid exactly the figure worked out in the test independently of the pay run (hours, leave pay, holiday, and for the 300 two sick days). **Measured on a laptop: first calculation 91.4 s, recalculation 65.8 s (limit 600 s); the whole test file 517 s, about 3 to 4 minutes longer than before, so every CI run is about that much longer.** A test change only: no code, no migration, no change to any amount. The test can append its timings to the file named by `WFP_PERF_REPORT`.
+- **Not measured:** several holidays in one month; page speed and low bandwidth (separate parts of rule 12). Explain-back note: `docs/plans/hourly-payroll-h14-piece4-explain-back.md`.
+
 ## Merged in #260 (no migration)
 
 - **Hourly pay, H14 piece 2, step 2c: the screens for paid sick leave** (the founder's "CONTINUE" of 2026-11-21). The services of step 2a get screens, as **sections of the two leave pages that already exist** (no new page, so navigation, page permissions and module switches are unchanged), shown only when paid sick days are set up in the leave policy. **My leave** (for a person paid by the hour): their paid sick days left in the leave year, a form to record a spell of sickness with the medical certificate chosen from their own medical documents (or a link to add it under My documents), and their spells with Cancel while one waits. **Leave management** (HR only): record a spell by choosing the certificate (which says whose it is), and every spell with Approve, Reject (a reason is required) and Cancel; the recorder and the person it is about are shown "Needs another approver" instead. A supervisor sees none of it. No migration and no pay changes.
