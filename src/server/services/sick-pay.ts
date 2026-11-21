@@ -155,11 +155,16 @@ export async function loadSickPay(tx: Tx, a: SickPayArgs): Promise<Map<string, S
 }
 
 /** The days of sick pay already paid by the period's payrolls that have not been replaced (a supplementary payroll must not pay them again), by person. Read for ONE company. */
-export async function sickDaysAlreadyPaid(tx: Tx, orgId: string, periodId: string): Promise<Map<string, Set<string>>> {
+export function sickDaysAlreadyPaid(tx: Tx, orgId: string, periodId: string): Promise<Map<string, Set<string>>> {
+  return allowanceDaysAlreadyPaid(tx, orgId, periodId, "SICK_DAY");
+}
+
+/** The days of a kind of day-based extra pay (sick pay, holiday pay) already paid by the period's payrolls that have not been replaced, by person. Read for ONE company. */
+export async function allowanceDaysAlreadyPaid(tx: Tx, orgId: string, periodId: string, kind: "SICK_DAY" | "HOLIDAY_NOT_WORKED"): Promise<Map<string, Set<string>>> {
   const runs = await tx.payrollRun.findMany({ where: { organizationId: orgId, periodId, status: { not: "SUPERSEDED" } }, select: { id: true } });
   const out = new Map<string, Set<string>>();
   if (!runs.length) return out;
-  const lines = await tx.hourlyAllowanceLine.findMany({ where: { organizationId: orgId, runId: { in: runs.map((r) => r.id) }, kind: "SICK_DAY" }, select: { employeeId: true, dates: true } });
+  const lines = await tx.hourlyAllowanceLine.findMany({ where: { organizationId: orgId, runId: { in: runs.map((r) => r.id) }, kind }, select: { employeeId: true, dates: true } });
   for (const l of lines) {
     const set = out.get(l.employeeId) ?? new Set<string>();
     for (const x of l.dates) set.add(x);
