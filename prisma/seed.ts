@@ -237,6 +237,7 @@ async function seedStatutory(orgId: string) {
       overtimeMultiplier: 1.5,
       maxOvertimeHoursPerMonth: 60,
       maxDeductionPctOfGross: 33.33,
+      hourlyLeaveBasis: "ALL_PAY", // the demonstration company keeps the first build's basis (the whole pay), so its figures and the tests that copy its rule do not change; a real company's new rule version starts on the Basic part
       hourlyLeavePct: 0, // the demonstration company keeps leave pay for staff paid by the hour off, so its figures do not change; a real company's new rule version starts at 2.5
       effectiveFrom: d("2020-01-01"),
     },
