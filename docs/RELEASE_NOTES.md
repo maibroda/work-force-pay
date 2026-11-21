@@ -44,13 +44,19 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-
 ## Not yet merged (branch `hourly-contract-leave-pct`, one small migration)
 
 - **Hourly pay: the contract's own leave percentage** (the founder's message of 2026-11-21: the contract may set its own, the company's 2.5% is the default). A new optional box on each **agreed rate** (Contracts > Agreed rates): **blank = the company's percentage, 0 = no leave pay on this contract**, effective-dated with the rate row (a new row starts blank). The pay run gives each site its contract rate's percentage in force on the last day worked there in the month, else the company's; the percentage actually used is stored on the payroll record and shown on the payslip as before. Late hours (supplementary payroll) work the same. **A contract can now pay leave pay even while the company's percentage is 0.** Nothing changes for any company until a percentage is entered on a rate.
 - **Migration `20270104090000_contract_leave_pct`:** one optional column (`ContractRate.hourlyLeavePct`). With `down.sql`; round-tripped down and up on a copy with no drift left. Data dictionary regenerated.
 - **Assumption to confirm:** a rate change in the middle of a month applies to that month's hours at that site as a whole (the percentage in force on the last day worked there).
 - **Tests (written first):** `tests/integration/hourly-contract-leave-pct.test.ts` (8) and two in `tests/unit/hourly-leave-pay.test.ts`. Explain-back note: `docs/plans/hourly-payroll-contract-leave-pct-explain-back.md`.
+
+## Merged in #263 (one tiny migration)
+
+- **Hourly pay: the founder's figures as defaults for NEW settings** (his message of 2026-11-21: leave pay 2.5% by default, a contract may set its own; 5 paid sick days; 3 months averaged). **A payroll rule version created without a figure now starts at 2.5% leave pay** (0 still means none), and **a company with no leave policy yet starts with 5 paid sick days**; the 3 months averaged was already the default. **Every existing payroll rule version and leave policy keeps the value it has, so no past or open payroll changes**: to switch leave pay on, create a new payroll rule version dated from the day you want; the forms show the current values. The demonstration company's rule is made explicitly 0 so its figures are unchanged. A new company copies the bureau's master rules, so enter 2.5 on the master rule for new companies to start with it.
+- **Migration `20270103090000_leave_defaults`:** two column defaults (`PayrollRule.hourlyLeavePct` 2.5, `LeavePolicy.sickDaysPerYear` 5) for NEW rows; no stored value changes. With `down.sql`; round-tripped down and up on a copy with no drift left. Data dictionary regenerated.
+- **The contract's own leave percentage** (on the contract's rate) was built next, in #264 (above).
+- **Tests (written first):** `tests/integration/leave-defaults.test.ts` (4); two existing tests updated for the new defaults. Explain-back note: `docs/plans/hourly-payroll-leave-defaults-explain-back.md`.
 
 ## Merged in #262 (tests only)
 

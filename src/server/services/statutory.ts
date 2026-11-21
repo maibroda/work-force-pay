@@ -414,7 +414,7 @@ export const payrollRuleSchema = z.object({
   minTakeHomePctOfGross: z.coerce.number().min(0).max(100).default(0),
   /** The minimum monthly pay for a person paid only by the hour (H13), in naira and kobo: a warning only. 0 = no check. */
   /** The leave pay for a person paid by the hour (H14): a percentage added to every hour worked, with at most two decimal places. 0 = none; no figure is built in. */
-  hourlyLeavePct: z.coerce.number().min(0).max(100).refine((n) => Math.abs(n * 100 - Math.round(n * 100)) < 0.001, "Use a percentage with at most two decimal places.").default(0),
+  hourlyLeavePct: z.coerce.number().min(0).max(100).refine((n) => Math.abs(n * 100 - Math.round(n * 100)) < 0.001, "Use a percentage with at most two decimal places.").default(2.5),
   /** The months of approved hours before a spell of sickness that are averaged to pay a sick day or a public holiday not worked, for a person paid by the hour (H14): 1 to 24, 3 as recommended. */
   hourlyAverageMonths: z.coerce.number().int().min(1).max(24).default(3),
   hourlyMinMonthlyPay: z.coerce.number().min(0).max(1_000_000_000).refine((n) => Math.abs(n * 100 - Math.round(n * 100)) < 0.001, "Use naira and kobo: at most two decimal places.").default(0),
