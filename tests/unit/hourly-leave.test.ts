@@ -63,6 +63,17 @@ describe("hourlyLeaveFinding and hourlyLeaveNotice", () => {
     expect(hourlyLeaveNotice(["2042-03-02"])).toMatch(/paid by the hour.*not paid/i);
   });
 
+  it("once a leave percentage is set, the warning and the notice say that leave pay is the percentage added to the hours, not a payment for the days", () => {
+    const f = hourlyLeaveFinding({ ...a, dates: ["2042-03-03"], leavePct: 8.33 })!;
+    expect(f.message).toContain("their leave pay is the 8.33% added to every hour they work");
+    expect(f.message).not.toMatch(/not set up yet/i);
+    expect(f.message).toMatch(/not paid/i);
+    expect(hourlyLeaveNotice(["2042-03-03"], 10)).toContain("their leave pay is the 10% added to every hour they work");
+    // with no percentage (0 or none given) the earlier wording stands
+    expect(hourlyLeaveFinding({ ...a, dates: ["2042-03-03"], leavePct: 0 })!.message).toMatch(/not set up yet/i);
+    expect(hourlyLeaveNotice(["2042-03-03"])).toMatch(/not set up yet/i);
+  });
+
   it("a long list of days is shortened but the count is exact", () => {
     const dates = Array.from({ length: 12 }, (_, i) => `2042-03-${String(i + 2).padStart(2, "0")}`);
     const f = hourlyLeaveFinding({ ...a, dates })!;

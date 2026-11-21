@@ -1,6 +1,6 @@
 import { naira, num } from "@/lib/money";
 import { d, fmtDate, fmtShort } from "@/lib/dates";
-import { hourlyPayslip, type HourlyLineInput } from "@/lib/payroll/payslip-hourly";
+import { hourlyPayslip, type AllowanceLineInput, type HourlyLineInput } from "@/lib/payroll/payslip-hourly";
 
 type Line = { type: string; code: string; name: string; amount: number };
 type Loc = { clientName: string; beatName: string; days: number; from: string; to: string };
@@ -34,6 +34,8 @@ export function Payslip({
     locations: unknown;
     /** The stored hourly pay lines of the record with the site's name (phase 4c); none for a person paid monthly. */
     hourly?: HourlyLineInput[];
+    /** The extra pay lines of the record (the leave percentage, H14). */
+    hourlyAllowances?: AllowanceLineInput[];
     run: {
       type: string;
       runNumber: number;
@@ -50,7 +52,7 @@ export function Payslip({
   const earnings = lines.filter((l) => l.type === "EARNING");
   const deductions = lines.filter((l) => l.type === "DEDUCTION");
   const period = rec.run.period;
-  const hs = hourlyPayslip(rec.hourly ?? []);
+  const hs = hourlyPayslip(rec.hourly ?? [], rec.hourlyAllowances ?? []);
   // a person paid only by the hour has no contractual monthly gross
   const hourlyOnly = hs !== null && num(rec.monthlyGross) === 0;
   // Merge contiguous ranges into a per-client/beat summary for the "Work Locations" table
@@ -181,7 +183,7 @@ export function Payslip({
                   <td className="py-1">{r.site}</td>
                   <td>{r.dayLabel}</td>
                   <td className="text-right tabular-nums">{r.duration}</td>
-                  <td className="text-right tabular-nums">{naira(r.rate)}</td>
+                  <td className="text-right tabular-nums">{r.rate === "" ? "" : naira(r.rate)}</td>
                   <td className="text-right tabular-nums">{naira(r.amount)}</td>
                 </tr>
               ))}

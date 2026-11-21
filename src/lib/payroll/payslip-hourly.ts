@@ -6,6 +6,7 @@
  * Hours are shown exactly (hours and minutes), never rounded; every amount is whole kobo, added exactly. A line is the stored `HourlyPayLine` of the payroll record (one per site, kind of day and rate).
  */
 import { koboToString, sumKobo, toKobo, type Kobo } from "../money-exact";
+import { naira } from "./hourly-minimum";
 import type { DayClass } from "./hourly";
 
 export interface HourlyLineInput {
@@ -15,6 +16,17 @@ export interface HourlyLineInput {
   /** Naira per hour, as stored ("1000.00"). */
   rate: string;
   /** Naira for the line, as stored ("8000.00"). */
+  amount: string;
+}
+
+/** Extra pay for the site's hours as stored on the payroll record (H14): the leave percentage, and in later pieces paid sick days and holidays not worked. */
+export interface AllowanceLineInput {
+  kind: "LEAVE_PERCENT" | "SICK_DAY" | "HOLIDAY_NOT_WORKED";
+  siteName: string;
+  /** LEAVE_PERCENT: the pay for the hours the percentage was worked on, as stored ("4000.00"). */
+  baseAmount: string | null;
+  /** LEAVE_PERCENT: the percentage used, as stored ("10.00"). */
+  pct: string | null;
   amount: string;
 }
 
@@ -45,7 +57,16 @@ export function durationOf(minutes: number): string {
   return [h ? `${h} h` : "", m ? `${m} min` : ""].filter(Boolean).join(" ");
 }
 
-export function hourlyPayslip(lines: readonly HourlyLineInput[]): HourlyPayslip | null {
+const KIND_LABEL: Record<AllowanceLineInput["kind"], string> = { LEAVE_PERCENT: "Leave pay", SICK_DAY: "Sick pay", HOLIDAY_NOT_WORKED: "Holiday pay" };
+const plainPct = (p: string) => (p.includes(".") ? p.replace(/\.?0+$/, "") : p);
+
+/** The label of an extra pay line: "Leave pay (10% of 4,000.00)". */
+function allowanceLabel(a: AllowanceLineInput): string {
+  const name = KIND_LABEL[a.kind];
+  return a.kind === "LEAVE_PERCENT" && a.pct !== null && a.baseAmount !== null ? `${name} (${plainPct(a.pct)}% of ${naira(toKobo(a.baseAmount))})` : name;
+}
+
+export function hourlyPayslip(lines: readonly HourlyLineInput[], allowances: readonly AllowanceLineInput[] = []): HourlyPayslip | null {
   if (lines.length === 0) return null;
   // one row per site, kind of day and rate (the pieces of a supplementary payroll's one line are shown as one)
   const rows = new Map<string, { site: string; dayClass: DayClass; rate: Kobo; minutes: number; amounts: Kobo[] }>();
@@ -64,10 +85,20 @@ export function hourlyPayslip(lines: readonly HourlyLineInput[]): HourlyPayslip 
     if (!mine.length) return [];
     return [{ dayLabel: LABEL[c], duration: durationOf(mine.reduce((s, r) => s + r.minutes, 0)), amount: koboToString(sumKobo(mine.flatMap((r) => r.amounts))) }];
   });
+  const extra = allowances.map((a) => ({ site: a.siteName.trim() || "Site not recorded", label: allowanceLabel(a), kind: a.kind, amount: toKobo(a.amount) }));
+  const shown: HourlyPayslipRow[] = [];
+  for (const site of [...new Set(sorted.map((r) => r.site)), ...extra.map((x) => x.site).filter((s) => !sorted.some((r) => r.site === s))].filter((s, i, all) => all.indexOf(s) === i)) {
+    for (const r of sorted.filter((x) => x.site === site)) shown.push({ site: r.site, dayLabel: LABEL[r.dayClass], duration: durationOf(r.minutes), rate: koboToString(r.rate), amount: koboToString(sumKobo(r.amounts)) });
+    for (const x of extra.filter((y) => y.site === site)) shown.push({ site, dayLabel: x.label, duration: "", rate: "", amount: koboToString(x.amount) });
+  }
+  const byKind = (Object.keys(KIND_LABEL) as Array<AllowanceLineInput["kind"]>).flatMap((k) => {
+    const mine = extra.filter((x) => x.kind === k);
+    return mine.length ? [{ dayLabel: KIND_LABEL[k], duration: "", amount: koboToString(sumKobo(mine.map((x) => x.amount))) }] : [];
+  });
   return {
-    rows: sorted.map((r) => ({ site: r.site, dayLabel: LABEL[r.dayClass], duration: durationOf(r.minutes), rate: koboToString(r.rate), amount: koboToString(sumKobo(r.amounts)) })),
-    byClass,
+    rows: shown,
+    byClass: [...byClass, ...byKind],
     totalDuration: durationOf(sorted.reduce((s, r) => s + r.minutes, 0)),
-    totalAmount: koboToString(sumKobo(sorted.flatMap((r) => r.amounts))),
+    totalAmount: koboToString(sumKobo([...sorted.flatMap((r) => r.amounts), ...extra.map((x) => x.amount)])),
   };
 }

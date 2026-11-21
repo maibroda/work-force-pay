@@ -8,6 +8,7 @@ import { hourlyLeaveDates, hourlyLeaveNotice } from "@/lib/payroll/hourly-leave"
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
 import { assertPeriodEditable, deploymentOn } from "./operations";
+import { payrollRuleFor } from "./statutory";
 
 const todayUtc = () => d(iso(new Date()));
 const NOT_ON_LEAVE = ["TERMINATED", "RESIGNED", "EXITED", "INACTIVE", "SUSPENDED"];
@@ -407,11 +408,12 @@ export async function leaveNotPaidNotice(ctx: Ctx, employeeId: string, startDate
   const end = typeof endDate === "string" ? d(endDate) : endDate;
   const emp = await db.employee.findFirst({ where: { id: employeeId, organizationId: ctx.orgId }, select: { id: true } });
   if (!emp) return null;
-  const [policy, comp] = await Promise.all([
+  const [policy, comp, rule] = await Promise.all([
     getLeavePolicy(ctx.orgId),
     db.employeeCompensationType.findMany({ where: { organizationId: ctx.orgId, employeeId, status: "APPROVED", effectiveFrom: { lte: end } }, select: { type: true, effectiveFrom: true, status: true } }),
+    payrollRuleFor(db, ctx.orgId, start).catch(() => null), // the leave percentage in force on the first day, when there is a payroll rule
   ]);
-  return hourlyLeaveNotice(hourlyLeaveDates(comp, [{ startDate: start, endDate: end }], policy.workingDaysPerWeek, { from: start, to: end }));
+  return hourlyLeaveNotice(hourlyLeaveDates(comp, [{ startDate: start, endDate: end }], policy.workingDaysPerWeek, { from: start, to: end }), rule?.hourlyLeavePct);
 }
 
 // ───────────────────────────── Cancel ─────────────────────────────

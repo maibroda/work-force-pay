@@ -133,3 +133,19 @@ describe("valueOfMinutes: what some minutes are worth at the rate in force that 
     expect(valueOfMinutes([ROLE], { ...q, categoryId: "office", dayClass: "WEEKDAY" }, 120)).toBeNull();
   });
 });
+
+describe("eligibleMinutes: the hours worked on or after the leave-pay eligibility day (H14 piece 1)", () => {
+  const pieces = [piece("2043-03-10", "WEEKDAY", 480), piece("2043-03-20", "WEEKDAY", 480), piece("2043-03-21", "WEEKEND", 300)];
+  it("marks, on each line, the minutes worked on or after the day, and the minutes of the line stay as they were", () => {
+    const r = buildHourlyEarnings("e1", pieces, [ROLE], { ...opts(), leaveEligibleFrom: "2043-03-15" });
+    expect(r.sites[0].lines.map((l) => [l.dayClass, l.minutes, l.eligibleMinutes])).toEqual([["WEEKDAY", 960, 480], ["WEEKEND", 300, 300]]);
+  });
+  it("counts the eligibility day itself", () => {
+    const r = buildHourlyEarnings("e1", pieces, [ROLE], { ...opts(), leaveEligibleFrom: "2043-03-20" });
+    expect(r.sites[0].lines.map((l) => l.eligibleMinutes)).toEqual([480, 300]);
+  });
+  it("marks nothing for hours before the day, or when no day is given (no leave pay)", () => {
+    expect(buildHourlyEarnings("e1", pieces, [ROLE], { ...opts(), leaveEligibleFrom: "2043-04-01" }).sites[0].lines.every((l) => l.eligibleMinutes === undefined)).toBe(true);
+    expect(buildHourlyEarnings("e1", pieces, [ROLE], opts()).sites[0].lines.every((l) => l.eligibleMinutes === undefined)).toBe(true);
+  });
+});

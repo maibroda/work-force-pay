@@ -207,6 +207,40 @@ describe("a supplementary run pays the hours that missed the locked payroll (H22
   });
 });
 
+describe("extra pay for an hourly site: the leave percentage (H14 piece 1)", () => {
+  // 100 hours at 1,000 = 100,000 of hours, plus 10% leave pay = 10,000, against the same 110,000 as hours alone
+  const withLeavePay = site({ allowances: [{ kind: "LEAVE_PERCENT", baseKobo: 10_000_000, pct: 10, amountKobo: 1_000_000 }] }, [{ dayClass: "WEEKDAY", minutes: 6_000, rate: 1000, amountKobo: 10_000_000 }]);
+  const sameGrossAsHours = site({}, [{ dayClass: "WEEKDAY", minutes: 6_600, rate: 1000, amountKobo: 11_000_000 }]);
+
+  it("is part of the site's gross: the structure divides it, and pension, PAYE and net pay are exactly those of the same gross as hours (H12)", () => {
+    const a = calculateEmployeePayroll(base({ hourly: [withLeavePay] }));
+    const b = calculateEmployeePayroll(base({ hourly: [sameGrossAsHours] }));
+    expect(a.earnedGross).toBe(110_000);
+    expect(a.components).toEqual(b.components);
+    expect([a.pensionBase, a.employeePension, a.employerPension]).toEqual([b.pensionBase, b.employeePension, b.employerPension]);
+    expect(a.paye.paye).toBe(b.paye.paye);
+    expect(a.netPay).toBe(b.netPay);
+  });
+
+  it("is carried on the site, with the base and the percentage as used, for the stored breakdown", () => {
+    const a = calculateEmployeePayroll(base({ hourly: [withLeavePay] }));
+    expect(a.segments.find((s) => s.hourly)?.hourly?.allowances).toEqual([{ kind: "LEAVE_PERCENT", baseKobo: 10_000_000, pct: 10, amountKobo: 1_000_000 }]);
+    expect(calculateEmployeePayroll(base({ hourly: [sameGrossAsHours] })).segments.find((s) => s.hourly)?.hourly?.allowances).toBeUndefined();
+  });
+
+  it("is paid in a supplementary run too, added to the late hours, with PAYE on top of what the locked payroll taxed", () => {
+    const r = calculateEmployeePayroll(base({ hourly: [withLeavePay], adjustmentsOnly: true, payeBase: { regularTaxable: 300_000, employeePension: 12_000, basic: 30_000 } }));
+    expect(r.earnedGross).toBe(110_000);
+    expect(r.monthlyGross).toBe(0);
+  });
+
+  it("refuses an amount that is negative or not a whole number of kobo", () => {
+    const bad = (amountKobo: number) => site({ allowances: [{ kind: "LEAVE_PERCENT", amountKobo }] });
+    expect(() => calculateEmployeePayroll(base({ hourly: [bad(-1)] }))).toThrow(MoneyError);
+    expect(() => calculateEmployeePayroll(base({ hourly: [bad(100.5)] }))).toThrow(MoneyError);
+  });
+});
+
 describe("what the engine refuses", () => {
 
   it("an hourly amount that is not whole kobo, or is negative, or a line with no minutes", () => {

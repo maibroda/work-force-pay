@@ -93,6 +93,24 @@ export interface HourlyLineInput {
   entryIds?: string[];
   /** The approved pieces (time entry segments) the line was worked from, so the pay run can mark them as paid. */
   segmentIds?: string[];
+  /** Of `minutes`, those worked on or after the day the person completed the company's service period for annual leave: the hours the leave percentage is worked on (H14). The engine does not use it. */
+  eligibleMinutes?: number;
+}
+
+/**
+ * Extra pay for an hourly person besides the hours they worked (the founder's H14), already worked out in whole kobo: the leave percentage, and in later pieces paid sick days and paid holidays not worked. It is part of the
+ * site's gross: divided by the site's salary structure, counted for pension and taxed through PAYE exactly like the hours (H12).
+ */
+export interface HourlyAllowanceInput {
+  kind: "LEAVE_PERCENT" | "SICK_DAY" | "HOLIDAY_NOT_WORKED";
+  amountKobo: number;
+  /** LEAVE_PERCENT: the pay for the eligible hours the percentage was worked on (whole kobo). */
+  baseKobo?: number;
+  /** LEAVE_PERCENT: the percentage used. */
+  pct?: number;
+  /** The day-based kinds: the minutes paid and the hourly rate used (naira). */
+  minutes?: number;
+  rate?: number;
 }
 
 /**
@@ -113,6 +131,8 @@ export interface HourlySiteInput {
   /** The distinct Nigerian calendar days worked at this site (for the days on the payslip and in the allocation). */
   dates: string[];
   lines: HourlyLineInput[];
+  /** Extra pay for this site's hours (the leave percentage, ...): added to the site's gross before the structure divides it. */
+  allowances?: HourlyAllowanceInput[];
 }
 
 export interface EngineInput {
@@ -184,7 +204,7 @@ export interface Segment {
   factor: number;
   rate: RateInfo;
   /** Set for a site of an hourly person: the pay lines the gross came from, for the stored breakdown. */
-  hourly?: { lines: HourlyLineInput[]; dates: string[] };
+  hourly?: { lines: HourlyLineInput[]; dates: string[]; allowances?: HourlyAllowanceInput[] };
   components: ComponentAmount[];
   gross: number;
   pensionable: number;
@@ -436,8 +456,9 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
       if (!Number.isSafeInteger(l.amountKobo) || l.amountKobo < 0) throw new MoneyError("An hourly amount must be a whole number of kobo, not below zero.");
       if (!Number.isInteger(l.minutes) || l.minutes < 1) throw new MoneyError("An hourly line must be a whole number of minutes, at least one.");
     }
+    for (const a of h.allowances ?? []) if (!Number.isSafeInteger(a.amountKobo) || a.amountKobo < 0) throw new MoneyError("An hourly allowance must be a whole number of kobo, not below zero.");
     const key = `H|${h.key}`;
-    hourlyGross.set(key, sumKobo(h.lines.map((l) => asKobo(l.amountKobo))));
+    hourlyGross.set(key, sumKobo([...h.lines.map((l) => asKobo(l.amountKobo)), ...(h.allowances ?? []).map((a) => asKobo(a.amountKobo))]));
     segments.push({
       key,
       clientId: h.clientId,
@@ -451,7 +472,7 @@ export function calculateEmployeePayroll(input: EngineInput): EngineResult {
       to: h.to,
       factor: 1,
       rate: { key: `H:${h.key}`, source: "HOURLY", agreedRate: null, operativeSharePct: null, monthlyGross: koboToNumber(hourlyGross.get(key)!), structure: h.structure },
-      hourly: { lines: h.lines, dates: h.dates },
+      hourly: { lines: h.lines, dates: h.dates, ...(h.allowances?.length ? { allowances: h.allowances } : {}) },
       components: [],
       gross: 0,
       pensionable: 0,

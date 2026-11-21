@@ -34,6 +34,7 @@ export default async function PayrollRulesPage() {
               <TH>NHF rate (voluntary)</TH>
               <TH>Take-home floor</TH>
               <TH>Hourly minimum pay</TH>
+              <TH>Hourly leave pay</TH>
               <TH>State of residence</TH>
               <TH>Effective</TH>
             </TR>
@@ -54,6 +55,7 @@ export default async function PayrollRulesPage() {
                 <TD>{num(x.nhfEmployeeRatePct) > 0 ? `${num(x.nhfEmployeeRatePct)}% of basic` : <span className="text-muted-foreground text-xs">not offered</span>}</TD>
                 <TD>{num(x.minTakeHomePctOfGross) > 0 ? `${num(x.minTakeHomePctOfGross)}% of gross` : <span className="text-muted-foreground text-xs">no floor</span>}</TD>
                 <TD>{num(x.hourlyMinMonthlyPay) > 0 ? naira(x.hourlyMinMonthlyPay) : <span className="text-muted-foreground text-xs">no check</span>}</TD>
+                <TD>{num(x.hourlyLeavePct) > 0 ? `${num(x.hourlyLeavePct)}% of hours worked` : <span className="text-muted-foreground text-xs">none</span>}</TD>
                 <TD>{x.requirePayeState ? <Badge tone="amber">required to approve</Badge> : <span className="text-muted-foreground text-xs">warning only</span>}</TD>
                 <TD>
                   {fmtDate(x.effectiveFrom)} →{" "}
@@ -151,6 +153,16 @@ export default async function PayrollRulesPage() {
                 min: 0,
                 defaultValue: num(r.hourlyMinMonthlyPay),
                 help: "0 = no check. A figure you or your adviser enter: no figure is built in. Above 0, the payroll raises a warning for anyone paid only by the hour whose pay from hours in the month is below it. It is a warning only: pay is never blocked or changed.",
+                span: 3,
+              },
+              {
+                name: "hourlyLeavePct",
+                label: "Leave pay for staff paid by the hour (% added to every hour worked)",
+                type: "number",
+                min: 0,
+                max: 100,
+                defaultValue: num(r.hourlyLeavePct),
+                help: "0 = none. A figure you or your adviser enter: no figure is built in. Above 0, a person paid by the hour is paid this percentage of the pay for every hour they work, as their annual leave pay, from the day they complete the annual-leave service period in the leave policy (12 months as shipped). It is part of their gross, and shown on the payslip as Leave pay.",
                 span: 3,
               },
               {
