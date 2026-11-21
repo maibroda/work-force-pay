@@ -161,6 +161,58 @@ describe("approving a spell of sickness", () => {
   });
 });
 
+describe("cancelling an approved spell (the plan docs/plans/hourly-sick-spell-correction-plan.md)", () => {
+  const approved = async (w: Awaited<ReturnType<typeof world>>, from: string, to: string) => {
+    const hr1 = await w.actor("HR_ADMIN", 1);
+    const hr2 = await w.actor("HR_ADMIN", 2);
+    const e = await w.person("Appr");
+    const s = await recordSickSpell(hr1, { employeeId: e.id, startDate: from, endDate: to, certificateDocumentId: (await w.doc(e.id)).id });
+    await decideSickSpell(hr2, s.id, "APPROVED");
+    return { hr1, hr2, e, s };
+  };
+
+  it("HR cancels it with a reason: kept on the spell with who and when, the audit entry holds ids and numbers only, and the days of entitlement are freed", async () => {
+    const w = await world();
+    await w.policy(5);
+    const { hr2, e, s } = await approved(w, "2043-06-01", "2043-06-03");
+    expect(await sickLeaveBalance(hr2, e.id, "2043-06-01")).toMatchObject({ approved: 3, remaining: 2 });
+    const done = await cancelSickSpell(hr2, s.id, "Certificate was for another person");
+    expect(done).toMatchObject({ status: "CANCELLED", cancelledByUserId: hr2.userId, cancellationNote: "Certificate was for another person" });
+    expect(done.cancelledAt).toBeInstanceOf(Date);
+    expect(await sickLeaveBalance(hr2, e.id, "2043-06-01")).toMatchObject({ approved: 0, remaining: 5 });
+    const audit = await db.auditLog.findFirstOrThrow({ where: { organizationId: w.t.org.id, action: "SICK_SPELL_CANCELLED", entityId: s.id } });
+    expect(JSON.stringify(audit)).not.toContain("another person");
+    expect(JSON.stringify(audit.newValue)).toContain("wasApproved");
+  });
+
+  it("needs a reason of a few words, is HR's alone, is never the employee's own, and is final", async () => {
+    const w = await world();
+    await w.policy(5);
+    const { hr2, e, s } = await approved(w, "2043-06-01", "2043-06-02");
+    await expect(cancelSickSpell(hr2, s.id)).rejects.toThrow(/reason/i);
+    await expect(cancelSickSpell(hr2, s.id, "no")).rejects.toThrow(/reason/i);
+    const own = await w.actor("EMPLOYEE", 1, e.id);
+    await expect(cancelSickSpell(own, s.id, "I was not ill after all")).rejects.toThrow();
+    expect((await db.sickSpell.findUniqueOrThrow({ where: { id: s.id } })).status).toBe("APPROVED");
+    // HR who is the person themselves cannot cancel their own sickness
+    const mine = await approved(w, "2043-07-06", "2043-07-07");
+    const hrOwn = await w.actor("HR_ADMIN", 3, mine.e.id);
+    await expect(cancelSickSpell(hrOwn, mine.s.id, "Cancelling my own sickness")).rejects.toThrow(/own/i);
+    await cancelSickSpell(hr2, s.id, "Recorded in error");
+    await expect(cancelSickSpell(hr2, s.id, "Recorded in error")).rejects.toThrow(/cancelled/i);
+  });
+
+  it("frees the dates for a replacement spell, and another company cannot cancel it", async () => {
+    const w = await world();
+    await w.policy(5);
+    const { hr1, hr2, e, s } = await approved(w, "2043-06-01", "2043-06-02");
+    const other = await world();
+    await expect(cancelSickSpell(await other.actor("HR_ADMIN"), s.id, "Not mine to cancel")).rejects.toThrow(/not found/i);
+    await cancelSickSpell(hr2, s.id, "Wrong certificate attached");
+    await expect(recordSickSpell(hr1, { employeeId: e.id, startDate: "2043-06-01", endDate: "2043-06-02", certificateDocumentId: (await w.doc(e.id)).id })).resolves.toMatchObject({ status: "PENDING" });
+  });
+});
+
 describe("cancelling, listing and the days of entitlement", () => {
   it("a spell can be cancelled while it waits, by whoever recorded it or by HR, and not once it is approved", async () => {
     const w = await world();
@@ -173,7 +225,8 @@ describe("cancelling, listing and the days of entitlement", () => {
     await expect(cancelSickSpell(hr1, a.id)).resolves.toMatchObject({ status: "CANCELLED" });
     const b = await recordSickSpell(hr1, { employeeId: e.id, startDate: "2043-06-02", endDate: "2043-06-02", certificateDocumentId: d.id });
     await decideSickSpell(hr2, b.id, "APPROVED");
-    await expect(cancelSickSpell(hr1, b.id)).rejects.toThrow(/approved/i);
+    // an APPROVED spell can still be cancelled, but only by HR and only with a reason (see "cancelling an approved spell" below)
+    await expect(cancelSickSpell(hr1, b.id)).rejects.toThrow(/reason/i);
   });
 
   it("counts the days of the leave year (approved and waiting), and a spell beyond the entitlement is recorded, not refused", async () => {

@@ -3586,6 +3586,11 @@ A spell of sickness of a person paid by the hour (the founder's H14, docs/plans/
 | decidedByUserId | String |  |  |
 | decidedAt | DateTime |  |  |
 | decisionNote | String |  | The reason for a rejection (words kept here, never in the audit log). |
+| cancelledBy | String |  | A cancellation (while waiting, or after approval by HR): who, when, and for an approved spell the reason (words kept here, never in the audit log). |
+| cancelledByUserId | String |  |  |
+| cancelledAt | DateTime |  |  |
+| cancellationNote | String |  |  |
+| overpaymentRunId | String |  | The payroll run that raised the finding "paid sick days on a cancelled spell" (once): later runs do not repeat it. |
 | createdAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |
 

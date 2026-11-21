@@ -34,7 +34,7 @@ import { findDuplicates } from "./employees";
 import { recentBankChanges } from "./change-requests";
 import { CLIENT_MISMATCH, LOCATION_MISMATCH } from "./operations";
 import { submissionBlockers, varianceIssues } from "./payroll-controls";
-import { loadSickPay, sickDaysAlreadyPaid, allowanceDaysAlreadyPaid } from "./sick-pay";
+import { loadSickPay, loadWithdrawnSickPay, sickDaysAlreadyPaid, allowanceDaysAlreadyPaid } from "./sick-pay";
 import { loadHolidayPay } from "./holiday-pay";
 import { hourlyDecreaseFinding, hourlyFindings, hourlyRateConflict, isHourlyOn, loadHourlyForPeriod, loadLateHourly, loadPayslipAllowances, loadPayslipHourly, monthlyRateWhileHourly, saveHourlyPieces } from "./hourly-payroll";
 import { loadRateBook } from "./rates";
@@ -422,6 +422,9 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
     namesOf: (beatId) => a.hourly.names.get(beatId) ?? { clientName: "", beatName: "" },
     people: new Map(a.employees.filter((x) => a.hourly.compByEmp.has(x.id)).map((x) => [x.id, { categoryId: x.categoryId, label: `${x.employeeNumber} ${fullName(x)}`, employmentDate: x.employmentDate, exitDate: x.exitDate, comp: a.hourly.compByEmp.get(x.id)! }])),
   });
+  // sick days already paid by a final payroll on a spell HR has since cancelled: one critical finding, in the first payroll calculated after the cancellation (no negative pay is ever made)
+  const withdrawnSick = await loadWithdrawnSickPay(db, { orgId: ctx.orgId, currentRunId: run?.id });
+  for (const w of withdrawnSick) issues.push({ employeeId: w.employeeId, category: w.category, severity: w.severity, code: w.code, message: w.message });
   const piecesByEmp = new Map<string, typeof a.hourly.pieces>();
   for (const p of a.hourly.pieces) {
     const own = piecesByEmp.get(p.employeeId);
@@ -613,6 +616,8 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
         });
       }
       const runId = run.id;
+      // the cancelled spells this payroll has reported are marked, so no later payroll repeats the finding
+      if (withdrawnSick.length) await tx.sickSpell.updateMany({ where: { id: { in: withdrawnSick.map((w) => w.spellId) }, organizationId: ctx.orgId }, data: { overpaymentRunId: runId } });
       // overrides and written explanations survive a recalculation, for findings that read exactly the same
       const keptOverrides = await tx.payrollValidationIssue.findMany({ where: { runId, OR: [{ overridden: true }, { explanation: { not: null } }] } });
       await tx.payrollValidationIssue.deleteMany({ where: { runId } });
@@ -1399,6 +1404,9 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
     people: new Map((await db.employee.findMany({ where: { organizationId: ctx.orgId, id: { in: [...a.hourly.compByEmp.keys()] } }, select: { id: true, categoryId: true, employeeNumber: true, firstName: true, lastName: true, employmentDate: true, exitDate: true } })).map((x) => [x.id, { categoryId: x.categoryId, label: `${x.employeeNumber} ${x.firstName} ${x.lastName}`, employmentDate: x.employmentDate, exitDate: x.exitDate, comp: a.hourly.compByEmp.get(x.id)! }])),
     alreadyPaid: await allowanceDaysAlreadyPaid(db, ctx.orgId, periodId, "HOLIDAY_NOT_WORKED"),
   });
+  // sick days already paid on a spell HR has since cancelled: reported once, as in a regular payroll
+  const withdrawnSick = await loadWithdrawnSickPay(db, { orgId: ctx.orgId });
+  for (const w of withdrawnSick) issues.push({ employeeId: w.employeeId, category: w.category, severity: w.severity, code: w.code, message: w.message });
   const late = a.late!; // a supplementary run always loads the late hours
   const allEmps = await db.employee.findMany({
     where: { organizationId: ctx.orgId },
@@ -1527,6 +1535,7 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
         preparedByUserIds: [ctx.userId],
       },
     });
+    if (withdrawnSick.length) await tx.sickSpell.updateMany({ where: { id: { in: withdrawnSick.map((w) => w.spellId) }, organizationId: ctx.orgId }, data: { overpaymentRunId: run.id } });
     for (const { emp, res } of rows) {
       const id = randomUUID();
       await tx.payrollRecord.create({

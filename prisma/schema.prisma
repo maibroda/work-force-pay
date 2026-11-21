@@ -4761,6 +4761,13 @@ model SickSpell {
   decidedAt             DateTime?
   /// The reason for a rejection (words kept here, never in the audit log).
   decisionNote          String?
+  /// A cancellation (while waiting, or after approval by HR): who, when, and for an approved spell the reason (words kept here, never in the audit log).
+  cancelledBy           String?
+  cancelledByUserId     String?
+  cancelledAt           DateTime?
+  cancellationNote      String?
+  /// The payroll run that raised the finding "paid sick days on a cancelled spell" (once): later runs do not repeat it.
+  overpaymentRunId      String?
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
 

@@ -45,7 +45,15 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `hourly-reports-allowances`, no migration)
+## Not yet merged (branch `hourly-sick-spell-correction`, one small migration)
+
+- **Hourly pay: an approved spell of sickness can now be cancelled** (the founder's "CONTINUE" after the plan `hourly-sick-spell-correction-plan.md`, with its defaults). Only HR, never the person it is about, with a reason of a few words (kept on the spell, never in the audit log). To correct a spell, cancel it and record a new one: nothing is edited in place. The cancelled spell frees its days of the five-day entitlement and its dates.
+- **If the days were already paid by a final payroll, no negative pay is made:** the next payroll (regular or supplementary) raises **one critical finding** naming the person, the days and the amount paid (from the stored line) for Payroll to enter a deduction if it is to be recovered; it is not repeated by later payrolls. A replacement spell for the same days raises no finding and is not paid twice. If the days were not yet paid, they simply drop out of the next calculation.
+- **Screen:** the Leave page shows a "Cancel (approved)" button that asks for the reason, and a cancelled spell shows who cancelled it and why.
+- **Migration `20270105090000_sick_spell_cancel`:** five optional columns on the sick spell. With `down.sql`; round-tripped down and up on a copy with no drift left. Data dictionary regenerated.
+- **Tests (written first):** `tests/integration/sick-spell-cancel-pay.test.ts` (3) and three new tests (one changed) in `tests/integration/sick-spell.test.ts`. Explain-back note: `docs/plans/hourly-sick-spell-correction-explain-back.md`.
+
+## Merged in #265 (no migration)
 
 - **Hourly reports now show leave pay, sick pay and holiday pay not worked** (the founder's "CONTINUE" after the plan `hourly-reports-allowances-plan.md`: option A, its defaults). The three cost reports (by employee, by client and contract, month by month) gain four columns: **Leave pay (payroll), Sick pay (payroll), Holiday pay not worked (payroll), Total with extra pay**, read from the lines the pay run stored (no second calculation) for each whole payroll month the dates touch; superseded runs are ignored, supplementary runs count once. **"Total cost" keeps its meaning** (approved hours at approved rates, indicative). The month-by-month report also shows the payroll's state for the month, and a month with hours but no calculated payroll shows 0 and is named in the description. The hours-only status report is unchanged. A stale line in the report descriptions ("the pay run does not read hours yet") is corrected.
 - **Reports only:** no pay figure, payslip, payroll run or setting changes, and no migration.
