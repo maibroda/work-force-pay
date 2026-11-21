@@ -158,6 +158,18 @@ export async function cancelSickSpellAction(id: string) {
   );
 }
 
+/** HR cancelling an APPROVED spell, with a reason (docs/plans/hourly-sick-spell-correction-plan.md): to correct a spell, cancel it and record a new one. */
+export async function cancelApprovedSickSpellAction(id: string, reason?: string) {
+  return act(
+    "leave.manage",
+    async (ctx) => {
+      await sick.cancelSickSpell(ctx, id, reason);
+      return { message: "Spell of sickness cancelled. If its days were already paid, the next payroll shows a finding for Payroll." };
+    },
+    PATHS,
+  );
+}
+
 /** HR cancelling a spell that waits. */
 export async function cancelSickSpellForAction(id: string) {
   return act(

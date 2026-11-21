@@ -25,6 +25,7 @@ import {
   applyLeaveForAction,
   approveLeaveAction,
   approveSickSpellAction,
+  cancelApprovedSickSpellAction,
   cancelLeaveForAction,
   cancelSickSpellForAction,
   recordSickSpellForAction,
@@ -214,6 +215,7 @@ export default async function LeavePage({
                           <TD className="text-xs">
                             {s.recordedBy}
                             {s.decidedBy && <div className="text-muted-foreground">{s.status === "REJECTED" ? "Rejected" : "Approved"} by {s.decidedBy}{s.decisionNote ? ` — “${s.decisionNote}”` : ""}</div>}
+                            {s.status === "CANCELLED" && s.cancelledBy && <div className="text-muted-foreground">Cancelled by {s.cancelledBy}{s.cancellationNote ? ` — “${s.cancellationNote}”` : ""}</div>}
                           </TD>
                           <TD className="space-x-1 whitespace-nowrap">
                             {s.status === "PENDING" &&
@@ -232,6 +234,11 @@ export default async function LeavePage({
                             {s.status === "PENDING" && (
                               <ActionButton action={cancelSickSpellForAction.bind(null, s.id)} variant="outline" confirm="Cancel this spell of sickness?">
                                 Cancel
+                              </ActionButton>
+                            )}
+                            {s.status === "APPROVED" && s.employeeId !== ctx.employeeId && (
+                              <ActionButton action={cancelApprovedSickSpellAction.bind(null, s.id)} reason variant="outline">
+                                Cancel (approved)
                               </ActionButton>
                             )}
                           </TD>

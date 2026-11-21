@@ -13,6 +13,8 @@ import type { HourlySiteInput } from "@/lib/payroll/engine";
 import { resolveHourlyRate, type HourlyRateRow } from "@/lib/payroll/hourly-rates";
 import { paidSickDates, sickBasis, sickPay, sickWindow, type WorkedSegment } from "@/lib/payroll/sick-pay";
 import { workingDatesBetween } from "@/lib/leave";
+import { mulDiv, sumKobo, toKobo, type Kobo } from "@/lib/money-exact";
+import { naira } from "@/lib/payroll/hourly-minimum";
 import type { StructureDef } from "@/lib/payroll/structure";
 import type { Tx } from "./_base";
 
@@ -173,3 +175,67 @@ export async function allowanceDaysAlreadyPaid(tx: Tx, orgId: string, periodId: 
   return out;
 }
 
+
+/** The payroll periods whose payrolls are final: a calculation of theirs can no longer be replaced, so what they paid stays paid. */
+const FROZEN_PERIOD = ["APPROVED", "LOCKED", "PAID", "CLOSED"] as const;
+
+export interface WithdrawnSickFinding extends SickFinding {
+  /** The cancelled spell the finding is about: the pay run marks it once its payroll is saved, so no later payroll repeats the finding. */
+  spellId: string;
+}
+
+/**
+ * Sick days PAID by a final payroll on a spell of sickness that HR has since CANCELLED (docs/plans/hourly-sick-spell-correction-plan.md). No negative pay is ever made (the rule the hourly pay already follows for hours
+ * corrected after payment): this raises ONE critical finding, in the first payroll calculated after the cancellation, naming the person, the days and the amount that was paid (from the stored sick pay line, never recalculated),
+ * for Payroll to enter a deduction if it is to be recovered. A day covered by an approved spell (a replacement) was not overpaid; a day is reported once even if more than one cancelled spell covers it; a payroll that was
+ * replaced (superseded) paid nothing. `currentRunId` is the payroll being calculated again (it keeps its own finding); a spell already reported by another live payroll is not reported again. Read for ONE company.
+ */
+export async function loadWithdrawnSickPay(tx: Tx, a: { orgId: string; currentRunId?: string | null }): Promise<WithdrawnSickFinding[]> {
+  const spells = await tx.sickSpell.findMany({ where: { organizationId: a.orgId, status: "CANCELLED", cancelledAt: { not: null } }, orderBy: [{ cancelledAt: "asc" }, { id: "asc" }] });
+  if (!spells.length) return [];
+  const employeeIds = [...new Set(spells.map((s) => s.employeeId))];
+  const runs = await tx.payrollRun.findMany({ where: { organizationId: a.orgId, status: { not: "SUPERSEDED" }, period: { status: { in: [...FROZEN_PERIOD] } } }, select: { id: true } });
+  if (!runs.length) return [];
+  const [lines, approved, noters, people] = await Promise.all([
+    tx.hourlyAllowanceLine.findMany({ where: { organizationId: a.orgId, kind: "SICK_DAY", runId: { in: runs.map((r) => r.id) }, employeeId: { in: employeeIds } }, select: { employeeId: true, dates: true, amount: true } }),
+    tx.sickSpell.findMany({ where: { organizationId: a.orgId, status: "APPROVED", employeeId: { in: employeeIds } }, select: { employeeId: true, startDate: true, endDate: true } }),
+    tx.payrollRun.findMany({ where: { organizationId: a.orgId, id: { in: spells.map((s) => s.overpaymentRunId).filter((x): x is string => Boolean(x)) }, status: { not: "SUPERSEDED" } }, select: { id: true } }),
+    tx.employee.findMany({ where: { organizationId: a.orgId, id: { in: employeeIds } }, select: { id: true, employeeNumber: true, firstName: true, middleName: true, lastName: true } }),
+  ]);
+  if (!lines.length) return [];
+  const liveNoters = new Set(noters.map((r) => r.id));
+  const label = new Map(people.map((p) => [p.id, `${p.employeeNumber} ${[p.firstName, p.middleName, p.lastName].filter(Boolean).join(" ")}`]));
+  const claimed = new Map<string, Set<string>>(); // the days already reported, by person
+  const out: WithdrawnSickFinding[] = [];
+  for (const s of spells) {
+    const from = iso(s.startDate);
+    const to = iso(s.endDate);
+    const mine = claimed.get(s.employeeId) ?? new Set<string>();
+    claimed.set(s.employeeId, mine);
+    const covered = (date: string) => approved.some((p) => p.employeeId === s.employeeId && date >= iso(p.startDate) && date <= iso(p.endDate));
+    const days: string[] = [];
+    const paid: Kobo[] = [];
+    for (const l of lines) {
+      if (l.employeeId !== s.employeeId) continue;
+      const over = l.dates.filter((x) => x >= from && x <= to && !covered(x) && !mine.has(x));
+      if (!over.length) continue;
+      days.push(...over);
+      paid.push(mulDiv(toKobo(l.amount), over.length, l.dates.length));
+    }
+    if (!days.length) continue;
+    for (const x of days) mine.add(x);
+    // a spell already reported by another live payroll is not reported again (its days stay claimed so another cancelled spell does not report them twice)
+    const noted = s.overpaymentRunId && liveNoters.has(s.overpaymentRunId) && s.overpaymentRunId !== a.currentRunId;
+    if (noted) continue;
+    const list = [...new Set(days)].sort();
+    out.push({
+      spellId: s.id,
+      employeeId: s.employeeId,
+      category: "ATTENDANCE",
+      severity: "CRITICAL",
+      code: "SICK_PAY_WITHDRAWN",
+      message: `${label.get(s.employeeId) ?? "A person"} was paid sick pay for ${list.length} ${list.length === 1 ? "day" : "days"} (${list.join(", ")}) on a spell of sickness that HR has since cancelled. That is about NGN ${naira(sumKobo(paid))} already paid. No negative pay is made: enter a deduction for the overpayment if it is to be recovered.`,
+    });
+  }
+  return out;
+}

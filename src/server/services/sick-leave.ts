@@ -107,14 +107,29 @@ export async function decideSickSpell(ctx: Ctx, id: string, decision: "APPROVED"
   });
 }
 
-/** A spell can be cancelled while it waits, by whoever recorded it or by HR. Once approved it can no longer be cancelled here. */
-export async function cancelSickSpell(ctx: Ctx, id: string) {
+/**
+ * A spell can be cancelled while it waits, by whoever recorded it or by HR. An APPROVED spell can be cancelled by HR alone, never by the person it is about, with a reason of a few words (kept on the spell, never in the audit
+ * log) (docs/plans/hourly-sick-spell-correction-plan.md). Cancelling frees its days of entitlement. To correct a spell, cancel it and record a new one: nothing is edited in place. If the days were already paid by a locked
+ * payroll, the next payroll raises a finding for Payroll (no negative pay is ever made); if not, the next calculation simply leaves the days out.
+ */
+export async function cancelSickSpell(ctx: Ctx, id: string, reason?: string) {
   const spell = await loadSpell(ctx, id);
-  if (spell.recordedByUserId !== ctx.userId && !can(ctx.role, "leave.manage")) throw new BusinessError("Only the person who recorded this spell, or HR, may cancel it.");
-  if (spell.status !== "PENDING") throw new BusinessError(`This spell is already ${spell.status.toLowerCase()} and cannot be cancelled.`);
+  if (spell.status === "APPROVED") {
+    assertCan(ctx, "leave.manage");
+    if (spell.employeeId === ctx.employeeId) throw new BusinessError("You cannot cancel your own sickness.");
+    if (!reason || reason.trim().length < 3) throw new BusinessError("Give a reason when cancelling an approved spell of sickness.");
+  } else if (spell.status === "PENDING") {
+    if (spell.recordedByUserId !== ctx.userId && !can(ctx.role, "leave.manage")) throw new BusinessError("Only the person who recorded this spell, or HR, may cancel it.");
+  } else {
+    throw new BusinessError(`This spell is already ${spell.status.toLowerCase()} and cannot be cancelled.`);
+  }
   return db.$transaction(async (tx) => {
-    const updated = await tx.sickSpell.update({ where: { id }, data: { status: "CANCELLED" } });
-    await logAudit(ctx, { action: "SICK_SPELL_CANCELLED", entity: "SickSpell", entityId: id, newValue: facts(spell) }, tx);
+    const updated = await tx.sickSpell.update({
+      where: { id },
+      data: { status: "CANCELLED", cancelledBy: ctx.name, cancelledByUserId: ctx.userId, cancelledAt: new Date(), cancellationNote: spell.status === "APPROVED" ? reason!.trim() : null },
+    });
+    // the audit log keeps ids and numbers only: the words of the reason stay on the spell
+    await logAudit(ctx, { action: "SICK_SPELL_CANCELLED", entity: "SickSpell", entityId: id, newValue: { ...facts(spell), wasApproved: spell.status === "APPROVED" } }, tx);
     return updated;
   });
 }

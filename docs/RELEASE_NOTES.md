@@ -44,6 +44,15 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
+
+## Not yet merged (branch `hourly-sick-spell-correction`, one small migration)
+
+- **Hourly pay: an approved spell of sickness can now be cancelled** (the founder's "CONTINUE" after the plan `hourly-sick-spell-correction-plan.md`, with its defaults). Only HR, never the person it is about, with a reason of a few words (kept on the spell, never in the audit log). To correct a spell, cancel it and record a new one: nothing is edited in place. The cancelled spell frees its days of the five-day entitlement and its dates.
+- **If the days were already paid by a final payroll, no negative pay is made:** the next payroll (regular or supplementary) raises **one critical finding** naming the person, the days and the amount paid (from the stored line) for Payroll to enter a deduction if it is to be recovered; it is not repeated by later payrolls. A replacement spell for the same days raises no finding and is not paid twice. If the days were not yet paid, they simply drop out of the next calculation.
+- **Screen:** the Leave page shows a "Cancel (approved)" button that asks for the reason, and a cancelled spell shows who cancelled it and why.
+- **Migration `20270105090000_sick_spell_cancel`:** five optional columns on the sick spell. With `down.sql`; round-tripped down and up on a copy with no drift left. Data dictionary regenerated.
+- **Tests (written first):** `tests/integration/sick-spell-cancel-pay.test.ts` (3) and three new tests (one changed) in `tests/integration/sick-spell.test.ts`. Explain-back note: `docs/plans/hourly-sick-spell-correction-explain-back.md`.
+
 ## Not yet merged (branch `hourly-contract-leave-pct`, one small migration)
 
 - **Hourly pay: the contract's own leave percentage** (the founder's message of 2026-11-21: the contract may set its own, the company's 2.5% is the default). A new optional box on each **agreed rate** (Contracts > Agreed rates): **blank = the company's percentage, 0 = no leave pay on this contract**, effective-dated with the rate row (a new row starts blank). The pay run gives each site its contract rate's percentage in force on the last day worked there in the month, else the company's; the percentage actually used is stored on the payroll record and shown on the payslip as before. Late hours (supplementary payroll) work the same. **A contract can now pay leave pay even while the company's percentage is 0.** Nothing changes for any company until a percentage is entered on a rate.
