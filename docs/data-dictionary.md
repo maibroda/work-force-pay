@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-284 tables and 214 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+284 tables and 215 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -2982,6 +2982,7 @@ Recurring payroll deductions applied automatically on every REGULAR run — dist
 | minTakeHomePctOfGross | Decimal |  | The take-home floor, % of gross: loan and salary-advance recoveries may not take net pay below this share of gross; the part not taken is carried forward by the loan book. 0 (the default) = no floor, as pay has always been worked. A client-specific policy, not a statutory one. |
 | hourlyMinMonthlyPay | Decimal |  | The minimum monthly pay, in naira, for a person paid only by the hour (the founder's H13): a WARNING (never a block, never a change to pay) when what they earned from hours in the month is below it. A figure the company or its adviser enters; none is built in. 0 (the default) = no check. |
 | hourlyLeavePct | Decimal |  | The leave pay for a person paid by the hour (the founder's H14, 2026-11-20): a percentage added to every hour worked, as their annual leave pay, from the day they complete the company's service period for annual leave (the leave policy, 12 months by default). The founder's figure of 2026-11-21 is 2.5, the default for a NEW rule version (a contract rate may set its own); every existing version keeps the value it has. 0 = no leave pay. |
+| hourlyLeaveBasis | HourlyLeaveBasis |  | What the leave percentage is taken of (the founder's decision, 2026-11-21: the Basic salary). BASIC = the Basic part of the eligible pay, as the site's salary structure splits it: the default for a NEW rule version. ALL_PAY = the whole eligible pay (the first build): every rule version made before the decision keeps it, so no past or open payroll changes. |
 | hourlyAverageMonths | Int |  | How many months of approved hours before a spell of sickness are averaged to pay a sick day or a public holiday not worked, for a person paid by the hour (the founder's H14; 3 as recommended). A company setting. |
 | hourlyAverageBasis | HourlyAverageBasis |  | How a paid sick day or a paid public holiday not worked is valued for a person paid by the hour (the founder's decision, 2026-11-21): GROSS_EARNINGS = the average daily GROSS earnings of the months before (the default for a NEW rule version); HOURS_AT_WEEKDAY_RATE = the average daily hours times the weekday rate (the first build): every rule version made before the decision keeps it, so no past or open payroll changes. |
 | hourlyAverageWeekday | Boolean |  | Which kinds of day count towards the gross-earnings average (all three by default): a kind that is left out is left out of the earnings and of the days. Leave pay, sick pay and holiday pay are never in it. |
@@ -6152,6 +6153,7 @@ How an hourly person's extra pay was made up (hourly pay, H14): one row for each
 | baseAmount | Decimal |  | LEAVE_PERCENT: the pay for hours worked (after the service period) the percentage was worked on. Null for the day-based kinds. |
 | pct | Decimal |  | LEAVE_PERCENT: the percentage used. Null for the day-based kinds. |
 | breakdown | Json |  | The day-based kinds on the gross-earnings basis: how the average was worked out (the window, the gross earnings in it, the days worked, the daily average, the kinds of day counted), kept for audit. Null on the hours-at-weekday-rate basis and for leave pay. |
+| leaveBasis | HourlyLeaveBasis |  | LEAVE_PERCENT: what the percentage was taken of when it was worked out: BASIC (the base above is the Basic part of the eligible pay) or null (a line made before the founder's decision: the base above is all the eligible pay). Null for the day-based kinds. |
 | minutes | Int |  | The day-based kinds: the minutes paid and the hourly rate used. Null for LEAVE_PERCENT. |
 | rate | Decimal |  |  |
 | dates | String[] |  | The day-based kinds: the days paid (YYYY-MM-DD), so a later (supplementary) payroll never pays the same day twice. Empty for LEAVE_PERCENT. |
@@ -7341,6 +7343,10 @@ Which line of business a contract belongs to. Back-office staff carry no contrac
 ### HourlyAverageBasis
 
 `HOURS_AT_WEEKDAY_RATE`, `GROSS_EARNINGS`
+
+### HourlyLeaveBasis
+
+`ALL_PAY`, `BASIC`
 
 ### LeaveStatus
 

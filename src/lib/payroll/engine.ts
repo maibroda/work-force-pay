@@ -108,6 +108,8 @@ export interface HourlyAllowanceInput {
   baseKobo?: number;
   /** LEAVE_PERCENT: the percentage used. */
   pct?: number;
+  /** LEAVE_PERCENT: BASIC when the base is the Basic part of the eligible pay; left out when the base is all the eligible pay (the first build). */
+  basis?: "BASIC";
   /** The day-based kinds: the minutes paid and the hourly rate used (naira). */
   minutes?: number;
   rate?: number;

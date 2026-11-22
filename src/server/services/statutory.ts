@@ -100,6 +100,7 @@ export async function copyStatutoryRules(tx: Tx, fromOrgId: string, toOrgId: str
         minTakeHomePctOfGross: r.minTakeHomePctOfGross,
         hourlyMinMonthlyPay: r.hourlyMinMonthlyPay,
         hourlyLeavePct: r.hourlyLeavePct,
+        hourlyLeaveBasis: r.hourlyLeaveBasis,
         hourlyAverageMonths: r.hourlyAverageMonths,
         hourlyAverageBasis: r.hourlyAverageBasis,
         hourlyAverageWeekday: r.hourlyAverageWeekday,
@@ -175,6 +176,8 @@ export async function payrollRuleFor(tx: Tx, orgId: string, date: Date) {
     hourlyMinMonthlyPayKobo: toKobo(r.hourlyMinMonthlyPay),
     /** The leave pay for a person paid by the hour, a percentage added to every hour worked (H14); 0 = none. */
     hourlyLeavePct: num(r.hourlyLeavePct),
+    /** What the leave percentage is taken of: the Basic part of the pay (BASIC, the default for a new version) or all the pay (ALL_PAY, a version made before the decision). */
+    hourlyLeaveBasis: r.hourlyLeaveBasis as "ALL_PAY" | "BASIC",
     /** The months of approved hours before a spell of sickness averaged to pay a sick day (H14). */
     hourlyAverageMonths: r.hourlyAverageMonths,
     /** How a paid sick day and a paid holiday not worked are valued: the average daily GROSS earnings (the default for a new version) or the first build's average hours times the weekday rate. */
@@ -423,6 +426,8 @@ export const payrollRuleSchema = z.object({
   /** The minimum monthly pay for a person paid only by the hour (H13), in naira and kobo: a warning only. 0 = no check. */
   /** The leave pay for a person paid by the hour (H14): a percentage added to every hour worked, with at most two decimal places. 0 = none; no figure is built in. */
   hourlyLeavePct: z.coerce.number().min(0).max(100).refine((n) => Math.abs(n * 100 - Math.round(n * 100)) < 0.001, "Use a percentage with at most two decimal places.").default(2.5),
+  /** What the leave percentage is taken of (the founder's decision): the Basic part of the pay (BASIC) or all the pay (ALL_PAY, how a version made before the decision works). */
+  hourlyLeaveBasis: z.enum(["BASIC", "ALL_PAY"]).default("BASIC"),
   /** The months of approved hours before a spell of sickness that are averaged to pay a sick day or a public holiday not worked, for a person paid by the hour (H14): 1 to 24, 3 as recommended. */
   hourlyAverageMonths: z.coerce.number().int().min(1).max(24).default(3),
   /** How a paid sick day and a paid holiday not worked are valued (the founder's decision): the average daily GROSS earnings (the default for a new version) or the first build's average hours times the weekday rate. */
