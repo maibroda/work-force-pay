@@ -137,6 +137,12 @@ export async function saveHourlyPieces(tx: Tx, rows: readonly Prisma.HourlyPayPi
   if (without.length) await tx.hourlyPayPiece.createMany({ data: without });
 }
 
+/** The CURRENT names of the clients and sites of some beats: for a stored line from before the names were kept (a payslip made then shows the names as they are now). Read for ONE company. */
+async function currentPlaceNames(tx: Tx, orgId: string, beatIds: string[]): Promise<Map<string, { siteName: string; clientName: string }>> {
+  const beats = beatIds.length ? await tx.beat.findMany({ where: { organizationId: orgId, id: { in: beatIds } }, select: { id: true, name: true, client: { select: { name: true } } } }) : [];
+  return new Map(beats.map((b) => [b.id, { siteName: b.name, clientName: b.client.name }]));
+}
+
 /**
  * The hourly pay lines of one payroll record for its payslip (phase 4c): the hours, the rate and the amount of each line as stored, with the name of the site. Read for ONE company; nothing is worked out here, so
  * the payslip can only show what the payroll paid. A record with no hourly lines (a person paid monthly) gives none.
@@ -145,9 +151,8 @@ export async function loadPayslipHourly(tx: Tx, orgId: string, recordId: string)
   const lines = await tx.hourlyPayLine.findMany({ where: { organizationId: orgId, recordId }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
   if (!lines.length) return [];
   const beatIds = [...new Set(lines.flatMap((l) => (l.beatId ? [l.beatId] : [])))];
-  const beats = beatIds.length ? await tx.beat.findMany({ where: { organizationId: orgId, id: { in: beatIds } }, select: { id: true, name: true } }) : [];
-  const names = new Map(beats.map((b) => [b.id, b.name]));
-  return lines.map((l) => ({ siteName: (l.beatId && names.get(l.beatId)) || "", dayClass: l.dayClass, minutes: l.minutes, rate: l.rate.toString(), amount: l.amount.toString() }));
+  const names = await currentPlaceNames(tx, orgId, beatIds);
+  return lines.map((l) => ({ siteName: l.siteName ?? (l.beatId && names.get(l.beatId)?.siteName) ?? "", clientName: l.clientName ?? (l.beatId && names.get(l.beatId)?.clientName) ?? null, dayClass: l.dayClass, minutes: l.minutes, rate: l.rate.toString(), amount: l.amount.toString() }));
 }
 
 /** The extra pay lines of one payroll record for its payslip (H14): the leave percentage as stored, with the name of the site. None for a person with no leave pay. Read for ONE company. */
@@ -155,9 +160,8 @@ export async function loadPayslipAllowances(tx: Tx, orgId: string, recordId: str
   const lines = await tx.hourlyAllowanceLine.findMany({ where: { organizationId: orgId, recordId }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
   if (!lines.length) return [];
   const beatIds = [...new Set(lines.flatMap((l) => (l.beatId ? [l.beatId] : [])))];
-  const beats = beatIds.length ? await tx.beat.findMany({ where: { organizationId: orgId, id: { in: beatIds } }, select: { id: true, name: true } }) : [];
-  const names = new Map(beats.map((b) => [b.id, b.name]));
-  return lines.map((l) => ({ kind: l.kind, siteName: (l.beatId && names.get(l.beatId)) || "", baseAmount: l.baseAmount === null ? null : l.baseAmount.toString(), pct: l.pct === null ? null : l.pct.toString(), amount: l.amount.toString(), minutes: l.minutes, rate: l.rate === null ? null : l.rate.toString(), dates: l.dates }));
+  const names = await currentPlaceNames(tx, orgId, beatIds);
+  return lines.map((l) => ({ kind: l.kind, siteName: l.siteName ?? (l.beatId && names.get(l.beatId)?.siteName) ?? "", clientName: l.clientName ?? (l.beatId && names.get(l.beatId)?.clientName) ?? null, baseAmount: l.baseAmount === null ? null : l.baseAmount.toString(), pct: l.pct === null ? null : l.pct.toString(), amount: l.amount.toString(), minutes: l.minutes, rate: l.rate === null ? null : l.rate.toString(), dates: l.dates }));
 }
 
 /** The finding for an overpayment after a correction made once the payroll was locked: no negative pay is made, so someone enters a deduction (or the approver overrides it, with a reason). */

@@ -8151,6 +8151,9 @@ model HourlyPayLine {
   clientId       String?
   contractId     String?
   beatId         String?
+  /// The client's and the site's names as they were when the payroll was calculated, kept so a payslip already made never changes when a client or a site is renamed. Null on a line made before they were kept: the payslip then shows the current names.
+  clientName     String?
+  siteName       String?
   /// The code of the salary structure that split this site's gross (the established structure for the location).
   structureCode  String
   dayClass       DayClass
@@ -8192,6 +8195,9 @@ model HourlyAllowanceLine {
   clientId       String?
   contractId     String?
   beatId         String?
+  /// The client's and the site's names as they were when the payroll was calculated (see HourlyPayLine). Null on a line made before they were kept.
+  clientName     String?
+  siteName       String?
   /// The code of the salary structure that split this site's gross, this extra pay included.
   structureCode  String
   /// LEAVE_PERCENT: the pay for hours worked (after the service period) the percentage was worked on. Null for the day-based kinds.

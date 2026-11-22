@@ -46,6 +46,14 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
+
+## Not yet merged (branch `hourly-payslip-client`, one small migration)
+
+- **The payslip names the client** (the founder's confirmed decision). A **Client** (or **Clients**, when the month had more than one) detail on the screen and the PDF, and the Site column of the hours table now reads **"Client - Site"**, so hours for different clients are told apart. Monthly staff: from their stored work locations (the head office is not a client); staff paid by the hour: from their hours and extra pay lines. A payslip with no client is unchanged.
+- **Names as they were when the payroll was calculated:** each stored hours line and extra pay line keeps the client's and the site's name, so **renaming a client or site never changes a payslip already made**; a line from an older payroll shows the current names. **Only the name is shown, never what the client is charged** (a test pins it). The PDF gives the Site column a little more room.
+- **Display and storage only:** no pay figure, rule or setting changes. **Migration `20270108090000_payslip_client_names`:** four nullable columns, with `down.sql`; round-tripped on a copy. Data dictionary regenerated.
+- **Tests (written first):** six in `tests/unit/payslip-pdf.test.ts`, `tests/integration/hourly-payslip-client.test.ts` (2); one older test now expects "Client - Site". Explain-back note: `docs/plans/hourly-payslip-client-explain-back.md`.
+
 ## Not yet merged (branch `hourly-payslip-lines`, no migration)
 
 - **The payslip PDF no longer hides hourly lines.** It listed at most 9 hours-and-pay lines and then said "... and N more line(s), included in the total", which could hide leave pay, sick pay and holiday pay lines for a person at several sites. **Every line is now drawn**; when they do not fit they carry on to a second page under the same headings ("HOURS WORKED AND PAY (continued)"), the totals line closes the table once, and the **footer is on every page**. Work locations (limit of eight) and the notes follow the same rule. A payslip that fits on one page is drawn as before.

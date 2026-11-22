@@ -195,7 +195,8 @@ describe("late sick days (a supplementary payroll) and the payslip", () => {
       daysWorked: num(slip.daysWorked), basisDays: slip.basisDays, daysAbsent: slip.daysAbsent, overtimeHours: 0, monthlyGross: num(slip.monthlyGross), totalEarnings: num(slip.totalEarnings), totalDeductions: num(slip.totalDeductions), netPay: num(slip.netPay),
       taxRuleVersion: slip.taxRuleVersion, hasOverride: false, lines: slip.lines as never, locations: [], hourly: slip.hourly, allowances: slip.hourlyAllowances, periodName: "March 2045", periodStart: "2045-03-01", periodEnd: "2045-03-31", runType: "REGULAR", runNumber: 1, generatedOn: "2045-03-31",
     });
-    expect(m.hourly?.rows).toEqual([[w.beat.name, "Sick pay (2 days)", "16 h", "1,000.00", "16,000.00"]]);
+    const place = `${(await db.client.findUniqueOrThrow({ where: { id: w.beat.clientId } })).name} - ${w.beat.name}`; // the Site column names the client (the founder's decision)
+    expect(m.hourly?.rows).toEqual([[place, "Sick pay (2 days)", "16 h", "1,000.00", "16,000.00"]]);
     expect(m.hourly?.total).toEqual(["Total", "", "16 h", "", "16,000.00"]);
   });
 });

@@ -159,6 +159,45 @@ describe("every hourly line is on the payslip, on as many pages as it takes (not
   });
 });
 
+describe("the client on the payslip (the founder's confirmed decision: show the client name)", () => {
+  const hours = (clientName: string | undefined, siteName: string, minutes = 480, amount = "8000.00") => ({ ...(clientName ? { clientName } : {}), siteName, dayClass: "WEEKDAY" as const, minutes, rate: "1000.00", amount });
+
+  it("one client: a Client detail, and the Site column of each hours line reads 'Client - Site'", () => {
+    const m = payslipModel(base({ monthlyGross: 0, hourly: [hours("ABC Bank", "Gate 1")] }));
+    expect(m.details.find(([k]) => k === "Client")?.[1]).toBe("ABC Bank");
+    expect(m.hourly?.rows[0][0]).toBe("ABC Bank - Gate 1");
+  });
+
+  it("several clients in the month: 'Clients' lists each once, in the order they first appear, and every hours line names its own client", () => {
+    const m = payslipModel(base({ monthlyGross: 0, hourly: [hours("ABC Bank", "Gate 1"), hours("Beta Foods", "Plant"), hours("ABC Bank", "Gate 2")] }));
+    expect(m.details.find(([k]) => k === "Clients")?.[1]).toBe("ABC Bank; Beta Foods");
+    expect(m.details.find(([k]) => k === "Client")).toBeUndefined();
+    expect(m.hourly?.rows.map((r) => r[0]).sort()).toEqual(["ABC Bank - Gate 1", "ABC Bank - Gate 2", "Beta Foods - Plant"]);
+  });
+
+  it("an extra pay line (leave, sick or holiday pay) names its client too", () => {
+    const m = payslipModel(base({ monthlyGross: 0, hourly: [hours("ABC Bank", "Gate 1")], allowances: [{ kind: "LEAVE_PERCENT", siteName: "Gate 1", clientName: "ABC Bank", baseAmount: "800.00", pct: "2.5", amount: "20.00" }] }));
+    expect(m.hourly?.rows.map((r) => r[0])).toEqual(["ABC Bank - Gate 1", "ABC Bank - Gate 1"]);
+  });
+
+  it("monthly staff: the client comes from their work locations (the head office is not a client)", () => {
+    const m = payslipModel(base({ locations: [{ clientName: "Head Office", beatName: "Head Office", days: 5 }, { clientName: "Global Insurance", beatName: "Tower", days: 20 }] }));
+    expect(m.details.find(([k]) => k === "Client")?.[1]).toBe("Global Insurance");
+    expect(payslipModel(base()).details.find(([k]) => k === "Client" || k === "Clients")).toBeUndefined(); // only the head office: no client row
+  });
+
+  it("with no client named the payslip is as before: no client row, and the Site column shows the site alone", () => {
+    const m = payslipModel(base({ monthlyGross: 0, hourly: [hours(undefined, "Gate 1")] }));
+    expect(m.details.find(([k]) => k === "Client" || k === "Clients")).toBeUndefined();
+    expect(m.hourly?.rows[0][0]).toBe("Gate 1");
+  });
+
+  it("shows the client's NAME only: nothing the client is charged, no contract rate and no management share is in what the payslip carries", () => {
+    const text = JSON.stringify(payslipModel(base({ monthlyGross: 0, hourly: [hours("ABC Bank", "Gate 1")] })));
+    expect(text).not.toMatch(/billing|charge|agreed|management share|contract rate/i);
+  });
+});
+
 describe("text a PDF can draw", () => {
   it("removes accents, straightens quotes and replaces what the font cannot draw", () => {
     expect(pdfSafe("Ọlá Adéwálé")).toBe("Ola Adewale");

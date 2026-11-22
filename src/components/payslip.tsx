@@ -53,6 +53,8 @@ export function Payslip({
   const deductions = lines.filter((l) => l.type === "DEDUCTION");
   const period = rec.run.period;
   const hs = hourlyPayslip(rec.hourly ?? [], rec.hourlyAllowances ?? []);
+  // the client(s) of the period, each once in the order they first appear: from the work locations (monthly staff) and from the hours and extra pay lines (staff paid by the hour); the head office is not a client. Only the name, never what the client is charged.
+  const clients = [...new Set([...locs.map((l) => l.clientName), ...(rec.hourly ?? []).map((l) => l.clientName ?? ""), ...(rec.hourlyAllowances ?? []).map((l) => l.clientName ?? "")].map((n) => n.trim()).filter((n) => n && n !== "Head Office"))];
   // a person paid only by the hour has no contractual monthly gross
   const hourlyOnly = hs !== null && num(rec.monthlyGross) === 0;
   // Merge contiguous ranges into a per-client/beat summary for the "Work Locations" table
@@ -101,6 +103,11 @@ export function Payslip({
         <p>
           <span className="text-muted-foreground">Category:</span> {rec.categoryName}
         </p>
+        {clients.length > 0 && (
+          <p>
+            <span className="text-muted-foreground">{clients.length === 1 ? "Client:" : "Clients:"}</span> <b>{clients.join("; ")}</b>
+          </p>
+        )}
         <p>
           <span className="text-muted-foreground">Bank:</span> {rec.bankName ?? "—"}{" "}
           {rec.accountNumber ? `· ${rec.accountNumber}` : ""}
