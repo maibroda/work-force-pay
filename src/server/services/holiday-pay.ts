@@ -12,10 +12,11 @@
  */
 import { iso } from "@/lib/dates";
 import { addMonths, workingDatesBetween } from "@/lib/leave";
-import { roundRatio } from "@/lib/money-exact";
+import { mulDiv, roundRatio, sumKobo, toKobo, type Kobo } from "@/lib/money-exact";
 import { grossBasis, grossBreakdown, grossDayPay, type AverageDayClass, type GrossBasis, type PricedDay } from "@/lib/payroll/hourly-average";
 import type { HourlySiteInput } from "@/lib/payroll/engine";
 import { compensationTypeOn, holidaysApplying, resolveHourlyRate, type CompensationRow, type HourlyRateRow } from "@/lib/payroll/hourly-rates";
+import { naira } from "@/lib/payroll/hourly-minimum";
 import { sickPay, sickWindow } from "@/lib/payroll/sick-pay";
 import type { StructureDef } from "@/lib/payroll/structure";
 import type { Tx } from "./_base";
@@ -149,3 +150,38 @@ export async function loadHolidayPay(tx: Tx, a: HolidayPayArgs): Promise<Map<str
   return out;
 }
 
+
+/**
+ * The pay for a public holiday NOT worked that the period's payrolls already paid, by person and day, in whole kobo (read from the stored lines of every payroll of the period that has not been replaced). Read for ONE company.
+ * Used when a shift on such a day is approved after the lock and is paid by a supplementary payroll: the day would then be paid twice (docs/plans/hourly-holiday-late-shift-explain-back.md).
+ */
+export async function holidayPaidByDate(tx: Tx, orgId: string, periodId: string): Promise<Map<string, Map<string, Kobo>>> {
+  const out = new Map<string, Map<string, Kobo>>();
+  const runs = await tx.payrollRun.findMany({ where: { organizationId: orgId, periodId, status: { not: "SUPERSEDED" } }, select: { id: true } });
+  if (!runs.length) return out;
+  const lines = await tx.hourlyAllowanceLine.findMany({ where: { organizationId: orgId, runId: { in: runs.map((r) => r.id) }, kind: "HOLIDAY_NOT_WORKED" }, select: { employeeId: true, dates: true, amount: true } });
+  for (const l of lines) {
+    if (!l.dates.length) continue;
+    const share = mulDiv(toKobo(l.amount), 1, l.dates.length); // a line normally holds one day; a line of several days is shared equally
+    const byDay = out.get(l.employeeId) ?? new Map<string, Kobo>();
+    for (const day of l.dates) byDay.set(day, sumKobo([byDay.get(day) ?? (0 as Kobo), share]));
+    out.set(l.employeeId, byDay);
+  }
+  return out;
+}
+
+/**
+ * A shift worked on a public holiday that was ALREADY paid as not worked, now paid by a supplementary payroll (approved after the lock): the person would be paid twice for the day. No negative pay is ever made (the rule the
+ * hourly pay already follows for corrections after payment): ONE critical finding names the person, the holiday(s) and the amount paid as not worked, for Payroll to enter a deduction if it is to be recovered.
+ */
+export function holidayPaidAndWorkedFinding(a: { employeeId: string; label: string; periodName: string; days: ReadonlyArray<{ date: string; amount: Kobo }> }): HolidayFinding {
+  const dates = a.days.map((d) => d.date).sort().join(", ");
+  const total = sumKobo(a.days.map((d) => d.amount));
+  return {
+    employeeId: a.employeeId,
+    category: "ATTENDANCE",
+    severity: "CRITICAL",
+    code: "HOLIDAY_PAID_AND_WORKED",
+    message: `${a.label} was paid for the public holiday on ${dates} as a day not worked in ${a.periodName}, and a shift worked that day was approved after the payroll was locked and is paid now. That is about NGN ${naira(total)} paid for the day as not worked. No negative pay is made: enter a deduction for it if it is to be recovered.`,
+  };
+}
