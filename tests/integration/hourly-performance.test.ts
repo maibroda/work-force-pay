@@ -63,7 +63,7 @@ beforeAll(async () => {
     code: `PERF-${uid()}`, name: "Hourly performance structure", effectiveFrom: "2040-01-01", activate: true,
     components: DEFAULT_EARNINGS.map((c, i) => ({ code: c.code, name: c.name, calcType: "PERCENTAGE" as const, percentage: [10, 14, 15, 5, 15, 20, 2.5, 5, 13.5][i], taxable: true, pensionable: c.pensionable })),
   });
-  await db.hourlyRate.create({ data: { organizationId: orgId, scope: "CATEGORY", categoryId: t.guardId, weekdayRate: "1000", weekendRate: "1500", holidayRate: "2000", effectiveFrom: day("2040-01-01"), reason: "perf", status: "APPROVED", proposedBy: "t", proposedByUserId: "t", decidedBy: "t2", decidedByUserId: "t2" } });
+  await db.hourlyRate.create({ data: { organizationId: orgId, scope: "CATEGORY", categoryId: t.guardId, weekdayRate: "1000", weekendRate: "1500", holidayRate: "2000", effectiveFrom: day("2030-01-01"), reason: "perf", status: "APPROVED", proposedBy: "t", proposedByUserId: "t", decidedBy: "t2", decidedByUserId: "t2" } });
 
   // 20 sites: 2 clients, a contract each, 10 sites on each
   const sites: Array<{ clientId: string; contractId: string; beatId: string }> = [];

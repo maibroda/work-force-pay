@@ -40,7 +40,7 @@ export function hourlyLeaveDates(comp: readonly CompensationRow[] | undefined, l
 
 const SHOWN = 6;
 /** Why the days are not paid: no leave pay is set up, or leave pay is the percentage added to every hour worked (H14 piece 1). */
-const reason = (pct?: number) => (pct && pct > 0 ? `their leave pay is the ${pct}% added to every hour they work, not a payment for the days` : "pay for their leave is not set up yet");
+const reason = (pct?: number) => (pct && pct > 0 ? `their leave pay is the ${pct}% worked out on the hours they work, not a payment for the days` : "pay for their leave is not set up yet");
 const listed = (dates: readonly string[]) => (dates.length > SHOWN ? `${dates.slice(0, SHOWN).join(", ")} and ${dates.length - SHOWN} more` : dates.join(", "));
 
 /** The payroll finding: a WARNING (never blocking, nothing to explain) when a person paid by the hour has approved annual leave in the month. */

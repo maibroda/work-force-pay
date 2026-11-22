@@ -487,6 +487,11 @@ enum RemittanceType {
   OUTSOURCING_LEAVE_ALLOWANCE
 }
 
+enum HourlyLeaveBasis {
+  ALL_PAY
+  BASIC
+}
+
 enum LeaveStatus {
   PENDING
   APPROVED
@@ -4044,6 +4049,8 @@ model PayrollRule {
   /// The leave pay for a person paid by the hour (the founder's H14, 2026-11-20): a percentage added to every hour worked, as their annual leave pay, from the day they complete the company's service period for annual leave
   /// (the leave policy, 12 months by default). The founder's figure of 2026-11-21 is 2.5, the default for a NEW rule version (a contract rate may set its own); every existing version keeps the value it has. 0 = no leave pay.
   hourlyLeavePct           Decimal        @default(2.5) @db.Decimal(5, 2)
+  /// What the leave percentage is taken of (the founder's decision, 2026-11-21: the Basic salary). BASIC = the Basic part of the eligible pay, as the site's salary structure splits it: the default for a NEW rule version. ALL_PAY = the whole eligible pay (the first build): every rule version made before the decision keeps it, so no past or open payroll changes.
+  hourlyLeaveBasis         HourlyLeaveBasis @default(BASIC)
   /// How many months of approved hours before a spell of sickness are averaged to pay a sick day or a public holiday not worked, for a person paid by the hour (the founder's H14; 3 as recommended). A company setting.
   hourlyAverageMonths      Int            @default(3)
   effectiveFrom            DateTime       @db.Date
@@ -8198,6 +8205,8 @@ model HourlyAllowanceLine {
   baseAmount     Decimal?              @db.Decimal(16, 2)
   /// LEAVE_PERCENT: the percentage used. Null for the day-based kinds.
   pct            Decimal?              @db.Decimal(5, 2)
+  /// LEAVE_PERCENT: what the percentage was taken of when it was worked out: BASIC (the base above is the Basic part of the eligible pay) or null (a line made before the founder's decision: the base above is all the eligible pay). Null for the day-based kinds.
+  leaveBasis     HourlyLeaveBasis?
   /// The day-based kinds: the minutes paid and the hourly rate used. Null for LEAVE_PERCENT.
   minutes        Int?
   rate           Decimal?              @db.Decimal(14, 2)

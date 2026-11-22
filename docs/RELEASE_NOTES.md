@@ -47,7 +47,15 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `hourly-holiday-late-shift`, no migration)
+## Not yet merged (branch `hourly-leave-pay-basic`, two small migrations)
+
+- **Hourly pay: the leave percentage is taken of the Basic part of the pay** (the founder's confirmed decision: 2.5% "calculated on basic salary"; for staff paid by the hour, the Basic component of the site's salary structure split). It is a **payroll rule setting**, "What the leave pay percentage is taken of": the Basic part (the default for a NEW version) or all the pay (how the first build worked). **Every existing rule version and the demonstration company's rule are set to "all the pay", so no past or open payroll changes**; to move a company over, create a new rule version from the date you choose.
+- **A structure with no Basic component** pays no leave pay on those hours (the hours are paid) and raises a **blocking finding**; it never falls back to gross or the client's rate. Each stored leave line keeps the base, the percentage, the amount and the basis; the payslip reads "Leave pay (2.5% of Basic 400.00)". The warning shown when HR approves annual leave for an hourly person is reworded.
+- **NOT production-ready:** the legal and payroll-tax review of the 2.5% on the Basic salary, its tax and pension treatment and the 12-month wait is outstanding. These are the founder's company policy, not statutory requirements.
+- **Migrations `20270106090000_leave_pay_basis` and `20270106100000_leave_basis_on_line`:** the enum and the rule column (existing rows ALL_PAY, new rows BASIC) and a nullable note on each stored leave line. With `down.sql`. Data dictionary regenerated.
+- **Tests (written first):** seven in `tests/unit/hourly-leave-pay.test.ts`, `tests/integration/hourly-leave-basic.test.ts`; two wording tests updated. Explain-back note: `docs/plans/hourly-leave-pay-basic-explain-back.md`.
+
+## Merged in #268 (no migration)
 
 - **A shift approved after the lock on a holiday already paid as "not worked" is now reported.** The supplementary payroll paid such a shift while the not-worked holiday pay stayed paid, so the person was paid twice for the day without anything saying so. The supplementary payroll now raises **one critical finding** naming the person, the holiday and the amount paid as not worked (read from the stored line), for Payroll to enter a deduction if it is to be recovered. **No negative pay is made and the shift is paid as before**, in the same way as every other correction after payment. A late shift on any other day raises nothing.
 - **A finding only:** no pay figure, rule, setting or payslip changes, and no migration.

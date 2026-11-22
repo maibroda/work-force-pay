@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { HourlySiteInput } from "@/lib/payroll/engine";
 import { MoneyError } from "@/lib/money-exact";
-import { addLeavePay } from "@/lib/payroll/hourly-leave-pay";
+import { addLeavePay, leaveWithoutBasic } from "@/lib/payroll/hourly-leave-pay";
 import { DEFAULT_EARNINGS, type StructureDef } from "@/lib/payroll/structure";
 
 /**
@@ -78,6 +78,53 @@ describe("addLeavePay: a percentage chosen per site (the contract rate may set i
     expect(addLeavePay([a], () => 0)[0].allowances).toBeUndefined();
     expect(() => addLeavePay([a], () => 101)).toThrow(MoneyError);
     expect(() => addLeavePay([a], () => -1)).toThrow(MoneyError);
+  });
+});
+
+describe("addLeavePay on the BASIC part (the founder's decision: leave pay is a percentage of the Basic salary)", () => {
+  // the test structure gives Basic 10% of the gross (DEFAULT_EARNINGS), so the Basic part of 10,000.00 of hours is 1,000.00
+  it("is the percentage of the Basic part of the eligible pay, and the stored base is that Basic part", () => {
+    const [s] = addLeavePay([site([line(600, 1000, 1_000_000, 600)])], 10, "BASIC"); // 10 h at 1,000 = 10,000.00; Basic 1,000.00; 10% = 100.00
+    expect(s.allowances).toEqual([{ kind: "LEAVE_PERCENT", baseKobo: 100_000, pct: 10, amountKobo: 10_000, basis: "BASIC" }]);
+  });
+
+  it("at 2.5%: 2.5% of the Basic part of 10,000.00 is 25.00", () => {
+    const [s] = addLeavePay([site([line(600, 1000, 1_000_000, 600)])], 2.5, "BASIC");
+    expect(s.allowances).toEqual([{ kind: "LEAVE_PERCENT", baseKobo: 100_000, pct: 2.5, amountKobo: 2_500, basis: "BASIC" }]);
+  });
+
+  it("counts only the eligible minutes, as for the all-pay basis", () => {
+    const [s] = addLeavePay([site([line(600, 1000, 1_000_000, 300)])], 10, "BASIC"); // 5 of 10 hours eligible: pay 5,000.00, Basic 500.00, 10% = 50.00
+    expect(s.allowances).toEqual([{ kind: "LEAVE_PERCENT", baseKobo: 50_000, pct: 10, amountKobo: 5_000, basis: "BASIC" }]);
+  });
+
+  it("rounds half up to the kobo at each line: the Basic part once, then the leave pay once", () => {
+    // 61 min at 1,000 an hour = 1,016.67 of pay; Basic 10% = 101.667, which rounds to 101.67; 2.5% of 101.67 = 2.54175, which rounds to 2.54
+    const [s] = addLeavePay([site([line(61, 1000, 101_667, 61)])], 2.5, "BASIC");
+    expect(s.allowances).toEqual([{ kind: "LEAVE_PERCENT", baseKobo: 10_167, pct: 2.5, amountKobo: 254, basis: "BASIC" }]);
+  });
+
+  it("uses the Basic component of the site's own structure: a structure with Basic at 40% gives four times as much", () => {
+    const forty: StructureDef = { ...STRUCT, id: "forty", code: "FORTY", components: [{ code: "BASIC", name: "Basic", calcType: "PERCENTAGE", percentage: 40, taxable: true, pensionable: true, active: true, sortOrder: 0 }, { code: "HOUSING", name: "Housing", calcType: "PERCENTAGE", percentage: 60, taxable: true, pensionable: true, active: true, sortOrder: 1 }] };
+    const [s] = addLeavePay([site([line(600, 1000, 1_000_000, 600)], { structure: forty })], 10, "BASIC");
+    expect(s.allowances).toEqual([{ kind: "LEAVE_PERCENT", baseKobo: 400_000, pct: 10, amountKobo: 40_000, basis: "BASIC" }]);
+  });
+
+  it("a structure with no Basic component pays no leave pay, and leaveWithoutBasic names that site so the pay run can raise a finding", () => {
+    const noBasic: StructureDef = { ...STRUCT, id: "nb", code: "NB", components: [{ code: "HOUSING", name: "Housing", calcType: "PERCENTAGE", percentage: 100, taxable: true, pensionable: true, active: true, sortOrder: 0 }] };
+    const sites = [site([line(600, 1000, 1_000_000, 600)], { structure: noBasic })];
+    expect(addLeavePay(sites, 10, "BASIC")[0].allowances).toBeUndefined();
+    expect(leaveWithoutBasic(sites, 10, "BASIC").map((x) => x.beatId)).toEqual(["b1"]);
+    expect(leaveWithoutBasic([site([line(600, 1000, 1_000_000, 600)])], 10, "BASIC")).toEqual([]); // a structure with Basic: none
+    expect(leaveWithoutBasic(sites, 10, "ALL_PAY")).toEqual([]); // the all-pay basis never needs a Basic part
+    expect(leaveWithoutBasic(sites, 0, "BASIC")).toEqual([]); // leave pay off
+    expect(leaveWithoutBasic([site([line(600, 1000, 1_000_000)], { structure: noBasic })], 10, "BASIC")).toEqual([]); // nothing eligible: nothing to pay
+  });
+
+  it("the all-pay basis is unchanged (the default), so a rule version made before this decision still works the same", () => {
+    const [s] = addLeavePay([site([line(600, 1000, 1_000_000, 600)])], 10, "ALL_PAY");
+    expect(s.allowances).toEqual([{ kind: "LEAVE_PERCENT", baseKobo: 1_000_000, pct: 10, amountKobo: 100_000 }]);
+    expect(addLeavePay([site([line(600, 1000, 1_000_000, 600)])], 10)[0].allowances).toEqual(s.allowances);
   });
 });
 
