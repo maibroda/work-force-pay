@@ -30,6 +30,8 @@ export interface AllowanceLineInput {
   baseAmount: string | null;
   /** LEAVE_PERCENT: the percentage used, as stored ("10.00"). */
   pct: string | null;
+  /** LEAVE_PERCENT: BASIC when the base is the Basic part of the pay; null for a line whose base is all the pay (made before the founder's decision). */
+  basis?: "ALL_PAY" | "BASIC" | null;
   amount: string;
   /** The day-based kinds (sick pay): the minutes paid, the hourly rate used ("1000.00") and the days paid. */
   minutes?: number | null;
@@ -67,10 +69,10 @@ export function durationOf(minutes: number): string {
 const KIND_LABEL: Record<AllowanceLineInput["kind"], string> = { LEAVE_PERCENT: "Leave pay", SICK_DAY: "Sick pay", HOLIDAY_NOT_WORKED: "Holiday pay" };
 const plainPct = (p: string) => (p.includes(".") ? p.replace(/\.?0+$/, "") : p);
 
-/** The label of an extra pay line: "Leave pay (10% of 4,000.00)". */
+/** The label of an extra pay line: "Leave pay (2.5% of Basic 400.00)" (the base is the Basic part of the pay) or, for a line whose base is all the pay, "Leave pay (10% of 4,000.00)". */
 function allowanceLabel(a: AllowanceLineInput): string {
   const name = KIND_LABEL[a.kind];
-  if (a.kind === "LEAVE_PERCENT" && a.pct !== null && a.baseAmount !== null) return `${name} (${plainPct(a.pct)}% of ${naira(toKobo(a.baseAmount))})`;
+  if (a.kind === "LEAVE_PERCENT" && a.pct !== null && a.baseAmount !== null) return `${name} (${plainPct(a.pct)}% of ${a.basis === "BASIC" ? "Basic " : ""}${naira(toKobo(a.baseAmount))})`;
   const n = a.dates?.length ?? 0;
   if (a.kind === "HOLIDAY_NOT_WORKED" && n === 1) return `${name} (${a.dates![0]})`;
   return n > 0 ? `${name} (${n} ${n === 1 ? "day" : "days"})` : name;

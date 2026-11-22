@@ -161,7 +161,7 @@ export async function loadPayslipAllowances(tx: Tx, orgId: string, recordId: str
   if (!lines.length) return [];
   const beatIds = [...new Set(lines.flatMap((l) => (l.beatId ? [l.beatId] : [])))];
   const names = await currentPlaceNames(tx, orgId, beatIds);
-  return lines.map((l) => ({ kind: l.kind, siteName: l.siteName ?? (l.beatId && names.get(l.beatId)?.siteName) ?? "", clientName: l.clientName ?? (l.beatId && names.get(l.beatId)?.clientName) ?? null, baseAmount: l.baseAmount === null ? null : l.baseAmount.toString(), pct: l.pct === null ? null : l.pct.toString(), amount: l.amount.toString(), minutes: l.minutes, rate: l.rate === null ? null : l.rate.toString(), dates: l.dates }));
+  return lines.map((l) => ({ kind: l.kind, siteName: l.siteName ?? (l.beatId && names.get(l.beatId)?.siteName) ?? "", clientName: l.clientName ?? (l.beatId && names.get(l.beatId)?.clientName) ?? null, baseAmount: l.baseAmount === null ? null : l.baseAmount.toString(), pct: l.pct === null ? null : l.pct.toString(), basis: l.leaveBasis, amount: l.amount.toString(), minutes: l.minutes, rate: l.rate === null ? null : l.rate.toString(), dates: l.dates }));
 }
 
 /** The finding for an overpayment after a correction made once the payroll was locked: no negative pay is made, so someone enters a deduction (or the approver overrides it, with a reason). */

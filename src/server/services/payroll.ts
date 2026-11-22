@@ -11,7 +11,7 @@ import { num } from "@/lib/money";
 import { asKobo, koboToString, roundPlaces, sumKobo } from "@/lib/money-exact";
 import { missingStateSeverity, normaliseState } from "@/lib/nigeria-states";
 import { buildHourlyEarnings, valueOfMinutes } from "@/lib/payroll/hourly-earnings";
-import { addLeavePay } from "@/lib/payroll/hourly-leave-pay";
+import { addLeavePay, leaveWithoutBasic } from "@/lib/payroll/hourly-leave-pay";
 import { mergeAllowanceSites } from "@/lib/payroll/sick-pay";
 import { minimumPayFinding } from "@/lib/payroll/hourly-minimum";
 import { hourlyLeaveDates, hourlyLeaveFinding } from "@/lib/payroll/hourly-leave";
@@ -35,7 +35,7 @@ import { recentBankChanges } from "./change-requests";
 import { CLIENT_MISMATCH, LOCATION_MISMATCH } from "./operations";
 import { submissionBlockers, varianceIssues } from "./payroll-controls";
 import { loadSickPay, loadWithdrawnSickPay, sickDaysAlreadyPaid, allowanceDaysAlreadyPaid } from "./sick-pay";
-import { loadHolidayPay } from "./holiday-pay";
+import { holidayPaidAndWorkedFinding, holidayPaidByDate, loadHolidayPay } from "./holiday-pay";
 import { hourlyDecreaseFinding, hourlyFindings, hourlyRateConflict, isHourlyOn, loadHourlyForPeriod, loadLateHourly, loadPayslipAllowances, loadPayslipHourly, monthlyRateWhileHourly, saveHourlyPieces } from "./hourly-payroll";
 import { loadRateBook } from "./rates";
 import { employerCostRuleFor, payrollRuleFor, pensionRuleFor, taxRuleFor } from "./statutory";
@@ -257,6 +257,17 @@ function leavePctOfSite(book: Assembled["book"], categoryId: string, companyPct:
   return (site: HourlySiteInput) => book.leavePctFor(site.contractId, categoryId, new Date(`${site.to}T00:00:00Z`)) ?? companyPct;
 }
 
+/** The finding for leave pay that could not be worked out because the site's salary structure has no Basic component (the leave percentage is taken of the Basic salary). */
+function leaveNoBasicFinding(employeeId: string, label: string, periodName: string, site: HourlySiteInput): Issue {
+  return {
+    employeeId,
+    category: "ATTENDANCE",
+    severity: "CRITICAL",
+    code: "HOURLY_LEAVE_NO_BASIC",
+    message: `${label} has hours at ${site.beatName} in ${periodName} whose salary structure (${site.structure.name}) has no Basic component, so their leave pay (a percentage of the Basic salary) could not be worked out and is not paid. Add a Basic component to the structure.`,
+  };
+}
+
 function workDaysFor(a: Assembled, employeeId: string): WorkDay[] {
   return a.work
     .filter((w) => w.employeeId === employeeId)
@@ -348,6 +359,7 @@ function hourlyRowsFor(orgId: string, runId: string, recordId: string, employeeI
         structureCode: seg.rate.structure.code,
         baseAmount: x.baseKobo === undefined ? null : koboToString(asKobo(x.baseKobo)),
         pct: x.pct ?? null,
+        leaveBasis: x.basis ?? null,
         minutes: x.minutes ?? null,
         rate: x.rate ?? null,
         dates: x.dates ?? [],
@@ -491,7 +503,10 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
           leaveEligibleFrom: iso(addMonths(emp.employmentDate, a.leaveEligibilityMonths)),
         });
         // the leave pay: a percentage added to every hour worked from the day the service period for annual leave is complete (H14); each site uses its contract rate's own percentage when it has one, else the company's; 0 = none
-        he = { ...he, sites: addLeavePay(he.sites, leavePctOfSite(a.book, emp.categoryId, a.rules.hourlyLeavePct)) };
+        const leavePct = leavePctOfSite(a.book, emp.categoryId, a.rules.hourlyLeavePct);
+        // a structure with no Basic component cannot give the Basic part: that leave pay is not paid and a blocking finding says so
+        for (const s of leaveWithoutBasic(he.sites, leavePct, a.rules.hourlyLeaveBasis)) issues.push(leaveNoBasicFinding(emp.id, `${emp.employeeNumber} ${fullName(emp)}`, period.name, s));
+        he = { ...he, sites: addLeavePay(he.sites, leavePct, a.rules.hourlyLeaveBasis) };
       } catch (e) {
         // two approved rates in force at the same level (the services prevent it): this person's hourly hours are not paid and a blocking finding says why; the rest of the payroll is worked
         issues.push(hourlyRateConflict(emp.id, `${emp.employeeNumber} ${fullName(emp)}`, period.name, e instanceof Error ? e.message : ""));
@@ -1412,6 +1427,8 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
   const withdrawnSick = await loadWithdrawnSickPay(db, { orgId: ctx.orgId });
   for (const w of withdrawnSick) issues.push({ employeeId: w.employeeId, category: w.category, severity: w.severity, code: w.code, message: w.message });
   const late = a.late!; // a supplementary run always loads the late hours
+  // holidays already paid as not worked: a late shift on one of those days is paid now too, so it is reported (once, in the payroll that pays the shift)
+  const holidayAlreadyPaid = await holidayPaidByDate(db, ctx.orgId, periodId);
   const allEmps = await db.employee.findMany({
     where: { organizationId: ctx.orgId },
     include: { category: true, department: true, deployments: true },
@@ -1438,11 +1455,17 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
           namesOf: (beatId) => a.hourly.names.get(beatId) ?? { clientName: "", beatName: "" },
           leaveEligibleFrom: iso(addMonths(emp.employmentDate, a.leaveEligibilityMonths)),
         });
-        he = { ...he, sites: addLeavePay(he.sites, leavePctOfSite(a.book, emp.categoryId, a.rules.hourlyLeavePct)) };
+        const leavePct = leavePctOfSite(a.book, emp.categoryId, a.rules.hourlyLeavePct);
+        // a structure with no Basic component cannot give the Basic part: that leave pay is not paid and a blocking finding says so
+        for (const s of leaveWithoutBasic(he.sites, leavePct, a.rules.hourlyLeaveBasis)) issues.push(leaveNoBasicFinding(emp.id, `${emp.employeeNumber} ${fullName(emp)}`, period.name, s));
+        he = { ...he, sites: addLeavePay(he.sites, leavePct, a.rules.hourlyLeaveBasis) };
       } catch (e) {
         issues.push(hourlyRateConflict(emp.id, label, period.name, e instanceof Error ? e.message : ""));
       }
       for (const f of hourlyFindings({ employeeId: emp.id, label, periodName: period.name, unresolved: he.unresolved, monthlyRateWhileHourly: false })) issues.push(f);
+      const paidDays = holidayAlreadyPaid.get(emp.id);
+      const bothDays = paidDays ? [...new Set(he.sites.flatMap((s) => s.dates))].filter((x) => paidDays.has(x)).map((date) => ({ date, amount: paidDays.get(date)! })) : [];
+      if (bothDays.length) issues.push(holidayPaidAndWorkedFinding({ employeeId: emp.id, label, periodName: period.name, days: bothDays }));
     }
     for (const d of lateDecreases)
       issues.push(

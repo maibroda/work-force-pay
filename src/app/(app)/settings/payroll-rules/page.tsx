@@ -56,7 +56,7 @@ export default async function PayrollRulesPage() {
                 <TD>{num(x.nhfEmployeeRatePct) > 0 ? `${num(x.nhfEmployeeRatePct)}% of basic` : <span className="text-muted-foreground text-xs">not offered</span>}</TD>
                 <TD>{num(x.minTakeHomePctOfGross) > 0 ? `${num(x.minTakeHomePctOfGross)}% of gross` : <span className="text-muted-foreground text-xs">no floor</span>}</TD>
                 <TD>{num(x.hourlyMinMonthlyPay) > 0 ? naira(x.hourlyMinMonthlyPay) : <span className="text-muted-foreground text-xs">no check</span>}</TD>
-                <TD>{num(x.hourlyLeavePct) > 0 ? `${num(x.hourlyLeavePct)}% of hours worked` : <span className="text-muted-foreground text-xs">none</span>}</TD>
+                <TD>{num(x.hourlyLeavePct) > 0 ? `${num(x.hourlyLeavePct)}% of ${x.hourlyLeaveBasis === "BASIC" ? "the Basic part of the pay" : "all pay for hours worked"}` : <span className="text-muted-foreground text-xs">none</span>}</TD>
                 <TD>{x.hourlyAverageMonths}</TD>
                 <TD>{x.requirePayeState ? <Badge tone="amber">required to approve</Badge> : <span className="text-muted-foreground text-xs">warning only</span>}</TD>
                 <TD>
@@ -159,12 +159,25 @@ export default async function PayrollRulesPage() {
               },
               {
                 name: "hourlyLeavePct",
-                label: "Leave pay for staff paid by the hour (% added to every hour worked)",
+                label: "Leave pay for staff paid by the hour (% worked out on the hours worked)",
                 type: "number",
                 min: 0,
                 max: 100,
                 defaultValue: num(r.hourlyLeavePct),
                 help: "0 = none. A figure you or your adviser enter: no figure is built in. Above 0, a person paid by the hour is paid this percentage of the pay for every hour they work, as their annual leave pay, from the day they complete the annual-leave service period in the leave policy (12 months as shipped). It is part of their gross, and shown on the payslip as Leave pay.",
+                span: 3,
+              },
+              {
+                name: "hourlyLeaveBasis",
+                label: "What the leave pay percentage is taken of",
+                type: "select",
+                required: true,
+                options: [
+                  { value: "BASIC", label: "The Basic part of the pay (as the site's salary structure splits it)" },
+                  { value: "ALL_PAY", label: "All the pay for the hours worked (the first build)" },
+                ],
+                defaultValue: r.hourlyLeaveBasis,
+                help: "The founder's decision is the Basic part. A version made before that decision keeps 'all the pay', so no past or open payroll changes; a new version starts on the Basic part. A structure with no Basic component cannot give the Basic part: the payroll then pays no leave pay for those hours and raises a finding. Subject to the legal and payroll-tax review before production use.",
                 span: 3,
               },
               {
