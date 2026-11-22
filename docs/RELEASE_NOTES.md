@@ -55,7 +55,13 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 - **Migrations `20270106090000_leave_pay_basis` and `20270106100000_leave_basis_on_line`:** the enum and the rule column (existing rows ALL_PAY, new rows BASIC) and a nullable note on each stored leave line. With `down.sql`. Data dictionary regenerated.
 - **Tests (written first):** seven in `tests/unit/hourly-leave-pay.test.ts`, `tests/integration/hourly-leave-basic.test.ts`; two wording tests updated. Explain-back note: `docs/plans/hourly-leave-pay-basic-explain-back.md`.
 
-## Not yet merged (branch `hourly-payslip-lines`, no migration)
+## Merged in #268 (no migration)
+
+- **A shift approved after the lock on a holiday already paid as "not worked" is now reported.** The supplementary payroll paid such a shift while the not-worked holiday pay stayed paid, so the person was paid twice for the day without anything saying so. The supplementary payroll now raises **one critical finding** naming the person, the holiday and the amount paid as not worked (read from the stored line), for Payroll to enter a deduction if it is to be recovered. **No negative pay is made and the shift is paid as before**, in the same way as every other correction after payment. A late shift on any other day raises nothing.
+- **A finding only:** no pay figure, rule, setting or payslip changes, and no migration.
+- **Tests (written first):** `tests/integration/hourly-holiday-late-shift.test.ts` (2). Explain-back note: `docs/plans/hourly-holiday-late-shift-explain-back.md`.
+
+## Merged in #267 (no migration)
 
 - **The payslip PDF no longer hides hourly lines.** It listed at most 9 hours-and-pay lines and then said "... and N more line(s), included in the total", which could hide leave pay, sick pay and holiday pay lines for a person at several sites. **Every line is now drawn**; when they do not fit they carry on to a second page under the same headings ("HOURS WORKED AND PAY (continued)"), the totals line closes the table once, and the **footer is on every page**. Work locations (limit of eight) and the notes follow the same rule. A payslip that fits on one page is drawn as before.
 - **Layout only:** no pay figure, rule or setting changes, and no migration. The on-screen payslip already showed every line.

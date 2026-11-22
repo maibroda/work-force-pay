@@ -35,7 +35,7 @@ import { recentBankChanges } from "./change-requests";
 import { CLIENT_MISMATCH, LOCATION_MISMATCH } from "./operations";
 import { submissionBlockers, varianceIssues } from "./payroll-controls";
 import { loadSickPay, loadWithdrawnSickPay, sickDaysAlreadyPaid, allowanceDaysAlreadyPaid } from "./sick-pay";
-import { loadHolidayPay } from "./holiday-pay";
+import { holidayPaidAndWorkedFinding, holidayPaidByDate, loadHolidayPay } from "./holiday-pay";
 import { hourlyDecreaseFinding, hourlyFindings, hourlyRateConflict, isHourlyOn, loadHourlyForPeriod, loadLateHourly, loadPayslipAllowances, loadPayslipHourly, monthlyRateWhileHourly, saveHourlyPieces } from "./hourly-payroll";
 import { loadRateBook } from "./rates";
 import { employerCostRuleFor, payrollRuleFor, pensionRuleFor, taxRuleFor } from "./statutory";
@@ -1423,6 +1423,8 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
   const withdrawnSick = await loadWithdrawnSickPay(db, { orgId: ctx.orgId });
   for (const w of withdrawnSick) issues.push({ employeeId: w.employeeId, category: w.category, severity: w.severity, code: w.code, message: w.message });
   const late = a.late!; // a supplementary run always loads the late hours
+  // holidays already paid as not worked: a late shift on one of those days is paid now too, so it is reported (once, in the payroll that pays the shift)
+  const holidayAlreadyPaid = await holidayPaidByDate(db, ctx.orgId, periodId);
   const allEmps = await db.employee.findMany({
     where: { organizationId: ctx.orgId },
     include: { category: true, department: true, deployments: true },
@@ -1457,6 +1459,9 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
         issues.push(hourlyRateConflict(emp.id, label, period.name, e instanceof Error ? e.message : ""));
       }
       for (const f of hourlyFindings({ employeeId: emp.id, label, periodName: period.name, unresolved: he.unresolved, monthlyRateWhileHourly: false })) issues.push(f);
+      const paidDays = holidayAlreadyPaid.get(emp.id);
+      const bothDays = paidDays ? [...new Set(he.sites.flatMap((s) => s.dates))].filter((x) => paidDays.has(x)).map((date) => ({ date, amount: paidDays.get(date)! })) : [];
+      if (bothDays.length) issues.push(holidayPaidAndWorkedFinding({ employeeId: emp.id, label, periodName: period.name, days: bothDays }));
     }
     for (const d of lateDecreases)
       issues.push(
