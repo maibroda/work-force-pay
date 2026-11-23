@@ -48,7 +48,13 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `hourly-holiday-adjustment-a`, one new table)
+
+## Not yet merged (branch `hourly-legal-review-record`, documentation only)
+
+- **The legal and payroll-tax review register for the hourly pay policies** (item 5 of the founder's confirmed brief): `docs/legal-review/hourly-payroll-policies-review.md`. It states each approved policy **exactly as built** (paid sick days, leave pay on the Basic part, gross-earnings averaging, the 12-month wait, the tax and pension treatment, the recovery of an overpayment, and the handling of sickness records), the **questions for the adviser**, a **review record to complete** (reviewer, date, outcome, approved wording, amendments, the founder's decision on any conflict, the configuration change), and what happens if a review finds a conflict.
+- **Every review is marked OUTSTANDING; nothing has been reviewed.** The approved values are company policy, not statutory requirements, until a review says so, and **nothing may be marked production-ready while its record is incomplete**. Documentation only: no code, setting, migration or test changes.
+
+## Merged in #272 (one new table)
 
 - **Late-approved public-holiday shifts: the adjustment record and its review (piece A of the plan `hourly-holiday-adjustment-plan.md`; no pay changes).** When a shift is approved on a public holiday that a payroll with a final period already paid as "holiday not worked", a **holiday adjustment** is proposed automatically, **one for each person and holiday** (a unique key): linked to the shift, who approved it and when, the original payroll run and stored line, what was paid and how it was classified, with the **corrected entitlement** (the hours worked that day at the approved holiday rate) and the **net difference**. A second shift that day is added to the one waiting.
 - **Review:** a person with the payroll approval right approves or rejects it, **never the person who approved the shift or the person it is about**; a rejection needs a reason (kept on the record, never in the audit log); the decision is final. A "Holiday adjustments" section on the Public holidays page lists them. **The original payroll and its stored lines are never touched, and nothing is paid or recovered yet**: applying the net difference in the next open payroll, recovering an overpayment within the cap, and leaving the late shift out of the supplementary payroll's own pay are later pieces.

@@ -40,3 +40,7 @@ Written 2026-11-10. Every HR feature built so far was built on **my recommended 
 ## C. What I will not do without you
 
 Write legal advice into the screens; add money to welfare, recognition or training; make any survey result or skill level feed pay, an appraisal or a decision about a person; or use real personal data in tests.
+
+## D. The hourly pay policies
+
+The paid sick days, the leave pay, the gross-earnings averaging, the 12-month wait, their tax and pension treatment and the recovery of an overpayment have their own register, adviser pack and review record: `docs/legal-review/hourly-payroll-policies-review.md`. Every review in it is outstanding.
