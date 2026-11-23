@@ -6,6 +6,7 @@ import { compensationTypeOn, holidaysApplying } from "@/lib/payroll/hourly-rates
 import { entriesOverlap, parseBreakTimes, parseWatLocal, payableSegments } from "@/lib/payroll/time-entry";
 import { assertCan, BusinessError, db, type Tx } from "./_base";
 import { logAudit } from "./audit";
+import { proposeHolidayAdjustments } from "./holiday-adjustments";
 import { assertHourlyPayOn } from "./hourly-pay";
 
 /**
@@ -229,6 +230,8 @@ export async function approveTimeEntry(ctx: Ctx, id: string, input: { breaks?: s
       data: { status: "APPROVED", decidedBy: ctx.name, decidedByUserId: ctx.userId, decidedAt: new Date(), placeState, calendarConfirmed: confirmed.length === years.length, payableMinutes: payable },
     });
     if (original) await tx.timeEntry.update({ where: { id: original.id }, data: { status: "SUPERSEDED" } });
+    // a shift on a public holiday that a payroll of a final period already paid as not worked becomes a holiday adjustment for a payroll reviewer (no pay changes here)
+    await proposeHolidayAdjustments(ctx, tx, { id, employeeId: e.employeeId });
     await logAudit(ctx, { action: "TIME_ENTRY_APPROVED", entity: "TimeEntry", entityId: id, newValue: { employeeId: e.employeeId, beatId: e.beatId, payableMinutes: payable, breakMinutes, supersedes: original?.id ?? null } }, tx);
     return row;
   });

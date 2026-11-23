@@ -47,7 +47,14 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `hourly-payslip-client`, one small migration)
+
+## Not yet merged (branch `hourly-holiday-adjustment-a`, one new table)
+
+- **Late-approved public-holiday shifts: the adjustment record and its review (piece A of the plan `hourly-holiday-adjustment-plan.md`; no pay changes).** When a shift is approved on a public holiday that a payroll with a final period already paid as "holiday not worked", a **holiday adjustment** is proposed automatically, **one for each person and holiday** (a unique key): linked to the shift, who approved it and when, the original payroll run and stored line, what was paid and how it was classified, with the **corrected entitlement** (the hours worked that day at the approved holiday rate) and the **net difference**. A second shift that day is added to the one waiting.
+- **Review:** a person with the payroll approval right approves or rejects it, **never the person who approved the shift or the person it is about**; a rejection needs a reason (kept on the record, never in the audit log); the decision is final. A "Holiday adjustments" section on the Public holidays page lists them. **The original payroll and its stored lines are never touched, and nothing is paid or recovered yet**: applying the net difference in the next open payroll, recovering an overpayment within the cap, and leaving the late shift out of the supplementary payroll's own pay are later pieces.
+- **Migration `20270109090000_holiday_adjustment`:** one new table and a status type, with `down.sql`; round-tripped on a copy. Data dictionary regenerated. **Tests (written first):** `tests/integration/holiday-adjustment.test.ts` (6). Explain-back note: `docs/plans/hourly-holiday-adjustment-a-explain-back.md`.
+
+## Merged in #271 (one small migration)
 
 - **The payslip names the client** (the founder's confirmed decision). A **Client** (or **Clients**, when the month had more than one) detail on the screen and the PDF, and the Site column of the hours table now reads **"Client - Site"**, so hours for different clients are told apart. Monthly staff: from their stored work locations (the head office is not a client); staff paid by the hour: from their hours and extra pay lines. A payslip with no client is unchanged.
 - **Names as they were when the payroll was calculated:** each stored hours line and extra pay line keeps the client's and the site's name, so **renaming a client or site never changes a payslip already made**; a line from an older payroll shows the current names. **Only the name is shown, never what the client is charged** (a test pins it). The PDF gives the Site column a little more room.
