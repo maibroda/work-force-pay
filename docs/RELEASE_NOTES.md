@@ -49,7 +49,14 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `hourly-legal-review-record`, documentation only)
+## Not yet merged (branch `hourly-holiday-adjustment-bd`, one migration: 20270110090000_holiday_adjustment_apply)
+
+- **Late-approved public-holiday shifts: the net difference is paid in the next open payroll (piece B) and the supplementary payroll stops paying the late shift (piece D). THIS CHANGES PAY.** An **approved** holiday adjustment is paid **once**, by the regular payroll of the **earliest open period after the one that paid the day as not worked**: an extra pay line **"Holiday adjustment (date)"** (the corrected entitlement less what was paid) at the shift's site, split by that site's salary structure like the hours. The adjustment becomes **applied**, linked to that run and audited; calculating again changes nothing; the closed payroll is never touched. A net of zero is applied with no line.
+- **Piece D:** while a holiday adjustment is waiting for review, approved or applied, a supplementary payroll **does not pay** that late holiday shift (a warning says it is held). A **rejected** adjustment holds nothing: the shift is paid in full as before, with the earlier "paid as not worked and worked" finding.
+- **Not built, stated plainly:** an **overpayment (a negative net) is not recovered**: it stays approved, nothing is taken and a critical finding says so (recovery within the 33.33% cap, piece C, waits for the legal review of deductions). With **no open period** after the original, the Public holidays page flags it and the supplementary payroll raises a critical finding. A held shift still counts as "not paid" in some hours reports until the adjustment is applied.
+- **Migration `20270110090000_holiday_adjustment_apply`:** two enum values and two nullable columns, with `down.sql` (destructive for applied adjustments, documented); round-tripped on a copy. Data dictionary regenerated. **Tests (written first):** `tests/integration/holiday-adjustment-pay.test.ts` (7). Explain-back note: `docs/plans/hourly-holiday-adjustment-bd-explain-back.md`.
+
+## Merged in #273 (documentation only)
 
 - **The legal and payroll-tax review register for the hourly pay policies** (item 5 of the founder's confirmed brief): `docs/legal-review/hourly-payroll-policies-review.md`. It states each approved policy **exactly as built** (paid sick days, leave pay on the Basic part, gross-earnings averaging, the 12-month wait, the tax and pension treatment, the recovery of an overpayment, and the handling of sickness records), the **questions for the adviser**, a **review record to complete** (reviewer, date, outcome, approved wording, amendments, the founder's decision on any conflict, the configuration change), and what happens if a review finds a conflict.
 - **Every review is marked OUTSTANDING; nothing has been reviewed.** The approved values are company policy, not statutory requirements, until a review says so, and **nothing may be marked production-ready while its record is incomplete**. Documentation only: no code, setting, migration or test changes.

@@ -6,7 +6,7 @@
  */
 import { addKobo, asKobo, sumKobo, type Kobo } from "../money-exact";
 
-export type AllowanceKind = "LEAVE_PERCENT" | "SICK_DAY" | "HOLIDAY_NOT_WORKED";
+export type AllowanceKind = "LEAVE_PERCENT" | "SICK_DAY" | "HOLIDAY_NOT_WORKED" | "HOLIDAY_ADJUSTMENT";
 
 export interface AllowanceRow {
   employeeId: string;
@@ -31,7 +31,7 @@ export function rollupAllowances(rows: readonly AllowanceRow[]): AllowanceRollup
   const of = (kind: AllowanceKind): Kobo => sumKobo(rows.filter((r) => r.kind === kind).map((r) => asKobo(r.amountKobo)));
   const leave = of("LEAVE_PERCENT");
   const sick = of("SICK_DAY");
-  const holiday = of("HOLIDAY_NOT_WORKED");
+  const holiday = addKobo(of("HOLIDAY_NOT_WORKED"), of("HOLIDAY_ADJUSTMENT")); // the net difference of a holiday adjustment is holiday pay
   return { leaveKobo: leave, sickKobo: sick, holidayKobo: holiday, totalKobo: addKobo(addKobo(leave, sick), holiday) };
 }
 

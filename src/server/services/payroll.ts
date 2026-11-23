@@ -36,6 +36,7 @@ import { CLIENT_MISMATCH, LOCATION_MISMATCH } from "./operations";
 import { submissionBlockers, varianceIssues } from "./payroll-controls";
 import { loadSickPay, loadWithdrawnSickPay, sickDaysAlreadyPaid, allowanceDaysAlreadyPaid } from "./sick-pay";
 import { holidayPaidAndWorkedFinding, holidayPaidByDate, loadHolidayPay } from "./holiday-pay";
+import { escalatedAdjustments, loadAdjustmentPay, markAdjustmentsApplied } from "./holiday-adjustments";
 import { hourlyDecreaseFinding, hourlyFindings, hourlyRateConflict, isHourlyOn, loadHourlyForPeriod, loadLateHourly, loadPayslipAllowances, loadPayslipHourly, monthlyRateWhileHourly, saveHourlyPieces } from "./hourly-payroll";
 import { loadRateBook } from "./rates";
 import { employerCostRuleFor, payrollRuleFor, pensionRuleFor, taxRuleFor } from "./statutory";
@@ -444,6 +445,16 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
   // sick days already paid by a final payroll on a spell HR has since cancelled: one critical finding, in the first payroll calculated after the cancellation (no negative pay is ever made)
   const withdrawnSick = await loadWithdrawnSickPay(db, { orgId: ctx.orgId, currentRunId: run?.id });
   for (const w of withdrawnSick) issues.push({ employeeId: w.employeeId, category: w.category, severity: w.severity, code: w.code, message: w.message });
+  // approved holiday adjustments (a holiday paid as not worked, then worked): the net difference is paid ONCE, by the earliest open period after the one that paid the day (docs/plans/hourly-holiday-adjustment-plan.md, piece B)
+  const adjustments = await loadAdjustmentPay(db, {
+    orgId: ctx.orgId,
+    period,
+    currentRunId: run?.id,
+    structureFor: (q) => a.book.structureFor(q.contractId, q.categoryId, new Date(`${q.date}T00:00:00Z`)),
+    namesOf: (beatId) => a.hourly.names.get(beatId) ?? { clientName: "", beatName: "" },
+    people: new Map(a.employees.map((x) => [x.id, { categoryId: x.categoryId, label: `${x.employeeNumber} ${fullName(x)}` }])),
+  });
+  for (const f of adjustments.findings) issues.push({ employeeId: f.employeeId, category: f.category, severity: f.severity, code: f.code, message: f.message });
   const piecesByEmp = new Map<string, typeof a.hourly.pieces>();
   for (const p of a.hourly.pieces) {
     const own = piecesByEmp.get(p.employeeId);
@@ -525,6 +536,8 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
       he = { ...he, sites: mergeAllowanceSites(he.sites, holiday.sites) };
       issues.push(...holiday.findings);
     }
+    const adjusted = adjustments.pay.get(emp.id);
+    if (adjusted) he = { ...he, sites: mergeAllowanceSites(he.sites, adjusted) };
     for (const f of hourlyFindings({
       employeeId: emp.id,
       label: `${emp.employeeNumber} ${fullName(emp)}`,
@@ -640,6 +653,8 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
       const runId = run.id;
       // the cancelled spells this payroll has reported are marked, so no later payroll repeats the finding
       if (withdrawnSick.length) await tx.sickSpell.updateMany({ where: { id: { in: withdrawnSick.map((w) => w.spellId) }, organizationId: ctx.orgId }, data: { overpaymentRunId: runId } });
+      // the holiday adjustments this payroll paid are marked applied (once), with this run, and audited
+      await markAdjustmentsApplied(ctx, tx, runId, adjustments.toApply);
       // overrides and written explanations survive a recalculation, for findings that read exactly the same
       const keptOverrides = await tx.payrollValidationIssue.findMany({ where: { runId, OR: [{ overridden: true }, { explanation: { not: null } }] } });
       await tx.payrollValidationIssue.deleteMany({ where: { runId } });
@@ -1432,6 +1447,15 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
   const withdrawnSick = await loadWithdrawnSickPay(db, { orgId: ctx.orgId });
   for (const w of withdrawnSick) issues.push({ employeeId: w.employeeId, category: w.category, severity: w.severity, code: w.code, message: w.message });
   const late = a.late!; // a supplementary run always loads the late hours
+  // a late shift on a holiday paid as not worked is held back while a holiday adjustment settles it: say so for the ones waiting; approved adjustments with no open payroll to take them are escalated (pieces B and D)
+  for (const h of late.held.filter((x) => x.status !== "APPLIED")) {
+    const who = await db.employee.findFirst({ where: { id: h.employeeId, organizationId: ctx.orgId }, select: { employeeNumber: true, firstName: true, lastName: true } });
+    issues.push({ employeeId: h.employeeId, category: "ATTENDANCE", severity: "WARNING", code: "HOLIDAY_ADJUSTMENT_HELD", message: `${who ? `${who.employeeNumber} ${who.firstName} ${who.lastName}` : "A person"} worked the public holiday on ${h.date} after it was paid as a day not worked. The shift is not paid by this payroll: a holiday adjustment ${h.status === "PROPOSED" ? "is waiting for review" : "is approved and will be paid by the next open payroll"}.` });
+  }
+  for (const e of (await escalatedAdjustments(db, ctx.orgId)).filter((x) => x.date >= iso(period.startDate) && x.date <= iso(period.endDate))) {
+    const who = await db.employee.findFirst({ where: { id: e.employeeId, organizationId: ctx.orgId }, select: { employeeNumber: true, firstName: true, lastName: true } });
+    issues.push({ employeeId: e.employeeId, category: "ATTENDANCE", severity: "CRITICAL", code: "HOLIDAY_ADJUSTMENT_ESCALATED", message: `${who ? `${who.employeeNumber} ${who.firstName} ${who.lastName}` : "A person"} has an approved holiday adjustment for ${e.date} but no payroll period is open after the one that paid the day, so it cannot be paid. Open the next payroll period (or decide how it is to be paid) so it can be applied.` });
+  }
   // holidays already paid as not worked: a late shift on one of those days is paid now too, so it is reported (once, in the payroll that pays the shift)
   const holidayAlreadyPaid = await holidayPaidByDate(db, ctx.orgId, periodId);
   const allEmps = await db.employee.findMany({

@@ -3630,6 +3630,8 @@ A public-holiday shift approved AFTER a payroll of a final period already paid t
 | reviewedByUserId | String |  |  |
 | reviewedAt | DateTime |  |  |
 | reviewNote | String |  | The reason for a rejection (words kept here, never in the audit log). |
+| appliedRunId | String |  | When it was applied: the regular payroll run that paid its net difference, and when. |
+| appliedAt | DateTime |  |  |
 | createdAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |
 
@@ -7388,7 +7390,7 @@ Which line of business a contract belongs to. Back-office staff carry no contrac
 
 ### HolidayAdjustmentStatus
 
-`PROPOSED`, `APPROVED`, `REJECTED`
+`PROPOSED`, `APPROVED`, `REJECTED`, `APPLIED`
 
 ### LeaveStatus
 
@@ -7906,7 +7908,7 @@ Whether an outbound message is a service message (about an active contract) or m
 
 What an hourly person is paid besides the hours they worked (the founder's H14, docs/plans/hourly-payroll-h14-build-plan.md).
 
-`LEAVE_PERCENT`, `SICK_DAY`, `HOLIDAY_NOT_WORKED`
+`LEAVE_PERCENT`, `SICK_DAY`, `HOLIDAY_NOT_WORKED`, `HOLIDAY_ADJUSTMENT`
 
 ### HourlyPieceKind
 
