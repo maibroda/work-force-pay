@@ -47,7 +47,15 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `hourly-leave-pay-basic`, two small migrations)
+## Not yet merged (branch `hourly-average-gross`, one migration)
+
+- **Hourly pay: paid sick days and paid holidays not worked are valued at the average daily GROSS earnings** (the founder's confirmed decision: the three-month averaging basis is gross earnings). The gross pay for the hours worked in the 3 months before the spell or the holiday, **each shift at the approved rate of its own day** (a rate change counts from its date; leave, sick and holiday pay are never in it), divided by the days worked, times the days paid, rounded half up to the kobo once. It is a **payroll rule setting** with the kinds of day that count (weekday, weekend, public holiday; all by default): **a new rule version starts on the gross earnings; every existing version and the demonstration company's rule keep the first build's method** (average hours x the weekday rate), so no past or open payroll changes.
+- **Handled and stated:** partial months and new starters (averaged over the days they have), unpaid absence (days not worked do not dilute it), salary (rate) changes, hours with no approved rate (left out, with a warning) and a period with no earnings (nothing paid, a blocking finding). Each stored sick or holiday line keeps how its average was worked out.
+- **NOT production-ready:** the adviser review of the gross-earnings averaging method (including which earnings qualify), the five paid sick days, the 12-month wait and the tax and pension treatment is outstanding. These are the founder's company policy, not statutory requirements.
+- **Migration `20270107090000_average_basis`:** the enum, four rule columns and a nullable breakdown on each stored line. With `down.sql`; round-tripped on a copy. Data dictionary regenerated.
+- **Tests (written first):** `tests/unit/hourly-average.test.ts`, `tests/integration/hourly-average-gross.test.ts`, and the 3,000-person performance test recalculated on the gross basis. Explain-back note: `docs/plans/hourly-average-gross-explain-back.md`
+
+## Merged in #269 (two small migrations)
 
 - **Hourly pay: the leave percentage is taken of the Basic part of the pay** (the founder's confirmed decision: 2.5% "calculated on basic salary"; for staff paid by the hour, the Basic component of the site's salary structure split). It is a **payroll rule setting**, "What the leave pay percentage is taken of": the Basic part (the default for a NEW version) or all the pay (how the first build worked). **Every existing rule version and the demonstration company's rule are set to "all the pay", so no past or open payroll changes**; to move a company over, create a new rule version from the date you choose.
 - **A structure with no Basic component** pays no leave pay on those hours (the hours are paid) and raises a **blocking finding**; it never falls back to gross or the client's rate. Each stored leave line keeps the base, the percentage, the amount and the basis; the payslip reads "Leave pay (2.5% of Basic 400.00)". The warning shown when HR approves annual leave for an hourly person is reworded.

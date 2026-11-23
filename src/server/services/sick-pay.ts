@@ -11,9 +11,11 @@
 import { d, iso } from "@/lib/dates";
 import type { HourlySiteInput } from "@/lib/payroll/engine";
 import { resolveHourlyRate, type HourlyRateRow } from "@/lib/payroll/hourly-rates";
-import { paidSickDates, sickBasis, sickPay, sickWindow, type WorkedSegment } from "@/lib/payroll/sick-pay";
+import { grossBasis, grossBreakdown, grossDayPay, type AverageDayClass, type GrossBasis, type PricedDay } from "@/lib/payroll/hourly-average";
+import { paidSickDates, sickBasis, sickPay, sickWindow, type SickBasis, type WorkedSegment } from "@/lib/payroll/sick-pay";
+import { loadPricedHistory } from "./hourly-history";
 import { workingDatesBetween } from "@/lib/leave";
-import { mulDiv, sumKobo, toKobo, type Kobo } from "@/lib/money-exact";
+import { mulDiv, roundRatio, sumKobo, toKobo, type Kobo } from "@/lib/money-exact";
 import { naira } from "@/lib/payroll/hourly-minimum";
 import type { StructureDef } from "@/lib/payroll/structure";
 import type { Tx } from "./_base";
@@ -47,6 +49,8 @@ export interface SickPayArgs {
   people: ReadonlyMap<string, { categoryId: string; label: string }>;
   /** Days already paid by the period's other payrolls, by person (a supplementary payroll's guard against paying a day twice). */
   alreadyPaid?: ReadonlyMap<string, ReadonlySet<string>>;
+  /** How a sick day is valued (the payroll rule): the average daily GROSS earnings of the window (the founder's decision) or, left out, the first build's average hours times the weekday rate; and which kinds of day count towards the gross average. */
+  average?: { basis: "HOURS_AT_WEEKDAY_RATE" | "GROSS_EARNINGS"; counted: ReadonlySet<AverageDayClass> };
 }
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
@@ -83,17 +87,20 @@ export async function loadSickPay(tx: Tx, a: SickPayArgs): Promise<Map<string, S
   if (mine.length === 0) return out;
 
   const employeeIds = [...new Set(mine.map((s) => s.employeeId))];
-  const [yearSpells, segments] = await Promise.all([
+  const gross = a.average?.basis === "GROSS_EARNINGS";
+  const windows = mine.map((s) => sickWindow(iso(s.startDate), a.months));
+  const from = windows.map((w) => w.from).sort()[0];
+  const to = windows.map((w) => w.to).sort().reverse()[0];
+  const [yearSpells, segments, priced] = await Promise.all([
     tx.sickSpell.findMany({ where: { organizationId: a.orgId, status: "APPROVED", employeeId: { in: employeeIds } }, select: { employeeId: true, cycleStart: true, startDate: true, endDate: true } }),
-    (async () => {
-      const windows = mine.map((s) => sickWindow(iso(s.startDate), a.months));
-      const from = windows.map((w) => w.from).sort()[0];
-      const to = windows.map((w) => w.to).sort().reverse()[0];
-      return tx.timeEntrySegment.findMany({
-        where: { organizationId: a.orgId, date: { gte: d(from), lt: d(to) }, entry: { status: "APPROVED", employeeId: { in: employeeIds } } },
-        select: { date: true, minutes: true, entry: { select: { employeeId: true, beatId: true, contractId: true, clientId: true } } },
-      });
-    })(),
+    gross
+      ? Promise.resolve([])
+      : tx.timeEntrySegment.findMany({
+          where: { organizationId: a.orgId, date: { gte: d(from), lt: d(to) }, entry: { status: "APPROVED", employeeId: { in: employeeIds } } },
+          select: { date: true, minutes: true, entry: { select: { employeeId: true, beatId: true, contractId: true, clientId: true } } },
+        }),
+    // the gross-earnings basis reads the same hours valued at the rate of their own day (one read for the whole company)
+    gross ? loadPricedHistory(tx, { orgId: a.orgId, employeeIds, from, to, categoryOf: (id) => a.people.get(id)?.categoryId ?? "" }) : Promise.resolve(new Map<string, PricedDay[]>()),
   ]);
   const historyBy = new Map<string, WorkedSegment[]>();
   for (const s of segments) {
@@ -114,9 +121,11 @@ export async function loadSickPay(tx: Tx, a: SickPayArgs): Promise<Map<string, S
     if (dates.length === 0) continue;
     const yearDates = yearSpells.filter((y) => y.employeeId === employeeId && y.cycleStart.getTime() === spell.cycleStart.getTime()).flatMap((y) => workingDatesBetween(y.startDate, y.endDate, a.workingDaysPerWeek).map(iso));
     const win = sickWindow(start, a.months);
-    const basis = sickBasis(historyBy.get(employeeId) ?? [], win.from, win.to);
+    const gb: GrossBasis | null = gross ? grossBasis(priced.get(employeeId) ?? [], win.from, win.to, a.average!.counted) : null;
+    const sb: SickBasis | null = gross ? null : sickBasis(historyBy.get(employeeId) ?? [], win.from, win.to);
+    const basis = gb ?? sb;
     if (!basis) {
-      person(employeeId).findings.push({ employeeId, category: "ATTENDANCE", severity: "CRITICAL", code: "SICK_NO_AVERAGE", message: `${who.label} has an approved spell of sickness from ${start} to ${end} but no approved hours in the ${a.months} ${plural(a.months, "month", "months")} before it, so there is nothing to average and the sick days are not paid. Check their hours, or override this finding with a reason.` });
+      person(employeeId).findings.push({ employeeId, category: "ATTENDANCE", severity: "CRITICAL", code: "SICK_NO_AVERAGE", message: `${who.label} has an approved spell of sickness from ${start} to ${end} but no approved ${gross ? "earnings (hours with an approved rate, of a kind of day that counts)" : "hours"} in the ${a.months} ${plural(a.months, "month", "months")} before it, so there is nothing to average and the sick days are not paid. Check their hours, or override this finding with a reason.` });
       continue;
     }
     const split = paidSickDates({ yearDates, entitled: a.sickDaysPerYear, dates, weekdays: basis.weekdays });
@@ -130,12 +139,12 @@ export async function loadSickPay(tx: Tx, a: SickPayArgs): Promise<Map<string, S
     const date = toPay[0];
     let rate;
     try {
-      rate = resolveHourlyRate(a.rates, { employeeId, contractId: basis.last.contractId, categoryId: who.categoryId, date: d(date) });
+      rate = gross ? null : resolveHourlyRate(a.rates, { employeeId, contractId: basis.last.contractId, categoryId: who.categoryId, date: d(date) });
     } catch (e) {
       person(employeeId).findings.push({ employeeId, category: "ATTENDANCE", severity: "CRITICAL", code: "HOURLY_RATE_CONFLICT", message: `${who.label}'s sick pay for ${a.period.name} could not be worked out, so it is not paid. ${e instanceof Error ? e.message : ""}` });
       continue;
     }
-    if (!rate) {
+    if (!gross && !rate) {
       person(employeeId).findings.push({ employeeId, category: "ATTENDANCE", severity: "CRITICAL", code: "SICK_NO_RATE", message: `${who.label} has approved sick days in ${a.period.name} but no approved hourly rate for their job role on ${date}, so they are not paid. Approve an hourly rate (Payroll > Hourly pay) and calculate again.` });
       continue;
     }
@@ -144,11 +153,17 @@ export async function loadSickPay(tx: Tx, a: SickPayArgs): Promise<Map<string, S
       person(employeeId).findings.push({ employeeId, category: "ATTENDANCE", severity: "CRITICAL", code: "SICK_NO_STRUCTURE", message: `${who.label} has approved sick days in ${a.period.name} at a site with no salary structure (the contract rate's, the contract's default or the company's default), so they are not paid. Set up a structure and calculate again.` });
       continue;
     }
-    const pay = sickPay(rate.rates.weekday, basis, toPay.length);
+    if (gb && gb.unpricedMinutes > 0)
+      person(employeeId).findings.push({ employeeId, category: "ATTENDANCE", severity: "WARNING", code: "SICK_AVERAGE_UNPRICED", message: `${who.label}: ${gb.unpricedMinutes} minutes of the hours in the ${a.months} ${plural(a.months, "month", "months")} before the spell from ${start} had no approved hourly rate for their day, so they are not in the average of earnings used to pay the sick days. Check the rates.` });
+    const pay = gb
+      ? { minutes: Number(roundRatio(BigInt(gb.minutes) * BigInt(toPay.length), BigInt(gb.daysWorked))), amountKobo: grossDayPay(gb, toPay.length) }
+      : sickPay(rate!.rates.weekday, sb!, toPay.length);
     const names = a.namesOf(basis.last.beatId);
     const key = `${basis.last.beatId}|${basis.last.contractId}|${structure.id}`;
     const p = person(employeeId);
-    const allowance = { kind: "SICK_DAY" as const, amountKobo: pay.amountKobo, minutes: pay.minutes, rate: rate.rates.weekday, dates: toPay };
+    const allowance = gb
+      ? { kind: "SICK_DAY" as const, amountKobo: pay.amountKobo, minutes: pay.minutes, dates: toPay, breakdown: grossBreakdown(gb, toPay.length, a.average!.counted) }
+      : { kind: "SICK_DAY" as const, amountKobo: pay.amountKobo, minutes: pay.minutes, rate: rate!.rates.weekday, dates: toPay };
     const site = p.sites.find((s) => s.key === key);
     if (site) site.allowances = [...(site.allowances ?? []), allowance];
     else p.sites.push({ key, clientId: basis.last.clientId, clientName: names.clientName, contractId: basis.last.contractId, beatId: basis.last.beatId, beatName: names.beatName, structure, from: date, to: date, dates: [], lines: [], allowances: [allowance] });

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { appendFileSync } from "node:fs";
+import { Prisma } from "@prisma/client";
 import { beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { DEFAULT_EARNINGS } from "@/lib/payroll/structure";
@@ -158,5 +159,21 @@ describe(`payroll for ${PEOPLE.toLocaleString("en")} people paid by the hour, ab
     expect(await db.hourlyAllowanceLine.count({ where: { runId } })).toBe(PEOPLE * 2 + idsSick.length); // leave pay and holiday pay for everyone, sick pay for the 300: replaced, not added to
     expect(await wrongGross(runId, idsFull, expectedFull)).toBe(0);
     expect(await wrongGross(runId, idsSick, expectedSick)).toBe(0);
+  }, LIMIT_MS + 120_000);
+
+  it("on the GROSS EARNINGS basis (the founder's decision for sick and holiday days) the same payroll, calculated again, still finishes inside the limit, with the average of every person kept on their line", async () => {
+    await db.payrollRule.updateMany({ where: { organizationId: orgId }, data: { hourlyAverageBasis: "GROSS_EARNINGS" } });
+    const started = performance.now();
+    const again = await runPayroll(ctx, periodId);
+    const ms = performance.now() - started;
+    report(`PERFORMANCE hourly payroll with leave, sick and holiday pay on the gross-earnings basis: recalculation ${(ms / 1000).toFixed(1)} s (limit ${LIMIT_MS / 1000} s)`);
+    expect(ms).toBeLessThan(LIMIT_MS);
+    expect(again.id).toBe(runId);
+    expect(await db.hourlyAllowanceLine.count({ where: { runId } })).toBe(PEOPLE * 2 + idsSick.length);
+    // the average daily gross is never below the weekday rate for 8 hours (the weekend hours earn more), and every holiday and sick line says how it was worked out
+    expect(await db.hourlyAllowanceLine.count({ where: { runId, kind: "HOLIDAY_NOT_WORKED", amount: { lt: "8000" } } })).toBe(0);
+    expect(await db.hourlyAllowanceLine.count({ where: { runId, kind: "HOLIDAY_NOT_WORKED", NOT: { breakdown: { equals: Prisma.DbNull } } } })).toBe(PEOPLE);
+    expect(await db.hourlyAllowanceLine.count({ where: { runId, kind: "SICK_DAY", NOT: { breakdown: { equals: Prisma.DbNull } } } })).toBe(idsSick.length);
+    expect(await db.payrollValidationIssue.count({ where: { runId, severity: "CRITICAL" } })).toBe(0);
   }, LIMIT_MS + 120_000);
 });
