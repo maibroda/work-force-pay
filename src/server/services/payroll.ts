@@ -339,7 +339,7 @@ function overridesFor(a: Assembled, employeeId: string): ComponentOverride[] {
 }
 
 /** The stored hourly pay lines of one person's record, and the marks of the approved pieces they were worked from (so a later supplementary payroll pays only what no payroll has paid). */
-function hourlyRowsFor(orgId: string, runId: string, recordId: string, employeeId: string, res: EngineResult) {
+function hourlyRowsFor(orgId: string, runId: string, recordId: string, employeeId: string, res: EngineResult, names: ReadonlyMap<string, { clientName: string; beatName: string }>) {
   const lines: Prisma.HourlyPayLineCreateManyInput[] = [];
   const pieces: Prisma.HourlyPayPieceCreateManyInput[] = [];
   const allowances: Prisma.HourlyAllowanceLineCreateManyInput[] = [];
@@ -354,6 +354,8 @@ function hourlyRowsFor(orgId: string, runId: string, recordId: string, employeeI
         clientId: seg.clientId,
         contractId: seg.contractId,
         beatId: seg.beatId,
+        clientName: (seg.beatId && names.get(seg.beatId)?.clientName) || null,
+        siteName: (seg.beatId && names.get(seg.beatId)?.beatName) || null,
         structureCode: seg.rate.structure.code,
         baseAmount: x.baseKobo === undefined ? null : koboToString(asKobo(x.baseKobo)),
         pct: x.pct ?? null,
@@ -374,6 +376,8 @@ function hourlyRowsFor(orgId: string, runId: string, recordId: string, employeeI
         clientId: seg.clientId,
         contractId: seg.contractId,
         beatId: seg.beatId,
+        clientName: (seg.beatId && names.get(seg.beatId)?.clientName) || null,
+        siteName: (seg.beatId && names.get(seg.beatId)?.beatName) || null,
         structureCode: seg.rate.structure.code,
         dayClass: l.dayClass,
         minutes: l.minutes,
@@ -650,7 +654,7 @@ export async function runPayroll(ctx: Ctx, periodId: string) {
         const id = randomUUID();
         recordData.push(recordRow(ctx.orgId, runId, id, emp, res, a.tax.def.code + "@" + a.tax.def.version));
         // the hourly pay lines, and which approved pieces of shifts this payroll paid, so a supplementary payroll pays only what it did not (H22)
-        const hr = hourlyRowsFor(ctx.orgId, runId, id, emp.id, res);
+        const hr = hourlyRowsFor(ctx.orgId, runId, id, emp.id, res, a.hourly.names);
         hourlyData.push(...hr.lines);
         allowanceData.push(...hr.allowances);
         pieceData.push(...hr.pieces);
@@ -1589,7 +1593,7 @@ export async function createSupplementaryRun(ctx: Ctx, periodId: string, descrip
           },
         });
       // the hours paid here: their pay lines, and the marks that make sure they are never paid twice; the pieces of a shift that a correction replaced are marked as credited once their pay has been set against what is owed
-      const hr = hourlyRowsFor(ctx.orgId, run.id, id, emp.id, res);
+      const hr = hourlyRowsFor(ctx.orgId, run.id, id, emp.id, res, a.hourly.names);
       if (hr.lines.length) await tx.hourlyPayLine.createMany({ data: hr.lines });
       if (hr.allowances.length) await tx.hourlyAllowanceLine.createMany({ data: hr.allowances });
       const priced = new Set(hr.pieces.map((p) => p.segmentId));

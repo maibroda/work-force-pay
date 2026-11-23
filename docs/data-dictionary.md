@@ -6123,6 +6123,8 @@ How an hourly person's pay was made up (hourly pay, phase 4b of docs/plans/hourl
 | clientId | String |  |  |
 | contractId | String |  |  |
 | beatId | String |  |  |
+| clientName | String |  | The client's and the site's names as they were when the payroll was calculated, kept so a payslip already made never changes when a client or a site is renamed. Null on a line made before they were kept: the payslip then shows the current names. |
+| siteName | String |  |  |
 | structureCode | String | yes | The code of the salary structure that split this site's gross (the established structure for the location). |
 | dayClass | DayClass | yes |  |
 | minutes | Int | yes |  |
@@ -6149,6 +6151,8 @@ How an hourly person's extra pay was made up (hourly pay, H14): one row for each
 | clientId | String |  |  |
 | contractId | String |  |  |
 | beatId | String |  |  |
+| clientName | String |  | The client's and the site's names as they were when the payroll was calculated (see HourlyPayLine). Null on a line made before they were kept. |
+| siteName | String |  |  |
 | structureCode | String | yes | The code of the salary structure that split this site's gross, this extra pay included. |
 | baseAmount | Decimal |  | LEAVE_PERCENT: the pay for hours worked (after the service period) the percentage was worked on. Null for the day-based kinds. |
 | pct | Decimal |  | LEAVE_PERCENT: the percentage used. Null for the day-based kinds. |

@@ -11,6 +11,8 @@ import type { DayClass } from "./hourly";
 
 export interface HourlyLineInput {
   siteName: string;
+  /** The client's name as it was when the payroll was calculated (the payslip names the client; never what the client is charged). */
+  clientName?: string | null;
   dayClass: DayClass;
   minutes: number;
   /** Naira per hour, as stored ("1000.00"). */
@@ -23,6 +25,7 @@ export interface HourlyLineInput {
 export interface AllowanceLineInput {
   kind: "LEAVE_PERCENT" | "SICK_DAY" | "HOLIDAY_NOT_WORKED";
   siteName: string;
+  clientName?: string | null;
   /** LEAVE_PERCENT: the pay for the hours the percentage was worked on, as stored ("4000.00"). */
   baseAmount: string | null;
   /** LEAVE_PERCENT: the percentage used, as stored ("10.00"). */
@@ -75,12 +78,19 @@ function allowanceLabel(a: AllowanceLineInput): string {
   return n > 0 ? `${name} (${n} ${n === 1 ? "day" : "days"})` : name;
 }
 
+/** The place of a line as the payslip shows it: "Client - Site" when the client is named, else the site alone. */
+export const placeLabel = (l: { siteName: string; clientName?: string | null }): string => {
+  const site = l.siteName.trim() || "Site not recorded";
+  const client = (l.clientName ?? "").trim();
+  return client ? `${client} - ${site}` : site;
+};
+
 export function hourlyPayslip(lines: readonly HourlyLineInput[], allowances: readonly AllowanceLineInput[] = []): HourlyPayslip | null {
   if (lines.length === 0 && allowances.length === 0) return null;
   // one row per site, kind of day and rate (the pieces of a supplementary payroll's one line are shown as one)
   const rows = new Map<string, { site: string; dayClass: DayClass; rate: Kobo; minutes: number; amounts: Kobo[] }>();
   for (const l of lines) {
-    const site = l.siteName.trim() || "Site not recorded";
+    const site = placeLabel(l);
     const rate = toKobo(l.rate);
     const key = `${site}|${l.dayClass}|${rate}`;
     const cur = rows.get(key) ?? { site, dayClass: l.dayClass, rate, minutes: 0, amounts: [] };
@@ -94,7 +104,7 @@ export function hourlyPayslip(lines: readonly HourlyLineInput[], allowances: rea
     if (!mine.length) return [];
     return [{ dayLabel: LABEL[c], duration: durationOf(mine.reduce((s, r) => s + r.minutes, 0)), amount: koboToString(sumKobo(mine.flatMap((r) => r.amounts))) }];
   });
-  const extra = allowances.map((a) => ({ site: a.siteName.trim() || "Site not recorded", label: allowanceLabel(a), kind: a.kind, amount: toKobo(a.amount), minutes: a.minutes ?? 0, rate: a.rate ? koboToString(toKobo(a.rate)) : "" }));
+  const extra = allowances.map((a) => ({ site: placeLabel(a), label: allowanceLabel(a), kind: a.kind, amount: toKobo(a.amount), minutes: a.minutes ?? 0, rate: a.rate ? koboToString(toKobo(a.rate)) : "" }));
   const shown: HourlyPayslipRow[] = [];
   for (const site of [...new Set(sorted.map((r) => r.site)), ...extra.map((x) => x.site).filter((s) => !sorted.some((r) => r.site === s))].filter((s, i, all) => all.indexOf(s) === i)) {
     for (const r of sorted.filter((x) => x.site === site)) shown.push({ site: r.site, dayLabel: LABEL[r.dayClass], duration: durationOf(r.minutes), rate: koboToString(r.rate), amount: koboToString(sumKobo(r.amounts)) });

@@ -72,7 +72,8 @@ describe("the payslip of a person paid by the hour", () => {
       daysWorked: num(slip.daysWorked), basisDays: slip.basisDays, daysAbsent: slip.daysAbsent, overtimeHours: 0, monthlyGross: num(slip.monthlyGross), totalEarnings: num(slip.totalEarnings), totalDeductions: num(slip.totalDeductions), netPay: num(slip.netPay),
       taxRuleVersion: slip.taxRuleVersion, hasOverride: false, lines: slip.lines as never, locations: [], hourly: slip.hourly, periodName: "March 2039", periodStart: "2039-03-01", periodEnd: "2039-03-31", runType: "REGULAR", runNumber: 1, generatedOn: "2039-03-31",
     });
-    expect(m.hourly?.rows).toEqual([[w.beat.name, "Weekday", "4 h", "1,000.00", "4,000.00"]]);
+    const clientName = (await db.client.findUniqueOrThrow({ where: { id: w.beat.clientId } })).name;
+    expect(m.hourly?.rows).toEqual([[`${clientName} - ${w.beat.name}`, "Weekday", "4 h", "1,000.00", "4,000.00"]]); // the Site column names the client (the founder's decision)
     expect(m.hourly?.total).toEqual(["Total", "", "4 h", "", "4,000.00"]);
     expect(m.details.find(([k]) => k === "Pay basis")?.[1]).toBe("Paid by the hour");
     const f = await payslipPdf(w.payroll, rec.id);

@@ -93,6 +93,8 @@ export function payslipModel(p: PayslipInput): PayslipModel {
   const hourlyOnly = hs !== null && p.monthlyGross === 0;
   const own = p.lines.filter((l) => l.type === "EARNING" || l.type === "DEDUCTION");
   const real = p.locations.filter((l) => l.clientName !== "Head Office");
+  // the client(s) of the period: from the work locations (monthly staff) and from the hours and extra pay lines (staff paid by the hour), each once, in the order they first appear; the head office is not a client
+  const clients = [...new Set([...real.map((l) => l.clientName), ...(p.hourly ?? []).map((l) => l.clientName ?? ""), ...(p.allowances ?? []).map((l) => l.clientName ?? "")].map((n) => n.trim()).filter((n) => n && n !== "Head Office"))];
   const byPlace = new Map<string, number>();
   for (const l of real) byPlace.set(`${l.clientName} - ${l.beatName}`, (byPlace.get(`${l.clientName} - ${l.beatName}`) ?? 0) + l.days);
   return {
@@ -103,6 +105,7 @@ export function payslipModel(p: PayslipInput): PayslipModel {
       ["Name", p.employeeName],
       ["Department", p.departmentName ?? "-"],
       ["Category", p.categoryName],
+      ...(clients.length ? [[clients.length === 1 ? "Client" : "Clients", clients.join("; ")] as [string, string]] : []),
       ["Pay period", `${p.periodStart} to ${p.periodEnd}`],
       ["Bank", p.bankName ? `${p.bankName} ${mask(p.accountNumber)}` : "-"],
       ["Tax ID", mask(p.taxId)],
@@ -254,9 +257,9 @@ async function drawPayslip(doc: PDFDocument, m: PayslipModel) {
 
   if (m.hourly) {
     const hourly = m.hourly;
-    const xs = [left, left + 190, left + 290, right - 110, right]; // site, day type, hours, rate (right edge at xs[3]), amount (right edge at xs[4])
+    const xs = [left, left + 196, left + 290, right - 110, right]; // site, day type, hours, rate (right edge at xs[3]), amount (right edge at xs[4])
     const cell = (s: string, i: number, f: PDFFont, color = INK) => {
-      const t = i < 3 ? clip(s, f, 9, (i === 0 ? 180 : 95)) : pdfSafe(s);
+      const t = i < 3 ? clip(s, f, 9, i === 0 ? 188 : i === 1 ? 88 : 95) : pdfSafe(s); // the Site column holds "Client - Site"
       page.drawText(t, { x: i < 3 ? xs[i] : xs[i] - f.widthOfTextAtSize(t, 9), y, size: 9, font: f, color });
     };
     const heading = (title: string) => {

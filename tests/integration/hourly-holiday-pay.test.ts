@@ -176,9 +176,10 @@ describe("what else counts it", () => {
       daysWorked: num(slip.daysWorked), basisDays: slip.basisDays, daysAbsent: slip.daysAbsent, overtimeHours: 0, monthlyGross: num(slip.monthlyGross), totalEarnings: num(slip.totalEarnings), totalDeductions: num(slip.totalDeductions), netPay: num(slip.netPay),
       taxRuleVersion: slip.taxRuleVersion, hasOverride: false, lines: slip.lines as never, locations: [], hourly: slip.hourly, allowances: slip.hourlyAllowances, periodName: "March 2046", periodStart: "2046-03-01", periodEnd: "2046-03-31", runType: "REGULAR", runNumber: 1, generatedOn: "2046-03-31",
     });
+    const place = `${(await db.client.findUniqueOrThrow({ where: { id: w.beat.clientId } })).name} - ${w.beat.name}`; // the Site column names the client (the founder's decision)
     expect(m.hourly?.rows).toEqual([
-      [w.beat.name, "Holiday pay (2046-03-07)", "8 h", "1,000.00", "8,000.00"],
-      [w.beat.name, "Holiday pay (2046-03-12)", "8 h", "1,000.00", "8,000.00"],
+      [place, "Holiday pay (2046-03-07)", "8 h", "1,000.00", "8,000.00"],
+      [place, "Holiday pay (2046-03-12)", "8 h", "1,000.00", "8,000.00"],
     ]);
     expect(m.hourly?.total).toEqual(["Total", "", "16 h", "", "16,000.00"]);
   });

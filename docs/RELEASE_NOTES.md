@@ -47,13 +47,21 @@ What changed, in the order it was merged, in plain words. Each entry names the p
 
 
 
-## Not yet merged (branch `hourly-average-gross`, one migration)
+## Not yet merged (branch `hourly-payslip-client`, one small migration)
+
+- **The payslip names the client** (the founder's confirmed decision). A **Client** (or **Clients**, when the month had more than one) detail on the screen and the PDF, and the Site column of the hours table now reads **"Client - Site"**, so hours for different clients are told apart. Monthly staff: from their stored work locations (the head office is not a client); staff paid by the hour: from their hours and extra pay lines. A payslip with no client is unchanged.
+- **Names as they were when the payroll was calculated:** each stored hours line and extra pay line keeps the client's and the site's name, so **renaming a client or site never changes a payslip already made**; a line from an older payroll shows the current names. **Only the name is shown, never what the client is charged** (a test pins it). The PDF gives the Site column a little more room.
+- **Display and storage only:** no pay figure, rule or setting changes. **Migration `20270108090000_payslip_client_names`:** four nullable columns, with `down.sql`; round-tripped on a copy. Data dictionary regenerated.
+- **Tests (written first):** six in `tests/unit/payslip-pdf.test.ts`, `tests/integration/hourly-payslip-client.test.ts` (2); one older test now expects "Client - Site". Explain-back note: `docs/plans/hourly-payslip-client-explain-back.md`.
+
+## Merged in #270 (one migration)
 
 - **Hourly pay: paid sick days and paid holidays not worked are valued at the average daily GROSS earnings** (the founder's confirmed decision: the three-month averaging basis is gross earnings). The gross pay for the hours worked in the 3 months before the spell or the holiday, **each shift at the approved rate of its own day** (a rate change counts from its date; leave, sick and holiday pay are never in it), divided by the days worked, times the days paid, rounded half up to the kobo once. It is a **payroll rule setting** with the kinds of day that count (weekday, weekend, public holiday; all by default): **a new rule version starts on the gross earnings; every existing version and the demonstration company's rule keep the first build's method** (average hours x the weekday rate), so no past or open payroll changes.
 - **Handled and stated:** partial months and new starters (averaged over the days they have), unpaid absence (days not worked do not dilute it), salary (rate) changes, hours with no approved rate (left out, with a warning) and a period with no earnings (nothing paid, a blocking finding). Each stored sick or holiday line keeps how its average was worked out.
 - **NOT production-ready:** the adviser review of the gross-earnings averaging method (including which earnings qualify), the five paid sick days, the 12-month wait and the tax and pension treatment is outstanding. These are the founder's company policy, not statutory requirements.
 - **Migration `20270107090000_average_basis`:** the enum, four rule columns and a nullable breakdown on each stored line. With `down.sql`; round-tripped on a copy. Data dictionary regenerated.
 - **Tests (written first):** `tests/unit/hourly-average.test.ts`, `tests/integration/hourly-average-gross.test.ts`, and the 3,000-person performance test recalculated on the gross basis. Explain-back note: `docs/plans/hourly-average-gross-explain-back.md`
+
 
 ## Merged in #269 (two small migrations)
 
