@@ -115,6 +115,8 @@ export interface HourlyAllowanceInput {
   rate?: number;
   /** The day-based kinds: the days paid (YYYY-MM-DD), kept so a later payroll never pays the same day twice. */
   dates?: string[];
+  /** The day-based kinds on the gross-earnings basis: how the average was worked out (kept on the stored line for audit). */
+  breakdown?: object;
 }
 
 /**

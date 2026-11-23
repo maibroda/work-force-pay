@@ -487,6 +487,11 @@ enum RemittanceType {
   OUTSOURCING_LEAVE_ALLOWANCE
 }
 
+enum HourlyAverageBasis {
+  HOURS_AT_WEEKDAY_RATE
+  GROSS_EARNINGS
+}
+
 enum HourlyLeaveBasis {
   ALL_PAY
   BASIC
@@ -4053,6 +4058,12 @@ model PayrollRule {
   hourlyLeaveBasis         HourlyLeaveBasis @default(BASIC)
   /// How many months of approved hours before a spell of sickness are averaged to pay a sick day or a public holiday not worked, for a person paid by the hour (the founder's H14; 3 as recommended). A company setting.
   hourlyAverageMonths      Int            @default(3)
+  /// How a paid sick day or a paid public holiday not worked is valued for a person paid by the hour (the founder's decision, 2026-11-21): GROSS_EARNINGS = the average daily GROSS earnings of the months before (the default for a NEW rule version); HOURS_AT_WEEKDAY_RATE = the average daily hours times the weekday rate (the first build): every rule version made before the decision keeps it, so no past or open payroll changes.
+  hourlyAverageBasis       HourlyAverageBasis @default(GROSS_EARNINGS)
+  /// Which kinds of day count towards the gross-earnings average (all three by default): a kind that is left out is left out of the earnings and of the days. Leave pay, sick pay and holiday pay are never in it.
+  hourlyAverageWeekday     Boolean        @default(true)
+  hourlyAverageWeekend     Boolean        @default(true)
+  hourlyAverageHoliday     Boolean        @default(true)
   effectiveFrom            DateTime       @db.Date
   effectiveTo              DateTime?      @db.Date
   createdAt                DateTime       @default(now())
@@ -8211,6 +8222,8 @@ model HourlyAllowanceLine {
   baseAmount     Decimal?              @db.Decimal(16, 2)
   /// LEAVE_PERCENT: the percentage used. Null for the day-based kinds.
   pct            Decimal?              @db.Decimal(5, 2)
+  /// The day-based kinds on the gross-earnings basis: how the average was worked out (the window, the gross earnings in it, the days worked, the daily average, the kinds of day counted), kept for audit. Null on the hours-at-weekday-rate basis and for leave pay.
+  breakdown      Json?
   /// LEAVE_PERCENT: what the percentage was taken of when it was worked out: BASIC (the base above is the Basic part of the eligible pay) or null (a line made before the founder's decision: the base above is all the eligible pay). Null for the day-based kinds.
   leaveBasis     HourlyLeaveBasis?
   /// The day-based kinds: the minutes paid and the hourly rate used. Null for LEAVE_PERCENT.
