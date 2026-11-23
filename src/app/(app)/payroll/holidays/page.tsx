@@ -95,7 +95,8 @@ export default async function HolidaysPage({ searchParams }: { searchParams: Pro
         <Section title="Holiday adjustments" flush>
           <p className="px-4 pt-3 text-xs text-muted-foreground">
             A shift worked on a public holiday that a payroll had already paid as <b>not worked</b>, approved after that payroll was final. The corrected entitlement is the hours worked at the holiday rate; the net difference is that less what was paid. A payroll reviewer who did not approve the shift
-            approves or rejects it. <b>This changes no pay yet</b>: the closed payroll is never touched.
+            approves or rejects it. The closed payroll is <b>never touched</b>. While it waits (or once approved) a supplementary payroll does not pay the late shift; an approved adjustment with a positive net difference is paid <b>once</b>, as an extra pay line, by the
+            earliest open payroll after the one that paid the day. A rejected one lets the supplementary payroll pay the shift in full. A negative difference (an overpayment) is not recovered yet: it stays approved and a finding on the payroll says so.
           </p>
           <Table>
             <THead>
@@ -124,6 +125,13 @@ export default async function HolidaysPage({ searchParams }: { searchParams: Pro
                   <TD>
                     <StatusBadge status={a.status} />
                     {a.reviewedBy && <div className="text-xs text-muted-foreground">by {a.reviewedBy}{a.reviewNote ? ` — “${a.reviewNote}”` : ""}</div>}
+                    {(a.status === "PROPOSED" || a.status === "APPROVED") &&
+                      (a.nextOpenPeriod ? (
+                        <div className="text-xs text-muted-foreground">{a.status === "APPROVED" ? "Paid by" : "Would be paid by"} the {a.nextOpenPeriod.name} payroll</div>
+                      ) : (
+                        <div className="text-xs font-medium text-destructive">No open payroll after the original period: open the next period so it can be paid</div>
+                      ))}
+                    {a.status === "APPLIED" && a.appliedAt && <div className="text-xs text-muted-foreground">Paid in a payroll on {fmtDate(a.appliedAt)}</div>}
                   </TD>
                   {review && (
                     <TD className="space-x-1 whitespace-nowrap text-right">

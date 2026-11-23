@@ -501,6 +501,8 @@ enum HolidayAdjustmentStatus {
   PROPOSED
   APPROVED
   REJECTED
+  /// Paid as its net difference by a regular payroll of the next open period (pieces B and D).
+  APPLIED
 }
 
 enum LeaveStatus {
@@ -4834,6 +4836,9 @@ model HolidayAdjustment {
   reviewedAt            DateTime?
   /// The reason for a rejection (words kept here, never in the audit log).
   reviewNote            String?
+  /// When it was applied: the regular payroll run that paid its net difference, and when.
+  appliedRunId          String?
+  appliedAt             DateTime?
   createdAt             DateTime                @default(now())
   updatedAt             DateTime                @updatedAt
 
@@ -8243,6 +8248,8 @@ enum HourlyAllowanceKind {
   SICK_DAY
   /// A paid public holiday not worked: average daily hours at the weekday rate (a later piece).
   HOLIDAY_NOT_WORKED
+  /// The net difference of an approved holiday adjustment (a public-holiday shift approved after the day was paid as not worked), paid by a regular payroll of the next open period.
+  HOLIDAY_ADJUSTMENT
 }
 
 /// How an hourly person's extra pay was made up (hourly pay, H14): one row for each kind of extra pay within each site's piece of pay, kept with the payroll record it belongs to. For the leave percentage it records

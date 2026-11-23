@@ -10,6 +10,7 @@ import { parseWatLocal } from "@/lib/payroll/time-entry";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import type { Tx } from "./_base";
+import { heldShiftDays } from "./holiday-adjustments";
 import { loadApprovedHourlyRates } from "./hourly-pay";
 import { loadApprovedSegments } from "./time-entries";
 
@@ -89,6 +90,8 @@ export interface LateHourly extends HourlyForPeriod {
   settled: LateNet["settled"];
   /** What was overpaid after a correction, to be recovered by a deduction someone enters. */
   decreases: Decrease[];
+  /** The days (person and date) whose late holiday shift is held back because a holiday adjustment settles it, with the adjustment's status. */
+  held: Array<{ employeeId: string; date: string; status: "PROPOSED" | "APPROVED" | "APPLIED" }>;
 }
 
 export async function loadLateHourly(tx: Tx, orgId: string, period: { id: string; startDate: Date; endDate: Date }): Promise<LateHourly> {
@@ -105,7 +108,20 @@ export async function loadLateHourly(tx: Tx, orgId: string, period: { id: string
   const marked = new Set(marks.map((m) => m.runId));
   const legacyEntries = new Set(lines.filter((l) => !marked.has(l.runId)).flatMap((l) => l.entryIds));
   const isPaid = (segmentId: string, entryId: string) => paid.has(segmentId) || legacyEntries.has(entryId);
-  const unpaid: SegRef[] = base.pieces.flatMap((p) => (p.segmentId && p.entryId && !isPaid(p.segmentId, p.entryId) ? [{ segmentId: p.segmentId, entryId: p.entryId, employeeId: p.employeeId, beatId: p.beatId, contractId: p.contractId, clientId: p.clientId, date: p.date, dayClass: p.dayClass, minutes: p.minutes }] : []));
+  // a late shift on a public holiday already paid as not worked is HELD BACK while a holiday adjustment settles it (waiting for review, approved, or applied): the adjustment pays the difference, so the shift is not also paid here
+  const heldDays = await heldShiftDays(tx, orgId, period.startDate, period.endDate);
+  const heldKey = new Map(heldDays.map((h) => [`${h.employeeId}|${h.date}`, h.status]));
+  const held: LateHourly["held"] = [];
+  const unpaid: SegRef[] = [];
+  for (const p of base.pieces) {
+    if (!(p.segmentId && p.entryId && !isPaid(p.segmentId, p.entryId))) continue;
+    const status = p.dayClass === "HOLIDAY" ? heldKey.get(`${p.employeeId}|${p.date}`) : undefined;
+    if (status) {
+      if (!held.some((h) => h.employeeId === p.employeeId && h.date === p.date)) held.push({ employeeId: p.employeeId, date: p.date, status });
+      continue;
+    }
+    unpaid.push({ segmentId: p.segmentId, entryId: p.entryId, employeeId: p.employeeId, beatId: p.beatId, contractId: p.contractId, clientId: p.clientId, date: p.date, dayClass: p.dayClass, minutes: p.minutes });
+  }
   const replaced = await tx.timeEntrySegment.findMany({
     where: { organizationId: orgId, date: { gte: period.startDate, lte: period.endDate }, entry: { status: "SUPERSEDED" } },
     include: { entry: { select: { employeeId: true, beatId: true, contractId: true, clientId: true } } },
@@ -118,7 +134,7 @@ export async function loadLateHourly(tx: Tx, orgId: string, period: { id: string
   const known = new Set(base.names.keys());
   const missing = [...new Set(replaced.map((r) => r.entry.beatId))].filter((id) => !known.has(id));
   if (missing.length) for (const b of await tx.beat.findMany({ where: { organizationId: orgId, id: { in: missing } }, select: { id: true, name: true, client: { select: { name: true } } } })) base.names.set(b.id, { clientName: b.client.name, beatName: b.name });
-  return { ...base, pieces: net.pieces, waitingByEmp: new Map(), doubtfulByEmp: new Map(), settled: net.settled, decreases: net.decreases };
+  return { ...base, pieces: net.pieces, waitingByEmp: new Map(), doubtfulByEmp: new Map(), settled: net.settled, decreases: net.decreases, held };
 }
 
 /**

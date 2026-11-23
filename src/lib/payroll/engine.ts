@@ -102,7 +102,7 @@ export interface HourlyLineInput {
  * site's gross: divided by the site's salary structure, counted for pension and taxed through PAYE exactly like the hours (H12).
  */
 export interface HourlyAllowanceInput {
-  kind: "LEAVE_PERCENT" | "SICK_DAY" | "HOLIDAY_NOT_WORKED";
+  kind: "LEAVE_PERCENT" | "SICK_DAY" | "HOLIDAY_NOT_WORKED" | "HOLIDAY_ADJUSTMENT";
   amountKobo: number;
   /** LEAVE_PERCENT: the pay for the eligible hours the percentage was worked on (whole kobo). */
   baseKobo?: number;
