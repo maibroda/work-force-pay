@@ -3,13 +3,17 @@ import { requirePage } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { fmtDate } from "@/lib/dates";
 import { listHolidays } from "@/server/services/holidays";
+import { listHolidayAdjustments } from "@/server/services/holiday-adjustments";
 import { holidayStatesOfYear, hourlyPayEnabled } from "@/server/services/hourly-pay";
+import { naira } from "@/lib/money";
+import { fullName } from "@/lib/utils";
 import { Empty, FormPanel, PageHeader, Section } from "@/components/page";
 import { SmartForm } from "@/components/smart-form";
 import { ActionButton } from "@/components/action-button";
-import { Badge } from "@/components/ui/badge";
+import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { addHolidayAction, confirmHolidayYearAction, removeHolidayAction } from "@/app/actions/holidays";
+import { approveHolidayAdjustmentAction, rejectHolidayAdjustmentAction } from "@/app/actions/holiday-adjustments";
 import { setHolidayStatesAction } from "@/app/actions/hourly-pay";
 
 export default async function HolidaysPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
@@ -23,6 +27,9 @@ export default async function HolidaysPage({ searchParams }: { searchParams: Pro
   const states = hourly ? await holidayStatesOfYear(ctx, year) : {};
   const manage = can(ctx.role, "payroll.run");
   const confirm = can(ctx.role, "payrate.approve");
+  const review = can(ctx.role, "payroll.inputs.approve");
+  // a public-holiday shift approved after the day was paid as not worked, waiting for (or already given) a payroll review
+  const adjustments = hourly ? await listHolidayAdjustments(ctx, {}) : [];
   return (
     <>
       <PageHeader
@@ -84,6 +91,63 @@ export default async function HolidaysPage({ searchParams }: { searchParams: Pro
           <Empty>No holidays entered for {year}.</Empty>
         )}
       </Section>
+      {hourly && adjustments.length > 0 && (
+        <Section title="Holiday adjustments" flush>
+          <p className="px-4 pt-3 text-xs text-muted-foreground">
+            A shift worked on a public holiday that a payroll had already paid as <b>not worked</b>, approved after that payroll was final. The corrected entitlement is the hours worked at the holiday rate; the net difference is that less what was paid. A payroll reviewer who did not approve the shift
+            approves or rejects it. <b>This changes no pay yet</b>: the closed payroll is never touched.
+          </p>
+          <Table>
+            <THead>
+              <TR>
+                <TH>Employee</TH>
+                <TH>Holiday</TH>
+                <TH className="text-right">Paid as not worked</TH>
+                <TH className="text-right">Corrected entitlement</TH>
+                <TH className="text-right">Net difference</TH>
+                <TH>Shift approved by</TH>
+                <TH>Status</TH>
+                {review && <TH />}
+              </TR>
+            </THead>
+            <TBody>
+              {adjustments.map((a) => (
+                <TR key={a.id}>
+                  <TD>
+                    {a.employee.employeeNumber} {fullName(a.employee)}
+                  </TD>
+                  <TD>{fmtDate(a.holidayDate)}</TD>
+                  <TD className="text-right">{naira(a.originalPaid)}</TD>
+                  <TD className="text-right">{a.correctedEntitlement === null ? <span className="text-xs text-muted-foreground">no approved rate</span> : naira(a.correctedEntitlement)}</TD>
+                  <TD className="text-right">{a.netDifference === null ? "—" : naira(a.netDifference)}</TD>
+                  <TD className="text-xs">{a.shiftApprovedBy}</TD>
+                  <TD>
+                    <StatusBadge status={a.status} />
+                    {a.reviewedBy && <div className="text-xs text-muted-foreground">by {a.reviewedBy}{a.reviewNote ? ` — “${a.reviewNote}”` : ""}</div>}
+                  </TD>
+                  {review && (
+                    <TD className="space-x-1 whitespace-nowrap text-right">
+                      {a.status === "PROPOSED" &&
+                        (a.shiftApprovedByUserId === ctx.userId || a.employeeId === ctx.employeeId ? (
+                          <span className="text-xs text-muted-foreground">Needs another reviewer</span>
+                        ) : (
+                          <>
+                            <ActionButton action={approveHolidayAdjustmentAction.bind(null, a.id)} variant="success">
+                              Approve
+                            </ActionButton>
+                            <ActionButton action={rejectHolidayAdjustmentAction.bind(null, a.id)} reason variant="outline">
+                              Reject
+                            </ActionButton>
+                          </>
+                        ))}
+                    </TD>
+                  )}
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </Section>
+      )}
       {manage && (
         <FormPanel title="Add a public holiday">
           <SmartForm

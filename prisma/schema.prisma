@@ -497,6 +497,12 @@ enum HourlyLeaveBasis {
   BASIC
 }
 
+enum HolidayAdjustmentStatus {
+  PROPOSED
+  APPROVED
+  REJECTED
+}
+
 enum LeaveStatus {
   PENDING
   APPROVED
@@ -677,6 +683,7 @@ model Organization {
   leavePolicy               LeavePolicy?
   leaveRequests             LeaveRequest[]
   sickSpells                SickSpell[]
+  holidayAdjustments        HolidayAdjustment[]
   glAccounts                GlAccount[]
   glMappings                PayrollGlMapping[]
   journalEntries            JournalEntry[]
@@ -2161,6 +2168,7 @@ model Employee {
   paymentTxns             PaymentTransaction[]
   leaveRequests           LeaveRequest[]
   sickSpells              SickSpell[]
+  holidayAdjustments      HolidayAdjustment[]
   directReports           Employee[]               @relation("ReportingLine")
   feedbackReceived        PerformanceFeedback[]
   probationDecisions      ProbationDecision[]
@@ -4792,6 +4800,45 @@ model SickSpell {
   @@index([organizationId, employeeId])
   @@index([organizationId, status])
   @@index([certificateDocumentId])
+}
+
+/// A public-holiday shift approved AFTER a payroll of a final period already paid that day as NOT WORKED (the founder's confirmed decision of 2026-11-21; docs/plans/hourly-holiday-adjustment-plan.md, piece A). One for each person and holiday,
+/// never twice. It links the shift, who approved it, the original payroll run and stored line, what was paid and how it was classified, with the corrected entitlement (the hours worked that day at the holiday rate) and the net difference.
+/// A payroll reviewer who did not approve the shift approves or rejects it. It changes NO pay: the original payroll is never touched; applying the net in the next open payroll is a later piece. The audit log holds ids and numbers only.
+model HolidayAdjustment {
+  id                    String                  @id @default(cuid())
+  organizationId        String
+  organization          Organization            @relation(fields: [organizationId], references: [id])
+  employeeId            String
+  employee              Employee                @relation(fields: [employeeId], references: [id])
+  holidayDate           DateTime                @db.Date
+  /// The approved shift that started the adjustment (a second shift the same day is added to the figures, not to the links).
+  timeEntryId           String
+  shiftApprovedBy       String
+  shiftApprovedByUserId String
+  shiftApprovedAt       DateTime
+  /// The original payroll run and the stored sick/holiday line that paid the day as not worked, kept as ids (those rows are history and are never changed).
+  originalRunId         String
+  originalLineId        String
+  originalClassification String
+  originalPaid          Decimal                 @db.Decimal(16, 2)
+  workedMinutes         Int
+  /// The hours worked that day at the approved holiday rate; null while there is no approved rate to work it out with.
+  correctedEntitlement  Decimal?                @db.Decimal(16, 2)
+  /// The corrected entitlement less what was paid: positive (owed), zero or negative (overpaid); null while the entitlement is.
+  netDifference         Decimal?                @db.Decimal(16, 2)
+  breakdown             Json?
+  status                HolidayAdjustmentStatus @default(PROPOSED)
+  reviewedBy            String?
+  reviewedByUserId      String?
+  reviewedAt            DateTime?
+  /// The reason for a rejection (words kept here, never in the audit log).
+  reviewNote            String?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  @@unique([organizationId, employeeId, holidayDate])
+  @@index([organizationId, status])
 }
 
 // ─────────────────────────── GENERAL LEDGER ───────────────────────────

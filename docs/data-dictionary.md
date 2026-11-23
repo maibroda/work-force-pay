@@ -2,7 +2,7 @@
 
 Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edit by hand**: a test fails if this file is out of date with the schema. To add a description, write a `///` comment above the table or field in the schema.
 
-284 tables and 215 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
+285 tables and 216 sets of fixed values. Money is stored as exact decimals (`Decimal`). "Required" means the field must always have a value (a field with a default is filled in for you). Fields shown as `→ Name` link to another table.
 
 ## Tables
 
@@ -110,6 +110,7 @@ Generated from `prisma/schema.prisma` by `npm run docs:dictionary`. **Do not edi
 | leavePolicy | → LeavePolicy |  |  |
 | leaveRequests | → LeaveRequest[] |  |  |
 | sickSpells | → SickSpell[] |  |  |
+| holidayAdjustments | → HolidayAdjustment[] |  |  |
 | glAccounts | → GlAccount[] |  |  |
 | glMappings | → PayrollGlMapping[] |  |  |
 | journalEntries | → JournalEntry[] |  |  |
@@ -1343,6 +1344,7 @@ One bulk import of employees from a file: who, when, which file, and what happen
 | paymentTxns | → PaymentTransaction[] |  |  |
 | leaveRequests | → LeaveRequest[] |  |  |
 | sickSpells | → SickSpell[] |  |  |
+| holidayAdjustments | → HolidayAdjustment[] |  |  |
 | directReports | → Employee[] |  |  |
 | feedbackReceived | → PerformanceFeedback[] |  |  |
 | probationDecisions | → ProbationDecision[] |  |  |
@@ -3596,6 +3598,38 @@ A spell of sickness of a person paid by the hour (the founder's H14, docs/plans/
 | cancelledAt | DateTime |  |  |
 | cancellationNote | String |  |  |
 | overpaymentRunId | String |  | The payroll run that raised the finding "paid sick days on a cancelled spell" (once): later runs do not repeat it. |
+| createdAt | DateTime |  |  |
+| updatedAt | DateTime |  |  |
+
+### HolidayAdjustment
+
+A public-holiday shift approved AFTER a payroll of a final period already paid that day as NOT WORKED (the founder's confirmed decision of 2026-11-21; docs/plans/hourly-holiday-adjustment-plan.md, piece A). One for each person and holiday, never twice. It links the shift, who approved it, the original payroll run and stored line, what was paid and how it was classified, with the corrected entitlement (the hours worked that day at the holiday rate) and the net difference. A payroll reviewer who did not approve the shift approves or rejects it. It changes NO pay: the original payroll is never touched; applying the net in the next open payroll is a later piece. The audit log holds ids and numbers only.
+
+| Field | Type | Required | What it holds |
+| --- | --- | --- | --- |
+| id | String |  | (key) |
+| organizationId | String | yes |  |
+| organization | → Organization |  |  |
+| employeeId | String | yes |  |
+| employee | → Employee |  |  |
+| holidayDate | DateTime | yes |  |
+| timeEntryId | String | yes | The approved shift that started the adjustment (a second shift the same day is added to the figures, not to the links). |
+| shiftApprovedBy | String | yes |  |
+| shiftApprovedByUserId | String | yes |  |
+| shiftApprovedAt | DateTime | yes |  |
+| originalRunId | String | yes | The original payroll run and the stored sick/holiday line that paid the day as not worked, kept as ids (those rows are history and are never changed). |
+| originalLineId | String | yes |  |
+| originalClassification | String | yes |  |
+| originalPaid | Decimal | yes |  |
+| workedMinutes | Int | yes |  |
+| correctedEntitlement | Decimal |  | The hours worked that day at the approved holiday rate; null while there is no approved rate to work it out with. |
+| netDifference | Decimal |  | The corrected entitlement less what was paid: positive (owed), zero or negative (overpaid); null while the entitlement is. |
+| breakdown | Json |  |  |
+| status | HolidayAdjustmentStatus |  |  |
+| reviewedBy | String |  |  |
+| reviewedByUserId | String |  |  |
+| reviewedAt | DateTime |  |  |
+| reviewNote | String |  | The reason for a rejection (words kept here, never in the audit log). |
 | createdAt | DateTime |  |  |
 | updatedAt | DateTime |  |  |
 
@@ -7351,6 +7385,10 @@ Which line of business a contract belongs to. Back-office staff carry no contrac
 ### HourlyLeaveBasis
 
 `ALL_PAY`, `BASIC`
+
+### HolidayAdjustmentStatus
+
+`PROPOSED`, `APPROVED`, `REJECTED`
 
 ### LeaveStatus
 

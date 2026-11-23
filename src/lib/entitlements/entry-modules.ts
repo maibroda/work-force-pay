@@ -352,6 +352,7 @@ export const ACTION_MODULES: Record<string, EntryModule> = {
   "journals.ts": "accounting",
   "launch-readiness.ts": "core",
   "holidays.ts": "payroll",
+  "holiday-adjustments.ts": "payroll",
   "hourly-pay.ts": "payroll",
   "time-entries.ts": "time_attendance",
   "documents.ts": "hr",
